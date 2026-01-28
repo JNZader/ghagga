@@ -14,6 +14,8 @@ import {
   Switch,
   Divider,
   Select,
+  Textarea,
+  Button,
 } from '@mantine/core';
 import { IconAlertCircle, IconGitBranch, IconSettings } from '@tabler/icons-react';
 import { useSettings, RepoConfig } from '../../lib/hooks/useSettings';
@@ -48,6 +50,8 @@ interface RepoConfigFormProps {
 
 function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
   const [saving, setSaving] = useState(false);
+  const [rules, setRules] = useState(repo.rules || '');
+  const [rulesModified, setRulesModified] = useState(false);
 
   const handleToggle = async (field: keyof RepoConfig, value: boolean) => {
     setSaving(true);
@@ -70,6 +74,21 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
         }
       }
       await onUpdate(repo.id, updates);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRulesChange = (value: string) => {
+    setRules(value);
+    setRulesModified(value !== (repo.rules || ''));
+  };
+
+  const handleSaveRules = async () => {
+    setSaving(true);
+    try {
+      await onUpdate(repo.id, { rules: rules || null });
+      setRulesModified(false);
     } finally {
       setSaving(false);
     }
@@ -137,6 +156,38 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
           onChange={(e) => handleToggle('hebbian_enabled', e.currentTarget.checked)}
           disabled={saving}
         />
+
+        <Divider label="Custom Rules" labelPosition="left" />
+
+        <Textarea
+          label="Review Rules"
+          description="Custom instructions for the AI reviewer (markdown supported)"
+          placeholder="Enter custom review rules...&#10;&#10;Example:&#10;- Focus on security issues&#10;- Flag any hardcoded credentials&#10;- Ensure proper error handling"
+          value={rules}
+          onChange={(e) => handleRulesChange(e.currentTarget.value)}
+          minRows={6}
+          autosize
+          maxRows={15}
+          disabled={saving}
+        />
+
+        {rulesModified && (
+          <Group justify="flex-end">
+            <Button
+              variant="light"
+              onClick={() => {
+                setRules(repo.rules || '');
+                setRulesModified(false);
+              }}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveRules} loading={saving}>
+              Save Rules
+            </Button>
+          </Group>
+        )}
       </Stack>
     </Card>
   );
