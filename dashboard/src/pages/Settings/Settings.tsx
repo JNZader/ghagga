@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Container,
   Title,
@@ -10,14 +11,147 @@ import {
   Loader,
   Alert,
   SimpleGrid,
+  Switch,
+  Divider,
+  Select,
 } from '@mantine/core';
-import { IconAlertCircle, IconGitBranch } from '@tabler/icons-react';
-import { useSettings } from '../../lib/hooks/useSettings';
+import { IconAlertCircle, IconGitBranch, IconSettings } from '@tabler/icons-react';
+import { useSettings, RepoConfig } from '../../lib/hooks/useSettings';
 import styles from './Settings.module.css';
 
+const PROVIDERS = [
+  { value: 'claude', label: 'Claude (Anthropic)' },
+  { value: 'openai', label: 'GPT (OpenAI)' },
+  { value: 'gemini', label: 'Gemini (Google)' },
+];
+
+const MODELS: Record<string, { value: string; label: string }[]> = {
+  claude: [
+    { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
+  ],
+  openai: [
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+  ],
+  gemini: [
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+  ],
+};
+
+interface RepoConfigFormProps {
+  repo: RepoConfig;
+  onUpdate: (id: string, updates: Partial<RepoConfig>) => Promise<void>;
+}
+
+function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
+  const [saving, setSaving] = useState(false);
+
+  const handleToggle = async (field: keyof RepoConfig, value: boolean) => {
+    setSaving(true);
+    try {
+      await onUpdate(repo.id, { [field]: value });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSelectChange = async (field: keyof RepoConfig, value: string | null) => {
+    if (!value) return;
+    setSaving(true);
+    try {
+      const updates: Partial<RepoConfig> = { [field]: value };
+      if (field === 'provider') {
+        const defaultModel = MODELS[value]?.[0]?.value;
+        if (defaultModel) {
+          updates.model = defaultModel;
+        }
+      }
+      await onUpdate(repo.id, updates);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const availableModels = MODELS[repo.provider] || MODELS.claude;
+
+  return (
+    <Card shadow="sm" padding="lg" radius="md" withBorder>
+      <Stack gap="md">
+        <Group>
+          <IconSettings size={20} />
+          <Title order={4}>Configuration for {repo.repo_full_name}</Title>
+        </Group>
+
+        <Divider label="Review Settings" labelPosition="left" />
+
+        <Switch
+          label="Enable Reviews"
+          description="Allow AI code reviews on pull requests"
+          checked={repo.enabled}
+          onChange={(e) => handleToggle('enabled', e.currentTarget.checked)}
+          disabled={saving}
+        />
+
+        <Group grow>
+          <Select
+            label="Provider"
+            data={PROVIDERS}
+            value={repo.provider}
+            onChange={(value) => handleSelectChange('provider', value)}
+            disabled={saving}
+          />
+          <Select
+            label="Model"
+            data={availableModels}
+            value={repo.model}
+            onChange={(value) => handleSelectChange('model', value)}
+            disabled={saving}
+          />
+        </Group>
+
+        <Divider label="Advanced Features" labelPosition="left" />
+
+        <Switch
+          label="Workflow Engine"
+          description="Enable multi-step review workflow with stages"
+          checked={repo.workflow_enabled}
+          onChange={(e) => handleToggle('workflow_enabled', e.currentTarget.checked)}
+          disabled={saving}
+        />
+
+        <Switch
+          label="Consensus Engine"
+          description="Use multiple AI models to reach consensus on reviews"
+          checked={repo.consensus_enabled}
+          onChange={(e) => handleToggle('consensus_enabled', e.currentTarget.checked)}
+          disabled={saving}
+        />
+
+        <Switch
+          label="Hebbian Learning"
+          description="Learn from past reviews to improve suggestions"
+          checked={repo.hebbian_enabled}
+          onChange={(e) => handleToggle('hebbian_enabled', e.currentTarget.checked)}
+          disabled={saving}
+        />
+      </Stack>
+    </Card>
+  );
+}
+
 export function Settings() {
-  const { installations, repoConfigs, loading, error, selectRepo, selectedRepo } =
-    useSettings();
+  const {
+    installations,
+    repoConfigs,
+    loading,
+    error,
+    selectRepo,
+    selectedRepo,
+    updateRepoConfig,
+  } = useSettings();
 
   if (loading) {
     return (
@@ -123,6 +257,10 @@ export function Settings() {
             </SimpleGrid>
           )}
         </div>
+
+        {selectedRepo && (
+          <RepoConfigForm repo={selectedRepo} onUpdate={updateRepoConfig} />
+        )}
       </Stack>
     </Container>
   );
