@@ -1,4 +1,4 @@
-import { Container, Title, Text, SimpleGrid, Stack, Loader, Alert, Paper } from '@mantine/core';
+import { Container, Title, Text, SimpleGrid, Stack, Loader, Alert, Paper, RingProgress, Group, Center } from '@mantine/core';
 import { AreaChart } from '@mantine/charts';
 import {
   IconFileCheck,
@@ -99,6 +99,67 @@ export function Dashboard() {
             </Text>
           )}
         </Paper>
+
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+          <Paper className={styles.chartSection} p="md" radius="md" withBorder>
+            <Title order={3} mb="md">
+              Pass Rate
+            </Title>
+            <Center>
+              <RingProgress
+                size={200}
+                thickness={20}
+                roundCaps
+                sections={[
+                  { value: stats?.passRate ?? 0, color: 'green' },
+                  { value: 100 - (stats?.passRate ?? 0), color: 'red' },
+                ]}
+                label={
+                  <Center>
+                    <Stack gap={0} align="center">
+                      <Text size="xl" fw={700}>
+                        {stats?.passRate ?? 0}%
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        Pass Rate
+                      </Text>
+                    </Stack>
+                  </Center>
+                }
+              />
+            </Center>
+          </Paper>
+
+          <Paper className={styles.chartSection} p="md" radius="md" withBorder>
+            <Title order={3} mb="md">
+              Review Breakdown
+            </Title>
+            <Stack gap="md">
+              <Group justify="space-between">
+                <Text c="dimmed">Passed</Text>
+                <Text fw={500} c="green">
+                  {stats?.passedReviews ?? 0}
+                </Text>
+              </Group>
+              <Group justify="space-between">
+                <Text c="dimmed">Failed</Text>
+                <Text fw={500} c="red">
+                  {stats?.failedReviews ?? 0}
+                </Text>
+              </Group>
+              <Group justify="space-between">
+                <Text c="dimmed">Pending</Text>
+                <Text fw={500} c="yellow">
+                  {stats?.pendingReviews ?? 0}
+                </Text>
+              </Group>
+              <Group justify="space-between">
+                <Text c="dimmed">Total</Text>
+                <Text fw={500}>{stats?.totalReviews ?? 0}</Text>
+              </Group>
+            </Stack>
+          </Paper>
+        </SimpleGrid>
       </Stack>
     </Container>
   );
