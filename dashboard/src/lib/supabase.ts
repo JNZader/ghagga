@@ -4,6 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
+  // En desarrollo puedes usar console.warn, pero en producción conviene lanzar un error
   throw new Error('Missing Supabase environment variables');
 }
 

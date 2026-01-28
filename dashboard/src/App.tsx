@@ -3,6 +3,7 @@ import { Container, Title, Text, Stack, Button, Group } from '@mantine/core';
 import { Dashboard } from './pages/Dashboard';
 import { Reviews } from './pages/Reviews/Reviews';
 import { Memory } from './pages/Memory/Memory';
+import { Settings } from './pages/Settings/Settings';
 
 function Home() {
   return (
@@ -42,6 +43,7 @@ export function App() {
       />
       <Route path="/reviews" element={<Reviews />} />
       <Route path="/memory" element={<Memory />} />
+      <Route path="/settings" element={<Settings />} />
     </Routes>
   );
 }
