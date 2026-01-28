@@ -179,4 +179,72 @@ export class HybridSearch {
 
     return results;
   }
+
+  /**
+   * Merge vector and text search results with weighted scoring
+   *
+   * Combines scores from both search methods using configured weights:
+   * - Default: 70% vector similarity + 30% text match
+   * - Filters results below minimum score threshold
+   * - Returns top N results sorted by combined score
+   *
+   * @param vectorScores - Map of review IDs to vector similarity scores
+   * @param textScores - Map of review IDs to text search scores
+   * @returns Array of merged search results
+   */
+  private mergeResults(
+    vectorScores: Map<string, number>,
+    textScores: Map<string, number>
+  ): SearchResult[] {
+    // Collect all unique IDs from both result sets
+    const allIds = new Set<string>([...vectorScores.keys(), ...textScores.keys()]);
+
+    const results: SearchResult[] = [];
+
+    for (const id of allIds) {
+      const vectorScore = vectorScores.get(id) || 0;
+      const textScore = textScores.get(id) || 0;
+
+      // Calculate combined score with weights
+      const combinedScore =
+        vectorScore * this.config.vectorWeight + textScore * this.config.textWeight;
+
+      // Filter by minimum score threshold
+      if (combinedScore >= this.config.minScore) {
+        results.push({
+          id,
+          combinedScore,
+          vectorScore,
+          textScore,
+        });
+      }
+    }
+
+    // Sort by combined score descending
+    results.sort((a, b) => b.combinedScore - a.combinedScore);
+
+    // Limit to max results
+    return results.slice(0, this.config.maxResults);
+  }
+
+  /**
+   * Get current configuration
+   */
+  getConfig(): HybridSearchConfig {
+    return { ...this.config };
+  }
+
+  /**
+   * Update configuration (creates new instance internally)
+   */
+  updateConfig(config: Partial<HybridSearchConfig>): void {
+    const newConfig = { ...this.config, ...config };
+
+    // Validate weights sum to 1
+    if (Math.abs(newConfig.vectorWeight + newConfig.textWeight - 1) > 0.001) {
+      throw new Error('vectorWeight and textWeight must sum to 1');
+    }
+
+    this.config = newConfig;
+  }
 }
