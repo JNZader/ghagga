@@ -92,4 +92,50 @@ export class TokenBudgeter {
   static getKnownModels(): string[] {
     return Object.keys(MODEL_CAPABILITIES);
   }
+
+  /**
+   * Allocate token budget based on model capabilities
+   *
+   * Allocation ratios depend on context window size:
+   * - Small models (<50k): 50% content, 50% response
+   * - Medium models (50k-300k): 60% content, 40% response
+   * - Large models (>300k): 80% content, 20% response
+   *
+   * Content is further divided:
+   * - 50% for files
+   * - 30% for conversation history
+   * - 20% for rules/system prompts
+   */
+  static allocate(model: string): TokenAllocation {
+    const caps = this.getCapabilities(model);
+    const total = caps.contextWindow;
+
+    // Determine content ratio based on context window size
+    let contentRatio: number;
+    if (total < 50000) {
+      contentRatio = 0.5; // Small model - split evenly
+    } else if (total < 300000) {
+      contentRatio = 0.6; // Medium model - favor content
+    } else {
+      contentRatio = 0.8; // Large model - maximize content
+    }
+
+    const content = Math.floor(total * contentRatio);
+    const response = Math.floor(total * (1 - contentRatio));
+
+    // Subdivide content allocation
+    const files = Math.floor(content * 0.5);
+    const history = Math.floor(content * 0.3);
+    const rules = Math.floor(content * 0.2);
+
+    return { total, content, response, files, history, rules };
+  }
+
+  /**
+   * Estimate token count for a given text
+   * Uses a simple approximation of ~4 characters per token
+   */
+  static estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
 }
