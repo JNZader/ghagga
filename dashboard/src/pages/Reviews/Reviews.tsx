@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Container,
   Title,
@@ -84,12 +84,14 @@ export function Reviews() {
     setSearchValue(value);
   };
 
-  if (debouncedSearch !== filters.search) {
-    setFilters({
-      ...filters,
-      search: debouncedSearch || undefined,
-    });
-  }
+  useEffect(() => {
+    if (debouncedSearch !== filters.search) {
+      setFilters({
+        ...filters,
+        search: debouncedSearch || undefined,
+      });
+    }
+  }, [debouncedSearch, filters, setFilters]);
 
   const repoOptions = [
     { value: '', label: 'All repositories' },
