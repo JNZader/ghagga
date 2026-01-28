@@ -1,44 +1,27 @@
-import { Routes, Route } from 'react-router-dom';
-import { Container, Title, Text, Stack, Button, Group } from '@mantine/core';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { Login } from './pages/Login/Login';
-
-function Home() {
-  const { user, signOut } = useAuth();
-
-  return (
-    <Container size="lg" py="xl">
-      <Stack gap="md">
-        <Group justify="space-between" align="center">
-          <Title order={1}>Ghagga Dashboard</Title>
-          <Button variant="subtle" onClick={() => signOut()}>
-            Sign out
-          </Button>
-        </Group>
-        <Text c="dimmed">
-          Welcome, {user?.user_metadata?.user_name ?? user?.email}
-        </Text>
-        <Text c="dimmed">Multi-provider AI code review platform</Text>
-      </Stack>
-    </Container>
-  );
-}
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { Dashboard } from './pages/Dashboard';
+import { Container, Title, Text, Stack, Button, Group } from '@mantine/core'; // Ajusta el paquete según corresponda
 
 export function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </AuthProvider>
+    <Routes>
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route
+        path="/dashboard"
+        element={
+          <Container>
+            <Stack>
+              <Title order={2}>Bienvenido al Dashboard</Title>
+              <Text>Este es tu panel principal</Text>
+              <Group>
+                <Button>Acción 1</Button>
+                <Button variant="outline">Acción 2</Button>
+              </Group>
+            </Stack>
+            <Dashboard />
+          </Container>
+        }
+      />
+    </Routes>
   );
 }
