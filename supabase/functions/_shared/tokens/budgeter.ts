@@ -18,6 +18,25 @@ export interface TokenAllocation {
 }
 
 /**
+ * Content item with priority for budget fitting
+ */
+export interface PrioritizedContent {
+  content: string;
+  priority: number; // Higher number = higher priority (kept first)
+  type: 'files' | 'history' | 'rules';
+}
+
+/**
+ * Result of fitting content to budget
+ */
+export interface FitResult {
+  items: PrioritizedContent[];
+  totalTokens: number;
+  truncatedCount: number;
+  droppedCount: number;
+}
+
+/**
  * Model capability information
  */
 export interface ModelCapabilities {
@@ -137,5 +156,109 @@ export class TokenBudgeter {
    */
   static estimateTokens(text: string): number {
     return Math.ceil(text.length / 4);
+  }
+
+  /**
+   * Truncate content to fit within a token limit
+   * Appends truncation indicator when content is cut
+   */
+  static truncateToFit(content: string, maxTokens: number): string {
+    const maxChars = maxTokens * 4;
+    if (content.length <= maxChars) {
+      return content;
+    }
+    // Reserve space for truncation indicator
+    const truncationIndicator = '\n\n... [TRUNCATED] ...';
+    const availableChars = maxChars - truncationIndicator.length;
+    if (availableChars <= 0) {
+      return truncationIndicator;
+    }
+    return content.slice(0, availableChars) + truncationIndicator;
+  }
+
+  /**
+   * Fit multiple content items within a total token budget
+   *
+   * Strategy:
+   * 1. Sort items by priority (highest first)
+   * 2. Add items until budget is reached
+   * 3. If an item doesn't fit fully, truncate it
+   * 4. Drop remaining items
+   */
+  static fitToBudget(
+    items: PrioritizedContent[],
+    maxTokens: number
+  ): FitResult {
+    // Sort by priority descending (higher priority first)
+    const sorted = [...items].sort((a, b) => b.priority - a.priority);
+
+    const result: PrioritizedContent[] = [];
+    let totalTokens = 0;
+    let truncatedCount = 0;
+    let droppedCount = 0;
+
+    for (const item of sorted) {
+      const itemTokens = this.estimateTokens(item.content);
+      const remainingBudget = maxTokens - totalTokens;
+
+      if (remainingBudget <= 0) {
+        // No budget left, drop remaining items
+        droppedCount++;
+        continue;
+      }
+
+      if (itemTokens <= remainingBudget) {
+        // Item fits completely
+        result.push(item);
+        totalTokens += itemTokens;
+      } else if (remainingBudget > 100) {
+        // Partial fit - truncate the item (only if meaningful space remains)
+        const truncatedContent = this.truncateToFit(item.content, remainingBudget);
+        result.push({
+          ...item,
+          content: truncatedContent,
+        });
+        totalTokens += this.estimateTokens(truncatedContent);
+        truncatedCount++;
+      } else {
+        // Not enough space for meaningful content, drop
+        droppedCount++;
+      }
+    }
+
+    return {
+      items: result,
+      totalTokens,
+      truncatedCount,
+      droppedCount,
+    };
+  }
+
+  /**
+   * Check if content fits within a token budget
+   */
+  static fitsInBudget(content: string, maxTokens: number): boolean {
+    return this.estimateTokens(content) <= maxTokens;
+  }
+
+  /**
+   * Calculate remaining tokens after accounting for used content
+   */
+  static remainingBudget(
+    allocation: TokenAllocation,
+    used: { files?: number; history?: number; rules?: number }
+  ): TokenAllocation {
+    return {
+      total: allocation.total,
+      content:
+        allocation.content -
+        (used.files || 0) -
+        (used.history || 0) -
+        (used.rules || 0),
+      response: allocation.response,
+      files: allocation.files - (used.files || 0),
+      history: allocation.history - (used.history || 0),
+      rules: allocation.rules - (used.rules || 0),
+    };
   }
 }
