@@ -80,4 +80,75 @@ export class ThreadManager {
   private isExpired(expiresAt: string): boolean {
     return new Date(expiresAt) < new Date();
   }
+
+  /**
+   * Create a new conversation thread
+   * @param options - Thread creation options
+   * @returns The new thread ID
+   */
+  async createThread(options: CreateThreadOptions): Promise<string> {
+    const { toolName, initialContext, files = [], metadata = {} } = options;
+
+    const threadId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const expiresAt = this.calculateExpiry();
+
+    const { error } = await this.supabase.from('conversation_threads').insert({
+      thread_id: threadId,
+      tool_name: toolName,
+      turns: [],
+      initial_context: initialContext,
+      files,
+      metadata,
+      created_at: now,
+      expires_at: expiresAt,
+    });
+
+    if (error) {
+      throw new Error(`Failed to create thread: ${error.message}`);
+    }
+
+    return threadId;
+  }
+
+  /**
+   * Get a thread by ID with TTL verification
+   * Returns null if thread doesn't exist or has expired
+   * @param threadId - Thread ID to retrieve
+   * @returns Thread context or null
+   */
+  async getThread(threadId: string): Promise<ThreadContext | null> {
+    const { data, error } = await this.supabase
+      .from('conversation_threads')
+      .select('*')
+      .eq('thread_id', threadId)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    // Check TTL - delete and return null if expired
+    if (this.isExpired(data.expires_at)) {
+      await this.deleteThread(threadId);
+      return null;
+    }
+
+    return data as ThreadContext;
+  }
+
+  /**
+   * Delete a thread
+   * @param threadId - Thread ID to delete
+   */
+  async deleteThread(threadId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('conversation_threads')
+      .delete()
+      .eq('thread_id', threadId);
+
+    if (error) {
+      throw new Error(`Failed to delete thread: ${error.message}`);
+    }
+  }
 }
