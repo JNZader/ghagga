@@ -151,4 +151,177 @@ export class ThreadManager {
       throw new Error(`Failed to delete thread: ${error.message}`);
     }
   }
+
+  /**
+   * Add a turn to an existing thread
+   * Extends the TTL on each turn addition
+   * @param threadId - Thread ID
+   * @param role - Role of the turn (user, assistant, system)
+   * @param content - Content of the turn
+   * @returns true if successful, false if thread not found
+   */
+  async addTurn(
+    threadId: string,
+    role: 'user' | 'assistant' | 'system',
+    content: string
+  ): Promise<boolean> {
+    const thread = await this.getThread(threadId);
+    if (!thread) {
+      return false;
+    }
+
+    const newTurn: Turn = {
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+
+    const newExpiry = this.calculateExpiry();
+
+    const { error } = await this.supabase
+      .from('conversation_threads')
+      .update({
+        turns: [...thread.turns, newTurn],
+        expires_at: newExpiry,
+      })
+      .eq('thread_id', threadId);
+
+    if (error) {
+      throw new Error(`Failed to add turn: ${error.message}`);
+    }
+
+    return true;
+  }
+
+  /**
+   * Add files to a thread with deduplication
+   * @param threadId - Thread ID
+   * @param files - Array of file paths to add
+   * @returns true if successful, false if thread not found
+   */
+  async addFiles(threadId: string, files: string[]): Promise<boolean> {
+    const thread = await this.getThread(threadId);
+    if (!thread) {
+      return false;
+    }
+
+    // Deduplicate files
+    const existingFiles = thread.files || [];
+    const uniqueFiles = [...new Set([...existingFiles, ...files])];
+
+    const { error } = await this.supabase
+      .from('conversation_threads')
+      .update({
+        files: uniqueFiles,
+        expires_at: this.calculateExpiry(),
+      })
+      .eq('thread_id', threadId);
+
+    if (error) {
+      throw new Error(`Failed to add files: ${error.message}`);
+    }
+
+    return true;
+  }
+
+  /**
+   * Update thread metadata
+   * @param threadId - Thread ID
+   * @param metadata - Metadata to merge
+   * @returns true if successful, false if thread not found
+   */
+  async updateMetadata(
+    threadId: string,
+    metadata: Record<string, unknown>
+  ): Promise<boolean> {
+    const thread = await this.getThread(threadId);
+    if (!thread) {
+      return false;
+    }
+
+    const mergedMetadata = {
+      ...(thread.metadata || {}),
+      ...metadata,
+    };
+
+    const { error } = await this.supabase
+      .from('conversation_threads')
+      .update({ metadata: mergedMetadata })
+      .eq('thread_id', threadId);
+
+    if (error) {
+      throw new Error(`Failed to update metadata: ${error.message}`);
+    }
+
+    return true;
+  }
+
+  /**
+   * List all active (non-expired) threads for a tool
+   * @param toolName - Tool name to filter by
+   * @param limit - Maximum number of threads to return
+   * @returns Array of thread contexts
+   */
+  async listThreads(toolName?: string, limit: number = 100): Promise<ThreadContext[]> {
+    let query = this.supabase
+      .from('conversation_threads')
+      .select('*')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (toolName) {
+      query = query.eq('tool_name', toolName);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Failed to list threads: ${error.message}`);
+    }
+
+    return (data || []) as ThreadContext[];
+  }
+
+  /**
+   * Clean up expired threads
+   * @returns Number of threads deleted
+   */
+  async cleanupExpired(): Promise<number> {
+    const { data, error } = await this.supabase
+      .from('conversation_threads')
+      .delete()
+      .lt('expires_at', new Date().toISOString())
+      .select('thread_id');
+
+    if (error) {
+      throw new Error(`Failed to cleanup expired threads: ${error.message}`);
+    }
+
+    return data?.length || 0;
+  }
+
+  /**
+   * Get thread statistics
+   * @param threadId - Thread ID
+   * @returns Statistics about the thread
+   */
+  async getThreadStats(
+    threadId: string
+  ): Promise<{ turnCount: number; fileCount: number; ageMinutes: number } | null> {
+    const thread = await this.getThread(threadId);
+    if (!thread) {
+      return null;
+    }
+
+    const createdAt = new Date(thread.created_at);
+    const now = new Date();
+    const ageMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
+
+    return {
+      turnCount: thread.turns.length,
+      fileCount: (thread.files || []).length,
+      ageMinutes,
+    };
+  }
 }
