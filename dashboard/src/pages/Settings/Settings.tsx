@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Container,
   Title,
@@ -52,6 +52,11 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
   const [saving, setSaving] = useState(false);
   const [rules, setRules] = useState(repo.rules || '');
   const [rulesModified, setRulesModified] = useState(false);
+
+  useEffect(() => {
+    setRules(repo.rules || '');
+    setRulesModified(false);
+  }, [repo.id, repo.rules]);
 
   const handleToggle = async (field: keyof RepoConfig, value: boolean) => {
     setSaving(true);
