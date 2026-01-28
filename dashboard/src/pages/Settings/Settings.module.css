@@ -1,0 +1,13 @@
+.repoCard {
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.repoCard:hover {
+  border-color: var(--mantine-color-blue-4);
+}
+
+.selected {
+  border-color: var(--mantine-color-blue-6);
+  box-shadow: 0 0 0 2px var(--mantine-color-blue-2);
+}
