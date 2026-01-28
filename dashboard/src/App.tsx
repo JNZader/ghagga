@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { Container, Title, Text, Stack } from '@mantine/core';
+import { Memory } from './pages/Memory/Memory';
 
 function Home() {
   return (
@@ -16,6 +17,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/memory" element={<Memory />} />
     </Routes>
   );
 }
