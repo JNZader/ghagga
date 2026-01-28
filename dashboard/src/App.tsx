@@ -1,46 +1,25 @@
 import { Routes, Route } from 'react-router-dom';
-import { Container, Title, Text, Stack } from '@mantine/core';
-import { Layout } from './components/Layout/Layout';
+import { Container, Title, Text, Stack, Button, Group } from '@mantine/core';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { Login } from './pages/Login/Login';
 
 function Home() {
-  return (
-    <Container size="lg" py="xl">
-      <Stack gap="md">
-        <Title order={1}>Dashboard</Title>
-        <Text c="dimmed">Welcome to Ghagga - Multi-provider AI code review platform</Text>
-      </Stack>
-    </Container>
-  );
-}
+  const { user, signOut } = useAuth();
 
-function Installations() {
   return (
     <Container size="lg" py="xl">
       <Stack gap="md">
-        <Title order={1}>Installations</Title>
-        <Text c="dimmed">Manage your GitHub App installations</Text>
-      </Stack>
-    </Container>
-  );
-}
-
-function Webhooks() {
-  return (
-    <Container size="lg" py="xl">
-      <Stack gap="md">
-        <Title order={1}>Webhooks</Title>
-        <Text c="dimmed">View webhook events and logs</Text>
-      </Stack>
-    </Container>
-  );
-}
-
-function Settings() {
-  return (
-    <Container size="lg" py="xl">
-      <Stack gap="md">
-        <Title order={1}>Settings</Title>
-        <Text c="dimmed">Configure your application settings</Text>
+        <Group justify="space-between" align="center">
+          <Title order={1}>Ghagga Dashboard</Title>
+          <Button variant="subtle" onClick={() => signOut()}>
+            Sign out
+          </Button>
+        </Group>
+        <Text c="dimmed">
+          Welcome, {user?.user_metadata?.user_name ?? user?.email}
+        </Text>
+        <Text c="dimmed">Multi-provider AI code review platform</Text>
       </Stack>
     </Container>
   );
@@ -48,13 +27,18 @@ function Settings() {
 
 export function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/installations" element={<Installations />} />
-        <Route path="/webhooks" element={<Webhooks />} />
-        <Route path="/settings" element={<Settings />} />
-      </Route>
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }
