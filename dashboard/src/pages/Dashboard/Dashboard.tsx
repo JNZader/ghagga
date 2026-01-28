@@ -1,4 +1,5 @@
 import { Container, Title, Text, SimpleGrid, Stack, Loader, Alert, Paper } from '@mantine/core';
+import { AreaChart } from '@mantine/charts';
 import {
   IconFileCheck,
   IconFileX,
@@ -79,9 +80,24 @@ export function Dashboard() {
           <Title order={3} mb="md">
             Reviews Over Time
           </Title>
-          <Text c="dimmed" size="sm">
-            Chart will be added in a subsequent commit
-          </Text>
+          {stats?.reviewsOverTime && stats.reviewsOverTime.length > 0 ? (
+            <AreaChart
+              h={300}
+              data={stats.reviewsOverTime}
+              dataKey="date"
+              series={[
+                { name: 'passed', color: 'green.6' },
+                { name: 'failed', color: 'red.6' },
+              ]}
+              curveType="monotone"
+              withLegend
+              legendProps={{ verticalAlign: 'bottom', height: 50 }}
+            />
+          ) : (
+            <Text c="dimmed" size="sm">
+              No review data available yet
+            </Text>
+          )}
         </Paper>
       </Stack>
     </Container>
