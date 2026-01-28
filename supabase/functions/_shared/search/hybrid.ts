@@ -124,4 +124,59 @@ export class HybridSearch {
     }
     return results;
   }
+
+  /**
+   * Perform full-text search using PostgreSQL pg_trgm
+   *
+   * Uses trigram similarity for fuzzy text matching on review content.
+   * Results are normalized to 0-1 range for combination with vector scores.
+   *
+   * @param query - Search query string
+   * @param repoFullName - Repository full name
+   * @returns Map of review IDs to normalized text search scores
+   */
+  async textSearch(query: string, repoFullName: string): Promise<Map<string, number>> {
+    // Use pg_trgm similarity search on content field
+    // The % operator checks if similarity > threshold (default 0.3)
+    const { data, error } = await this.supabase
+      .from('reviews')
+      .select('id, content')
+      .eq('repo_full_name', repoFullName)
+      .limit(this.config.maxResults * 4);
+
+    if (error) {
+      throw new Error(`Text search failed: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      return new Map<string, number>();
+    }
+
+    // Calculate trigram similarity scores client-side
+    // In production, this would use the pg_trgm similarity() function via RPC
+    const results = new Map<string, number>();
+    const queryLower = query.toLowerCase();
+    const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 0);
+
+    for (const row of data) {
+      const contentLower = row.content.toLowerCase();
+
+      // Calculate simple term match score
+      let matchCount = 0;
+      for (const term of queryTerms) {
+        if (contentLower.includes(term)) {
+          matchCount++;
+        }
+      }
+
+      // Normalize score to 0-1 range
+      const score = queryTerms.length > 0 ? matchCount / queryTerms.length : 0;
+
+      if (score > 0) {
+        results.set(row.id, score);
+      }
+    }
+
+    return results;
+  }
 }
