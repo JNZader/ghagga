@@ -1,11 +1,29 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Container, Title, Text, Stack, Button, Group } from '@mantine/core';
 import { Dashboard } from './pages/Dashboard';
-import { Container, Title, Text, Stack, Button, Group } from '@mantine/core'; // Ajusta el paquete según corresponda
+import { Reviews } from './pages/Reviews/Reviews';
+
+function Home() {
+  return (
+    <Container size="lg" py="xl">
+      <Stack gap="md">
+        <Title order={1}>Ghagga Dashboard</Title>
+        <Text c="dimmed">Multi-provider AI code review platform</Text>
+      </Stack>
+    </Container>
+  );
+}
 
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* Puedes elegir: redirigir o mostrar Home */}
+      {/* Opción A: redirigir directamente */}
+      {/* <Route path="/" element={<Navigate to="/dashboard" replace />} /> */}
+
+      {/* Opción B: mostrar Home */}
+      <Route path="/" element={<Home />} />
+
       <Route
         path="/dashboard"
         element={
@@ -22,6 +40,7 @@ export function App() {
           </Container>
         }
       />
+      <Route path="/reviews" element={<Reviews />} />
     </Routes>
   );
 }
