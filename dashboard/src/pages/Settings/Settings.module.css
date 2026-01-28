@@ -1,13 +1,33 @@
 .repoCard {
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
 }
 
 .repoCard:hover {
   border-color: var(--mantine-color-blue-4);
+  transform: translateY(-1px);
+}
+
+.repoCard:active {
+  transform: translateY(0);
 }
 
 .selected {
   border-color: var(--mantine-color-blue-6);
   box-shadow: 0 0 0 2px var(--mantine-color-blue-2);
+}
+
+.configCard {
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

@@ -97,7 +97,7 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
   const availableModels = MODELS[repo.provider] || MODELS.claude;
 
   return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
+    <Card shadow="sm" padding="lg" radius="md" withBorder className={styles.configCard}>
       <Stack gap="md">
         <Group>
           <IconSettings size={20} />
