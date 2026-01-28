@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { Container, Title, Text, Stack } from '@mantine/core';
+import { Reviews } from './pages/Reviews/Reviews';
 
 function Home() {
   return (
@@ -16,6 +17,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/reviews" element={<Reviews />} />
     </Routes>
   );
 }
