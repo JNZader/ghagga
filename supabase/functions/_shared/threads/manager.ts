@@ -324,4 +324,81 @@ export class ThreadManager {
       ageMinutes,
     };
   }
+
+  /**
+   * Reconstruct context from a thread for LLM consumption
+   * @param threadId - Thread ID
+   * @returns Reconstructed context with history string and metadata
+   * @throws Error if thread not found
+   */
+  async reconstructContext(threadId: string): Promise<ReconstructedContext> {
+    const thread = await this.getThread(threadId);
+    if (!thread) {
+      throw new Error(`Thread ${threadId} not found or expired`);
+    }
+
+    const parts: string[] = ['=== CONVERSATION HISTORY ==='];
+
+    for (const turn of thread.turns) {
+      parts.push(`--- ${turn.role.toUpperCase()} [${turn.timestamp}] ---`);
+      parts.push(turn.content);
+      parts.push('');
+    }
+
+    parts.push('=== END HISTORY ===');
+
+    return {
+      history: parts.join('\n'),
+      files: thread.files || [],
+      initialContext: thread.initial_context,
+      turnCount: thread.turns.length,
+    };
+  }
+
+  /**
+   * Extract unique files from thread turns
+   * Parses content for file references and deduplicates
+   * @param threadId - Thread ID
+   * @returns Array of unique file paths
+   * @throws Error if thread not found
+   */
+  async extractFiles(threadId: string): Promise<string[]> {
+    const thread = await this.getThread(threadId);
+    if (!thread) {
+      throw new Error(`Thread ${threadId} not found or expired`);
+    }
+
+    const fileSet = new Set<string>(thread.files || []);
+
+    // Extract file references from turn content
+    // Matches patterns like: `file.ts`, file.ts:123, "path/to/file.js"
+    const filePatterns = [
+      /`([^`]+\.[a-zA-Z]{1,10})`/g, // Backtick wrapped files
+      /["']([^"']+\.[a-zA-Z]{1,10})["']/g, // Quoted files
+      /(?:^|\s)(\S+\.[a-zA-Z]{2,10})(?::\d+)?(?:\s|$)/gm, // Plain file references
+    ];
+
+    for (const turn of thread.turns) {
+      for (const pattern of filePatterns) {
+        let match;
+        while ((match = pattern.exec(turn.content)) !== null) {
+          const file = match[1];
+          // Filter out URLs and common false positives
+          if (
+            file &&
+            !file.startsWith('http') &&
+            !file.includes('://') &&
+            !file.startsWith('npm:') &&
+            !file.startsWith('node:')
+          ) {
+            fileSet.add(file);
+          }
+        }
+        // Reset regex lastIndex for next iteration
+        pattern.lastIndex = 0;
+      }
+    }
+
+    return Array.from(fileSet).sort();
+  }
 }
