@@ -1,0 +1,41 @@
+.card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mantine-shadow-md);
+}
+
+.patterns {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pattern {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  border-radius: var(--mantine-radius-sm);
+}
+
+.connector {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.linkIcon {
+  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+}
+
+.progress {
+  margin-top: 0.25rem;
+}
+
+.meta {
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+}

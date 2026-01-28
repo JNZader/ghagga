@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Container, Title, Text, Stack, Button, Group } from '@mantine/core';
 import { Dashboard } from './pages/Dashboard';
 import { Reviews } from './pages/Reviews/Reviews';
+import { Memory } from './pages/Memory/Memory';
 
 function Home() {
   return (
@@ -17,7 +18,6 @@ function Home() {
 export function App() {
   return (
     <Routes>
-      {/* Puedes elegir: redirigir o mostrar Home */}
       {/* Opción A: redirigir directamente */}
       {/* <Route path="/" element={<Navigate to="/dashboard" replace />} /> */}
 
@@ -41,6 +41,7 @@ export function App() {
         }
       />
       <Route path="/reviews" element={<Reviews />} />
+      <Route path="/memory" element={<Memory />} />
     </Routes>
   );
 }
