@@ -1,0 +1,22 @@
+.card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mantine-shadow-sm);
+}
+
+.title {
+  letter-spacing: 0.025em;
+}
+
+.value {
+  font-size: 1.75rem;
+  line-height: 1.2;
+  margin-top: 0.25rem;
+}
+
+.description {
+  margin-top: 0.25rem;
+}

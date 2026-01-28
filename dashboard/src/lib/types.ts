@@ -7,7 +7,7 @@ export interface Review {
   pr_title?: string;
   status: ReviewStatus;
   result_summary: string;
-  result_full?: Record<string, unknown>;
+  result_full?: Record<string, unknown>; // de vk/4d1e-t-021-reviews-pa
   files_reviewed: string[];
   created_at: string;
   updated_at?: string;
@@ -23,4 +23,20 @@ export interface ReviewFilters {
   status?: ReviewStatus;
   repo?: string;
   search?: string;
+}
+
+export interface DashboardStats {
+  totalReviews: number;
+  passedReviews: number;
+  failedReviews: number;
+  pendingReviews: number;
+  passRate: number;
+  reviewsOverTime: TimelineDataPoint[];
+}
+
+export interface TimelineDataPoint {
+  date: string;
+  reviews: number;
+  passed: number;
+  failed: number;
 }
