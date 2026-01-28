@@ -226,4 +226,191 @@ REASONING: [your explanation]`;
 
     return { decision, confidence, reasoning };
   }
+
+  /**
+   * Run consensus process with multiple models in parallel
+   */
+  async runConsensus(
+    proposal: string,
+    models: ConsensusModelConfig[]
+  ): Promise<ConsensusEngineResult> {
+    const startTime = Date.now();
+
+    if (models.length === 0) {
+      throw new Error('At least one model is required for consensus');
+    }
+
+    // Run all models in parallel
+    const responses = await Promise.all(
+      models.map((m) => this.getModelOpinion(proposal, m))
+    );
+
+    // Calculate recommendation based on responses
+    const recommendation = this.calculateRecommendation(responses);
+
+    // Synthesize the results
+    const synthesis = await this.synthesize(proposal, responses);
+
+    // Calculate total tokens used
+    const totalTokens = responses.reduce((sum, r) => {
+      return sum + (r.tokenUsage?.totalTokens ?? 0);
+    }, 0);
+
+    const totalTimeMs = Date.now() - startTime;
+
+    return {
+      responses,
+      synthesis,
+      recommendation,
+      totalTokens,
+      totalTimeMs,
+    };
+  }
+
+  /**
+   * Calculate recommendation based on model responses
+   */
+  calculateRecommendation(responses: ConsensusResponse[]): {
+    action: 'approve' | 'reject' | 'discuss';
+    confidence: number;
+  } {
+    let forScore = 0;
+    let againstScore = 0;
+    let totalWeight = 0;
+
+    for (const response of responses) {
+      const weight = response.confidence;
+      totalWeight += weight;
+
+      if (response.decision === 'approve') {
+        forScore += weight;
+      } else if (response.decision === 'reject') {
+        againstScore += weight;
+      }
+      // abstain doesn't contribute to either score
+    }
+
+    // Prevent division by zero
+    if (totalWeight === 0) {
+      return { action: 'discuss', confidence: 0 };
+    }
+
+    const normalizedFor = forScore / totalWeight;
+    const normalizedAgainst = againstScore / totalWeight;
+    const difference = Math.abs(normalizedFor - normalizedAgainst);
+
+    // Decision thresholds
+    const APPROVE_THRESHOLD = 0.6;
+    const REJECT_THRESHOLD = 0.6;
+    const MIN_CONFIDENCE = 0.3;
+
+    if (normalizedFor >= APPROVE_THRESHOLD && difference >= MIN_CONFIDENCE) {
+      return {
+        action: 'approve',
+        confidence: normalizedFor,
+      };
+    }
+
+    if (normalizedAgainst >= REJECT_THRESHOLD && difference >= MIN_CONFIDENCE) {
+      return {
+        action: 'reject',
+        confidence: normalizedAgainst,
+      };
+    }
+
+    // Not enough consensus - needs discussion
+    return {
+      action: 'discuss',
+      confidence: Math.max(normalizedFor, normalizedAgainst),
+    };
+  }
+
+  /**
+   * Synthesize model responses into a coherent summary
+   */
+  async synthesize(
+    proposal: string,
+    responses: ConsensusResponse[]
+  ): Promise<string> {
+    // If no synthesis model configured, generate a simple summary
+    if (!this.config.synthesisModel) {
+      return this.generateSimpleSynthesis(responses);
+    }
+
+    const provider = this.providers.get(this.config.synthesisModel.provider);
+    if (!provider) {
+      return this.generateSimpleSynthesis(responses);
+    }
+
+    const responseSummary = responses
+      .map(
+        (r) =>
+          `[${r.provider}/${r.model}] Stance: ${r.stance}, Decision: ${r.decision}, ` +
+          `Confidence: ${(r.confidence * 100).toFixed(0)}%\nReasoning: ${r.reasoning}`
+      )
+      .join('\n\n');
+
+    const systemPrompt = `You are synthesizing multiple code review opinions into a coherent summary.
+Be concise and highlight key points of agreement and disagreement.`;
+
+    const userPrompt = `Original proposal:
+${proposal}
+
+Model opinions:
+${responseSummary}
+
+Please provide a concise synthesis of these opinions, highlighting:
+1. Points of agreement
+2. Points of disagreement
+3. Key concerns raised
+4. Overall assessment`;
+
+    const response = await provider.complete({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      model: this.config.synthesisModel.model,
+      maxTokens: 1024,
+      temperature: 0.5,
+    });
+
+    return response.content;
+  }
+
+  /**
+   * Generate a simple synthesis without using an LLM
+   */
+  private generateSimpleSynthesis(responses: ConsensusResponse[]): string {
+    const approvals = responses.filter((r) => r.decision === 'approve');
+    const rejections = responses.filter((r) => r.decision === 'reject');
+    const abstentions = responses.filter((r) => r.decision === 'abstain');
+
+    const lines: string[] = [
+      `**Consensus Summary**`,
+      ``,
+      `- Approvals: ${approvals.length}/${responses.length}`,
+      `- Rejections: ${rejections.length}/${responses.length}`,
+      `- Abstentions: ${abstentions.length}/${responses.length}`,
+      ``,
+    ];
+
+    if (approvals.length > 0) {
+      lines.push(`**In Favor:**`);
+      approvals.forEach((r) => {
+        lines.push(`- [${r.provider}/${r.model}]: ${r.reasoning.slice(0, 200)}...`);
+      });
+      lines.push(``);
+    }
+
+    if (rejections.length > 0) {
+      lines.push(`**Against:**`);
+      rejections.forEach((r) => {
+        lines.push(`- [${r.provider}/${r.model}]: ${r.reasoning.slice(0, 200)}...`);
+      });
+      lines.push(``);
+    }
+
+    return lines.join('\n');
+  }
 }
