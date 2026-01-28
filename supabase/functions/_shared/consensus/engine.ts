@@ -144,4 +144,86 @@ export class ConsensusEngine {
   getProviderNames(): string[] {
     return Array.from(this.providers.keys());
   }
+
+  /**
+   * Get a model's opinion on a proposal with the assigned stance
+   */
+  async getModelOpinion(
+    proposal: string,
+    modelConfig: ConsensusModelConfig
+  ): Promise<ConsensusResponse> {
+    const startTime = Date.now();
+    const provider = this.providers.get(modelConfig.provider);
+
+    if (!provider) {
+      throw new Error(`Provider "${modelConfig.provider}" is not registered`);
+    }
+
+    const stancePrompt = STANCE_PROMPTS[modelConfig.stance];
+    const systemPrompt = `You are a code reviewer participating in a consensus process.
+
+${stancePrompt}
+
+After your analysis, you MUST provide a structured response with:
+1. Your DECISION: "approve", "reject", or "abstain"
+2. Your CONFIDENCE: a number from 0 to 1 (e.g., 0.8 for 80% confident)
+3. Your REASONING: a brief explanation
+
+Format your final response as:
+DECISION: [approve|reject|abstain]
+CONFIDENCE: [0.0-1.0]
+REASONING: [your explanation]`;
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Please review the following proposal:\n\n${proposal}` },
+    ];
+
+    const response = await provider.complete({
+      messages,
+      model: modelConfig.model,
+      maxTokens: 2048,
+      temperature: 0.3,
+    });
+
+    const responseTimeMs = Date.now() - startTime;
+    const parsed = this.parseModelResponse(response.content);
+
+    return {
+      provider: modelConfig.provider,
+      model: modelConfig.model,
+      stance: modelConfig.stance,
+      decision: parsed.decision,
+      confidence: parsed.confidence,
+      reasoning: parsed.reasoning,
+      responseTimeMs,
+      tokenUsage: response.usage,
+    };
+  }
+
+  /**
+   * Parse structured response from model output
+   */
+  private parseModelResponse(content: string): {
+    decision: 'approve' | 'reject' | 'abstain';
+    confidence: number;
+    reasoning: string;
+  } {
+    const decisionMatch = content.match(/DECISION:\s*(approve|reject|abstain)/i);
+    const confidenceMatch = content.match(/CONFIDENCE:\s*([\d.]+)/i);
+    const reasoningMatch = content.match(/REASONING:\s*(.+)/is);
+
+    const decision = (decisionMatch?.[1]?.toLowerCase() || 'abstain') as
+      | 'approve'
+      | 'reject'
+      | 'abstain';
+
+    let confidence = parseFloat(confidenceMatch?.[1] || '0.5');
+    confidence = Math.max(0, Math.min(1, confidence));
+
+    const reasoning =
+      reasoningMatch?.[1]?.trim() || 'No reasoning provided';
+
+    return { decision, confidence, reasoning };
+  }
 }
