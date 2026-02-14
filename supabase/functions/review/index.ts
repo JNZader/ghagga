@@ -38,6 +38,11 @@ import {
   type ConsensusReviewConfig,
   type ConsensusReviewResult,
 } from './consensus.ts';
+import type {
+  StaticAnalysisResult,
+  StaticAnalysisFinding,
+} from '../_shared/static-analysis/index.ts';
+import { formatFindingsAsLLMContext } from '../_shared/static-analysis/index.ts';
 
 /**
  * Review mode determines which review strategy to use
@@ -62,6 +67,8 @@ export interface ReviewInput {
   diff: string;
   /** Repository configuration */
   repoConfig: RepoConfig;
+  /** Static analysis result (Layer 0 pre-LLM) */
+  staticAnalysisResult?: StaticAnalysisResult;
 }
 
 /**
@@ -132,6 +139,17 @@ export class ReviewService {
       input.diff
     );
 
+    // Build static analysis context for LLM (if available)
+    const staticAnalysisContext = input.staticAnalysisResult
+      ? formatFindingsAsLLMContext(input.staticAnalysisResult)
+      : '';
+
+    // Enrich rules with static analysis context
+    const baseRules = input.repoConfig.rules || '';
+    const enrichedRules = staticAnalysisContext
+      ? `${baseRules}\n\n${staticAnalysisContext}`
+      : baseRules;
+
     // Execute review based on mode
     let result: SimpleReviewResult | WorkflowReviewResult | ConsensusReviewResult;
     let status: ReviewStatus;
@@ -141,7 +159,7 @@ export class ReviewService {
     switch (mode) {
       case 'workflow': {
         const context: WorkflowReviewContext = {
-          rules: input.repoConfig.rules || '',
+          rules: enrichedRules,
           files: input.files,
           diff: input.diff,
           prTitle: input.prTitle,
@@ -156,7 +174,7 @@ export class ReviewService {
 
       case 'consensus': {
         const context: ConsensusReviewContext = {
-          rules: input.repoConfig.rules || '',
+          rules: enrichedRules,
           files: input.files,
           diff: input.diff,
           prTitle: input.prTitle,
@@ -172,7 +190,7 @@ export class ReviewService {
       case 'simple':
       default: {
         const context: ReviewContext = {
-          rules: input.repoConfig.rules || '',
+          rules: enrichedRules,
           files: input.files,
           diff: input.diff,
           prTitle: input.prTitle,
@@ -184,6 +202,24 @@ export class ReviewService {
         summary = result.summary;
         findings = result.findings;
         break;
+      }
+    }
+
+    // Merge static analysis findings into the review findings
+    if (input.staticAnalysisResult) {
+      const staticFindings: ReviewFinding[] = input.staticAnalysisResult.findings.map((f) => ({
+        severity: f.severity,
+        category: f.category,
+        message: f.message,
+        file: f.file,
+        line: f.line,
+        suggestion: f.suggestion,
+      }));
+      findings = [...staticFindings, ...findings];
+
+      // If static analysis found blocking issues, force failed status
+      if (input.staticAnalysisResult.hasBlockingFindings && status === 'passed') {
+        status = 'failed';
       }
     }
 
@@ -214,6 +250,7 @@ export class ReviewService {
       findings,
       mode,
       prTitle: input.prTitle,
+      staticAnalysisResult: input.staticAnalysisResult,
     });
 
     const durationMs = Date.now() - startTime;
@@ -409,6 +446,7 @@ interface FormatCommentOptions {
   findings: ReviewFinding[];
   mode: ReviewMode;
   prTitle?: string;
+  staticAnalysisResult?: StaticAnalysisResult;
 }
 
 /**

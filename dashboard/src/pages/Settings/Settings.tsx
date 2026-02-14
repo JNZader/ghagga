@@ -15,6 +15,7 @@ import {
   Divider,
   Select,
   Textarea,
+  TextInput,
   Button,
 } from '@mantine/core';
 import { IconAlertCircle, IconGitBranch, IconSettings } from '@tabler/icons-react';
@@ -52,11 +53,15 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
   const [saving, setSaving] = useState(false);
   const [rules, setRules] = useState(repo.rules || '');
   const [rulesModified, setRulesModified] = useState(false);
+  const [semgrepUrl, setSemgrepUrl] = useState(repo.semgrep_service_url || '');
+  const [semgrepUrlModified, setSemgrepUrlModified] = useState(false);
 
   useEffect(() => {
     setRules(repo.rules || '');
     setRulesModified(false);
-  }, [repo.id, repo.rules]);
+    setSemgrepUrl(repo.semgrep_service_url || '');
+    setSemgrepUrlModified(false);
+  }, [repo.id, repo.rules, repo.semgrep_service_url]);
 
   const handleToggle = async (field: keyof RepoConfig, value: boolean) => {
     setSaving(true);
@@ -94,6 +99,16 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
     try {
       await onUpdate(repo.id, { rules: rules || null });
       setRulesModified(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveSemgrepUrl = async () => {
+    setSaving(true);
+    try {
+      await onUpdate(repo.id, { semgrep_service_url: semgrepUrl });
+      setSemgrepUrlModified(false);
     } finally {
       setSaving(false);
     }
@@ -160,6 +175,79 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
           checked={repo.hebbian_enabled}
           onChange={(e) => handleToggle('hebbian_enabled', e.currentTarget.checked)}
           disabled={saving}
+        />
+
+        <Divider label="Static Analysis" labelPosition="left" />
+
+        <Switch
+          label="Static Analysis"
+          description="Run deterministic checks (AI attribution, security, commits) before AI review"
+          checked={repo.static_analysis_enabled}
+          onChange={(e) => handleToggle('static_analysis_enabled', e.currentTarget.checked)}
+          disabled={saving}
+        />
+
+        <Switch
+          label="AI Attribution Check"
+          description="Detect AI attribution patterns in code and commits"
+          checked={repo.ai_attribution_check}
+          onChange={(e) => handleToggle('ai_attribution_check', e.currentTarget.checked)}
+          disabled={saving || !repo.static_analysis_enabled}
+        />
+
+        <Switch
+          label="Security Patterns (Semgrep)"
+          description="Run Semgrep security analysis via external service"
+          checked={repo.security_patterns_check}
+          onChange={(e) => handleToggle('security_patterns_check', e.currentTarget.checked)}
+          disabled={saving || !repo.static_analysis_enabled}
+        />
+
+        <TextInput
+          label="Semgrep Service URL"
+          description="URL of the Semgrep scanning microservice"
+          placeholder="https://your-semgrep-service.railway.app"
+          value={semgrepUrl}
+          onChange={(e) => {
+            setSemgrepUrl(e.currentTarget.value);
+            setSemgrepUrlModified(e.currentTarget.value !== (repo.semgrep_service_url || ''));
+          }}
+          disabled={saving || !repo.static_analysis_enabled || !repo.security_patterns_check}
+        />
+
+        {semgrepUrlModified && (
+          <Group justify="flex-end">
+            <Button
+              variant="light"
+              onClick={() => {
+                setSemgrepUrl(repo.semgrep_service_url || '');
+                setSemgrepUrlModified(false);
+              }}
+              disabled={saving}
+              size="xs"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveSemgrepUrl} loading={saving} size="xs">
+              Save URL
+            </Button>
+          </Group>
+        )}
+
+        <Switch
+          label="Commit Message Validation"
+          description="Check commit messages for conventional commits format"
+          checked={repo.commit_message_check}
+          onChange={(e) => handleToggle('commit_message_check', e.currentTarget.checked)}
+          disabled={saving || !repo.static_analysis_enabled}
+        />
+
+        <Switch
+          label="Stack-Aware Prompts"
+          description="Add stack-specific hints to the AI reviewer based on detected technology"
+          checked={repo.stack_aware_prompts}
+          onChange={(e) => handleToggle('stack_aware_prompts', e.currentTarget.checked)}
+          disabled={saving || !repo.static_analysis_enabled}
         />
 
         <Divider label="Custom Rules" labelPosition="left" />
@@ -302,6 +390,11 @@ export function Settings() {
                           {repo.hebbian_enabled && (
                             <Badge color="orange" variant="light" size="sm">
                               Hebbian
+                            </Badge>
+                          )}
+                          {repo.static_analysis_enabled && (
+                            <Badge color="teal" variant="light" size="sm">
+                              Static Analysis
                             </Badge>
                           )}
                         </Group>

@@ -1,0 +1,214 @@
+# =============================================================================
+# Semgrep: Universal Security & Quality Rules
+# =============================================================================
+# Reglas genéricas para cualquier proyecto
+# Agrega reglas específicas según tu stack
+# =============================================================================
+
+rules:
+  # ===== SECRETS (todos los lenguajes) =====
+  - id: hardcoded-secret-generic
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "..."
+          - pattern: "$VAR": "..."
+    metavariable-regex:
+      metavariable: $VAR
+      regex: (?i)(password|secret|api_key|apikey|token|credentials|auth)
+    metavariable-pattern:
+      metavariable: $VAR
+      patterns:
+        - pattern-not: "..."  # No vacío
+    message: "Possible hardcoded secret. Use environment variables."
+    severity: ERROR
+    languages: [java, kotlin, javascript, typescript, python, go, rust]
+
+  # ===== SQL INJECTION (multi-lenguaje) =====
+  - id: sql-string-concat
+    pattern-either:
+      - pattern: |
+          "SELECT " + $USER_INPUT
+      - pattern: |
+          "DELETE " + $USER_INPUT
+      - pattern: |
+          "UPDATE " + $USER_INPUT
+      - pattern: |
+          "INSERT " + $USER_INPUT
+      - pattern: |
+          f"SELECT {$USER_INPUT}"
+      - pattern: |
+          `SELECT ${$USER_INPUT}`
+    message: "SQL injection risk: use parameterized queries"
+    severity: ERROR
+    languages: [java, kotlin, javascript, typescript, python]
+
+  # ===== JAVA/KOTLIN =====
+  - id: java-unsafe-reflection
+    pattern: Class.forName($USER_INPUT)
+    message: "Unsafe reflection with user input"
+    severity: WARNING
+    languages: [java, kotlin]
+
+  # ===== JAVASCRIPT/TYPESCRIPT =====
+  - id: js-eval-usage
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: new Function($X)
+    message: "Avoid eval() - security risk"
+    severity: ERROR
+    languages: [javascript, typescript]
+
+  - id: js-innerhtml
+    pattern: $X.innerHTML = $Y
+    message: "innerHTML can cause XSS. Use textContent or sanitize."
+    severity: WARNING
+    languages: [javascript, typescript]
+
+  # ===== PYTHON =====
+  - id: python-exec
+    pattern-either:
+      - pattern: exec($X)
+      - pattern: eval($X)
+    message: "Avoid exec/eval - security risk"
+    severity: ERROR
+    languages: [python]
+
+  - id: python-subprocess-shell
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+    message: "shell=True is dangerous with user input"
+    severity: WARNING
+    languages: [python]
+
+  # ===== GO =====
+  - id: go-sql-format
+    pattern: |
+      fmt.Sprintf("SELECT ... %s ...", $USER_INPUT)
+    message: "SQL injection risk: use parameterized queries"
+    severity: ERROR
+    languages: [go]
+
+  # ===== RUST =====
+  - id: rust-unsafe-block
+    pattern: |
+      unsafe { ... }
+    message: "Review unsafe block carefully"
+    severity: INFO
+    languages: [rust]
+
+  # ===== TESTS (multi-lenguaje) =====
+  - id: test-todo-skip
+    pattern-either:
+      - pattern: "@Disabled"
+      - pattern: "@Ignore"
+      - pattern: "it.skip(...)"
+      - pattern: "describe.skip(...)"
+      - pattern: "@pytest.mark.skip"
+      - pattern: "t.Skip()"
+    message: "Skipped test - ensure it's intentional"
+    severity: INFO
+    languages: [java, kotlin, javascript, typescript, python, go]
+
+  # ===== PATH TRAVERSAL =====
+  - id: path-traversal-python
+    pattern-either:
+      - pattern: open($USER_INPUT, ...)
+      - pattern: os.path.join(..., $USER_INPUT, ...)
+    message: "Potential path traversal - validate user input"
+    severity: WARNING
+    languages: [python]
+
+  - id: path-traversal-go
+    pattern: filepath.Join(..., $USER_INPUT, ...)
+    message: "Potential path traversal - validate user input"
+    severity: WARNING
+    languages: [go]
+
+  - id: path-traversal-node
+    pattern-either:
+      - pattern: path.join(..., $USER_INPUT, ...)
+      - pattern: fs.readFile($USER_INPUT, ...)
+      - pattern: fs.readFileSync($USER_INPUT, ...)
+    message: "Potential path traversal - validate user input"
+    severity: WARNING
+    languages: [javascript, typescript]
+
+  # ===== COMMAND INJECTION =====
+  - id: command-injection-go
+    pattern-either:
+      - pattern: exec.Command($USER_INPUT, ...)
+      - pattern: exec.CommandContext(..., $USER_INPUT, ...)
+    message: "Potential command injection - sanitize user input"
+    severity: ERROR
+    languages: [go]
+
+  - id: command-injection-node
+    pattern-either:
+      - pattern: child_process.exec($USER_INPUT, ...)
+      - pattern: child_process.execSync($USER_INPUT, ...)
+    message: "Potential command injection - use execFile instead"
+    severity: ERROR
+    languages: [javascript, typescript]
+
+  # ===== SSRF =====
+  - id: ssrf-python
+    pattern-either:
+      - pattern: requests.get($USER_INPUT, ...)
+      - pattern: urllib.request.urlopen($USER_INPUT)
+    message: "Potential SSRF - validate URL against allowlist"
+    severity: WARNING
+    languages: [python]
+
+  - id: ssrf-node
+    pattern-either:
+      - pattern: fetch($USER_INPUT, ...)
+      - pattern: axios.get($USER_INPUT, ...)
+    message: "Potential SSRF - validate URL against allowlist"
+    severity: WARNING
+    languages: [javascript, typescript]
+
+  # ===== INSECURE DESERIALIZATION =====
+  - id: insecure-deserialize-python
+    pattern-either:
+      - pattern: pickle.loads($X)
+      - pattern: yaml.load($X)
+      - pattern: yaml.unsafe_load($X)
+    message: "Insecure deserialization - use safe alternatives"
+    severity: ERROR
+    languages: [python]
+
+  - id: insecure-deserialize-java
+    pattern: new ObjectInputStream($X)
+    message: "Insecure deserialization - validate input source"
+    severity: WARNING
+    languages: [java, kotlin]
+
+  # ===== LOG INJECTION =====
+  - id: log-injection
+    pattern-either:
+      - pattern: logger.info($USER_INPUT)
+      - pattern: console.log($USER_INPUT)
+      - pattern: log.Printf($USER_INPUT)
+    message: "Log injection risk - sanitize user input before logging"
+    severity: INFO
+    languages: [java, javascript, typescript, go, python]
+
+  # ===== WEAK CRYPTOGRAPHY =====
+  - id: weak-crypto-md5
+    pattern-either:
+      - pattern: MessageDigest.getInstance("MD5")
+      - pattern: hashlib.md5(...)
+      - pattern: crypto.createHash("md5")
+      - pattern: md5.New()
+    message: "MD5 is weak - use SHA-256 or better"
+    severity: WARNING
+    languages: [java, python, javascript, typescript, go]
+
+  - id: weak-crypto-sha1
+    pattern-either:
+      - pattern: MessageDigest.getInstance("SHA-1")
+      - pattern: hashlib.sha1(...)
+      - pattern: crypto.createHash("sha1")
+      - pattern: sha1.New()
+    message: "SHA-1 is weak for security - use SHA-256 or better"
+    severity: WARNING
+    languages: [java, python, javascript, typescript, go]

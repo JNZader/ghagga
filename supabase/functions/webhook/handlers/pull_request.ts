@@ -16,6 +16,13 @@ import { TokenBudgeter } from '../../_shared/tokens/index.ts';
 import { getProviderRegistry } from '../../_shared/providers/index.ts';
 import { WorkflowEngine, type WorkflowExecutionResult } from '../../_shared/workflow/index.ts';
 import { ConsensusEngine, type ConsensusEngineResult } from '../../_shared/consensus/index.ts';
+import {
+  runStaticAnalysis,
+  formatFindingsAsLLMContext,
+  DEFAULT_STATIC_ANALYSIS_CONFIG,
+  type StaticAnalysisConfig,
+  type StaticAnalysisResult,
+} from '../../_shared/static-analysis/index.ts';
 
 /**
  * Review mode configuration
@@ -165,6 +172,60 @@ class GitHubClient {
       `/repos/${owner}/${repo}/issues/${prNumber}/comments`,
       { body }
     );
+  }
+
+  /**
+   * Get PR commits
+   */
+  async getPullRequestCommits(
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<Array<{ sha: string; message: string }>> {
+    const commits = await this.request<Array<{ sha: string; commit: { message: string } }>>(
+      'GET',
+      `/repos/${owner}/${repo}/pulls/${prNumber}/commits`
+    );
+    return commits.map((c) => ({ sha: c.sha, message: c.commit.message }));
+  }
+
+  /**
+   * Get file contents for multiple files (for Semgrep scanning)
+   * Only fetches code files, limited to maxFiles to avoid API rate limits.
+   */
+  async getFileContents(
+    owner: string,
+    repo: string,
+    paths: string[],
+    ref: string,
+    maxFiles: number = 30
+  ): Promise<Array<{ path: string; content: string }>> {
+    const CODE_EXTENSIONS = new Set([
+      '.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs',
+      '.java', '.kt', '.kts', '.rb', '.php', '.cs', '.cpp',
+      '.c', '.h', '.hpp', '.swift', '.scala',
+    ]);
+
+    const codePaths = paths.filter((p) => {
+      const ext = '.' + p.split('.').pop();
+      return CODE_EXTENSIONS.has(ext);
+    }).slice(0, maxFiles);
+
+    const results: Array<{ path: string; content: string }> = [];
+
+    // Fetch in parallel (batches of 10 to avoid overwhelming the API)
+    for (let i = 0; i < codePaths.length; i += 10) {
+      const batch = codePaths.slice(i, i + 10);
+      const fetched = await Promise.all(
+        batch.map(async (path) => {
+          const content = await this.getFileContent(owner, repo, path, ref);
+          return content ? { path, content } : null;
+        })
+      );
+      results.push(...fetched.filter((f): f is { path: string; content: string } => f !== null));
+    }
+
+    return results;
   }
 
   /**
@@ -595,10 +656,17 @@ function formatReviewComment(
   result: string | WorkflowExecutionResult | ConsensusEngineResult,
   mode: ReviewMode,
   filesReviewed: number,
-  filesSkipped: number
+  filesSkipped: number,
+  staticResult?: StaticAnalysisResult
 ): string {
   const header = `## 🤖 GHAGGA Code Review\n\n`;
   const summary = `*Reviewed ${filesReviewed} files${filesSkipped > 0 ? `, skipped ${filesSkipped}` : ''}*\n\n`;
+
+  // Static Analysis section (before AI review)
+  let staticSection = '';
+  if (staticResult) {
+    staticSection = formatStaticAnalysisSection(staticResult);
+  }
 
   let body: string;
 
@@ -631,7 +699,98 @@ function formatReviewComment(
 
   const footer = `\n\n---\n*Review mode: ${mode} | [GHAGGA](https://github.com/ghagga)*`;
 
-  return header + summary + body + footer;
+  return header + summary + staticSection + body + footer;
+}
+
+/**
+ * Format the static analysis section of the PR comment
+ */
+function formatStaticAnalysisSection(result: StaticAnalysisResult): string {
+  const lines: string[] = [];
+
+  const stackLabels: Record<string, string> = {
+    'java-gradle': 'Java/Kotlin (Gradle)',
+    'java-maven': 'Java/Kotlin (Maven)',
+    'node-npm': 'Node.js (npm)',
+    'node-yarn': 'Node.js (Yarn)',
+    'node-pnpm': 'Node.js (pnpm)',
+    'python': 'Python',
+    'go': 'Go',
+    'rust': 'Rust',
+    'unknown': 'Unknown',
+  };
+
+  const stackLabel = stackLabels[result.detectedStack] || result.detectedStack;
+  const semgrepStatus = result.summary.security.serviceAvailable
+    ? `${result.totalTimeMs}ms`
+    : 'unavailable';
+
+  lines.push(`### Static Analysis`);
+  lines.push(
+    `**${result.findings.length} issues found** | Stack: ${stackLabel} | Semgrep: ${semgrepStatus}`
+  );
+  lines.push('');
+
+  if (!result.summary.security.serviceAvailable && result.summary.security.findings === 0) {
+    lines.push('> Security scan skipped. Configure Semgrep service URL in Settings.');
+    lines.push('');
+  }
+
+  if (result.findings.length > 0) {
+    // Group by severity
+    const groups: Record<string, typeof result.findings> = {
+      error: [],
+      warning: [],
+      info: [],
+      suggestion: [],
+    };
+    for (const f of result.findings) {
+      groups[f.severity].push(f);
+    }
+
+    for (const [severity, findings] of Object.entries(groups)) {
+      if (findings.length === 0) continue;
+
+      const label = severity.charAt(0).toUpperCase() + severity.slice(1) + 's';
+      lines.push(`#### ${label} (${findings.length})`);
+
+      for (const finding of findings) {
+        let line = `- **[${finding.ruleId}]** ${finding.message}`;
+        if (finding.file) {
+          line += ` *(${finding.file}`;
+          if (finding.line) line += `:${finding.line}`;
+          line += ')*';
+        }
+        lines.push(line);
+
+        if (finding.suggestion) {
+          lines.push(`  > ${finding.suggestion}`);
+        }
+      }
+      lines.push('');
+    }
+  }
+
+  lines.push('---');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+/**
+ * Build StaticAnalysisConfig from the repo config object
+ */
+function buildStaticAnalysisConfig(config: RepoConfig): StaticAnalysisConfig {
+  // Use database fields if available, otherwise defaults
+  const dbConfig = config as Record<string, unknown>;
+  return {
+    enabled: (dbConfig.static_analysis_enabled as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.enabled,
+    aiAttributionCheck: (dbConfig.ai_attribution_check as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.aiAttributionCheck,
+    securityPatternsCheck: (dbConfig.security_patterns_check as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.securityPatternsCheck,
+    semgrepServiceUrl: (dbConfig.semgrep_service_url as string) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.semgrepServiceUrl,
+    commitMessageCheck: (dbConfig.commit_message_check as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.commitMessageCheck,
+    stackAwarePrompts: (dbConfig.stack_aware_prompts as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.stackAwarePrompts,
+  };
 }
 
 /**
@@ -709,6 +868,39 @@ export async function handlePullRequest(
       };
     }
 
+    // Fetch commits and file contents in parallel (for static analysis)
+    const [commits, fileContents] = await Promise.all([
+      client.getPullRequestCommits(owner, repo, pr.number),
+      client.getFileContents(
+        owner,
+        repo,
+        toReview.filter((f) => f.status !== 'removed').map((f) => f.filename),
+        pr.head.sha
+      ),
+    ]);
+
+    console.log(
+      `[${deliveryId}] Fetched ${commits.length} commits, ${fileContents.length} file contents`
+    );
+
+    // Build static analysis config from repo config (database fields)
+    const staticConfig: StaticAnalysisConfig = buildStaticAnalysisConfig(config);
+
+    // Run static analysis (Layer 0 - pre-LLM)
+    let staticResult: StaticAnalysisResult | undefined;
+    if (staticConfig.enabled) {
+      staticResult = await runStaticAnalysis({
+        files: toReview,
+        fileContents,
+        commits,
+        config: staticConfig,
+      });
+
+      console.log(
+        `[${deliveryId}] Static analysis: ${staticResult.findings.length} findings in ${staticResult.totalTimeMs}ms (stack: ${staticResult.detectedStack})`
+      );
+    }
+
     // Format diff content
     const diff = formatDiffForReview(toReview);
 
@@ -728,29 +920,40 @@ export async function handlePullRequest(
       );
     }
 
+    // Build static analysis context for LLM
+    const staticContext = staticResult
+      ? formatFindingsAsLLMContext(staticResult)
+      : '';
+
+    // Enrich rules with static analysis context
+    const enrichedRules = staticContext
+      ? `${config.customRules}\n\n${staticContext}`
+      : config.customRules;
+
     // Run appropriate review mode
     let reviewResult: string | WorkflowExecutionResult | ConsensusEngineResult;
 
     switch (config.mode) {
       case 'simple':
-        reviewResult = await runSimpleReview(reviewContent, config.customRules, deliveryId);
+        reviewResult = await runSimpleReview(reviewContent, enrichedRules, deliveryId);
         break;
       case 'workflow':
-        reviewResult = await runWorkflowReview(reviewContent, config.customRules, deliveryId);
+        reviewResult = await runWorkflowReview(reviewContent, enrichedRules, deliveryId);
         break;
       case 'consensus':
-        reviewResult = await runConsensusReview(reviewContent, config.customRules, deliveryId);
+        reviewResult = await runConsensusReview(reviewContent, enrichedRules, deliveryId);
         break;
       default:
-        reviewResult = await runSimpleReview(reviewContent, config.customRules, deliveryId);
+        reviewResult = await runSimpleReview(reviewContent, enrichedRules, deliveryId);
     }
 
-    // Format and post comment
+    // Format and post comment (with static analysis section)
     const comment = formatReviewComment(
       reviewResult,
       config.mode,
       toReview.length,
-      skipped.length
+      skipped.length,
+      staticResult
     );
 
     const { id: commentId } = await client.createPullRequestComment(

@@ -26,6 +26,12 @@ export interface RepoConfig {
   workflow_enabled: boolean;
   consensus_enabled: boolean;
   hebbian_enabled: boolean;
+  static_analysis_enabled: boolean;
+  ai_attribution_check: boolean;
+  security_patterns_check: boolean;
+  semgrep_service_url: string;
+  commit_message_check: boolean;
+  stack_aware_prompts: boolean;
   created_at?: string;
   updated_at?: string;
 }
