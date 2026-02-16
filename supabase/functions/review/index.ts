@@ -69,6 +69,8 @@ export interface ReviewInput {
   repoConfig: RepoConfig;
   /** Static analysis result (Layer 0 pre-LLM) */
   staticAnalysisResult?: StaticAnalysisResult;
+  /** Memory context from past reviews (Engram) */
+  memoryContext?: string;
 }
 
 /**
@@ -144,11 +146,11 @@ export class ReviewService {
       ? formatFindingsAsLLMContext(input.staticAnalysisResult)
       : '';
 
-    // Enrich rules with static analysis context
+    // Enrich rules with static analysis context and memory context
     const baseRules = input.repoConfig.rules || '';
-    const enrichedRules = staticAnalysisContext
-      ? `${baseRules}\n\n${staticAnalysisContext}`
-      : baseRules;
+    const enrichedRules = [baseRules, staticAnalysisContext, input.memoryContext]
+      .filter(Boolean)
+      .join('\n\n');
 
     // Execute review based on mode
     let result: SimpleReviewResult | WorkflowReviewResult | ConsensusReviewResult;

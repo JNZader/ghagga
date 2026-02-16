@@ -1,0 +1,24 @@
+.card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mantine-shadow-md);
+}
+
+.codeLocation {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.learned {
+  padding: 0.5rem;
+  background-color: light-dark(var(--mantine-color-teal-0), var(--mantine-color-dark-6));
+  border-radius: var(--mantine-radius-sm);
+  border-left: 3px solid var(--mantine-color-teal-5);
+}
+
+.meta {
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+}

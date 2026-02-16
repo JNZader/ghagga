@@ -13,6 +13,7 @@ import {
   IconSettings,
   IconWebhook,
   IconUsers,
+  IconBrain,
 } from '@tabler/icons-react';
 import classes from './Layout.module.css';
 
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: IconDashboard },
   { to: '/installations', label: 'Installations', icon: IconUsers },
   { to: '/webhooks', label: 'Webhooks', icon: IconWebhook },
+  { to: '/memory', label: 'Memory', icon: IconBrain },
   { to: '/settings', label: 'Settings', icon: IconSettings },
 ];
 

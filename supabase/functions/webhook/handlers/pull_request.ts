@@ -23,6 +23,8 @@ import {
   type StaticAnalysisConfig,
   type StaticAnalysisResult,
 } from '../../_shared/static-analysis/index.ts';
+import { MemoryService } from '../../_shared/memory/index.ts';
+import { EmbeddingService } from '../../_shared/embeddings/service.ts';
 
 /**
  * Review mode configuration
@@ -39,6 +41,7 @@ export interface RepoConfig {
   customRules: string;
   maxFilesPerReview: number;
   preferredProvider?: string;
+  memory_enabled?: boolean;
 }
 
 /**
@@ -63,6 +66,7 @@ const DEFAULT_REPO_CONFIG: RepoConfig = {
   ],
   customRules: '',
   maxFilesPerReview: 50,
+  memory_enabled: false,
 };
 
 /**
@@ -454,28 +458,29 @@ export function shouldReviewFile(
  * Simple glob pattern matching
  */
 function matchPattern(filename: string, pattern: string): boolean {
-  // Handle ** for any path
-  if (pattern.includes('**')) {
-    const parts = pattern.split('**');
-    if (parts.length === 2) {
-      const [prefix, suffix] = parts;
-      const prefixMatch = !prefix || filename.startsWith(prefix);
-      const suffixMatch = !suffix || filename.endsWith(suffix.replace(/^\//, ''));
-      return prefixMatch && suffixMatch;
-    }
+  // Convert glob pattern to regex
+  const toRegex = (p: string) => {
+    return p
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+      .replace(/\*\*/g, '{{GLOBSTAR}}')      // Temporarily mark **
+      .replace(/\*/g, '[^/]*')               // * matches anything except /
+      .replace(/{{GLOBSTAR}}/g, '.*')         // ** matches anything including /
+      .replace(/\?/g, '.');                   // ? matches single char
+  };
+
+  const regex = new RegExp('^' + toRegex(pattern) + '$');
+  if (regex.test(filename)) {
+    return true;
   }
 
-  // Handle * for single segment
-  const regex = new RegExp(
-    '^' +
-      pattern
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special chars
-        .replace(/\*/g, '[^/]*') // * matches anything except /
-        .replace(/\?/g, '.') + // ? matches single char
-      '$'
-  );
+  // For patterns without path separators, also match against basename
+  // (consistent with .gitignore behavior)
+  if (!pattern.includes('/')) {
+    const basename = filename.split('/').pop() || filename;
+    return regex.test(basename);
+  }
 
-  return regex.test(filename);
+  return false;
 }
 
 /**
@@ -794,6 +799,40 @@ function buildStaticAnalysisConfig(config: RepoConfig): StaticAnalysisConfig {
 }
 
 /**
+ * Extract review findings from various result types for memory storage
+ */
+export function extractFindingsFromResult(
+  result: string | WorkflowExecutionResult | ConsensusEngineResult
+): Array<{ severity: 'error' | 'warning' | 'info' | 'suggestion'; category: string; message: string; file?: string; line?: number; suggestion?: string }> {
+  if (typeof result === 'string') {
+    // Simple review - create a single observation from the text
+    return [{
+      severity: 'info',
+      category: 'review',
+      message: result.slice(0, 500),
+    }];
+  }
+
+  if ('synthesis' in result && 'findings' in result) {
+    // Workflow result
+    const workflow = result as WorkflowExecutionResult;
+    return workflow.findings.map((f) => ({
+      severity: 'info' as const,
+      category: f.stepName || 'workflow',
+      message: typeof f.findings === 'string' ? f.findings.slice(0, 500) : String(f.findings).slice(0, 500),
+    }));
+  }
+
+  // Consensus result
+  const consensus = result as ConsensusEngineResult;
+  return [{
+    severity: consensus.recommendation?.action === 'reject' ? 'error' as const : 'info' as const,
+    category: 'consensus',
+    message: (consensus.synthesis || '').slice(0, 500),
+  }];
+}
+
+/**
  * Handle a pull request event
  */
 export async function handlePullRequest(
@@ -833,6 +872,49 @@ export async function handlePullRequest(
 
     // Get repository config
     const config = await getRepoConfig(owner, repo, client, pr.head.sha);
+
+    // Initialize memory service if enabled
+    const supabase = getSupabaseClient();
+    let memoryService: MemoryService | undefined;
+    let memorySessionId: string | undefined;
+    let memoryContextStr = '';
+
+    if (config.memory_enabled) {
+      try {
+        const embeddingService = new EmbeddingService({
+          provider: 'auto',
+          fallback: 'none',
+          model: 'text-embedding-3-small',
+          openaiApiKey: Deno.env.get('OPENAI_API_KEY'),
+          geminiApiKey: Deno.env.get('GEMINI_API_KEY'),
+        });
+
+        memoryService = new MemoryService(supabase, embeddingService);
+        memorySessionId = await memoryService.startSession(
+          `${owner}/${repo}`,
+          installationId,
+          pr.number,
+          pr.title
+        );
+
+        // Consult past memory (query = PR title + first 500 chars of body)
+        const queryText = `${pr.title} ${(pr.body || '').slice(0, 500)}`;
+        const memoryContext = await memoryService.consultMemory(
+          `${owner}/${repo}`,
+          queryText
+        );
+        memoryContextStr = memoryService.formatContextForLLM(memoryContext);
+
+        if (memoryContextStr) {
+          console.log(
+            `[${deliveryId}] Memory: found ${memoryContext.observations.length} relevant past observations`
+          );
+        }
+      } catch (memError) {
+        console.warn(`[${deliveryId}] Memory initialization failed:`, memError);
+        // Continue without memory - non-blocking
+      }
+    }
 
     if (!config.enabled) {
       return {
@@ -925,10 +1007,10 @@ export async function handlePullRequest(
       ? formatFindingsAsLLMContext(staticResult)
       : '';
 
-    // Enrich rules with static analysis context
-    const enrichedRules = staticContext
-      ? `${config.customRules}\n\n${staticContext}`
-      : config.customRules;
+    // Enrich rules with static analysis context and memory context
+    const enrichedRules = [config.customRules, staticContext, memoryContextStr]
+      .filter(Boolean)
+      .join('\n\n');
 
     // Run appropriate review mode
     let reviewResult: string | WorkflowExecutionResult | ConsensusEngineResult;
@@ -964,6 +1046,36 @@ export async function handlePullRequest(
     );
 
     console.log(`[${deliveryId}] Posted review comment (ID: ${commentId})`);
+
+    // Save memory observations (non-blocking, pattern from Hebbian)
+    if (memoryService && memorySessionId) {
+      try {
+        // Extract findings from workflow result for observation extraction
+        const reviewFindings = extractFindingsFromResult(reviewResult);
+
+        const observations = memoryService.extractObservationsFromFindings(
+          reviewFindings,
+          toReview,
+          pr.number,
+          memorySessionId,
+          installationId,
+          `${owner}/${repo}`
+        );
+
+        for (const obs of observations) {
+          await memoryService.addObservation(obs);
+        }
+
+        await memoryService.closeSession(memorySessionId);
+
+        console.log(
+          `[${deliveryId}] Memory: saved ${observations.length} observations, session closed`
+        );
+      } catch (memError) {
+        console.warn(`[${deliveryId}] Memory save failed:`, memError);
+        // Non-blocking - review was already posted
+      }
+    }
 
     return {
       success: true,

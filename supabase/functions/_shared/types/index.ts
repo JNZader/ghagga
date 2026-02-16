@@ -24,3 +24,6 @@ export * from './hebbian.ts';
 
 // GitHub webhook and API types
 export * from './github.ts';
+
+// Memory types (Engram-style persistent memory)
+export * from './memory.ts';

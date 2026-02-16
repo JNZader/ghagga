@@ -43,6 +43,22 @@
   width: 180px;
 }
 
+.observationsLayout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1rem;
+}
+
+.sessionList {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+
+.observationTimeline {
+  min-width: 0;
+}
+
 @media (max-width: 768px) {
   .filterInput {
     max-width: 100%;
@@ -51,5 +67,9 @@
 
   .typeSelect {
     width: 100%;
+  }
+
+  .observationsLayout {
+    grid-template-columns: 1fr;
   }
 }

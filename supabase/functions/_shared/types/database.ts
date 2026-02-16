@@ -32,6 +32,7 @@ export interface RepoConfig {
   semgrep_service_url: string;
   commit_message_check: boolean;
   stack_aware_prompts: boolean;
+  memory_enabled: boolean;
   created_at?: string;
   updated_at?: string;
 }
