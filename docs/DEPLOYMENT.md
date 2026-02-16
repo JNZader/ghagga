@@ -1,202 +1,501 @@
-# Deployment Guide
+# Guia de Despliegue
 
-This document covers deployment options for the GHAGGA project.
+Guia paso a paso para desplegar ghagga en produccion. Cubre los 4 componentes: base de datos (Supabase), Edge Functions, Dashboard (GitHub Pages) y Semgrep Service (opcional).
 
-## Table of Contents
+## Tabla de Contenidos
 
-1. [Dashboard Deployment (GitHub Pages)](#dashboard-deployment-github-pages)
-2. [Supabase Edge Functions](#supabase-edge-functions)
-3. [GitHub Actions Secrets](#github-actions-secrets)
-4. [Manual Deployment](#manual-deployment)
-5. [Environment Variables](#environment-variables)
-6. [Troubleshooting](#troubleshooting)
+1. [Arquitectura de Despliegue](#arquitectura-de-despliegue)
+2. [Prerequisitos](#prerequisitos)
+3. [Paso 1: Crear proyecto en Supabase](#paso-1-crear-proyecto-en-supabase)
+4. [Paso 2: Ejecutar migraciones de BD](#paso-2-ejecutar-migraciones-de-bd)
+5. [Paso 3: Crear GitHub App](#paso-3-crear-github-app)
+6. [Paso 4: Configurar secrets de Edge Functions](#paso-4-configurar-secrets-de-edge-functions)
+7. [Paso 5: Desplegar Edge Functions](#paso-5-desplegar-edge-functions)
+8. [Paso 6: Desplegar Dashboard en GitHub Pages](#paso-6-desplegar-dashboard-en-github-pages)
+9. [Paso 7: Desplegar Semgrep Service (opcional)](#paso-7-desplegar-semgrep-service-opcional)
+10. [Paso 8: CI/CD automatico](#paso-8-cicd-automatico)
+11. [Verificacion post-despliegue](#verificacion-post-despliegue)
+12. [Despliegue para otros proyectos (forks)](#despliegue-para-otros-proyectos-forks)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Dashboard Deployment (GitHub Pages)
-
-The dashboard is automatically deployed to GitHub Pages when changes are pushed to the `main` branch.
-
-### Automatic Deployment
-
-The workflow triggers on:
-- Push to `main` branch (when files in `dashboard/` change)
-- Manual dispatch via GitHub Actions UI
-
-### Required Secrets
-
-Configure these secrets in your repository settings (**Settings** > **Secrets and variables** > **Actions**):
-
-| Secret | Description |
-|--------|-------------|
-| `VITE_SUPABASE_URL` | Your Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key for client access |
-
-### Enabling GitHub Pages
-
-1. Go to repository **Settings** > **Pages**
-2. Under "Build and deployment", select **GitHub Actions** as the source
-3. The workflow will handle the rest
-
-### Manual Deployment
-
-To trigger a manual deployment:
-
-1. Go to **Actions** > **Deploy Dashboard to GitHub Pages**
-2. Click **Run workflow**
-3. Select the branch and click **Run workflow**
-
-### Accessing the Dashboard
-
-After deployment, the dashboard is available at:
+## Arquitectura de Despliegue
 
 ```
-https://<username>.github.io/ghagga/
+GitHub (PR events)
+    |
+    | webhook POST
+    v
+Supabase Edge Functions          Semgrep Service (opcional)
+    |-- webhook/                       |-- FastAPI + Semgrep
+    |-- review/                        |-- Railway / Docker
+    |
+    v
+Supabase PostgreSQL
+    |-- 9 migraciones
+    |-- pgvector, FTS, RLS
+    |-- RPCs de busqueda hibrida
+    |
+    v
+Dashboard (GitHub Pages)
+    |-- React + Mantine UI
+    |-- SPA con client-side routing
 ```
 
-### Custom Domain (Optional)
+---
 
-To use a custom domain:
+## Prerequisitos
 
-1. Go to repository **Settings** > **Pages**
-2. Under "Custom domain", enter your domain
-3. Configure DNS records as instructed
-4. Update `dashboard/vite.config.ts` base path if needed
+- **Cuenta GitHub** con permisos para crear GitHub Apps
+- **Cuenta Supabase** (plan Free o superior)
+- **Supabase CLI** instalado: `npm install -g supabase`
+- **Node.js 20+** (para build del dashboard)
+- **Al menos 1 API key de LLM**: Anthropic (`sk-ant-*`), OpenAI (`sk-*`), o Google AI (`AIza*`)
 
 ---
 
-## Supabase Edge Functions
+## Paso 1: Crear proyecto en Supabase
 
-The project uses GitHub Actions to automatically deploy Edge Functions when changes are pushed to `main`.
+1. Ir a [supabase.com/dashboard](https://supabase.com/dashboard)
+2. Click **New Project**
+3. Elegir organizacion, nombre, password de DB, y region
+4. Esperar a que se aprovisione (~2 minutos)
+5. Anotar estos valores de **Settings > API**:
 
-### Trigger Conditions
-
-The deployment workflow runs when:
-
-- Changes are pushed to `main` branch affecting:
-  - `supabase/functions/**`
-  - `supabase/migrations/**`
-  - `.github/workflows/deploy-functions.yml`
-- Manually triggered via GitHub Actions UI (workflow_dispatch)
-
-### Deployment Steps
-
-1. Checkout repository
-2. Setup Supabase CLI
-3. Link to Supabase project
-4. Run database migrations
-5. Deploy all Edge Functions
-6. Set function secrets
+| Valor | Donde encontrarlo | Variable |
+|-------|-------------------|----------|
+| Project URL | Settings > API > Project URL | `SUPABASE_URL` |
+| Anon Key | Settings > API > anon public | `SUPABASE_ANON_KEY` |
+| Service Role Key | Settings > API > service_role | `SUPABASE_SERVICE_ROLE_KEY` |
+| Project Ref | URL del dashboard: `supabase.com/dashboard/project/<REF>` | `SUPABASE_PROJECT_ID` |
+| DB Password | El que elegiste al crear el proyecto | `SUPABASE_DB_PASSWORD` |
+| Access Token | [Account > Access Tokens](https://supabase.com/dashboard/account/tokens) | `SUPABASE_ACCESS_TOKEN` |
 
 ---
 
-## GitHub Actions Secrets
+## Paso 2: Ejecutar migraciones de BD
 
-Configure these secrets in your repository: **Settings** > **Secrets and variables** > **Actions**
-
-### Required Secrets
-
-| Secret | Description | How to Obtain |
-|--------|-------------|---------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token for Supabase CLI | [Supabase Dashboard](https://supabase.com/dashboard/account/tokens) > Access Tokens |
-| `SUPABASE_PROJECT_ID` | Your Supabase project reference ID | Dashboard URL: `https://supabase.com/dashboard/project/<PROJECT_ID>` |
-| `SUPABASE_DB_PASSWORD` | Database password for migrations | Project Settings > Database > Connection string password |
-
-### Function Secrets
-
-These secrets are set on the Edge Functions during deployment:
-
-| Secret | Description |
-|--------|-------------|
-| `GITHUB_APP_ID` | GitHub App ID |
-| `GITHUB_CLIENT_ID` | GitHub App Client ID |
-| `GITHUB_CLIENT_SECRET` | GitHub App Client Secret |
-| `GITHUB_PRIVATE_KEY` | Base64-encoded GitHub App private key |
-| `GITHUB_WEBHOOK_SECRET` | Webhook signature verification secret |
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_ANON_KEY` | Supabase anonymous key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
-| `OPENAI_API_KEY` | OpenAI API key (optional) |
-| `ANTHROPIC_API_KEY` | Anthropic API key (optional) |
-| `GOOGLE_AI_API_KEY` | Google AI API key (optional) |
-
-See [ENV_VARIABLES.md](./ENV_VARIABLES.md) for detailed information on each variable.
-
-### Adding Secrets
-
-1. Go to your GitHub repository
-2. Navigate to **Settings** > **Secrets and variables** > **Actions**
-3. Click **New repository secret**
-4. Add each secret listed above
-
----
-
-## Manual Deployment
-
-For local or manual deployments:
-
-### Prerequisites
-
-- [Supabase CLI](https://supabase.com/docs/guides/cli) installed
-- Supabase access token configured
-
-### Steps
+Las 9 migraciones crean todo el schema: tablas, indexes HNSW/GIN, triggers, RPCs de busqueda hibrida, y politicas RLS.
 
 ```bash
-# Login to Supabase
+# Login en Supabase CLI
 supabase login
 
-# Link to your project
-supabase link --project-ref <PROJECT_ID>
+# Linkar al proyecto
+supabase link --project-ref <TU_PROJECT_ID>
 
-# Run migrations
+# Ejecutar las 9 migraciones
 supabase db push
-
-# Deploy functions
-supabase functions deploy
-
-# Set secrets (from .env file)
-supabase secrets set --env-file .env.production
 ```
 
-### Deploy Individual Functions
+Esto crea:
+
+| Migracion | Que crea |
+|-----------|----------|
+| 001 | Extensiones: pgvector, pg_trgm |
+| 002 | Tablas core: installations, repo_configs |
+| 003 | reviews, review_chunks, review_embeddings |
+| 004 | review_threads |
+| 005 | hebbian_associations |
+| 006 | Indexes HNSW/GIN, RPCs de busqueda hibrida |
+| 007 | Politicas RLS |
+| 008 | static_analysis_results |
+| 009 | memory_sessions, memory_observations, RPCs de memoria |
+
+### Verificar
+
+En Supabase Dashboard > SQL Editor:
+
+```sql
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
+```
+
+Debe listar: `hebbian_associations`, `installations`, `memory_observations`, `memory_sessions`, `repo_configs`, `review_chunks`, `review_embeddings`, `review_threads`, `reviews`, `static_analysis_results`.
+
+---
+
+## Paso 3: Crear GitHub App
+
+Guia completa en [GITHUB_APP_SETUP.md](./GITHUB_APP_SETUP.md). Resumen rapido:
+
+1. Ir a [github.com/settings/apps](https://github.com/settings/apps) > **New GitHub App**
+2. Configurar:
+
+| Campo | Valor |
+|-------|-------|
+| Name | `ghagga-reviewer` (o el nombre que prefieras) |
+| Webhook URL | `https://<project-ref>.supabase.co/functions/v1/webhook` |
+| Webhook Secret | Generar con `openssl rand -hex 32` |
+| Content Type | `application/json` |
+
+3. Permisos de repositorio:
+
+| Permiso | Nivel | Motivo |
+|---------|-------|--------|
+| Contents | Read | Leer archivos del repo |
+| Metadata | Read | Requerido por GitHub |
+| Pull requests | Read & Write | Leer PRs y postear reviews |
+
+4. Suscribirse a eventos:
+   - **Pull request**
+   - **Installation**
+   - **Installation repositories**
+
+5. Generar private key (descarga un `.pem`) y convertir a base64:
 
 ```bash
-# Deploy specific function
-supabase functions deploy webhook
-supabase functions deploy review
+# Linux/macOS
+cat ghagga-reviewer.pem | base64 -w 0
+
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("ghagga-reviewer.pem"))
+```
+
+6. Anotar credenciales:
+
+| Credencial | Variable |
+|------------|----------|
+| App ID | `GITHUB_APP_ID` |
+| Client ID | `GITHUB_CLIENT_ID` |
+| Client Secret | `GITHUB_CLIENT_SECRET` |
+| Private Key (base64) | `GITHUB_PRIVATE_KEY` |
+| Webhook Secret | `GITHUB_WEBHOOK_SECRET` |
+
+7. Instalar la app en los repos deseados desde `https://github.com/apps/<nombre-app>`
+
+---
+
+## Paso 4: Configurar secrets de Edge Functions
+
+```bash
+supabase secrets set \
+  GITHUB_APP_ID="<tu-app-id>" \
+  GITHUB_CLIENT_ID="<tu-client-id>" \
+  GITHUB_CLIENT_SECRET="<tu-client-secret>" \
+  GITHUB_PRIVATE_KEY="<base64-encoded-private-key>" \
+  GITHUB_WEBHOOK_SECRET="<tu-webhook-secret>" \
+  SUPABASE_URL="https://<project-ref>.supabase.co" \
+  SUPABASE_ANON_KEY="<tu-anon-key>" \
+  SUPABASE_SERVICE_ROLE_KEY="<tu-service-role-key>" \
+  ANTHROPIC_API_KEY="<sk-ant-...>" \
+  OPENAI_API_KEY="<sk-...>" \
+  GOOGLE_AI_API_KEY="<AIza...>"
+```
+
+> Solo necesitas **al menos 1** API key de LLM. El `ProviderRegistry` usa fallback automatico en este orden: Anthropic > OpenAI > Google.
+
+### Verificar
+
+```bash
+supabase secrets list
 ```
 
 ---
 
-## Environment Variables
+## Paso 5: Desplegar Edge Functions
 
-For a complete list of environment variables and how to configure them, see [ENV_VARIABLES.md](./ENV_VARIABLES.md).
+```bash
+# Deployar todas las funciones
+supabase functions deploy --no-verify-jwt
+```
+
+O individualmente:
+
+```bash
+supabase functions deploy webhook --no-verify-jwt
+supabase functions deploy review --no-verify-jwt
+```
+
+Las funciones desplegadas:
+
+| Funcion | Endpoint | Proposito |
+|---------|----------|-----------|
+| `webhook` | `/functions/v1/webhook` | Recibe webhooks de GitHub, verifica firma, routea a handlers |
+| `review` | `/functions/v1/review` | Orquesta el code review (simple/workflow/consensus) |
+
+### Verificar
+
+```bash
+# Debe retornar 405 Method Not Allowed (solo acepta POST)
+curl https://<project-ref>.supabase.co/functions/v1/webhook
+```
+
+---
+
+## Paso 6: Desplegar Dashboard en GitHub Pages
+
+El dashboard es una SPA React con Mantine UI. Se despliega automaticamente en GitHub Pages.
+
+### 6.1 Habilitar GitHub Pages
+
+1. Ir al repo en GitHub > **Settings** > **Pages**
+2. En "Build and deployment", seleccionar **GitHub Actions** como source
+
+### 6.2 Configurar secrets del dashboard
+
+En **Settings** > **Secrets and variables** > **Actions**, agregar:
+
+| Secret | Valor |
+|--------|-------|
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Tu anon key de Supabase |
+
+### 6.3 Trigger del deploy
+
+El workflow `deploy-pages.yml` se ejecuta automaticamente cuando:
+- Se pushea a `main` con cambios en `dashboard/`
+- Se dispara manualmente desde **Actions** > **Deploy Dashboard to GitHub Pages** > **Run workflow**
+
+### 6.4 URL del dashboard
+
+Despues del deploy, acceder en:
+
+```
+https://<usuario>.github.io/<nombre-repo>/
+```
+
+### 6.5 Base path dinamico
+
+El base path se detecta automaticamente del nombre del repositorio. No hay que configurar nada extra, funciona con cualquier nombre de repo.
+
+### 6.6 Deploy manual (alternativa)
+
+```bash
+cd dashboard
+npm ci
+
+# Variables de entorno para el build
+export VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+export VITE_SUPABASE_ANON_KEY=<tu-anon-key>
+export VITE_BASE_PATH=/<nombre-repo>/
+
+npm run build
+# Subir dist/ al hosting que prefieras (Vercel, Netlify, Cloudflare Pages, etc.)
+```
+
+### 6.7 Custom domain (opcional)
+
+1. En el repo: **Settings** > **Pages** > **Custom domain** > ingresar tu dominio
+2. Configurar DNS segun las instrucciones de GitHub
+3. Si usas dominio custom en la raiz, cambiar `VITE_BASE_PATH=/`
+
+---
+
+## Paso 7: Desplegar Semgrep Service (opcional)
+
+El servicio de Semgrep agrega analisis estatico avanzado (SAST) al pipeline de review. Es opcional - ghagga funciona sin el.
+
+### Opcion A: Railway
+
+```bash
+cd semgrep-service
+railway login
+railway up
+```
+
+La configuracion ya esta en `railway.toml` (healthcheck en `/health`).
+
+### Opcion B: Docker
+
+```bash
+cd semgrep-service
+docker build -t ghagga-semgrep .
+docker run -d -p 8000:8000 ghagga-semgrep
+```
+
+### Opcion C: Cualquier hosting con Python
+
+```bash
+cd semgrep-service
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### Conectar con Edge Functions
+
+Agregar la URL del servicio como secret:
+
+```bash
+supabase secrets set SEMGREP_SERVICE_URL="https://<tu-semgrep-url>"
+```
+
+---
+
+## Paso 8: CI/CD automatico
+
+El proyecto incluye 2 workflows de GitHub Actions que se ejecutan al pushear a `main`:
+
+### deploy-functions.yml
+
+| Trigger | Paths | Que hace |
+|---------|-------|----------|
+| Push a `main` | `supabase/functions/**`, `supabase/migrations/**` | Migraciones + deploy funciones + set secrets |
+| `workflow_dispatch` | - | Deploy manual |
+
+**Secrets requeridos en GitHub Actions:**
+
+| Secret | Proposito |
+|--------|-----------|
+| `SUPABASE_ACCESS_TOKEN` | Auth del CLI |
+| `SUPABASE_PROJECT_ID` | Linkar proyecto |
+| `SUPABASE_DB_PASSWORD` | Ejecutar migraciones |
+| `GITHUB_APP_ID` | Secret de la funcion |
+| `GITHUB_CLIENT_ID` | Secret de la funcion |
+| `GITHUB_CLIENT_SECRET` | Secret de la funcion |
+| `GITHUB_PRIVATE_KEY` | Secret de la funcion |
+| `GITHUB_WEBHOOK_SECRET` | Secret de la funcion |
+| `SUPABASE_URL` | Secret de la funcion |
+| `SUPABASE_ANON_KEY` | Secret de la funcion |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret de la funcion |
+| `ANTHROPIC_API_KEY` | LLM (al menos 1) |
+| `OPENAI_API_KEY` | LLM (opcional) |
+| `GOOGLE_AI_API_KEY` | LLM (opcional) |
+
+### deploy-pages.yml
+
+| Trigger | Paths | Que hace |
+|---------|-------|----------|
+| Push a `main` | `dashboard/**` | Build + deploy a GitHub Pages |
+| `workflow_dispatch` | - | Deploy manual |
+
+**Secrets requeridos:**
+
+| Secret | Proposito |
+|--------|-----------|
+| `VITE_SUPABASE_URL` | URL de Supabase para el frontend |
+| `VITE_SUPABASE_ANON_KEY` | Anon key para el frontend |
+
+---
+
+## Verificacion post-despliegue
+
+### 1. Base de datos
+
+En Supabase Dashboard > SQL Editor:
+
+```sql
+-- Verificar tablas
+SELECT count(*) FROM memory_sessions;  -- Debe retornar 0
+SELECT count(*) FROM installations;     -- Debe retornar 0
+
+-- Verificar RPCs
+SELECT proname FROM pg_proc WHERE proname LIKE 'hybrid_search%' OR proname LIKE 'search_memory%';
+-- Debe listar: hybrid_search_reviews, hybrid_search_memory, search_memory_observations_vector
+```
+
+### 2. Edge Functions
+
+```bash
+# Webhook (debe dar 405)
+curl -s -o /dev/null -w "%{http_code}" \
+  https://<project-ref>.supabase.co/functions/v1/webhook
+# Esperado: 405
+
+# Review (debe dar 401 sin auth)
+curl -s -o /dev/null -w "%{http_code}" \
+  https://<project-ref>.supabase.co/functions/v1/review
+# Esperado: 401 o 405
+```
+
+### 3. Dashboard
+
+Navegar a `https://<usuario>.github.io/<repo>/` y verificar:
+- Carga la pagina de login/home
+- Las rutas `/memory`, `/settings`, `/reviews` funcionan
+- Recargar la pagina en una subruta no da 404
+
+### 4. Test end-to-end
+
+1. Instalar la GitHub App en un repo de prueba
+2. Abrir un PR con cambios de codigo
+3. Verificar que el bot comenta con el code review en ~30-60 segundos
+4. En Supabase Dashboard, verificar que se creo un registro en `reviews` y `memory_sessions`
+
+---
+
+## Despliegue para otros proyectos (forks)
+
+ghagga esta preparado para funcionar con cualquier nombre de repositorio. Si haces fork o lo usas en otro proyecto:
+
+### Lo que se adapta solo
+
+- **Base path del dashboard**: Se genera automaticamente de `github.event.repository.name` en el workflow
+- **BrowserRouter basename**: Usa `import.meta.env.BASE_URL` (se configura en build)
+- **404.html SPA redirect**: Funciona con cualquier base path
+
+### Lo que hay que configurar
+
+1. Crear tu propio proyecto en Supabase
+2. Crear tu propia GitHub App (apuntando a tu Supabase)
+3. Configurar los secrets de GitHub Actions de tu repo
+4. Habilitar GitHub Pages con source "GitHub Actions"
+
+### Ejemplo: fork como `mi-org/code-reviewer`
+
+```
+Dashboard URL: https://mi-org.github.io/code-reviewer/
+Webhook URL:   https://<mi-project>.supabase.co/functions/v1/webhook
+```
+
+No se necesita cambiar ni una linea de codigo.
 
 ---
 
 ## Troubleshooting
 
-### Migration Failures
+### Migraciones fallan
 
-If migrations fail:
+```bash
+# Ver estado de migraciones
+supabase migration list
 
-1. Check the migration SQL syntax
-2. Verify database password is correct
-3. Check for conflicting schema changes
+# Si hay conflictos, reparar manualmente en SQL Editor
+# y luego marcar como aplicada
+supabase migration repair <version> --status applied
+```
 
-### Function Deployment Failures
+### Edge Functions no responden
 
-If function deployment fails:
+```bash
+# Ver logs en tiempo real
+supabase functions logs webhook --tail
 
-1. Verify `import_map.json` is valid
-2. Check for TypeScript errors in function code
-3. Ensure all dependencies are properly imported
+# Verificar secrets
+supabase secrets list
+```
 
-### Secret Issues
+### Dashboard da 404 en subrutas
 
-If functions fail due to missing secrets:
+- Verificar que `dashboard/public/404.html` existe en el build
+- Verificar que GitHub Pages usa "GitHub Actions" como source (no "Deploy from branch")
 
-1. Verify all secrets are set in GitHub Actions
-2. Check secret names match exactly (case-sensitive)
-3. Re-run the deployment workflow after adding secrets
+### Webhook no recibe eventos
+
+1. En GitHub App settings > **Advanced** > **Recent Deliveries**: ver si los webhooks se envian
+2. Verificar que la Webhook URL sea exacta: `https://<ref>.supabase.co/functions/v1/webhook`
+3. Verificar que el `GITHUB_WEBHOOK_SECRET` coincida exactamente
+
+### Review no comenta en el PR
+
+1. Verificar logs: `supabase functions logs review --tail`
+2. Verificar que al menos 1 API key de LLM este configurada
+3. Verificar que la GitHub App tenga permisos de `pull_requests: write`
+4. Verificar que el PR no sea draft y la accion sea `opened`, `synchronize`, o `reopened`
+
+### Memoria no funciona
+
+1. Verificar en `repo_configs` que `memory_enabled = true` para el repo
+2. Verificar que las tablas `memory_sessions` y `memory_observations` existen
+3. Los embeddings requieren que al menos 1 LLM provider con embeddings este disponible
+
+---
+
+## Referencias
+
+- [Supabase CLI Docs](https://supabase.com/docs/guides/cli)
+- [GitHub Apps Documentation](https://docs.github.com/en/apps)
+- [GitHub Pages](https://docs.github.com/en/pages)
+- [Variables de entorno](./ENV_VARIABLES.md)
+- [Setup de GitHub App](./GITHUB_APP_SETUP.md)
+- [Configuracion](./CONFIGURATION.md)
