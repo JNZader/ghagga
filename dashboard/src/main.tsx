@@ -11,7 +11,7 @@ import '@mantine/charts/styles.css';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MantineProvider theme={theme}>
-      <BrowserRouter basename="/ghagga">
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <App />
       </BrowserRouter>
     </MantineProvider>
