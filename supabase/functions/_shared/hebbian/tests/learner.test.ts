@@ -115,6 +115,14 @@ function createMockSupabase() {
           error: null,
         });
       },
+      then: (resolve: (val: { data: unknown[]; error: null }) => void) => {
+        const results = Array.from(assocs.values()).filter((a) => {
+          return Object.entries(filters).every(
+            ([k, v]) => (a as Record<string, unknown>)[k] === v
+          );
+        });
+        resolve({ data: results, error: null });
+      },
     };
   }
 

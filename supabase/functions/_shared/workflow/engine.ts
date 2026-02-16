@@ -129,12 +129,14 @@ export class WorkflowEngine {
       });
 
       const totalDuration_ms = Date.now() - startTime;
+      const status = this.determineOverallStatus(synthesis);
 
       return {
         findings: parallelResults,
         synthesis,
         totalDuration_ms,
-        status: this.determineOverallStatus(synthesis),
+        status,
+        ...(status === 'error' && synthesis.error ? { error: synthesis.error } : {}),
       };
     } catch (error) {
       const totalDuration_ms = Date.now() - startTime;
@@ -199,12 +201,14 @@ export class WorkflowEngine {
       // The last result should be synthesis
       const synthesis = results[results.length - 1];
       const findings = results.slice(0, -1);
+      const status = this.determineOverallStatus(synthesis);
 
       return {
         findings,
         synthesis,
         totalDuration_ms,
-        status: this.determineOverallStatus(synthesis),
+        status,
+        ...(status === 'error' && synthesis.error ? { error: synthesis.error } : {}),
       };
     } catch (error) {
       const totalDuration_ms = Date.now() - startTime;

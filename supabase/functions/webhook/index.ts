@@ -15,7 +15,7 @@ import type {
   InstallationRepositoriesEventPayload,
 } from '../_shared/types/index.ts';
 import { handlePullRequest } from './handlers/pull_request.ts';
-import { handleInstallation, handleInstallationRepositories } from './handlers/installation.ts';
+import { handleInstallationEvent, handleInstallationRepositories } from './handlers/installation.ts';
 
 /**
  * Verify GitHub webhook signature using HMAC-SHA256
@@ -220,7 +220,7 @@ serve(async (req: Request): Promise<Response> => {
 
       case 'installation': {
         const installPayload = payload as InstallationEventPayload;
-        const result = await handleInstallation(installPayload, deliveryId);
+        const result = await handleInstallationEvent(installPayload, deliveryId);
         return successResponse(result);
       }
 

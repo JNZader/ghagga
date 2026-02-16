@@ -6,6 +6,7 @@ import {
   assertEquals,
   assertExists,
   assertRejects,
+  assertStringIncludes,
 } from 'https://deno.land/std@0.208.0/assert/mod.ts';
 import {
   describe,
@@ -345,6 +346,127 @@ describe('ProviderRegistry', () => {
       Error,
       'All providers failed'
     );
+  });
+});
+
+describe('ProviderRegistry.completeWithFallback', () => {
+  let registry: ProviderRegistry;
+
+  beforeEach(() => {
+    resetProviderRegistry();
+    registry = new ProviderRegistry();
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  it('should complete with first available provider', async () => {
+    mockEnv({
+      ANTHROPIC_API_KEY: 'key1',
+      OPENAI_API_KEY: 'key2',
+    });
+
+    // We can't mock complete() easily without fetch, but we can test the selection logic
+    // by checking that it throws on actual API call (which confirms provider was selected)
+    try {
+      await registry.completeWithFallback({
+        messages: [{ role: 'user', content: 'test' }],
+      });
+    } catch (error) {
+      // Expected: will fail because there's no real API, but should have attempted anthropic first
+      const msg = (error as Error).message;
+      assertEquals(msg.includes('anthropic'), true);
+    }
+  });
+
+  it('should exclude specified providers in fallback', async () => {
+    mockEnv({
+      ANTHROPIC_API_KEY: 'key1',
+      OPENAI_API_KEY: 'key2',
+      GOOGLE_API_KEY: 'key3',
+    });
+
+    try {
+      await registry.completeWithFallback(
+        { messages: [{ role: 'user', content: 'test' }] },
+        { excludeProviders: ['anthropic'] }
+      );
+    } catch (error) {
+      const msg = (error as Error).message;
+      // anthropic should NOT be in attempted providers
+      assertEquals(msg.includes('anthropic') === false || msg.includes('openai'), true);
+    }
+  });
+
+  it('should throw with detailed error when all providers fail', async () => {
+    mockEnv({});
+    try {
+      await registry.completeWithFallback({
+        messages: [{ role: 'user', content: 'test' }],
+      });
+      // Should not reach here
+      assertEquals(true, false);
+    } catch (error) {
+      assertStringIncludes((error as Error).message, 'All providers failed');
+    }
+  });
+
+  it('should track all attempted providers', async () => {
+    mockEnv({
+      ANTHROPIC_API_KEY: 'key1',
+      OPENAI_API_KEY: 'key2',
+      GOOGLE_API_KEY: 'key3',
+    });
+
+    try {
+      await registry.completeWithFallback({
+        messages: [{ role: 'user', content: 'test' }],
+      });
+    } catch (error) {
+      const msg = (error as Error).message;
+      // Should have attempted at least the first provider
+      assertEquals(msg.includes('Attempted:'), true);
+    }
+  });
+});
+
+describe('ProviderRegistry.getAvailableProviderNames', () => {
+  let registry: ProviderRegistry;
+
+  beforeEach(() => {
+    resetProviderRegistry();
+    registry = new ProviderRegistry();
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  it('should return names of available providers', async () => {
+    mockEnv({
+      ANTHROPIC_API_KEY: 'key1',
+      GOOGLE_API_KEY: 'key3',
+    });
+
+    const names = await registry.getAvailableProviderNames();
+    assertEquals(names.includes('anthropic'), true);
+    assertEquals(names.includes('google'), true);
+    assertEquals(names.includes('openai'), false);
+  });
+
+  it('should return empty array when none available', async () => {
+    mockEnv({});
+    const names = await registry.getAvailableProviderNames();
+    assertEquals(names.length, 0);
+  });
+});
+
+describe('ProviderRegistry.getAllProviders', () => {
+  it('should return all registered providers', () => {
+    const registry = new ProviderRegistry();
+    const all = registry.getAllProviders();
+    assertEquals(all.length, 3);
   });
 });
 

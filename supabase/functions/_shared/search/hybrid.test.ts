@@ -213,16 +213,16 @@ describe('HybridSearch', () => {
       const results = await search.search('test', 'owner/repo');
 
       // uuid-1: vector=1.0, text=1.0 -> 0.7*1.0 + 0.3*1.0 = 1.0
-      // uuid-2: vector=0.8, text=0.0 -> 0.7*0.8 + 0.3*0.0 = 0.56
+      // uuid-2: vector=0.8, text=0.0 -> 0.7*0.8 + 0.3*0.0 ≈ 0.56
       // uuid-3: vector=0.0, text=1.0 -> 0.7*0.0 + 0.3*1.0 = 0.3
 
       assertEquals(results.length, 3);
       assertEquals(results[0].id, 'uuid-1');
       assertEquals(results[0].combinedScore, 1.0);
       assertEquals(results[1].id, 'uuid-2');
-      assertEquals(results[1].combinedScore, 0.56);
+      assertEquals(Math.abs(results[1].combinedScore - 0.56) < 0.001, true);
       assertEquals(results[2].id, 'uuid-3');
-      assertEquals(results[2].combinedScore, 0.3);
+      assertEquals(Math.abs(results[2].combinedScore - 0.3) < 0.001, true);
     });
 
     it('should filter results below minScore', async () => {

@@ -206,11 +206,11 @@ export function extractConceptsFromMultiple(
     }
   }
 
-  // Average scores across all contents
+  // Average scores across all contents (including zeros for non-matching contents)
   const scores: Record<string, number> = {};
   for (const [concept, conceptScores] of Object.entries(aggregatedScores)) {
     scores[concept] =
-      conceptScores.reduce((a, b) => a + b, 0) / conceptScores.length;
+      conceptScores.reduce((a, b) => a + b, 0) / contents.length;
   }
 
   const concepts = Object.keys(scores);
