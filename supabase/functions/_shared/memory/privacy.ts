@@ -45,12 +45,15 @@ export function stripPrivacy(content: string): string {
  * Check if content contains potentially sensitive data.
  */
 export function hasPrivateContent(content: string): boolean {
+  PRIVATE_TAG_REGEX.lastIndex = 0;
   if (PRIVATE_TAG_REGEX.test(content)) return true;
 
   for (const pattern of API_KEY_PATTERNS) {
+    pattern.lastIndex = 0;
     if (pattern.test(content)) return true;
   }
 
+  EMAIL_REGEX.lastIndex = 0;
   if (EMAIL_REGEX.test(content)) return true;
 
   return false;

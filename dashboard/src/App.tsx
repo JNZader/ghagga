@@ -1,5 +1,4 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Container, Title, Text, Stack, Button, Group } from '@mantine/core';
 import { Dashboard } from './pages/Dashboard';
 import { Reviews } from './pages/Reviews/Reviews';
 import { Memory } from './pages/Memory/Memory';

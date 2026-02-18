@@ -211,7 +211,7 @@ export class MemoryService {
     if (observationIds.length > 0) {
       let query = this.supabase
         .from('memory_observations')
-        .select('*')
+        .select('id, session_id, installation_id, repo_full_name, observation_type, title, content_stripped, what_happened, why_it_matters, where_in_code, what_was_learned, tags, confidence, metadata, created_at')
         .in('id', observationIds);
 
       if (options?.observationType) {

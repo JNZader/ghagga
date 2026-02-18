@@ -144,15 +144,25 @@ export class GeminiProvider implements AIProvider {
       (body.generationConfig as Record<string, unknown>).stopSequences = options.stop;
     }
 
-    const url = `${this.baseUrl}/models/${model}:generateContent?key=${key}`;
+    const url = `${this.baseUrl}/models/${model}:generateContent`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120_000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorData = (await response.json()) as GeminiError;

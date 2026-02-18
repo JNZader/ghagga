@@ -37,10 +37,13 @@ export function useStats(): UseStatsResult {
     setError(null);
 
     try {
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data: reviews, error: fetchError } = await supabase
         .from('reviews')
         .select('id, repo_full_name, pr_number, status, result_summary, files_reviewed, created_at')
-        .order('created_at', { ascending: false });
+        .gte('created_at', ninetyDaysAgo)
+        .order('created_at', { ascending: false })
+        .limit(1000);
 
       if (fetchError) {
         throw new Error(fetchError.message);

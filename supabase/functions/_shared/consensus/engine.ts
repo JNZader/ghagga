@@ -12,17 +12,7 @@ import type {
   ChatMessage,
   TokenUsage,
 } from '../types/index.ts';
-
-/**
- * AI Provider interface for LLM interactions
- * Compatible with providers from T-005 provider registry
- */
-export interface AIProvider {
-  readonly name: LLMProvider;
-  readonly models: string[];
-  complete(options: LLMRequestOptions): Promise<LLMResponse>;
-  isAvailable(): Promise<boolean>;
-}
+import type { AIProvider } from '../providers/anthropic.ts';
 
 /**
  * Stance represents the argumentative position a model takes

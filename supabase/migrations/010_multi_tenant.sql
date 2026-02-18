@@ -11,6 +11,15 @@ ALTER TABLE repo_configs
   ADD COLUMN IF NOT EXISTS api_keys_configured jsonb NOT NULL DEFAULT '{}';
 
 -- =============================================================================
+-- 1b. Add numeric account_id to installations (immutable, unlike account_login)
+-- =============================================================================
+ALTER TABLE installations
+  ADD COLUMN IF NOT EXISTS account_id bigint;
+
+CREATE INDEX IF NOT EXISTS idx_installations_account_id
+  ON installations (account_id) WHERE account_id IS NOT NULL;
+
+-- =============================================================================
 -- 2. Create github_user_mappings table
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS github_user_mappings (
@@ -176,3 +185,10 @@ CREATE TRIGGER trg_prevent_direct_api_key_update
 -- Grant execute on helper function
 GRANT EXECUTE ON FUNCTION prevent_direct_api_key_update TO authenticated;
 GRANT EXECUTE ON FUNCTION prevent_direct_api_key_update TO service_role;
+
+-- =============================================================================
+-- 7. Revoke SELECT on encrypted API key columns from authenticated role
+-- =============================================================================
+-- Grant SELECT on all non-sensitive columns explicitly, then revoke on encrypted ones
+REVOKE SELECT (anthropic_api_key_encrypted, openai_api_key_encrypted, google_ai_api_key_encrypted)
+  ON repo_configs FROM authenticated;

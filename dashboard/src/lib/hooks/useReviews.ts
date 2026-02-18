@@ -31,12 +31,12 @@ export function useReviews(): UseReviewsReturn {
 
   const fetchRepos = useCallback(async () => {
     const { data } = await supabase
-      .from('reviews')
-      .select('repo_full_name');
+      .from('repo_configs')
+      .select('repo_full_name')
+      .order('repo_full_name');
 
     if (data) {
-      const uniqueRepos = [...new Set(data.map(r => r.repo_full_name))];
-      setRepos(uniqueRepos);
+      setRepos(data.map(r => r.repo_full_name));
     }
   }, []);
 
@@ -58,8 +58,12 @@ export function useReviews(): UseReviewsReturn {
       }
 
       if (filters.search) {
+        const sanitized = filters.search
+          .replace(/\\/g, '\\\\')
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
         query = query.or(
-          `result_summary.ilike.%${filters.search}%,pr_title.ilike.%${filters.search}%`
+          `result_summary.ilike.%${sanitized}%,pr_title.ilike.%${sanitized}%`
         );
       }
 

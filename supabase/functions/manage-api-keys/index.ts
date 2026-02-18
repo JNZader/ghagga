@@ -20,10 +20,25 @@ const PROVIDER_COLUMN_MAP: Record<Provider, string> = {
   google: 'google_ai_api_key_encrypted',
 };
 
+const API_KEY_PREFIX_MAP: Record<Provider, RegExp> = {
+  anthropic: /^sk-ant-/,
+  openai: /^sk-/,
+  google: /^AIza/,
+};
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
@@ -37,8 +52,15 @@ serve(async (req: Request) => {
     }
 
     // Create user-scoped client to verify auth
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -66,6 +88,13 @@ serve(async (req: Request) => {
       );
     }
 
+    if (!UUID_REGEX.test(repo_config_id)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid repo_config_id format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (!VALID_PROVIDERS.includes(provider as Provider)) {
       return new Response(
         JSON.stringify({ error: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(', ')}` }),
@@ -73,11 +102,27 @@ serve(async (req: Request) => {
       );
     }
 
+    // Validate API key format if saving
+    if (api_key && api_key.trim().length > 0) {
+      const expectedPrefix = API_KEY_PREFIX_MAP[provider as Provider];
+      if (expectedPrefix && !expectedPrefix.test(api_key.trim())) {
+        return new Response(
+          JSON.stringify({ error: `Invalid API key format for provider ${provider}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Verify user owns this repo via github_user_mappings
-    const serviceClient = createClient(
-      supabaseUrl,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!serviceRoleKey) {
+      console.error('Missing SUPABASE_SERVICE_ROLE_KEY env var');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
     // Get the repo config to check ownership
     const { data: repoConfig, error: repoError } = await serviceClient

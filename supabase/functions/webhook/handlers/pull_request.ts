@@ -41,6 +41,7 @@ export interface RepoConfig {
   customRules: string;
   maxFilesPerReview: number;
   preferredProvider?: string;
+  model?: string;
   memory_enabled?: boolean;
 }
 
@@ -130,10 +131,18 @@ class GitHubClient {
     repo: string,
     prNumber: number
   ): Promise<GitHubDiffFile[]> {
-    return this.request<GitHubDiffFile[]>(
-      'GET',
-      `/repos/${owner}/${repo}/pulls/${prNumber}/files`
-    );
+    const allFiles: GitHubDiffFile[] = [];
+    let page = 1;
+    while (true) {
+      const files = await this.request<GitHubDiffFile[]>(
+        'GET',
+        `/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=100&page=${page}`
+      );
+      allFiles.push(...files);
+      if (files.length < 100) break;
+      page++;
+    }
+    return allFiles;
   }
 
   /**
@@ -407,9 +416,9 @@ async function getRepoConfig(
   try {
     const supabase = getSupabaseClient();
     const { data } = await supabase
-      .from('repository_configs')
+      .from('repo_configs')
       .select('*')
-      .eq('full_name', `${owner}/${repo}`)
+      .eq('repo_full_name', `${owner}/${repo}`)
       .single();
 
     if (data) {
@@ -878,57 +887,7 @@ export async function handlePullRequest(
     // Get repository config
     const config = await getRepoConfig(owner, repo, client, pr.head.sha);
 
-    // Load per-repo API credentials (encrypted in DB)
-    const supabase = getSupabaseClient();
-    let credentials: PerRepoCredentials = {};
-    try {
-      credentials = await getRepoCredentials(`${owner}/${repo}`, supabase);
-    } catch (credError) {
-      console.warn(`[${deliveryId}] Failed to load per-repo credentials, using env vars:`, credError);
-    }
-
-    // Initialize memory service if enabled
-    let memoryService: MemoryService | undefined;
-    let memorySessionId: string | undefined;
-    let memoryContextStr = '';
-
-    if (config.memory_enabled) {
-      try {
-        const embeddingService = new EmbeddingService({
-          provider: 'auto',
-          fallback: 'none',
-          model: 'text-embedding-3-small',
-          openaiApiKey: Deno.env.get('OPENAI_API_KEY'),
-          geminiApiKey: Deno.env.get('GEMINI_API_KEY'),
-        });
-
-        memoryService = new MemoryService(supabase, embeddingService);
-        memorySessionId = await memoryService.startSession(
-          `${owner}/${repo}`,
-          installationId,
-          pr.number,
-          pr.title
-        );
-
-        // Consult past memory (query = PR title + first 500 chars of body)
-        const queryText = `${pr.title} ${(pr.body || '').slice(0, 500)}`;
-        const memoryContext = await memoryService.consultMemory(
-          `${owner}/${repo}`,
-          queryText
-        );
-        memoryContextStr = memoryService.formatContextForLLM(memoryContext);
-
-        if (memoryContextStr) {
-          console.log(
-            `[${deliveryId}] Memory: found ${memoryContext.observations.length} relevant past observations`
-          );
-        }
-      } catch (memError) {
-        console.warn(`[${deliveryId}] Memory initialization failed:`, memError);
-        // Continue without memory - non-blocking
-      }
-    }
-
+    // Early exit if reviews are disabled (before expensive credential/memory init)
     if (!config.enabled) {
       return {
         success: true,
@@ -939,6 +898,65 @@ export async function handlePullRequest(
         filesSkipped: 0,
         commentPosted: false,
       };
+    }
+
+    // Load credentials and initialize memory in parallel
+    const supabase = getSupabaseClient();
+    let credentials: PerRepoCredentials = {};
+    let memoryService: MemoryService | undefined;
+    let memorySessionId: string | undefined;
+    let memoryContextStr = '';
+
+    const credentialPromise = getRepoCredentials(`${owner}/${repo}`, supabase)
+      .catch((credError) => {
+        console.warn(`[${deliveryId}] Failed to load per-repo credentials, using env vars:`, credError);
+        return {} as PerRepoCredentials;
+      });
+
+    const memoryPromise = config.memory_enabled
+      ? (async () => {
+          const embeddingService = new EmbeddingService({
+            provider: 'auto',
+            fallback: 'none',
+            model: 'text-embedding-3-small',
+            openaiApiKey: Deno.env.get('OPENAI_API_KEY'),
+            geminiApiKey: Deno.env.get('GEMINI_API_KEY'),
+          });
+
+          const svc = new MemoryService(supabase, embeddingService);
+          const sessionId = await svc.startSession(
+            `${owner}/${repo}`,
+            installationId,
+            pr.number,
+            pr.title
+          );
+
+          const queryText = `${pr.title} ${(pr.body || '').slice(0, 500)}`;
+          const memoryContext = await svc.consultMemory(
+            `${owner}/${repo}`,
+            queryText
+          );
+          const contextStr = svc.formatContextForLLM(memoryContext);
+
+          if (contextStr) {
+            console.log(
+              `[${deliveryId}] Memory: found ${memoryContext.observations.length} relevant past observations`
+            );
+          }
+
+          return { svc, sessionId, contextStr };
+        })().catch((memError) => {
+          console.warn(`[${deliveryId}] Memory initialization failed:`, memError);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const [credResult, memResult] = await Promise.all([credentialPromise, memoryPromise]);
+    credentials = credResult;
+    if (memResult) {
+      memoryService = memResult.svc;
+      memorySessionId = memResult.sessionId;
+      memoryContextStr = memResult.contextStr;
     }
 
     // Get PR files
@@ -1004,7 +1022,7 @@ export async function handlePullRequest(
     const budgeter = new TokenBudgeter();
 
     const tokenEstimate = budgeter.estimateTokens(diff);
-    const allocation = budgeter.allocate('claude-sonnet-4-20250514');
+    const allocation = budgeter.allocate(config.model || 'claude-sonnet-4-20250514');
 
     let reviewContent = diff;
     if (tokenEstimate > allocation.content) {
@@ -1075,9 +1093,7 @@ export async function handlePullRequest(
           `${owner}/${repo}`
         );
 
-        for (const obs of observations) {
-          await memoryService.addObservation(obs);
-        }
+        await Promise.all(observations.map(obs => memoryService!.addObservation(obs)));
 
         await memoryService.closeSession(memorySessionId);
 

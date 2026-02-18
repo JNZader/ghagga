@@ -65,6 +65,24 @@ export async function scanWithSemgrep(
     return { findings: [], serviceAvailable: false };
   }
 
+  // SSRF protection: validate URL is HTTPS and not a private/loopback address
+  try {
+    const parsed = new URL(serviceUrl);
+    if (parsed.protocol !== 'https:') {
+      console.warn(`[static-analysis] Semgrep service URL must use HTTPS: ${serviceUrl}`);
+      return { findings: [], serviceAvailable: false };
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'];
+    if (blocked.includes(hostname) || hostname.startsWith('10.') || hostname.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
+      console.warn(`[static-analysis] Semgrep service URL points to private network: ${serviceUrl}`);
+      return { findings: [], serviceAvailable: false };
+    }
+  } catch {
+    console.warn(`[static-analysis] Invalid Semgrep service URL: ${serviceUrl}`);
+    return { findings: [], serviceAvailable: false };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
