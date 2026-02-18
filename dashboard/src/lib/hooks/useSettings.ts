@@ -20,6 +20,7 @@ export interface RepoConfig {
   semgrep_service_url: string;
   commit_message_check: boolean;
   stack_aware_prompts: boolean;
+  api_keys_configured: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +42,8 @@ interface UseSettingsReturn {
   error: string | null;
   selectRepo: (repoFullName: string) => void;
   updateRepoConfig: (id: string, updates: Partial<RepoConfig>) => Promise<void>;
+  saveApiKey: (repoConfigId: string, provider: string, apiKey: string) => Promise<void>;
+  removeApiKey: (repoConfigId: string, provider: string) => Promise<void>;
   refreshData: () => Promise<void>;
 }
 
@@ -116,6 +119,72 @@ export function useSettings(): UseSettingsReturn {
     [selectedRepo]
   );
 
+  const manageApiKey = useCallback(
+    async (repoConfigId: string, provider: string, apiKey?: string) => {
+      setError(null);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('Not authenticated');
+        throw new Error('Not authenticated');
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/manage-api-keys`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repo_config_id: repoConfigId,
+          provider,
+          api_key: apiKey || null,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        const errorMsg = result.error || 'Failed to manage API key';
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      // Update local state with new api_keys_configured
+      const updatedKeys = result.api_keys_configured;
+
+      setRepoConfigs((prev) =>
+        prev.map((config) =>
+          config.id === repoConfigId
+            ? { ...config, api_keys_configured: updatedKeys }
+            : config
+        )
+      );
+
+      if (selectedRepo?.id === repoConfigId) {
+        setSelectedRepo((prev) =>
+          prev ? { ...prev, api_keys_configured: updatedKeys } : null
+        );
+      }
+    },
+    [selectedRepo]
+  );
+
+  const saveApiKey = useCallback(
+    async (repoConfigId: string, provider: string, apiKey: string) => {
+      await manageApiKey(repoConfigId, provider, apiKey);
+    },
+    [manageApiKey]
+  );
+
+  const removeApiKey = useCallback(
+    async (repoConfigId: string, provider: string) => {
+      await manageApiKey(repoConfigId, provider);
+    },
+    [manageApiKey]
+  );
+
   return {
     installations,
     repoConfigs,
@@ -124,6 +193,8 @@ export function useSettings(): UseSettingsReturn {
     error,
     selectRepo,
     updateRepoConfig,
+    saveApiKey,
+    removeApiKey,
     refreshData: fetchData,
   };
 }

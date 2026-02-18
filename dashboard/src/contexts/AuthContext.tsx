@@ -40,6 +40,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Register user-installation mappings on sign in
+      if (_event === 'SIGNED_IN' && session?.access_token) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        fetch(`${supabaseUrl}/functions/v1/register-user`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }).catch((err) => console.warn('register-user failed:', err));
+      }
     });
 
     return () => subscription.unsubscribe();

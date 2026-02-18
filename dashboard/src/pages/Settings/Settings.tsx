@@ -16,9 +16,11 @@ import {
   Select,
   Textarea,
   TextInput,
+  PasswordInput,
   Button,
+  ActionIcon,
 } from '@mantine/core';
-import { IconAlertCircle, IconGitBranch, IconSettings } from '@tabler/icons-react';
+import { IconAlertCircle, IconGitBranch, IconSettings, IconTrash } from '@tabler/icons-react';
 import { useSettings, RepoConfig } from '../../lib/hooks/useSettings';
 import styles from './Settings.module.css';
 
@@ -44,12 +46,108 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
+const API_KEY_PROVIDERS = [
+  { key: 'anthropic', label: 'Anthropic API Key', placeholder: 'sk-ant-...' },
+  { key: 'openai', label: 'OpenAI API Key', placeholder: 'sk-...' },
+  { key: 'google', label: 'Google AI API Key', placeholder: 'AIza...' },
+] as const;
+
+interface ApiKeySectionProps {
+  repo: RepoConfig;
+  onSaveKey: (repoConfigId: string, provider: string, apiKey: string) => Promise<void>;
+  onRemoveKey: (repoConfigId: string, provider: string) => Promise<void>;
+}
+
+function ApiKeySection({ repo, onSaveKey, onRemoveKey }: ApiKeySectionProps) {
+  const [keyValues, setKeyValues] = useState<Record<string, string>>({});
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  // Reset inputs when repo changes
+  useEffect(() => {
+    setKeyValues({});
+  }, [repo.id]);
+
+  const handleSave = async (provider: string) => {
+    const value = keyValues[provider];
+    if (!value?.trim()) return;
+
+    setSavingKey(provider);
+    try {
+      await onSaveKey(repo.id, provider, value.trim());
+      setKeyValues((prev) => ({ ...prev, [provider]: '' }));
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleRemove = async (provider: string) => {
+    setSavingKey(provider);
+    try {
+      await onRemoveKey(repo.id, provider);
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  return (
+    <>
+      <Divider label="API Keys" labelPosition="left" />
+      <Text size="sm" c="dimmed">
+        Configure per-repository API keys. If not set, global keys will be used as fallback.
+      </Text>
+      {API_KEY_PROVIDERS.map(({ key, label, placeholder }) => {
+        const isConfigured = repo.api_keys_configured?.[key] === true;
+        const hasInput = !!keyValues[key]?.trim();
+        const isSaving = savingKey === key;
+
+        return (
+          <Group key={key} align="flex-end" gap="sm">
+            <PasswordInput
+              label={label}
+              placeholder={isConfigured ? 'Key configured' : placeholder}
+              value={keyValues[key] || ''}
+              onChange={(e) =>
+                setKeyValues((prev) => ({ ...prev, [key]: e.currentTarget.value }))
+              }
+              disabled={isSaving}
+              style={{ flex: 1 }}
+            />
+            {hasInput && (
+              <Button
+                onClick={() => handleSave(key)}
+                loading={isSaving}
+                size="sm"
+              >
+                Save
+              </Button>
+            )}
+            {isConfigured && !hasInput && (
+              <ActionIcon
+                color="red"
+                variant="light"
+                onClick={() => handleRemove(key)}
+                loading={isSaving}
+                size="lg"
+                title="Remove key"
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            )}
+          </Group>
+        );
+      })}
+    </>
+  );
+}
+
 interface RepoConfigFormProps {
   repo: RepoConfig;
   onUpdate: (id: string, updates: Partial<RepoConfig>) => Promise<void>;
+  onSaveKey: (repoConfigId: string, provider: string, apiKey: string) => Promise<void>;
+  onRemoveKey: (repoConfigId: string, provider: string) => Promise<void>;
 }
 
-function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
+function RepoConfigForm({ repo, onUpdate, onSaveKey, onRemoveKey }: RepoConfigFormProps) {
   const [saving, setSaving] = useState(false);
   const [rules, setRules] = useState(repo.rules || '');
   const [rulesModified, setRulesModified] = useState(false);
@@ -281,6 +379,12 @@ function RepoConfigForm({ repo, onUpdate }: RepoConfigFormProps) {
             </Button>
           </Group>
         )}
+
+        <ApiKeySection
+          repo={repo}
+          onSaveKey={onSaveKey}
+          onRemoveKey={onRemoveKey}
+        />
       </Stack>
     </Card>
   );
@@ -295,6 +399,8 @@ export function Settings() {
     selectRepo,
     selectedRepo,
     updateRepoConfig,
+    saveApiKey,
+    removeApiKey,
   } = useSettings();
 
   if (loading) {
@@ -408,7 +514,12 @@ export function Settings() {
         </div>
 
         {selectedRepo && (
-          <RepoConfigForm repo={selectedRepo} onUpdate={updateRepoConfig} />
+          <RepoConfigForm
+            repo={selectedRepo}
+            onUpdate={updateRepoConfig}
+            onSaveKey={saveApiKey}
+            onRemoveKey={removeApiKey}
+          />
         )}
       </Stack>
     </Container>

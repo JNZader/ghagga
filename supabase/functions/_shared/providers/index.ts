@@ -20,4 +20,8 @@ export {
   resetProviderRegistry,
   type ProviderSelectionOptions,
   type CompletionResult,
+  type PerRepoCredentials,
 } from './registry.ts';
+
+// Per-repo credential loader
+export { getRepoCredentials } from './credentials.ts';

@@ -33,8 +33,20 @@ export interface RepoConfig {
   commit_message_check: boolean;
   stack_aware_prompts: boolean;
   memory_enabled: boolean;
+  api_keys_configured: Record<string, boolean>;
   created_at?: string;
   updated_at?: string;
+}
+
+// GitHub user to installation mapping (multi-tenant)
+export interface GitHubUserMapping {
+  id: string;
+  supabase_user_id: string;
+  github_user_id: number;
+  github_username: string;
+  installation_id: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // Review status types

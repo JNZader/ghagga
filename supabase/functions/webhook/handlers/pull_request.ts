@@ -13,7 +13,7 @@ import type {
 } from '../../_shared/types/index.ts';
 import { SmartChunker } from '../../_shared/chunking/index.ts';
 import { TokenBudgeter } from '../../_shared/tokens/index.ts';
-import { getProviderRegistry } from '../../_shared/providers/index.ts';
+import { getProviderRegistry, getRepoCredentials, type PerRepoCredentials } from '../../_shared/providers/index.ts';
 import { WorkflowEngine, type WorkflowExecutionResult } from '../../_shared/workflow/index.ts';
 import { ConsensusEngine, type ConsensusEngineResult } from '../../_shared/consensus/index.ts';
 import {
@@ -538,10 +538,11 @@ function formatDiffForReview(files: GitHubDiffFile[]): string {
 async function runSimpleReview(
   diff: string,
   rules: string,
-  deliveryId: string
+  deliveryId: string,
+  credentials?: PerRepoCredentials
 ): Promise<string> {
   const registry = getProviderRegistry();
-  const provider = await registry.getBestProvider();
+  const provider = await registry.getBestProvider(undefined, credentials);
 
   if (!provider) {
     throw new Error('No LLM provider available');
@@ -549,6 +550,7 @@ async function runSimpleReview(
 
   console.log(`[${deliveryId}] Running simple review with ${provider.name}`);
 
+  const credKey = credentials?.[provider.name as keyof PerRepoCredentials];
   const response = await provider.complete({
     messages: [
       {
@@ -572,7 +574,7 @@ Format your response as a clear, actionable review comment.`,
     ],
     maxTokens: 4096,
     temperature: 0.3,
-  });
+  }, credKey);
 
   return response.content;
 }
@@ -583,20 +585,22 @@ Format your response as a clear, actionable review comment.`,
 async function runWorkflowReview(
   diff: string,
   rules: string,
-  deliveryId: string
+  deliveryId: string,
+  credentials?: PerRepoCredentials
 ): Promise<WorkflowExecutionResult> {
   const registry = getProviderRegistry();
 
-  // Create LLM caller function
+  // Create LLM caller function that uses per-repo credentials
   const llmCaller = async (options: { messages: unknown[]; maxTokens?: number }) => {
-    const provider = await registry.getBestProvider();
+    const provider = await registry.getBestProvider(undefined, credentials);
     if (!provider) {
       throw new Error('No LLM provider available');
     }
+    const credKey = credentials?.[provider.name as keyof PerRepoCredentials];
     return provider.complete({
       messages: options.messages as { role: string; content: string }[],
       maxTokens: options.maxTokens || 2048,
-    });
+    }, credKey);
   };
 
   const engine = new WorkflowEngine(
@@ -621,10 +625,11 @@ async function runWorkflowReview(
 async function runConsensusReview(
   diff: string,
   rules: string,
-  deliveryId: string
+  deliveryId: string,
+  credentials?: PerRepoCredentials
 ): Promise<ConsensusEngineResult> {
   const registry = getProviderRegistry();
-  const availableProviders = await registry.getAvailableProviders();
+  const availableProviders = await registry.getAvailableProviders(credentials);
 
   if (availableProviders.length === 0) {
     throw new Error('No LLM providers available for consensus');
@@ -873,8 +878,16 @@ export async function handlePullRequest(
     // Get repository config
     const config = await getRepoConfig(owner, repo, client, pr.head.sha);
 
-    // Initialize memory service if enabled
+    // Load per-repo API credentials (encrypted in DB)
     const supabase = getSupabaseClient();
+    let credentials: PerRepoCredentials = {};
+    try {
+      credentials = await getRepoCredentials(`${owner}/${repo}`, supabase);
+    } catch (credError) {
+      console.warn(`[${deliveryId}] Failed to load per-repo credentials, using env vars:`, credError);
+    }
+
+    // Initialize memory service if enabled
     let memoryService: MemoryService | undefined;
     let memorySessionId: string | undefined;
     let memoryContextStr = '';
@@ -1017,16 +1030,16 @@ export async function handlePullRequest(
 
     switch (config.mode) {
       case 'simple':
-        reviewResult = await runSimpleReview(reviewContent, enrichedRules, deliveryId);
+        reviewResult = await runSimpleReview(reviewContent, enrichedRules, deliveryId, credentials);
         break;
       case 'workflow':
-        reviewResult = await runWorkflowReview(reviewContent, enrichedRules, deliveryId);
+        reviewResult = await runWorkflowReview(reviewContent, enrichedRules, deliveryId, credentials);
         break;
       case 'consensus':
-        reviewResult = await runConsensusReview(reviewContent, enrichedRules, deliveryId);
+        reviewResult = await runConsensusReview(reviewContent, enrichedRules, deliveryId, credentials);
         break;
       default:
-        reviewResult = await runSimpleReview(reviewContent, enrichedRules, deliveryId);
+        reviewResult = await runSimpleReview(reviewContent, enrichedRules, deliveryId, credentials);
     }
 
     // Format and post comment (with static analysis section)

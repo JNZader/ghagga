@@ -127,9 +127,9 @@ export class OpenAIProvider implements AIProvider {
     ],
   ]);
 
-  async complete(options: LLMRequestOptions): Promise<LLMResponse> {
-    const apiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!apiKey) {
+  async complete(options: LLMRequestOptions, apiKey?: string): Promise<LLMResponse> {
+    const key = apiKey ?? Deno.env.get('OPENAI_API_KEY');
+    if (!key) {
       throw new Error('OPENAI_API_KEY environment variable is not set');
     }
 
@@ -158,7 +158,7 @@ export class OpenAIProvider implements AIProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify(body),
     });
@@ -175,8 +175,8 @@ export class OpenAIProvider implements AIProvider {
     return this.formatResponse(data);
   }
 
-  async isAvailable(): Promise<boolean> {
-    return !!Deno.env.get('OPENAI_API_KEY');
+  async isAvailable(apiKey?: string): Promise<boolean> {
+    return !!(apiKey ?? Deno.env.get('OPENAI_API_KEY'));
   }
 
   getModelInfo(modelId: string): ModelInfo | undefined {

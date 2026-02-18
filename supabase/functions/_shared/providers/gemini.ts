@@ -111,9 +111,9 @@ export class GeminiProvider implements AIProvider {
     ],
   ]);
 
-  async complete(options: LLMRequestOptions): Promise<LLMResponse> {
-    const apiKey = Deno.env.get('GOOGLE_API_KEY');
-    if (!apiKey) {
+  async complete(options: LLMRequestOptions, apiKey?: string): Promise<LLMResponse> {
+    const key = apiKey ?? Deno.env.get('GOOGLE_API_KEY');
+    if (!key) {
       throw new Error('GOOGLE_API_KEY environment variable is not set');
     }
 
@@ -144,7 +144,7 @@ export class GeminiProvider implements AIProvider {
       (body.generationConfig as Record<string, unknown>).stopSequences = options.stop;
     }
 
-    const url = `${this.baseUrl}/models/${model}:generateContent?key=${apiKey}`;
+    const url = `${this.baseUrl}/models/${model}:generateContent?key=${key}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -166,8 +166,8 @@ export class GeminiProvider implements AIProvider {
     return this.formatResponse(data, model);
   }
 
-  async isAvailable(): Promise<boolean> {
-    return !!Deno.env.get('GOOGLE_API_KEY');
+  async isAvailable(apiKey?: string): Promise<boolean> {
+    return !!(apiKey ?? Deno.env.get('GOOGLE_API_KEY'));
   }
 
   getModelInfo(modelId: string): ModelInfo | undefined {

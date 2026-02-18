@@ -17,8 +17,8 @@ import type {
 export interface AIProvider {
   readonly name: LLMProvider;
   readonly models: string[];
-  complete(options: LLMRequestOptions): Promise<LLMResponse>;
-  isAvailable(): Promise<boolean>;
+  complete(options: LLMRequestOptions, apiKey?: string): Promise<LLMResponse>;
+  isAvailable(apiKey?: string): Promise<boolean>;
   getModelInfo(modelId: string): ModelInfo | undefined;
 }
 
@@ -119,9 +119,9 @@ export class AnthropicProvider implements AIProvider {
     ],
   ]);
 
-  async complete(options: LLMRequestOptions): Promise<LLMResponse> {
-    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!apiKey) {
+  async complete(options: LLMRequestOptions, apiKey?: string): Promise<LLMResponse> {
+    const key = apiKey ?? Deno.env.get('ANTHROPIC_API_KEY');
+    if (!key) {
       throw new Error('ANTHROPIC_API_KEY environment variable is not set');
     }
 
@@ -154,7 +154,7 @@ export class AnthropicProvider implements AIProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': key,
         'anthropic-version': this.apiVersion,
       },
       body: JSON.stringify(body),
@@ -172,8 +172,8 @@ export class AnthropicProvider implements AIProvider {
     return this.formatResponse(data);
   }
 
-  async isAvailable(): Promise<boolean> {
-    return !!Deno.env.get('ANTHROPIC_API_KEY');
+  async isAvailable(apiKey?: string): Promise<boolean> {
+    return !!(apiKey ?? Deno.env.get('ANTHROPIC_API_KEY'));
   }
 
   getModelInfo(modelId: string): ModelInfo | undefined {

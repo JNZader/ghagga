@@ -8,6 +8,16 @@ import { OpenAIProvider } from './openai.ts';
 import { GeminiProvider } from './gemini.ts';
 
 /**
+ * Per-repo API credentials (decrypted)
+ * Keys map to provider names: anthropic, openai, google
+ */
+export interface PerRepoCredentials {
+  anthropic?: string;
+  openai?: string;
+  google?: string;
+}
+
+/**
  * Options for provider selection
  */
 export interface ProviderSelectionOptions {
@@ -53,9 +63,11 @@ export class ProviderRegistry {
 
   /**
    * Get the best available provider based on priority order
+   * If credentials are provided, per-repo keys are checked first
    */
   async getBestProvider(
-    options?: ProviderSelectionOptions
+    options?: ProviderSelectionOptions,
+    credentials?: PerRepoCredentials
   ): Promise<AIProvider | null> {
     const priorityOrder = this.getPriorityOrder(options);
 
@@ -73,7 +85,8 @@ export class ProviderRegistry {
         continue;
       }
 
-      if (await provider.isAvailable()) {
+      const credKey = credentials?.[name as keyof PerRepoCredentials];
+      if (await provider.isAvailable(credKey)) {
         return provider;
       }
     }
@@ -83,12 +96,14 @@ export class ProviderRegistry {
 
   /**
    * Get all available providers
+   * If credentials are provided, per-repo keys are checked first
    */
-  async getAvailableProviders(): Promise<AIProvider[]> {
+  async getAvailableProviders(credentials?: PerRepoCredentials): Promise<AIProvider[]> {
     const available: AIProvider[] = [];
 
-    for (const provider of this.providers.values()) {
-      if (await provider.isAvailable()) {
+    for (const [name, provider] of this.providers.entries()) {
+      const credKey = credentials?.[name as keyof PerRepoCredentials];
+      if (await provider.isAvailable(credKey)) {
         available.push(provider);
       }
     }
@@ -99,11 +114,12 @@ export class ProviderRegistry {
   /**
    * Get provider names that are currently available
    */
-  async getAvailableProviderNames(): Promise<LLMProvider[]> {
+  async getAvailableProviderNames(credentials?: PerRepoCredentials): Promise<LLMProvider[]> {
     const available: LLMProvider[] = [];
 
     for (const [name, provider] of this.providers.entries()) {
-      if (await provider.isAvailable()) {
+      const credKey = credentials?.[name as keyof PerRepoCredentials];
+      if (await provider.isAvailable(credKey)) {
         available.push(name);
       }
     }
@@ -113,10 +129,12 @@ export class ProviderRegistry {
 
   /**
    * Complete a request with automatic fallback to other providers
+   * If credentials are provided, per-repo keys are used
    */
   async completeWithFallback(
     options: LLMRequestOptions,
-    selectionOptions?: ProviderSelectionOptions
+    selectionOptions?: ProviderSelectionOptions,
+    credentials?: PerRepoCredentials
   ): Promise<CompletionResult> {
     const priorityOrder = this.getPriorityOrder(selectionOptions);
     const attemptedProviders: LLMProvider[] = [];
@@ -139,14 +157,15 @@ export class ProviderRegistry {
         continue;
       }
 
-      if (!(await provider.isAvailable())) {
+      const credKey = credentials?.[name as keyof PerRepoCredentials];
+      if (!(await provider.isAvailable(credKey))) {
         continue;
       }
 
       attemptedProviders.push(name);
 
       try {
-        const response = await provider.complete(options);
+        const response = await provider.complete(options, credKey);
         return {
           response,
           provider: name,
@@ -175,9 +194,10 @@ export class ProviderRegistry {
   /**
    * Check if any provider is available
    */
-  async hasAvailableProvider(): Promise<boolean> {
-    for (const provider of this.providers.values()) {
-      if (await provider.isAvailable()) {
+  async hasAvailableProvider(credentials?: PerRepoCredentials): Promise<boolean> {
+    for (const [name, provider] of this.providers.entries()) {
+      const credKey = credentials?.[name as keyof PerRepoCredentials];
+      if (await provider.isAvailable(credKey)) {
         return true;
       }
     }
