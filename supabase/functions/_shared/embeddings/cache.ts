@@ -4,7 +4,7 @@
  * Uses content hash to identify cached embeddings, keyed by provider and model.
  */
 
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // Cache entry structure
 export interface EmbeddingCacheEntry {

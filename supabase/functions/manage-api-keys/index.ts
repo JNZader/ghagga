@@ -7,7 +7,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from '@supabase/supabase-js';
 import { corsHeaders } from '../_shared/cors.ts';
 import { encrypt } from '../_shared/crypto/encryption.ts';
 
@@ -22,9 +22,11 @@ const PROVIDER_COLUMN_MAP: Record<Provider, string> = {
 
 const API_KEY_PREFIX_MAP: Record<Provider, RegExp> = {
   anthropic: /^sk-ant-/,
-  openai: /^sk-/,
+  openai: /^sk-(?!ant-)/,
   google: /^AIza/,
 };
+
+const MAX_API_KEY_LENGTH = 256;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -104,6 +106,12 @@ serve(async (req: Request) => {
 
     // Validate API key format if saving
     if (api_key && api_key.trim().length > 0) {
+      if (api_key.trim().length > MAX_API_KEY_LENGTH) {
+        return new Response(
+          JSON.stringify({ error: `API key exceeds maximum length of ${MAX_API_KEY_LENGTH} characters` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       const expectedPrefix = API_KEY_PREFIX_MAP[provider as Provider];
       if (expectedPrefix && !expectedPrefix.test(api_key.trim())) {
         return new Response(

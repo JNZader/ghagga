@@ -6,7 +6,7 @@
  * strengthening associations between concepts that appear together.
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   HebbianConfig,
   HebbianConnection,
@@ -149,7 +149,10 @@ export class HebbianLearner {
   }
 
   /**
-   * Strengthen multiple concept pairs at once
+   * Strengthen multiple concept pairs at once (batched)
+   *
+   * Batch-fetches all existing associations, computes updates in memory,
+   * then performs bulk upsert in a single DB call instead of O(n^2) roundtrips.
    *
    * @param repoFullName - Repository identifier
    * @param concepts - Array of concepts that co-occurred
@@ -160,15 +163,84 @@ export class HebbianLearner {
     concepts: string[],
     options: StrengthenOptions = {}
   ): Promise<void> {
-    // Create all pairwise associations
+    if (concepts.length < 2) return;
+
+    const learningRate = options.learningRate ?? this.config.learning_rate;
+    const associationType = options.associationType ?? 'code_pattern';
+
+    // Build all pairs with consistent ordering
+    const pairs: Array<{ source: string; target: string }> = [];
     for (let i = 0; i < concepts.length; i++) {
       for (let j = i + 1; j < concepts.length; j++) {
-        await this.strengthen(
-          repoFullName,
-          concepts[i],
-          concepts[j],
-          options
+        const [source, target] =
+          concepts[i] < concepts[j]
+            ? [concepts[i], concepts[j]]
+            : [concepts[j], concepts[i]];
+        pairs.push({ source, target });
+      }
+    }
+
+    // Batch-fetch all existing associations for this repo + type
+    const sources = [...new Set(pairs.map(p => p.source))];
+    const targets = [...new Set(pairs.map(p => p.target))];
+
+    const { data: existing } = await this.supabase
+      .from('hebbian_associations')
+      .select('id, source_pattern, target_pattern, weight, activation_count')
+      .eq('repo_full_name', repoFullName)
+      .eq('association_type', associationType)
+      .in('source_pattern', sources)
+      .in('target_pattern', targets);
+
+    // Index existing by "source|target" for O(1) lookup
+    const existingMap = new Map(
+      (existing || []).map(e => [`${e.source_pattern}|${e.target_pattern}`, e])
+    );
+
+    const toUpdate: Array<{ id: string; weight: number; activation_count: number }> = [];
+    const toInsert: Array<Record<string, unknown>> = [];
+
+    for (const { source, target } of pairs) {
+      const key = `${source}|${target}`;
+      const match = existingMap.get(key);
+
+      if (match) {
+        const newWeight = Math.min(
+          this.config.max_weight,
+          match.weight + learningRate * (1.0 - match.weight)
         );
+        toUpdate.push({
+          id: match.id,
+          weight: newWeight,
+          activation_count: match.activation_count + 1,
+        });
+      } else {
+        const initialWeight = 0.5 + learningRate * 0.5;
+        toInsert.push({
+          repo_full_name: repoFullName,
+          source_pattern: source,
+          target_pattern: target,
+          association_type: associationType,
+          weight: Math.min(this.config.max_weight, initialWeight),
+          activation_count: 1,
+          last_activated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    // Bulk insert new associations
+    if (toInsert.length > 0) {
+      await this.supabase.from('hebbian_associations').insert(toInsert);
+    }
+
+    // Bulk update existing (Supabase doesn't support batch update, so use upsert by id)
+    if (toUpdate.length > 0) {
+      const now = new Date().toISOString();
+      for (const { id, weight, activation_count } of toUpdate) {
+        await this.supabase
+          .from('hebbian_associations')
+          .update({ weight, activation_count, last_activated_at: now })
+          .eq('id', id);
       }
     }
   }

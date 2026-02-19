@@ -5,13 +5,12 @@
  * Fetches PR diff, filters files, runs reviews, and posts comments.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type {
   PullRequestEventPayload,
   GitHubDiffFile,
   GitHubRepository,
 } from '../../_shared/types/index.ts';
-import { SmartChunker } from '../../_shared/chunking/index.ts';
+import { getSupabaseClient } from '../../_shared/db.ts';
 import { TokenBudgeter } from '../../_shared/tokens/index.ts';
 import { getProviderRegistry, getRepoCredentials, type PerRepoCredentials } from '../../_shared/providers/index.ts';
 import { WorkflowEngine, type WorkflowExecutionResult } from '../../_shared/workflow/index.ts';
@@ -285,8 +284,8 @@ async function getInstallationAccessToken(
   if (!privateKey.startsWith('-----BEGIN')) {
     try {
       decodedKey = atob(privateKey);
-    } catch {
-      // Already decoded or invalid
+    } catch (e) {
+      console.warn('Failed to base64-decode GitHub private key, using raw value:', e instanceof Error ? e.message : 'decode error');
     }
   }
 
@@ -399,13 +398,28 @@ async function getRepoConfig(
   if (configContent) {
     try {
       const customConfig = JSON.parse(configContent);
+
+      // Allowlist: only safe fields can be overridden from .ghagga.json
+      // Prevents PR authors from injecting mode, provider, customRules, etc.
+      const safeConfig: Partial<RepoConfig> = {};
+      if (Array.isArray(customConfig.ignorePatterns)) {
+        safeConfig.ignorePatterns = [
+          ...DEFAULT_REPO_CONFIG.ignorePatterns,
+          ...customConfig.ignorePatterns.filter((p: unknown) => typeof p === 'string'),
+        ];
+      }
+      if (typeof customConfig.maxFilesPerReview === 'number' &&
+          customConfig.maxFilesPerReview > 0 &&
+          customConfig.maxFilesPerReview <= 100) {
+        safeConfig.maxFilesPerReview = customConfig.maxFilesPerReview;
+      }
+      if (typeof customConfig.enabled === 'boolean') {
+        safeConfig.enabled = customConfig.enabled;
+      }
+
       return {
         ...DEFAULT_REPO_CONFIG,
-        ...customConfig,
-        ignorePatterns: [
-          ...DEFAULT_REPO_CONFIG.ignorePatterns,
-          ...(customConfig.ignorePatterns || []),
-        ],
+        ...safeConfig,
       };
     } catch (e) {
       console.warn(`Failed to parse .ghagga.json: ${e}`);
@@ -434,19 +448,7 @@ async function getRepoConfig(
   return DEFAULT_REPO_CONFIG;
 }
 
-/**
- * Get Supabase client
- */
-function getSupabaseClient() {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Supabase credentials not configured');
-  }
-
-  return createClient(supabaseUrl, supabaseServiceKey);
-}
+// getSupabaseClient imported from _shared/db.ts
 
 /**
  * Check if a file should be reviewed based on patterns
@@ -800,15 +802,13 @@ function formatStaticAnalysisSection(result: StaticAnalysisResult): string {
  * Build StaticAnalysisConfig from the repo config object
  */
 function buildStaticAnalysisConfig(config: RepoConfig): StaticAnalysisConfig {
-  // Use database fields if available, otherwise defaults
-  const dbConfig = config as Record<string, unknown>;
   return {
-    enabled: (dbConfig.static_analysis_enabled as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.enabled,
-    aiAttributionCheck: (dbConfig.ai_attribution_check as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.aiAttributionCheck,
-    securityPatternsCheck: (dbConfig.security_patterns_check as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.securityPatternsCheck,
-    semgrepServiceUrl: (dbConfig.semgrep_service_url as string) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.semgrepServiceUrl,
-    commitMessageCheck: (dbConfig.commit_message_check as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.commitMessageCheck,
-    stackAwarePrompts: (dbConfig.stack_aware_prompts as boolean) ?? DEFAULT_STATIC_ANALYSIS_CONFIG.stackAwarePrompts,
+    enabled: config.static_analysis_enabled ?? DEFAULT_STATIC_ANALYSIS_CONFIG.enabled,
+    aiAttributionCheck: config.ai_attribution_check ?? DEFAULT_STATIC_ANALYSIS_CONFIG.aiAttributionCheck,
+    securityPatternsCheck: config.security_patterns_check ?? DEFAULT_STATIC_ANALYSIS_CONFIG.securityPatternsCheck,
+    semgrepServiceUrl: config.semgrep_service_url ?? DEFAULT_STATIC_ANALYSIS_CONFIG.semgrepServiceUrl,
+    commitMessageCheck: config.commit_message_check ?? DEFAULT_STATIC_ANALYSIS_CONFIG.commitMessageCheck,
+    stackAwarePrompts: config.stack_aware_prompts ?? DEFAULT_STATIC_ANALYSIS_CONFIG.stackAwarePrompts,
   };
 }
 
@@ -1017,17 +1017,14 @@ export async function handlePullRequest(
     // Format diff content
     const diff = formatDiffForReview(toReview);
 
-    // Use smart chunker and token budgeter for large diffs
-    const chunker = new SmartChunker();
-    const budgeter = new TokenBudgeter();
-
-    const tokenEstimate = budgeter.estimateTokens(diff);
-    const allocation = budgeter.allocate(config.model || 'claude-sonnet-4-20250514');
+    // Token budgeting for large diffs
+    const tokenEstimate = TokenBudgeter.estimateTokens(diff);
+    const allocation = TokenBudgeter.allocate(config.model || 'claude-sonnet-4-20250514');
 
     let reviewContent = diff;
     if (tokenEstimate > allocation.content) {
       // Truncate diff to fit budget
-      reviewContent = budgeter.truncateToFit(diff, allocation.content);
+      reviewContent = TokenBudgeter.truncateToFit(diff, allocation.content);
       console.log(
         `[${deliveryId}] Diff truncated from ${tokenEstimate} to ${allocation.content} tokens`
       );

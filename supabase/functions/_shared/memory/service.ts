@@ -5,7 +5,7 @@
  * Provides pre-review context consultation and post-review observation extraction.
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { EmbeddingService } from '../embeddings/service.ts';
 import { stripPrivacy } from './privacy.ts';
 import type {

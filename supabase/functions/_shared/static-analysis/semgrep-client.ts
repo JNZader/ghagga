@@ -72,9 +72,18 @@ export async function scanWithSemgrep(
       console.warn(`[static-analysis] Semgrep service URL must use HTTPS: ${serviceUrl}`);
       return { findings: [], serviceAvailable: false };
     }
-    const hostname = parsed.hostname.toLowerCase();
-    const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'];
-    if (blocked.includes(hostname) || hostname.startsWith('10.') || hostname.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '169.254.169.254'];
+    if (
+      blocked.includes(hostname) ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      hostname.startsWith('fe80:') ||
+      hostname.startsWith('fd') ||
+      hostname.startsWith('fc') ||
+      hostname.startsWith('169.254.')
+    ) {
       console.warn(`[static-analysis] Semgrep service URL points to private network: ${serviceUrl}`);
       return { findings: [], serviceAvailable: false };
     }

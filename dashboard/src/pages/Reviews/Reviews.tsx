@@ -119,6 +119,7 @@ export function Reviews() {
         <Group gap="md" className={classes.filters}>
           <TextInput
             placeholder="Search reviews..."
+            aria-label="Search reviews"
             leftSection={<IconSearch size={16} />}
             value={searchValue}
             onChange={handleSearchChange}
@@ -126,6 +127,7 @@ export function Reviews() {
           />
           <Select
             placeholder="Filter by status"
+            aria-label="Filter by status"
             leftSection={<IconFilter size={16} />}
             data={STATUS_OPTIONS}
             value={filters.status || ''}
@@ -135,6 +137,7 @@ export function Reviews() {
           />
           <Select
             placeholder="Filter by repository"
+            aria-label="Filter by repository"
             data={repoOptions}
             value={filters.repo || ''}
             onChange={handleRepoChange}

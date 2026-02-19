@@ -9,7 +9,7 @@
  * - PR comment formatting
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   Review,
   ReviewInsert,

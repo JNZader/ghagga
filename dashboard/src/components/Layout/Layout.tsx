@@ -12,15 +12,13 @@ import {
   IconDashboard,
   IconSettings,
   IconWebhook,
-  IconUsers,
   IconBrain,
 } from '@tabler/icons-react';
 import classes from './Layout.module.css';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: IconDashboard },
-  { to: '/installations', label: 'Installations', icon: IconUsers },
-  { to: '/webhooks', label: 'Webhooks', icon: IconWebhook },
+  { to: '/dashboard', label: 'Dashboard', icon: IconDashboard },
+  { to: '/reviews', label: 'Reviews', icon: IconWebhook },
   { to: '/memory', label: 'Memory', icon: IconBrain },
   { to: '/settings', label: 'Settings', icon: IconSettings },
 ];
@@ -67,7 +65,7 @@ export function Layout() {
               to={item.to}
               label={item.label}
               leftSection={<item.icon size={18} stroke={1.5} />}
-              active={location.pathname === item.to}
+              active={location.pathname.startsWith(item.to)}
               onClick={close}
               className={classes.navLink}
             />

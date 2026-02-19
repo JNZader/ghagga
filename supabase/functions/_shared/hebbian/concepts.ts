@@ -7,6 +7,9 @@
  * Concept patterns for automatic detection
  * Maps concept names to regex patterns that identify them
  */
+/** Number of pattern matches needed for full confidence (1.0) in concept scoring */
+const CONCEPT_SCORE_NORMALIZATION_DIVISOR = 10;
+
 const CONCEPT_PATTERNS: Record<string, RegExp[]> = {
   security: [
     /\bauth\b/i,
@@ -176,7 +179,7 @@ export function extractConceptsWithScores(
 
     if (matchCount > 0) {
       // Normalize score: more matches = higher confidence (capped at 1.0)
-      scores[concept] = Math.min(1.0, matchCount / 10);
+      scores[concept] = Math.min(1.0, matchCount / CONCEPT_SCORE_NORMALIZATION_DIVISOR);
     }
   }
 

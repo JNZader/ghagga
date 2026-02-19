@@ -27,3 +27,19 @@ npm-debug.log*
 # Build
 dist/
 build/
+
+# Secrets / keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Test output / coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Python
+__pycache__/
+*.pyc
+.venv/

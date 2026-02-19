@@ -5,7 +5,7 @@
  * for multi-turn conversations.
  */
 
-import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** Turn in a conversation */
 export interface Turn {

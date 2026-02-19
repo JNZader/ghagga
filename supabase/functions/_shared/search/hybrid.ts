@@ -7,7 +7,7 @@
  * 3. Merges results with configurable weights (default: 70% vector, 30% text)
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * Configuration for hybrid search behavior

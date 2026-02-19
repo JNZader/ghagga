@@ -84,6 +84,9 @@ function timingSafeEqual(a: string, b: string): boolean {
  */
 const REVIEW_TRIGGER_ACTIONS = ['opened', 'synchronize', 'reopened'];
 
+/** Maximum webhook payload size (10 MB) */
+const MAX_BODY_SIZE = 10 * 1024 * 1024;
+
 /**
  * Check if a PR event should trigger a review
  */
@@ -162,8 +165,20 @@ serve(async (req: Request): Promise<Response> => {
       return errorResponse('Webhook secret not configured', 500);
     }
 
+    // Check content length before reading body
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
+      console.warn(`[${deliveryId}] Payload too large: ${contentLength} bytes`);
+      return errorResponse('Payload too large', 413);
+    }
+
     // Read and verify request body
     const body = await req.text();
+
+    if (body.length > MAX_BODY_SIZE) {
+      console.warn(`[${deliveryId}] Payload too large: ${body.length} bytes`);
+      return errorResponse('Payload too large', 413);
+    }
 
     // Verify signature
     const signature = req.headers.get('x-hub-signature-256');

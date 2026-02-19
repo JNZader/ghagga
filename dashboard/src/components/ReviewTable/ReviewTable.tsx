@@ -105,6 +105,15 @@ export function ReviewTable({
               key={review.id}
               className={classes.row}
               onClick={() => onRowClick(review)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onRowClick(review);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label={`Review ${review.repo_full_name} PR #${review.pr_number} - ${review.status}`}
             >
               <Table.Td>
                 <Text size="sm" fw={500}>{review.repo_full_name}</Text>
@@ -142,9 +151,9 @@ export function ReviewTable({
       <Group justify="space-between" mt="md" className={classes.footer}>
         <Group gap="xs">
           <Text size="sm" c="dimmed">
-            Showing {(pagination.page - 1) * pagination.pageSize + 1} to{' '}
-            {Math.min(pagination.page * pagination.pageSize, pagination.total)} of{' '}
-            {pagination.total} reviews
+            {pagination.total > 0
+              ? `Showing ${(pagination.page - 1) * pagination.pageSize + 1} to ${Math.min(pagination.page * pagination.pageSize, pagination.total)} of ${pagination.total} reviews`
+              : 'No reviews'}
           </Text>
           <Select
             size="xs"

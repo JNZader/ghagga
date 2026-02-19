@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   InstallationEventPayload,
   InstallationRepositoriesEventPayload,
@@ -8,6 +8,7 @@ import type {
   InstallationInsert,
   RepoConfigInsert,
 } from '../../_shared/types/database.ts';
+import { getSupabaseClient } from '../../_shared/db.ts';
 
 export interface HandlerResult {
   success: boolean;
@@ -19,13 +20,6 @@ export interface HandlerResult {
   data?: {
     repos_configured?: number;
   };
-}
-
-function getSupabaseClient(): SupabaseClient {
-  const url = Deno.env.get('SUPABASE_URL');
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !key) throw new Error('Missing Supabase configuration');
-  return createClient(url, key);
 }
 
 export async function handleInstallationEvent(
@@ -45,7 +39,11 @@ export async function handleInstallationEvent(
         account_type: installation.target_type,
         account_avatar_url: installation.account.avatar_url,
       };
-      await supabase.from('installations').upsert(installationData, { onConflict: 'id' });
+      const { error: upsertError } = await supabase.from('installations').upsert(installationData, { onConflict: 'id' });
+      if (upsertError) {
+        console.error(`[${deliveryId}] Failed to upsert installation ${installation.id}:`, upsertError.message);
+        throw new Error(`Installation upsert failed: ${upsertError.message}`);
+      }
 
       // Create default repo configs
       let reposConfigured = 0;

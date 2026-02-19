@@ -51,7 +51,7 @@ export function Dashboard() {
             value={stats?.totalReviews ?? 0}
             icon={<IconChartBar size={20} />}
             color="blue"
-            description="All time reviews"
+            description="Last 90 days"
           />
           <StatsCard
             title="Passed"

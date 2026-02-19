@@ -6,7 +6,7 @@
  * so providers use their env var defaults.
  */
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { decrypt } from '../crypto/encryption.ts';
 import type { PerRepoCredentials } from './registry.ts';
 
@@ -60,7 +60,8 @@ export async function getRepoCredentials(
 
     return credentials;
   } catch (err) {
-    console.warn(`Failed to load credentials for ${repoFullName}:`, err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.warn(`Failed to load credentials for ${repoFullName}: ${message}`);
     return {};
   }
 }
