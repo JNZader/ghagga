@@ -1,7 +1,8 @@
 /**
- * @ghagga/core — Public API
+ * ghagga-core — Public API
  *
  * The core review engine for GHAGGA v2.
+ * Distribution-agnostic: used by CLI, GitHub Action, and Server adapters.
  * This module re-exports the pipeline entry point and all public types.
  */
 

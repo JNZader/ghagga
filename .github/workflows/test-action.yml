@@ -1,0 +1,27 @@
+# Temporary workflow to test the GHAGGA action on PRs.
+# Uses GitHub Models (free tier) — no API key needed.
+# Delete this file after verification.
+name: Test GHAGGA Action
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  models: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run GHAGGA Review
+        uses: ./
+        with:
+          provider: github
+          mode: simple
+          github-token: ${{ secrets.GITHUB_TOKEN }}
