@@ -40,7 +40,32 @@ RUN pnpm prune --prod
 # ── Stage 2: Production Runtime ────────────────────────────────
 FROM node:22-slim AS runner
 
-# Install tsx for running migrations (needed at startup)
+# Install system deps for static analysis tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    default-jre-headless \
+    curl \
+    unzip \
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Semgrep
+RUN pip3 install --no-cache-dir --break-system-packages semgrep
+
+# Install Trivy
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+# Install PMD (for CPD — copy/paste detection)
+ENV PMD_VERSION=7.8.0
+RUN curl -sL "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" \
+    -o /tmp/pmd.zip && \
+    unzip -q /tmp/pmd.zip -d /opt && \
+    mv /opt/pmd-bin-${PMD_VERSION} /opt/pmd && \
+    ln -s /opt/pmd/bin/pmd /usr/local/bin/pmd && \
+    rm /tmp/pmd.zip
+
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /app
@@ -66,6 +91,9 @@ COPY --from=builder /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/apps/server/package.json ./apps/server/
 COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
+
+# Copy Semgrep rules for static analysis
+COPY --from=builder /app/packages/core/src/tools/semgrep-rules.yml ./packages/core/src/tools/
 
 ENV NODE_ENV=production
 
