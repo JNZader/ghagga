@@ -17,7 +17,7 @@
   "dependencies": {
     "@hono/node-server": "^1.19.11",
     "@octokit/rest": "^21.1.0",
-    "@octokit/webhooks": "^13.4.0",
+    "@octokit/webhooks": "^14.2.0",
     "dotenv": "^16.4.0",
     "ghagga-core": "workspace:*",
     "ghagga-db": "workspace:*",
