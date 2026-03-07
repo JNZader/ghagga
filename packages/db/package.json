@@ -51,13 +51,13 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "drizzle-orm": "^0.39.0",
-    "pg": "^8.13.0"
+    "drizzle-orm": "^0.45.1",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",
     "@types/pg": "^8.11.0",
-    "drizzle-kit": "^0.30.0",
+    "drizzle-kit": "^0.31.9",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
