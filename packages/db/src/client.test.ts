@@ -11,7 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const mockPool = { end: vi.fn() };
-  const MockPool = vi.fn(() => mockPool);
+  // Vitest v4: must use function expression (not arrow) for constructor mocks
+  const MockPool = vi.fn(function () {
+    return mockPool;
+  });
   const mockDrizzle = vi.fn().mockReturnValue({ query: vi.fn() });
   return { mockPool, MockPool, mockDrizzle };
 });

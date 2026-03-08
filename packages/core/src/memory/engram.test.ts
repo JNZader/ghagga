@@ -12,17 +12,20 @@ const mockGetStats = vi.fn<() => Promise<EngramStats | null>>();
 const mockCreateSession = vi.fn<() => Promise<number | null>>();
 const mockEndSession = vi.fn<() => Promise<void>>();
 
+// Vitest v4: must use function expression (not arrow) for constructor mocks
 vi.mock('./engram-client.js', () => ({
-  EngramClient: vi.fn(() => ({
-    healthCheck: mockHealthCheck,
-    search: mockSearch,
-    save: mockSave,
-    getObservation: mockGetObservation,
-    deleteObservation: mockDeleteObservation,
-    getStats: mockGetStats,
-    createSession: mockCreateSession,
-    endSession: mockEndSession,
-  })),
+  EngramClient: vi.fn(function () {
+    return {
+      healthCheck: mockHealthCheck,
+      search: mockSearch,
+      save: mockSave,
+      getObservation: mockGetObservation,
+      deleteObservation: mockDeleteObservation,
+      getStats: mockGetStats,
+      createSession: mockCreateSession,
+      endSession: mockEndSession,
+    };
+  }),
 }));
 
 import { EngramMemoryStorage } from './engram.js';
