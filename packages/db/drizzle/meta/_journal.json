@@ -29,6 +29,13 @@
       "when": 1741392000000,
       "tag": "0008_fix_cascade_delete_remaining",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1741478400000,
+      "tag": "0009_add_delegated_ci",
+      "breakpoints": true
     }
   ]
 }
