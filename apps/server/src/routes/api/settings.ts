@@ -12,6 +12,7 @@ import {
   encrypt,
   getInstallationSettings,
   getRepoByFullName,
+  updateDelegatedCiPolicy,
   updateRepoSettings,
 } from 'ghagga-db';
 import { Hono } from 'hono';
@@ -36,6 +37,27 @@ const RepoSettingsSchema = z
     disabledTools: z.array(z.string()).optional(),
   })
   .strict();
+
+const DelegatedCiJobSchema = z.object({
+  jobKey: z.string().min(1).max(100),
+  displayName: z.string().min(1).max(200),
+  classification: z.enum(['safe/delegable', 'sensitive/no-delegable']),
+  profile: z.enum(['node-lint', 'node-unit', 'python-lint', 'python-pytest', 'go-test']),
+  enabled: z.boolean(),
+  allowArtifacts: z.union([z.literal(false), z.array(z.string())]),
+  allowCache: z.boolean(),
+  maxDurationMinutes: z.number().int().min(1).max(30).optional(),
+  rationale: z.string().max(500).optional(),
+});
+
+const DelegatedCiPolicySchema = z
+  .object({
+    enabled: z.boolean(),
+    allowManualTrigger: z.boolean().optional(),
+    allowPullRequestTrigger: z.boolean().optional(),
+    jobs: z.array(DelegatedCiJobSchema).max(10),
+  })
+  .nullable();
 
 /** Map of deprecated boolean field names to their tool names */
 const DEPRECATED_TOOL_BOOLEANS: Record<string, string> = {
@@ -93,7 +115,7 @@ export function createSettingsRouter(db: Database) {
 
       // Fetch global settings for reference
       const globalRow = await getInstallationSettings(db, repo.installationId);
-      let globalSettings;
+      let globalSettings: Record<string, unknown> | undefined;
       if (globalRow) {
         const gChain = (globalRow.providerChain ?? []) as DbProviderChainEntry[];
         const gSettings = (globalRow.settings ?? DEFAULT_REPO_SETTINGS) as RepoSettings;
@@ -129,6 +151,7 @@ export function createSettingsRouter(db: Database) {
           enabledTools: settings.enabledTools ?? [],
           disabledTools: settings.disabledTools ?? [],
           registeredTools: getRegisteredToolsList(),
+          delegatedCiPolicy: repo.delegatedCiPolicy ?? null,
           globalSettings,
         },
       });
@@ -345,6 +368,25 @@ export function createSettingsRouter(db: Database) {
         useGlobalSettings:
           typeof body.useGlobalSettings === 'boolean' ? body.useGlobalSettings : undefined,
       });
+
+      // ── Delegated CI Policy (repo-only, not inherited) ────────
+      if ('delegatedCiPolicy' in body) {
+        const parsed = DelegatedCiPolicySchema.safeParse(body.delegatedCiPolicy);
+        if (!parsed.success) {
+          return c.json(
+            {
+              error: 'VALIDATION_ERROR',
+              message: 'Invalid delegatedCiPolicy',
+              details: parsed.error.issues.map((i) => ({
+                path: i.path.join('.'),
+                message: i.message,
+              })),
+            },
+            400,
+          );
+        }
+        await updateDelegatedCiPolicy(db, repo.id, parsed.data);
+      }
 
       logger.info(
         { repo: repoFullName, user: user.githubLogin, chainLength: mergedChain.length },

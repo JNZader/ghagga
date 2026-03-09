@@ -10,6 +10,7 @@
 
 import type { Database } from 'ghagga-db';
 import { Hono } from 'hono';
+import { createDelegatedCiRouter } from './delegated-ci.js';
 import { createInstallationsRouter } from './installations.js';
 import { createMemoryRouter } from './memory.js';
 import { createRepositoriesRouter } from './repositories.js';
@@ -28,6 +29,7 @@ export function createApiRouter(db: Database) {
   router.route('/', createSettingsRouter(db));
   router.route('/', createMemoryRouter(db));
   router.route('/', createRunnerRouter(db));
+  router.route('/', createDelegatedCiRouter(db));
 
   return router;
 }

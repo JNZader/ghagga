@@ -1,7 +1,7 @@
 // Schema
 
 // Drizzle utilities re-exported for consumers
-export { sql } from 'drizzle-orm';
+export { eq, sql } from 'drizzle-orm';
 // Client
 export { createDatabase, createDatabaseFromEnv, type Database } from './client.js';
 // Crypto

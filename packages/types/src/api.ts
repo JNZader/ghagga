@@ -154,6 +154,7 @@ export interface RepositorySettings {
   enabledTools: string[];
   disabledTools: string[];
   registeredTools: RegisteredTool[];
+  delegatedCiPolicy: DelegatedCiPolicyView | null;
   globalSettings?: InstallationSettings;
 }
 
