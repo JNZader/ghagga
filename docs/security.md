@@ -100,6 +100,90 @@ This prevents:
 - **Spoofed callbacks**: Only the runner with access to `GHAGGA_TOKEN` can generate valid signatures
 - **Stale secrets**: In-memory Map entries auto-expire, preventing memory leaks
 
+## Delegated CI Safety Boundaries
+
+Delegated CI extends the runner pattern to execute general CI jobs (lint, tests) for private repositories on the public runner. This introduces a broader attack surface than static analysis because CI profiles execute project code (running `npm test` or `pytest` evaluates user-authored test files). The following guardrails constrain that risk.
+
+### Private Repo Code on the Public Runner
+
+The `ghagga-delegated-ci.yml` workflow clones the private repository using an ephemeral GitHub installation token, executes the CI profile, and destroys the workspace:
+
+1. **Clone** -- `actions/checkout@v4` clones the target repo at the specific `headSha` into a `target-repo/` directory
+2. **Execute** -- The curated profile command runs with all stdout/stderr redirected to temp files (`/tmp/ci-stdout.txt`, `/tmp/ci-stderr.txt`) -- never printed to logs
+3. **Cleanup** -- The `Cleanup` step runs unconditionally (`if: always()`) and removes `target-repo/` and all temp files via `rm -rf`
+4. **Log deletion** -- The workflow deletes its own run logs via the GitHub API after the callback is sent
+
+No source code, test output, or workspace artifacts persist on the runner after the workflow completes.
+
+### Log Scrubbing and Secret Masking
+
+The workflow applies `::add-mask::` to all sensitive values before any step that could produce output:
+
+| Value Masked | Reason |
+|-------------|--------|
+| `GHAGGA_TOKEN` | Installation token for private repo access |
+| `repoFullName` | Prevents repo name from appearing in logs |
+| Repo name (after `/`) | Catches partial references |
+| `callbackSecret` | HMAC signing key |
+| Working directory path | Prevents filesystem path exposure |
+
+Even if a masked value accidentally appears in a log line, GitHub replaces it with `***`. As a defense-in-depth measure:
+
+- All CI tool output is captured to files (`> /tmp/ci-stdout.txt 2> /tmp/ci-stderr.txt`), never echoed
+- Only a short summary (first 5 lines, max 500 chars of stdout) is included in the callback payload
+- Workflow logs are proactively deleted after callback delivery
+- The runner repo has a 1-day log retention policy as a safety net
+
+### Encrypted Configuration Transport
+
+Delegated CI dispatch inputs travel through two encrypted channels:
+
+1. **GitHub Actions secrets** -- `GHAGGA_TOKEN` and `GHAGGA_CALLBACK_SECRET` are set as encrypted repository secrets on the runner repo using libsodium sealed-box encryption (GitHub's standard mechanism). The server fetches the repo's public key, encrypts the secret value, and PUTs it via the API.
+
+2. **workflow_dispatch inputs** -- The `config` JSON and other dispatch inputs are transmitted via the GitHub Actions `workflow_dispatch` API, which is TLS-encrypted in transit. Security-critical inputs (`callbackSecret`, `callbackUrl`, `token`) remain as separate workflow inputs so the runner can use them before parsing any JSON.
+
+The callback secret is derived deterministically via `HMAC-SHA256(STATE_SECRET, callbackId)` on the server side, which means the server never stores secrets in memory -- it re-derives them during callback verification. The `callbackId` embeds a base-36 timestamp, and callbacks are rejected if older than the configured TTL (default 11 minutes).
+
+### Policy-Based Access Control
+
+Delegated CI enforces a multi-layer access control model:
+
+```mermaid
+flowchart TD
+    A[PR webhook arrives] --> B{Repo has delegatedCiPolicy?}
+    B -- No --> C[Skip delegated CI]
+    B -- Yes --> D{Policy enabled?}
+    D -- No --> C
+    D -- Yes --> E{Job configured + enabled?}
+    E -- No --> F[Reject: job_not_configured / job_disabled]
+    E -- Yes --> G{Classification = safe/delegable?}
+    G -- No --> H[Reject: job_sensitive]
+    G -- Yes --> I{Profile supported in MVP?}
+    I -- No --> J[Reject: profile_unsupported]
+    I -- Yes --> K{Duration + artifacts within limits?}
+    K -- No --> L[Reject: duration_exceeded / artifact_policy_violation]
+    K -- Yes --> M[Approve + dispatch]
+```
+
+Key policy rules:
+
+- **Repo-only scope** -- Delegated CI policy is stored per-repository and is never inherited from installation-level settings. Enabling it for one repo does not affect any other repo.
+- **Conservative defaults** -- Any unconfigured, unclassified, or ambiguous job defaults to `sensitive/no-delegable`. The policy normalizer applies safe defaults for all fields.
+- **Profile restriction** -- Only GHAGGA-curated execution profiles are allowed. Arbitrary shell commands, repo-authored workflows, and custom scripts cannot be delegated.
+- **No secrets fan-out** -- Delegated CI jobs receive only `GHAGGA_TOKEN` (ephemeral installation token) and `GHAGGA_CALLBACK_SECRET`. Repo environment secrets, signing keys, cloud credentials, and long-lived PATs are never copied to the runner.
+- **Artifact controls** -- Artifact uploads are disabled by default. When enabled, only allowlisted kinds (`junit`, `coverage-summary`) are accepted. Source bundles and workspace exports are blocked.
+- **Rejection audit trail** -- Every rejected job is persisted in `delegated_ci_runs` with a machine-readable `reasonCode` and `reasonDetail`, providing a full audit trail of what was blocked and why.
+
+### What Delegated CI Explicitly Does NOT Support
+
+These are intentional MVP safety boundaries, not missing features:
+
+- Production deployments, release publishing, or package publication
+- Jobs requiring signing keys, cloud credentials, or production secrets
+- Arbitrary repo-authored workflow files or shell commands
+- Cross-repository cache sharing or secret sharing
+- Automatic job classification without explicit repository-owner configuration
+
 ## Security Best Practices
 
 1. **Never commit API keys** — Use environment variables or GitHub secrets
@@ -109,7 +193,7 @@ This prevents:
 5. **Limit GitHub App permissions** — Only request `pull_requests: write`, `actions: write`, `secrets: read-write`, and `metadata: read` (auto). The `administration` and `contents` permissions are no longer needed — runner repo creation is handled via the user's OAuth token.
 6. **Use the correct auth flow** — Dashboard uses OAuth Web Flow, so self-hosted/server deployments need `GITHUB_CLIENT_SECRET` and `STATE_SECRET`. CLI uses Device Flow via `ghagga login`. Never store GitHub tokens in config files.
 7. **Configure runner repo as public** — The `ghagga-runner` repo must be public for free GitHub Actions minutes. Never put sensitive code in this repo — it only contains the analysis workflow.
-8. **Review runner workflow changes** — The `ghagga-analysis.yml` workflow is the trust boundary. Only accept changes from the template repository.
+8. **Review runner workflow changes** — The `ghagga-analysis.yml` and `ghagga-delegated-ci.yml` workflows are the trust boundary. Only accept changes from the template repository.
 
 ## OAuth Scope: `public_repo`
 
