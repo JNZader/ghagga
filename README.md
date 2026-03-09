@@ -50,7 +50,7 @@ You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plai
 | **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (multi-model voting) |
 | **15 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 8 auto-detect tools — zero tokens |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews (PostgreSQL + tsvector FTS) |
-| **Multi-Provider** | 6 providers: GitHub Models (free), Anthropic, OpenAI, Google, Ollama (local), Qwen (Alibaba) — bring your own key. **Note**: In SaaS mode, GitHub Models requires a personal access token in the provider chain — installation tokens lack `models:read` scope. Entries without an explicit API key are silently skipped. |
+| **Multi-Provider** | 6 providers: GitHub Models, Anthropic, OpenAI, Google, Ollama (local), Qwen (Alibaba). **Mode note**: SaaS/server mode needs a PAT with `models:read` for GitHub Models; CLI and GitHub Action mode can use the GitHub token you already control. |
 | **3 Distribution Modes** | SaaS, GitHub Action, CLI |
 | **Pagination** | Full GitHub API pagination for PRs with >100 files/commits — no silent truncation |
 | **Comment Trigger** | Type `ghagga review` on any PR to re-trigger a review on demand |
@@ -67,7 +67,7 @@ The easiest way to get started. Install the App, configure in the Dashboard, get
 
 1. **[Install the GHAGGA GitHub App](https://github.com/apps/ghagga-review/installations/new)** on your repositories
 2. **[Open the Dashboard](https://jnzader.github.io/ghagga/app/)** and log in with GitHub
-3. **Configure your LLM provider** — GitHub Models is free (no API key needed), or bring your own key
+3. **Configure your LLM provider** — in SaaS mode, GitHub Models requires a PAT with `models:read`, or bring your own provider key
 4. **Open a PR** — get an AI-powered review in ~1-2 minutes
 
 > **Important**: After installing the App, reviews won't work until you configure an LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/). See the [full SaaS guide](https://jnzader.github.io/ghagga/docs/#/saas-getting-started) for detailed steps.
@@ -498,7 +498,7 @@ React SPA deployed on GitHub Pages. Dark theme with GitHub-dark palette and purp
 
 | Page | Description |
 |------|-------------|
-| **Login** | GitHub OAuth Device Flow login |
+| **Login** | GitHub OAuth Web Flow login with PAT fallback |
 | **Dashboard** | 4 stat cards (total reviews, pass rate, avg findings, avg time) + Recharts area chart with review trends |
 | **Reviews** | Filterable table with status badges, severity indicators, detail expansion, and pagination |
 | **Settings** | Per-repo or global settings — provider chain, review mode, tools, ignore patterns |
@@ -510,7 +510,7 @@ React SPA deployed on GitHub Pages. Dark theme with GitHub-dark palette and purp
 - React 19 + TypeScript + Vite
 - TanStack Query 5 for data fetching and caching
 - Recharts for data visualization
-- Tailwind CSS 3 with dark theme
+- Tailwind CSS 4 with dark theme
 - HashRouter for GitHub Pages compatibility (no server-side routing needed)
 - Code-split: lazy-loaded page components with vendor chunk splitting
 - Base path: `/ghagga/app/` for GitHub Pages deployment
@@ -798,14 +798,14 @@ pnpm exec turbo test          # Run all ~2,859 tests
 | **Language** | TypeScript 5.7 (strict mode) | Type safety across all packages |
 | **Backend** | Hono 4 | Fastest TS framework, 14KB, runs anywhere |
 | **Database** | PostgreSQL 16 + Drizzle ORM | Zero-overhead SQL, tsvector FTS, plain TS migrations |
-| **AI** | Vercel AI SDK 5 | Multi-provider (6 providers), streaming, structured output, fallback chains |
+| **AI** | Vercel AI SDK 6 | Multi-provider (6 providers), streaming, structured output, fallback chains |
 | **Async** | Inngest 3 | Zero-infra durable functions, step checkpointing, automatic retries |
-| **Frontend** | React 19 + Vite + Tailwind 3 | Lazy-loaded routes, vendor splitting, dark theme |
+| **Frontend** | React 19 + Vite + Tailwind 4 | Lazy-loaded routes, vendor splitting, dark theme |
 | **Data Fetching** | TanStack Query 5 | Caching, background refetching, optimistic updates |
 | **Charts** | Recharts 2 | Composable React chart components |
 | **UI Patterns** | ConfirmDialog (3-tier) + Toast | Tiered destructive action safety, non-blocking notifications |
 | **CLI** | Commander 13 | Standard CLI framework for Node.js |
-| **Testing** | Vitest 3 | Fast, ESM-native, compatible with Jest API |
+| **Testing** | Vitest 4 | Fast, ESM-native, compatible with Jest API |
 | **Static Analysis** | 15-tool plugin registry | Security, SCA, duplication, linting, complexity — zero tokens |
 | **Encryption** | Node.js `crypto` (AES-256-GCM) | No external dependencies for cryptographic operations |
 

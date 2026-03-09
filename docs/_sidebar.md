@@ -15,7 +15,7 @@
   - [Tool Candidates](static-analysis-candidates.md)
   - [Health Check](health.md)
   - [Memory System](memory-system.md)
-  - [Security](security.md)
+  - [Security Policy](security.md)
 
 - Distribution
   - [SaaS (GitHub App)](saas-getting-started.md)

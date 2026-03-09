@@ -89,6 +89,8 @@ If you're using the hosted GHAGGA SaaS (Render deployment), static analysis runs
 
 > **Important**: After installing the GitHub App, you must configure an LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/) before reviews will work. See the [SaaS Getting Started Guide](saas-getting-started.md) for the full setup flow.
 
+> **Auth note**: The dashboard signs in with GitHub OAuth Web Flow. That login is separate from GitHub Models credentials in SaaS/server mode.
+
 To enable static analysis:
 
 1. **[Open the Dashboard](https://jnzader.github.io/ghagga/app/)** and go to **Global Settings**
@@ -103,7 +105,7 @@ See [Runner Architecture](runner-architecture.md) for details.
 
 ## BYOK — Bring Your Own Key
 
-> **Free by default**: GHAGGA is free and open source. GitHub Models provides free LLM access (`gpt-4o-mini`) — no API key needed. The providers below are optional if you want different models.
+> **Mode note**: GHAGGA is free and open source, but GitHub Models auth differs by mode. SaaS/server mode needs a PAT with `models:read`; CLI and GitHub Action mode can use the GitHub token you already control.
 
 GHAGGA never sees or stores your keys in plaintext. They're encrypted with AES-256-GCM at rest. You bring your own API key from any supported provider:
 

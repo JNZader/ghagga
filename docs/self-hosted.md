@@ -7,7 +7,7 @@ Complete step-by-step guide to deploy GHAGGA with full capabilities: webhook rev
 - **Docker** and **Docker Compose** installed
 - A **GitHub account** (to create a GitHub App)
 - An **Inngest account** (free tier — [inngest.com](https://www.inngest.com/))
-- **Optional**: LLM API key from Anthropic, OpenAI, Google, or Qwen. GitHub Models works free with any GitHub token.
+- **Optional**: LLM API key from Anthropic, OpenAI, Google, or Qwen. For GitHub Models in server mode, use a PAT with `models:read`.
 
 ## Overview
 
@@ -40,7 +40,7 @@ Navigate to: **[github.com/settings/apps/new](https://github.com/settings/apps/n
 |-------|-------|
 | **GitHub App name** | `GHAGGA` (or any unique name) |
 | **Homepage URL** | `https://github.com/JNZader/ghagga` |
-| **Webhook URL** | `https://your-domain.com/webhook/github` (you'll update this later) |
+| **Webhook URL** | `https://your-domain.com/webhook` (you'll update this later) |
 | **Webhook secret** | Generate one now — run this in your terminal: |
 
 ```bash
@@ -230,6 +230,8 @@ DATABASE_URL=postgresql://ghagga:ghagga_dev@postgres:5432/ghagga
 GITHUB_APP_ID=123456
 GITHUB_PRIVATE_KEY=LS0tLS1CRUdJTi...
 GITHUB_WEBHOOK_SECRET=a1b2c3d4e5f6...
+GITHUB_CLIENT_ID=Ov23li...
+GITHUB_CLIENT_SECRET=abcdef...
 
 # Inngest
 INNGEST_EVENT_KEY=evt_xxxx
@@ -237,6 +239,7 @@ INNGEST_SIGNING_KEY=signkey-xxxx
 
 # Encryption
 ENCRYPTION_KEY=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+STATE_SECRET=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
 
 # Server
 PORT=3000
@@ -290,7 +293,7 @@ ghagga.yourdomain.com {
 Go back to your GitHub App settings (Step 1) and update the **Webhook URL** to:
 
 ```
-https://ghagga.yourdomain.com/webhook/github
+https://ghagga.yourdomain.com/webhook
 ```
 
 Also update the Inngest webhook (Step 2.3):
@@ -338,7 +341,7 @@ Once deployed, configure your LLM providers:
 1. Open the GHAGGA dashboard
 2. Go to **Global Settings** to set installation-wide defaults
 3. Configure a **provider chain** — ordered list of providers with fallback (e.g., GitHub Models → OpenAI → Anthropic)
-4. Each provider needs an API key (except GitHub Models, which uses the installation token)
+4. Each provider needs an API key or token. For **GitHub Models** in server mode, use a PAT with `models:read` because GitHub App installation tokens do not have that scope.
 5. Choose review mode (Simple, Workflow, or Consensus)
 6. Configure which static analysis tools to enable
 7. Individual repos can override global settings via **Settings** → toggle "Use global settings" off
@@ -365,7 +368,7 @@ The runner setup is per-user — each GitHub user/org that installs GHAGGA can h
 
 ### Webhook not received
 
-- Verify the webhook URL matches exactly: `https://your-domain.com/webhook/github`
+- Verify the webhook URL matches exactly: `https://your-domain.com/webhook`
 - Check the webhook secret matches `GITHUB_WEBHOOK_SECRET`
 - In GitHub App settings → **"Advanced"** → **"Recent Deliveries"**, check for failed deliveries
 - Ensure your server is publicly accessible (not behind a firewall)

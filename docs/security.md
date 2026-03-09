@@ -1,5 +1,7 @@
 # Security
 
+> Canonical security policy: see the root [`SECURITY.md`](../SECURITY.md). This docs page mirrors the current architecture-specific details.
+
 ## Security Measures
 
 | Measure | Implementation |
@@ -12,7 +14,7 @@
 | **BYOK model** | Users provide their own LLM API keys. GHAGGA never pays for or sees your LLM usage in plaintext. |
 | **Installation scoping** | API routes are scoped by GitHub installation ID — users can only access their own repos |
 | **Runner HMAC** | Per-dispatch HMAC-SHA256 verification for runner callbacks. Unique secret per dispatch with 11-minute TTL. |
-| **OAuth Device Flow** | GitHub OAuth Device Flow for dashboard and CLI authentication. No client secret stored — uses public client ID with device code verification. |
+| **OAuth separation** | Dashboard uses GitHub OAuth Web Flow with `STATE_SECRET` + `GITHUB_CLIENT_SECRET`; CLI uses GitHub Device Flow; PAT fallback remains available when the server is unavailable. |
 | **HTTP timeouts** | All `fetch()` calls use `AbortSignal.timeout()` (10s for API calls, 15s for diff fetching, 5s for keepalive) to prevent resource exhaustion |
 | **Env validation (fail-fast)** | Server validates all required environment variables at startup, exiting immediately with a clear error if any are missing |
 | **Error IDs** | All 500 responses include an `errorId` (8-char UUID) for support ticket correlation with server logs |
@@ -105,7 +107,7 @@ This prevents:
 3. **Rotate webhook secrets** — If compromised, regenerate in GitHub App settings
 4. **Use HTTPS** — All webhook endpoints should be served over HTTPS
 5. **Limit GitHub App permissions** — Only request `pull_requests: write`, `actions: write`, `secrets: read-write`, and `metadata: read` (auto). The `administration` and `contents` permissions are no longer needed — runner repo creation is handled via the user's OAuth token.
-6. **Use Device Flow for auth** — Dashboard and CLI use GitHub OAuth Device Flow (no client secret needed). Never store GitHub tokens in config files — use `ghagga login` which stores tokens securely. The OAuth scope `public_repo` is requested to enable runner repo creation.
+6. **Use the correct auth flow** — Dashboard uses OAuth Web Flow, so self-hosted/server deployments need `GITHUB_CLIENT_SECRET` and `STATE_SECRET`. CLI uses Device Flow via `ghagga login`. Never store GitHub tokens in config files.
 7. **Configure runner repo as public** — The `ghagga-runner` repo must be public for free GitHub Actions minutes. Never put sensitive code in this repo — it only contains the analysis workflow.
 8. **Review runner workflow changes** — The `ghagga-analysis.yml` workflow is the trust boundary. Only accept changes from the template repository.
 

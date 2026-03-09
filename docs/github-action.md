@@ -20,12 +20,12 @@ Add AI-powered code reviews to any repository in under 5 minutes. GHAGGA runs di
 |-----------|------|
 | **GHAGGA** | Free and open source (MIT license) |
 | **GitHub Actions minutes** | **Free unlimited** for public repos. Private repos: 2,000 free minutes/month (then [paid by GitHub](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)) |
-| **GitHub Models** (`gpt-4o-mini`) | **Free** — default provider, no API key needed |
+| **GitHub Models** (`gpt-4o-mini`) | Uses the workflow's GitHub token by default — no separate API key needed |
 | **Other LLM providers** (Anthropic, OpenAI, Google, Qwen) | BYOK — you pay those providers directly at their standard rates |
 | **Ollama** | Free — runs on a self-hosted runner with Ollama installed |
 | **Static analysis** (up to 15 tools) | Free — runs on the GitHub Actions runner |
 
-> 💡 **TL;DR**: 100% free for public repos with the default GitHub Models provider. No credit card, no API key, no signup.
+> 💡 **TL;DR**: Public repos can use the default GitHub Models provider with the workflow token you already have. No separate provider key is required.
 
 ---
 
@@ -141,7 +141,7 @@ All configuration is done via Action inputs in the workflow YAML. The Action doe
 | `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` |
 | `model` | No | Auto | Model identifier (auto-selects best model per provider, e.g. `gpt-4o-mini` for GitHub) |
 | `mode` | No | `simple` | Review mode: `simple` (1 LLM call), `workflow` (5 specialists), `consensus` (multi-model voting) |
-| `api-key` | No | — | LLM provider API key. **Not required** for `github` provider (uses `GITHUB_TOKEN` automatically) |
+| `api-key` | No | — | LLM provider API key. **Not required** for `github` provider unless you want to override the token used for GitHub Models |
 | `github-token` | No | `${{ github.token }}` | GitHub token for fetching PR diffs and posting comments. Automatic. |
 | `enabled-tools` | No | — | Comma-separated list of tools to force-enable (e.g., `ruff,bandit`). Properly forwarded through webhooks in SaaS mode. |
 | `disabled-tools` | No | — | Comma-separated list of tools to force-disable (e.g., `markdownlint`). Properly forwarded through webhooks in SaaS mode. |
@@ -225,10 +225,18 @@ Uses the `apps/action/Dockerfile` which includes all static analysis tools pre-i
 
 ### GitHub Models (default — free)
 
-No API key needed. Uses `GITHUB_TOKEN` automatically:
+No separate provider key needed. Uses `github-token` or `GITHUB_TOKEN` automatically:
 
 ```yaml
 - uses: JNZader/ghagga-action@v1
+```
+
+You can also pass your own GitHub token explicitly:
+
+```yaml
+- uses: JNZader/ghagga-action@v1
+  with:
+    github-token: ${{ secrets.MY_GITHUB_TOKEN }}
 ```
 
 ### OpenAI
