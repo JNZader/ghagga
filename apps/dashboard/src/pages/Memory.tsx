@@ -266,7 +266,7 @@ function ObservationCard({
               checked={isSelected ?? false}
               onChange={() => onToggleSelect(observation)}
               onClick={(e) => e.stopPropagation()}
-              className="h-4 w-4 rounded border-surface-border"
+              className="h-4 w-4 rounded-sm border-surface-border"
               aria-label={`Select observation: ${observation.title}`}
             />
           </div>
@@ -287,13 +287,13 @@ function ObservationCard({
               {visiblePaths.map((path: string) => (
                 <span
                   key={path}
-                  className="rounded bg-surface-bg px-2 py-1 font-mono text-xs text-text-secondary"
+                  className="rounded-sm bg-surface-bg px-2 py-1 font-mono text-xs text-text-secondary"
                 >
                   {path}
                 </span>
               ))}
               {extraPathCount > 0 && (
-                <span className="rounded bg-surface-bg px-2 py-1 text-xs text-text-muted">
+                <span className="rounded-sm bg-surface-bg px-2 py-1 text-xs text-text-muted">
                   +{extraPathCount} more
                 </span>
               )}
@@ -893,7 +893,7 @@ export function Memory() {
 
           <div className="flex gap-6">
             {/* Sessions sidebar */}
-            <div className="w-72 flex-shrink-0 space-y-2">
+            <div className="w-72 shrink-0 space-y-2">
               {hasEmptySessions && (
                 <button
                   onClick={() => {
@@ -960,7 +960,7 @@ export function Memory() {
                           if (el) el.indeterminate = someObsSelected;
                         }}
                         onChange={toggleSelectAllObs}
-                        className="h-4 w-4 rounded border-surface-border"
+                        className="h-4 w-4 rounded-sm border-surface-border"
                         aria-label="Select all observations"
                       />
                       Select all

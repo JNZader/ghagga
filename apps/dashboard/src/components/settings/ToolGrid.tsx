@@ -106,7 +106,7 @@ export function ToolGrid({ tools, disabledTools, onToggle, readOnly = false }: T
                         {tool.tier === 'always-on' ? 'Always-on' : 'Auto-detect'}
                       </span>
                       {readOnly && (
-                        <span className="rounded bg-primary-600/20 px-2 py-0.5 text-xs text-primary-400">
+                        <span className="rounded-sm bg-primary-600/20 px-2 py-0.5 text-xs text-primary-400">
                           Inherited
                         </span>
                       )}

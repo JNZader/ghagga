@@ -268,7 +268,7 @@ export function Settings() {
                           {toggle.value ? '✓' : '✕'}
                         </span>
                         <span className="text-sm text-text-secondary">{toggle.label}</span>
-                        <span className="ml-auto rounded bg-primary-600/20 px-2 py-0.5 text-xs text-primary-400">
+                        <span className="ml-auto rounded-sm bg-primary-600/20 px-2 py-0.5 text-xs text-primary-400">
                           Inherited
                         </span>
                       </div>

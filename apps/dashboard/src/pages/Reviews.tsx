@@ -298,7 +298,7 @@ export function Reviews() {
                     }}
                     onChange={toggleSelectAll}
                     disabled={filteredReviews.length === 0}
-                    className="h-4 w-4 rounded border-surface-border"
+                    className="h-4 w-4 rounded-sm border-surface-border"
                     aria-label="Select all reviews"
                   />
                 </th>
@@ -335,7 +335,7 @@ export function Reviews() {
                         checked={selectedIds.has(review.id)}
                         onChange={() => toggleSelectOne(review.id)}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-4 w-4 rounded border-surface-border"
+                        className="h-4 w-4 rounded-sm border-surface-border"
                         aria-label={`Select review ${review.repo} #${review.prNumber}`}
                       />
                     </td>
@@ -435,7 +435,7 @@ export function Reviews() {
             type="checkbox"
             checked={includeMemory}
             onChange={(e) => setIncludeMemory(e.target.checked)}
-            className="h-4 w-4 rounded border-surface-border"
+            className="h-4 w-4 rounded-sm border-surface-border"
           />
           Also clear memory observations for this repository
         </label>

@@ -87,7 +87,7 @@ export function ObservationDetailModal({ observation, onClose }: ObservationDeta
         aria-modal="true"
         aria-labelledby="observation-detail-title"
         tabIndex={-1}
-        className="relative z-10 w-full max-w-2xl rounded-lg border border-surface-border bg-surface-card shadow-xl focus:outline-none"
+        className="relative z-10 w-full max-w-2xl rounded-lg border border-surface-border bg-surface-card shadow-xl focus:outline-hidden"
       >
         {/* Scrollable body */}
         <div className="max-h-[80vh] overflow-y-auto p-6">
@@ -152,7 +152,7 @@ export function ObservationDetailModal({ observation, onClose }: ObservationDeta
                 {observation.filePaths.map((path: string) => (
                   <span
                     key={path}
-                    className="rounded bg-surface-bg px-2 py-1 font-mono text-xs text-text-secondary"
+                    className="rounded-sm bg-surface-bg px-2 py-1 font-mono text-xs text-text-secondary"
                   >
                     {path}
                   </span>

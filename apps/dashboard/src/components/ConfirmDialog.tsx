@@ -124,7 +124,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         tabIndex={-1}
-        className="relative z-10 w-full max-w-md rounded-lg border border-surface-border bg-surface-card p-6 shadow-xl focus:outline-none"
+        className="relative z-10 w-full max-w-md rounded-lg border border-surface-border bg-surface-card p-6 shadow-xl focus:outline-hidden"
       >
         <h2 id="confirm-dialog-title" className="text-lg font-semibold text-text-primary">
           {title}

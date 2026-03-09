@@ -245,7 +245,9 @@ export function GlobalSettings() {
                   <p className="text-sm text-text-secondary">
                     GHAGGA uses a GitHub Actions runner in your account for static analysis
                     (Semgrep, Trivy, PMD/CPD). This creates a public repository named
-                    <code className="mx-1 rounded bg-surface-bg px-1 text-xs">ghagga-runner</code>
+                    <code className="mx-1 rounded-sm bg-surface-bg px-1 text-xs">
+                      ghagga-runner
+                    </code>
                     in your GitHub account.
                   </p>
                   <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">

@@ -131,7 +131,7 @@ export function ProviderEntry({
                 type="button"
                 onClick={onMoveUp}
                 disabled={index === 0}
-                className="rounded p-1 text-text-secondary hover:bg-surface-border/50 hover:text-text-primary disabled:opacity-30"
+                className="rounded-sm p-1 text-text-secondary hover:bg-surface-border/50 hover:text-text-primary disabled:opacity-30"
                 title="Move up"
               >
                 &#9650;
@@ -140,7 +140,7 @@ export function ProviderEntry({
                 type="button"
                 onClick={onMoveDown}
                 disabled={index === totalEntries - 1}
-                className="rounded p-1 text-text-secondary hover:bg-surface-border/50 hover:text-text-primary disabled:opacity-30"
+                className="rounded-sm p-1 text-text-secondary hover:bg-surface-border/50 hover:text-text-primary disabled:opacity-30"
                 title="Move down"
               >
                 &#9660;
@@ -150,7 +150,7 @@ export function ProviderEntry({
           <button
             type="button"
             onClick={onRemove}
-            className="ml-2 rounded p-1 text-text-secondary hover:bg-red-500/20 hover:text-red-400"
+            className="ml-2 rounded-sm p-1 text-text-secondary hover:bg-red-500/20 hover:text-red-400"
             title="Remove provider"
           >
             &#10005;
