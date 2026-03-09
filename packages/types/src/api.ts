@@ -1,3 +1,5 @@
+import type { DelegatedCiClassification, DelegatedCiRunState } from './delegated-ci.js';
+
 // ─── Enums / Unions ─────────────────────────────────────────────
 
 export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED';
@@ -213,4 +215,47 @@ export interface RunnerError {
   message?: string;
   repoFullName?: string;
   retryAfter?: number;
+}
+
+// ─── Delegated CI ───────────────────────────────────────────────
+
+/** API view of a repository's delegated CI policy (GET /api/repos/:id/delegated-ci) */
+export interface DelegatedCiPolicyView {
+  enabled: boolean;
+  allowManualTrigger: boolean;
+  allowPullRequestTrigger: boolean;
+  jobs: Array<{
+    jobKey: string;
+    displayName: string;
+    classification: DelegatedCiClassification;
+    profile: string;
+    enabled: boolean;
+    allowArtifacts: false | string[];
+    allowCache: boolean;
+    maxDurationMinutes?: number;
+    rationale?: string;
+  }>;
+}
+
+/** API view of a delegated CI run */
+export interface DelegatedCiRunView {
+  id: number;
+  repositoryId: number;
+  prNumber: number | null;
+  jobKey: string;
+  classification: DelegatedCiClassification;
+  state: DelegatedCiRunState;
+  reasonCode: string | null;
+  reasonDetail: string | null;
+  profile: string;
+  summary: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+/** API response for listing delegated CI runs */
+export interface DelegatedCiRunsResponse {
+  runs: DelegatedCiRunView[];
+  total: number;
 }

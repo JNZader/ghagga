@@ -1,5 +1,8 @@
 export type {
   DayStats,
+  DelegatedCiPolicyView,
+  DelegatedCiRunsResponse,
+  DelegatedCiRunView,
   Finding,
   Installation,
   InstallationSettings,
@@ -24,3 +27,11 @@ export type {
   User,
   ValidationResponse,
 } from './api.js';
+
+export type {
+  DelegatedCiClassification,
+  DelegatedCiJobPolicy,
+  DelegatedCiPolicy,
+  DelegatedCiProfile,
+  DelegatedCiRunState,
+} from './delegated-ci.js';
