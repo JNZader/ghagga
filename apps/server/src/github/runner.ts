@@ -401,6 +401,143 @@ export async function dispatchWorkflow(params: DispatchParams): Promise<string> 
   return callbackId;
 }
 
+// ─── Runner Workflow Descriptor ─────────────────────────────────
+// Generic descriptor for dispatching different workflow types to the
+// runner repo. Supports both static analysis and delegated CI without
+// modifying the existing dispatchWorkflow() function.
+
+export type ExecutionKind = 'static-analysis' | 'delegated-ci';
+
+export interface RunnerWorkflowDescriptor {
+  kind: ExecutionKind;
+  workflowFile: string;
+  inputs: Record<string, string>;
+}
+
+export interface DelegatedCiDispatchParams {
+  ownerLogin: string;
+  repoFullName: string;
+  prNumber?: number;
+  headSha: string;
+  baseBranch: string;
+  callbackUrl: string;
+  jobKey: string;
+  profile: string;
+  allowArtifacts: false | string[];
+  allowCache: boolean;
+  maxDurationMinutes: number;
+  token: string;
+}
+
+/**
+ * Build a RunnerWorkflowDescriptor for delegated CI execution.
+ *
+ * Packs CI-specific parameters into a single `config` JSON input
+ * alongside the 6 explicit workflow_dispatch inputs required by
+ * `ghagga-delegated-ci.yml`.
+ */
+export function buildDelegatedCiDescriptor(
+  params: DelegatedCiDispatchParams,
+): RunnerWorkflowDescriptor {
+  const callbackId = `${randomUUID()}.${Date.now().toString(36)}`;
+  const callbackSecret = deriveCallbackSecret(callbackId);
+
+  const config = JSON.stringify({
+    jobKey: params.jobKey,
+    profile: params.profile,
+    allowArtifacts: params.allowArtifacts,
+    allowCache: params.allowCache,
+    maxDurationMinutes: params.maxDurationMinutes,
+    prNumber: params.prNumber ?? null,
+  });
+
+  return {
+    kind: 'delegated-ci',
+    workflowFile: 'ghagga-delegated-ci.yml',
+    inputs: {
+      callbackId,
+      callbackUrl: params.callbackUrl,
+      callbackSecret,
+      repoFullName: params.repoFullName,
+      headSha: params.headSha,
+      baseBranch: params.baseBranch,
+      config,
+    },
+  };
+}
+
+/**
+ * Dispatch a workflow on the user's runner repo using a generic descriptor.
+ *
+ * Sets ephemeral secrets (GHAGGA_TOKEN, GHAGGA_CALLBACK_SECRET) on
+ * the runner repo then dispatches the workflow specified by the
+ * descriptor. Returns the callbackId for correlation.
+ *
+ * This is the new generic dispatch path used by delegated CI (Phase 5
+ * Inngest will call this). The existing `dispatchWorkflow()` for
+ * static analysis remains unchanged.
+ */
+export async function dispatchRunnerWorkflow(
+  descriptor: RunnerWorkflowDescriptor,
+  ownerLogin: string,
+  token: string,
+): Promise<string> {
+  const runnerRepo = `${ownerLogin}/ghagga-runner`;
+
+  // Set secrets on the runner repo before dispatching
+  await setRunnerSecret(runnerRepo, 'GHAGGA_TOKEN', token, token);
+  if (descriptor.inputs.callbackSecret) {
+    await setRunnerSecret(
+      runnerRepo,
+      'GHAGGA_CALLBACK_SECRET',
+      descriptor.inputs.callbackSecret,
+      token,
+    );
+  }
+
+  // Dispatch the workflow
+  const dispatchUrl = `https://api.github.com/repos/${runnerRepo}/actions/workflows/${descriptor.workflowFile}/dispatches`;
+
+  const response = await githubCircuitBreaker.execute(() =>
+    fetch(dispatchUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({
+        ref: 'main',
+        inputs: descriptor.inputs,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    }),
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+    logger.error(
+      {
+        status: response.status,
+        statusText: response.statusText,
+        body,
+        repo: runnerRepo,
+        kind: descriptor.kind,
+      },
+      'GitHub API error dispatching workflow',
+    );
+    throw new Error('Failed to communicate with GitHub API');
+  }
+
+  logger.info(
+    { callbackId: descriptor.inputs.callbackId, runnerRepo, kind: descriptor.kind },
+    'Dispatched runner workflow',
+  );
+
+  return descriptor.inputs.callbackId;
+}
+
 // ─── Runner Creation ────────────────────────────────────────────
 
 const creationLogger = rootLogger.child({ module: 'runner-creation' });

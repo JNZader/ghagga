@@ -23,14 +23,18 @@ vi.mock('../lib/logger.js', () => ({
 }));
 
 import {
+  buildDelegatedCiDescriptor,
   createRunnerRepo,
+  type DelegatedCiDispatchParams,
   type DispatchParams,
   deriveCallbackSecret,
   discoverRunnerRepo,
+  dispatchRunnerWorkflow,
   dispatchWorkflow,
   getCallbackTtlMs,
   RunnerCreationError,
   type RunnerErrorCode,
+  type RunnerWorkflowDescriptor,
   setRunnerSecret,
   verifyCallbackSignature,
 } from './runner.js';
@@ -1362,5 +1366,395 @@ describe('createRunnerRepo', () => {
 
     // The creation logger is a separate child logger
     expect(mockRootChildFn).toHaveBeenCalledWith({ module: 'runner-creation' });
+  });
+});
+
+// ─── Group 7: buildDelegatedCiDescriptor ────────────────────────
+
+describe('buildDelegatedCiDescriptor', () => {
+  const TEST_SECRET = 'test-delegated-ci-secret';
+
+  /** Build minimal DelegatedCiDispatchParams with sensible defaults. */
+  function makeDelegatedCiParams(
+    overrides: Partial<DelegatedCiDispatchParams> = {},
+  ): DelegatedCiDispatchParams {
+    return {
+      ownerLogin: 'test-owner',
+      repoFullName: 'test-owner/test-repo',
+      headSha: 'abc123',
+      baseBranch: 'main',
+      callbackUrl: 'https://example.com/runner/callback',
+      jobKey: 'ci-lint-test',
+      profile: 'node-20',
+      allowArtifacts: false,
+      allowCache: true,
+      maxDurationMinutes: 15,
+      token: 'ghp_test-token',
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    process.env.STATE_SECRET = TEST_SECRET;
+  });
+
+  afterEach(() => {
+    delete process.env.STATE_SECRET;
+  });
+
+  it('produces a descriptor with kind "delegated-ci"', () => {
+    const descriptor = buildDelegatedCiDescriptor(makeDelegatedCiParams());
+
+    expect(descriptor.kind).toBe('delegated-ci');
+  });
+
+  it('produces a descriptor with workflowFile "ghagga-delegated-ci.yml"', () => {
+    const descriptor = buildDelegatedCiDescriptor(makeDelegatedCiParams());
+
+    expect(descriptor.workflowFile).toBe('ghagga-delegated-ci.yml');
+  });
+
+  it('produces a callbackId in {uuid}.{timestamp_base36} format', () => {
+    const descriptor = buildDelegatedCiDescriptor(makeDelegatedCiParams());
+
+    expect(descriptor.inputs.callbackId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[0-9a-z]+$/,
+    );
+
+    // Timestamp portion should parse to a valid time
+    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
+    const tsPart = descriptor.inputs.callbackId.split('.').pop()!;
+    const timestamp = parseInt(tsPart, 36);
+    expect(timestamp).toBeGreaterThan(0);
+    expect(Math.abs(Date.now() - timestamp)).toBeLessThan(2000);
+  });
+
+  it('callbackSecret is HMAC-SHA256(STATE_SECRET, callbackId) as 64-char hex', () => {
+    const descriptor = buildDelegatedCiDescriptor(makeDelegatedCiParams());
+
+    const expected = createHmac('sha256', TEST_SECRET)
+      .update(descriptor.inputs.callbackId)
+      .digest('hex');
+
+    expect(descriptor.inputs.callbackSecret).toBe(expected);
+    expect(descriptor.inputs.callbackSecret).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('config JSON contains all expected fields', () => {
+    const descriptor = buildDelegatedCiDescriptor(
+      makeDelegatedCiParams({
+        jobKey: 'ci-build',
+        profile: 'node-18',
+        allowArtifacts: ['junit'],
+        allowCache: false,
+        maxDurationMinutes: 30,
+        prNumber: 42,
+      }),
+    );
+
+    const config = JSON.parse(descriptor.inputs.config);
+    expect(config).toEqual({
+      jobKey: 'ci-build',
+      profile: 'node-18',
+      allowArtifacts: ['junit'],
+      allowCache: false,
+      maxDurationMinutes: 30,
+      prNumber: 42,
+    });
+  });
+
+  it('prNumber defaults to null when not provided', () => {
+    const descriptor = buildDelegatedCiDescriptor(makeDelegatedCiParams());
+
+    const config = JSON.parse(descriptor.inputs.config);
+    expect(config.prNumber).toBeNull();
+  });
+
+  it('allowArtifacts=false serializes correctly in config', () => {
+    const descriptor = buildDelegatedCiDescriptor(makeDelegatedCiParams({ allowArtifacts: false }));
+
+    const config = JSON.parse(descriptor.inputs.config);
+    expect(config.allowArtifacts).toBe(false);
+  });
+
+  it('allowArtifacts=["junit"] serializes correctly in config', () => {
+    const descriptor = buildDelegatedCiDescriptor(
+      makeDelegatedCiParams({ allowArtifacts: ['junit'] }),
+    );
+
+    const config = JSON.parse(descriptor.inputs.config);
+    expect(config.allowArtifacts).toEqual(['junit']);
+  });
+
+  it('allowArtifacts=["junit","coverage"] serializes correctly in config', () => {
+    const descriptor = buildDelegatedCiDescriptor(
+      makeDelegatedCiParams({ allowArtifacts: ['junit', 'coverage'] }),
+    );
+
+    const config = JSON.parse(descriptor.inputs.config);
+    expect(config.allowArtifacts).toEqual(['junit', 'coverage']);
+  });
+
+  it('includes all 7 inputs: callbackId, callbackUrl, callbackSecret, repoFullName, headSha, baseBranch, config', () => {
+    const descriptor = buildDelegatedCiDescriptor(makeDelegatedCiParams());
+
+    expect(Object.keys(descriptor.inputs).sort()).toEqual(
+      [
+        'baseBranch',
+        'callbackId',
+        'callbackSecret',
+        'callbackUrl',
+        'config',
+        'headSha',
+        'repoFullName',
+      ].sort(),
+    );
+  });
+
+  it('passes repoFullName, headSha, baseBranch, and callbackUrl from params', () => {
+    const descriptor = buildDelegatedCiDescriptor(
+      makeDelegatedCiParams({
+        repoFullName: 'org/my-app',
+        headSha: 'deadbeef',
+        baseBranch: 'develop',
+        callbackUrl: 'https://api.ghagga.dev/runner/callback',
+      }),
+    );
+
+    expect(descriptor.inputs.repoFullName).toBe('org/my-app');
+    expect(descriptor.inputs.headSha).toBe('deadbeef');
+    expect(descriptor.inputs.baseBranch).toBe('develop');
+    expect(descriptor.inputs.callbackUrl).toBe('https://api.ghagga.dev/runner/callback');
+  });
+});
+
+// ─── Group 8: dispatchRunnerWorkflow ────────────────────────────
+
+describe('dispatchRunnerWorkflow', () => {
+  const mockFetch = vi.fn();
+  const TEST_SECRET = 'test-dispatch-runner-secret';
+
+  // Same valid test public key as other groups
+  const testPublicKeyB64 = 'C2o8Fz0SSCMy56fVlx+MPxPvZC7eQVOMlf82K32KJYA=';
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockReset();
+    mockRunnerLogger.info.mockClear();
+    mockRunnerLogger.warn.mockClear();
+    mockRunnerLogger.error.mockClear();
+    process.env.STATE_SECRET = TEST_SECRET;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.STATE_SECRET;
+  });
+
+  /** Build a test descriptor for delegated CI. */
+  function makeTestDescriptor(
+    overrides: Partial<RunnerWorkflowDescriptor> = {},
+  ): RunnerWorkflowDescriptor {
+    const callbackId = '550e8400-e29b-41d4-a716-446655440000.testts';
+    return {
+      kind: 'delegated-ci',
+      workflowFile: 'ghagga-delegated-ci.yml',
+      inputs: {
+        callbackId,
+        callbackUrl: 'https://example.com/runner/callback',
+        callbackSecret: 'abc123secret',
+        repoFullName: 'test-owner/test-repo',
+        headSha: 'deadbeef',
+        baseBranch: 'main',
+        config: '{"jobKey":"ci-test","profile":"node-20"}',
+      },
+      ...overrides,
+    };
+  }
+
+  /**
+   * Set up mock fetch for a successful dispatchRunnerWorkflow flow:
+   *  1. GET public-key → 200  (for GHAGGA_TOKEN)
+   *  2. PUT secret     → 204  (for GHAGGA_TOKEN)
+   *  3. GET public-key → 200  (for GHAGGA_CALLBACK_SECRET)
+   *  4. PUT secret     → 204  (for GHAGGA_CALLBACK_SECRET)
+   *  5. POST dispatch  → given status
+   */
+  function setupMockChain(dispatchStatus: number, dispatchBody?: string) {
+    // setRunnerSecret(GHAGGA_TOKEN) → GET public key
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ key: testPublicKeyB64, key_id: 'key-dispatch' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    // setRunnerSecret(GHAGGA_TOKEN) → PUT secret
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    // setRunnerSecret(GHAGGA_CALLBACK_SECRET) → GET public key
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ key: testPublicKeyB64, key_id: 'key-dispatch' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    // setRunnerSecret(GHAGGA_CALLBACK_SECRET) → PUT secret
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    // POST dispatch
+    const isNullBody = dispatchStatus === 204 || dispatchStatus === 304;
+    mockFetch.mockResolvedValueOnce(
+      new Response(isNullBody ? null : (dispatchBody ?? ''), {
+        status: dispatchStatus,
+        statusText: dispatchStatus === 204 ? 'No Content' : 'Error',
+      }),
+    );
+  }
+
+  it('calls setRunnerSecret for GHAGGA_TOKEN and GHAGGA_CALLBACK_SECRET', async () => {
+    setupMockChain(204);
+
+    await dispatchRunnerWorkflow(makeTestDescriptor(), 'test-owner', 'ghp_token');
+
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+
+    // GHAGGA_TOKEN PUT
+    const putTokenUrl = mockFetch.mock.calls[1][0] as string;
+    expect(putTokenUrl).toBe(
+      'https://api.github.com/repos/test-owner/ghagga-runner/actions/secrets/GHAGGA_TOKEN',
+    );
+
+    // GHAGGA_CALLBACK_SECRET PUT
+    const putCallbackUrl = mockFetch.mock.calls[3][0] as string;
+    expect(putCallbackUrl).toBe(
+      'https://api.github.com/repos/test-owner/ghagga-runner/actions/secrets/GHAGGA_CALLBACK_SECRET',
+    );
+  });
+
+  it('uses the correct workflowFile in the dispatch URL', async () => {
+    setupMockChain(204);
+
+    await dispatchRunnerWorkflow(makeTestDescriptor(), 'my-org', 'ghp_token');
+
+    const dispatchUrl = mockFetch.mock.calls[4][0] as string;
+    expect(dispatchUrl).toBe(
+      'https://api.github.com/repos/my-org/ghagga-runner/actions/workflows/ghagga-delegated-ci.yml/dispatches',
+    );
+  });
+
+  it('uses a different workflowFile when descriptor specifies it', async () => {
+    setupMockChain(204);
+
+    const descriptor = makeTestDescriptor({ workflowFile: 'ghagga-analysis.yml' });
+    await dispatchRunnerWorkflow(descriptor, 'my-org', 'ghp_token');
+
+    const dispatchUrl = mockFetch.mock.calls[4][0] as string;
+    expect(dispatchUrl).toBe(
+      'https://api.github.com/repos/my-org/ghagga-runner/actions/workflows/ghagga-analysis.yml/dispatches',
+    );
+  });
+
+  it('returns the callbackId from the descriptor', async () => {
+    setupMockChain(204);
+
+    const descriptor = makeTestDescriptor();
+    const result = await dispatchRunnerWorkflow(descriptor, 'test-owner', 'ghp_token');
+
+    expect(result).toBe(descriptor.inputs.callbackId);
+  });
+
+  it('sends all descriptor inputs in the dispatch body', async () => {
+    setupMockChain(204);
+
+    const descriptor = makeTestDescriptor();
+    await dispatchRunnerWorkflow(descriptor, 'test-owner', 'ghp_token');
+
+    const body = JSON.parse(mockFetch.mock.calls[4][1].body as string);
+    expect(body.ref).toBe('main');
+    expect(body.inputs).toEqual(descriptor.inputs);
+  });
+
+  it('sends correct headers for the dispatch POST request', async () => {
+    setupMockChain(204);
+
+    await dispatchRunnerWorkflow(makeTestDescriptor(), 'test-owner', 'ghp_my-token');
+
+    const headers = mockFetch.mock.calls[4][1].headers;
+    expect(headers).toEqual({
+      Authorization: 'Bearer ghp_my-token',
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    });
+  });
+
+  it('logs info with callbackId, runnerRepo, and kind on success', async () => {
+    setupMockChain(204);
+
+    const descriptor = makeTestDescriptor();
+    await dispatchRunnerWorkflow(descriptor, 'test-owner', 'ghp_token');
+
+    expect(mockRunnerLogger.info).toHaveBeenCalledWith(
+      {
+        callbackId: descriptor.inputs.callbackId,
+        runnerRepo: 'test-owner/ghagga-runner',
+        kind: 'delegated-ci',
+      },
+      'Dispatched runner workflow',
+    );
+  });
+
+  it('throws when dispatch API fails (422)', async () => {
+    setupMockChain(422, '{"message":"Validation Failed"}');
+
+    await expect(
+      dispatchRunnerWorkflow(makeTestDescriptor(), 'test-owner', 'ghp_token'),
+    ).rejects.toThrow('Failed to communicate with GitHub API');
+  });
+
+  it('logs error with kind and repo when dispatch fails', async () => {
+    setupMockChain(422, '{"message":"Validation Failed"}');
+
+    try {
+      await dispatchRunnerWorkflow(makeTestDescriptor(), 'test-owner', 'ghp_token');
+    } catch {
+      // expected
+    }
+
+    expect(mockRunnerLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 422,
+        repo: 'test-owner/ghagga-runner',
+        kind: 'delegated-ci',
+      }),
+      'GitHub API error dispatching workflow',
+    );
+  });
+
+  it('skips GHAGGA_CALLBACK_SECRET when descriptor has no callbackSecret input', async () => {
+    // Only 3 fetch calls: GET+PUT (GHAGGA_TOKEN) + POST dispatch
+    // setRunnerSecret(GHAGGA_TOKEN) → GET public key
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ key: testPublicKeyB64, key_id: 'key-dispatch' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    // setRunnerSecret(GHAGGA_TOKEN) → PUT secret
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    // POST dispatch → 204
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const descriptor: RunnerWorkflowDescriptor = {
+      kind: 'static-analysis',
+      workflowFile: 'ghagga-analysis.yml',
+      inputs: {
+        callbackId: 'test-id.abc',
+        repoFullName: 'owner/repo',
+      },
+    };
+
+    await dispatchRunnerWorkflow(descriptor, 'owner', 'ghp_token');
+
+    // Only 3 fetch calls (no GHAGGA_CALLBACK_SECRET set)
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 });
