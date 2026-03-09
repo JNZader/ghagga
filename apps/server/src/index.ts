@@ -18,6 +18,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { rateLimiter } from 'hono-rate-limiter';
 import { serve as serveInngest } from 'inngest/hono';
 import { inngest } from './inngest/client.js';
+import { delegatedCiFunction } from './inngest/delegated-ci.js';
 import { reviewFunction } from './inngest/review.js';
 import { githubCircuitBreaker } from './lib/circuit-breaker.js';
 import { getClientIp } from './lib/get-client-ip.js';
@@ -211,7 +212,7 @@ app.route('/', oauthRouter);
 app.on(
   ['GET', 'POST', 'PUT'],
   '/api/inngest',
-  serveInngest({ client: inngest, functions: [reviewFunction] }),
+  serveInngest({ client: inngest, functions: [reviewFunction, delegatedCiFunction] }),
 );
 
 // Runner callback route — intentionally outside /api/* namespace to avoid the
