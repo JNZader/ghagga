@@ -11,6 +11,14 @@ services:
     branch: main
     dockerfilePath: apps/server/Dockerfile
     dockerContext: .
+    watchPaths:
+      - apps/server/**
+      - packages/core/**
+      - packages/db/**
+      - package.json
+      - pnpm-workspace.yaml
+      - pnpm-lock.yaml
+      - render.yaml
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
