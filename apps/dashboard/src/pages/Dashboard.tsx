@@ -8,6 +8,7 @@ import {
   YAxis,
 } from 'recharts';
 import { Card } from '@/components/Card';
+import { DelegatedCiRuns } from '@/components/DelegatedCiRuns';
 import { useRepositories, useStats } from '@/lib/api';
 import { useSelectedRepo } from '@/lib/repo-context';
 import type { Stats } from '@/lib/types';
@@ -160,6 +161,9 @@ export function Dashboard() {
         <>
           <StatsOverview stats={stats} />
           <ReviewChart data={stats.reviewsByDay ?? []} />
+          <div className="mt-6">
+            <DelegatedCiRuns />
+          </div>
         </>
       ) : (
         <EmptyState />

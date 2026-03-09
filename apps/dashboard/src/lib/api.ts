@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  DelegatedCiRunsResponse,
+  DelegatedCiRunView,
   Installation,
   InstallationSettings,
   MemorySession,
@@ -388,6 +390,33 @@ export function useConfigureRunnerSecret() {
       fetchApi<{ data: RunnerConfigureResult }>('/api/runner/configure-secret', {
         method: 'POST',
       }).then((res) => res.data),
+  });
+}
+
+// ─── Delegated CI ─────────────────────────────────────────
+
+export function useDelegatedCiRuns(repo: string, page = 1) {
+  return useQuery<DelegatedCiRunsResponse>({
+    queryKey: ['delegated-ci-runs', repo, page],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set('repo', repo);
+      params.set('page', String(page));
+      const result = await fetchApi<{
+        data: DelegatedCiRunsResponse;
+        pagination: { page: number; limit: number; offset: number };
+      }>(`/api/delegated-ci/runs?${params.toString()}`);
+      return result.data;
+    },
+    enabled: !!repo,
+  });
+}
+
+export function useDelegatedCiRun(runId: number) {
+  return useQuery<DelegatedCiRunView>({
+    queryKey: ['delegated-ci-run', runId],
+    queryFn: () => fetchData<DelegatedCiRunView>(`/api/delegated-ci/runs/${runId}`),
+    enabled: !!runId,
   });
 }
 

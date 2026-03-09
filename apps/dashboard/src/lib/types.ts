@@ -2,6 +2,14 @@
 // Dashboard-only types (if any) can be added below.
 export type {
   DayStats,
+  DelegatedCiClassification,
+  DelegatedCiJobPolicy,
+  DelegatedCiPolicy,
+  DelegatedCiPolicyView,
+  DelegatedCiProfile,
+  DelegatedCiRunState,
+  DelegatedCiRunsResponse,
+  DelegatedCiRunView,
   Finding,
   Installation,
   InstallationSettings,
