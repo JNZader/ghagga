@@ -121,8 +121,191 @@ If the runner repo doesn't exist or the dispatch fails, the server falls back to
 
 The [`ghagga-runner-template`](https://github.com/JNZader/ghagga-runner-template) contains:
 
-- `.github/workflows/ghagga-analysis.yml` — The analysis workflow (348 lines)
+- `.github/workflows/ghagga-analysis.yml` — The static analysis workflow (348 lines)
+- `.github/workflows/ghagga-delegated-ci.yml` — The delegated CI workflow (407 lines)
 - `README.md` — Setup instructions for users
 - Workflow auto-installs and caches tools using `@actions/cache`
 - First run: ~3-5 minutes (tool installation)
 - Subsequent runs: ~18 seconds (cached)
+
+---
+
+## Delegated CI
+
+> Extends the static analysis runner pattern to execute general CI jobs (lint, test) for private repositories on the public runner repo.
+
+Delegated CI is a separate execution kind that reuses the same runner infrastructure (repo discovery, secret provisioning, HMAC callbacks) but has its own policy model, workflow template, orchestration flow, and result storage.
+
+### How It Extends the Runner Pattern
+
+The static analysis runner was built for a single purpose: run GHAGGA-owned analysis tools on PR diffs. Delegated CI generalizes this into a multi-purpose execution platform by separating three concerns:
+
+| Concern | Static Analysis | Delegated CI |
+|---------|----------------|--------------|
+| **Infrastructure** | Shared: runner discovery, secret provisioning, HMAC callbacks, log deletion |  |
+| **Execution** | `ghagga-analysis.yml` with fixed tool set | `ghagga-delegated-ci.yml` with curated profiles |
+| **Policy** | Implicit (enabled when runner exists) | Explicit per-repo opt-in with job classification |
+
+The refactored dispatch uses a generic `RunnerWorkflowDescriptor` interface so the runner module no longer knows what execution kind it is dispatching:
+
+```ts
+interface RunnerWorkflowDescriptor {
+  kind: 'static-analysis' | 'delegated-ci';
+  workflowFile: string;
+  inputs: Record<string, string>;
+}
+```
+
+Each execution kind has its own factory function (`buildDelegatedCiDescriptor` for CI, the existing `dispatchWorkflow` for static analysis) that populates the descriptor inputs.
+
+### Dispatch Flow
+
+```mermaid
+sequenceDiagram
+    participant PR as Pull Request
+    participant WH as Webhook Handler
+    participant PE as Policy Evaluator
+    participant DB as PostgreSQL
+    participant IG as Inngest
+    participant RN as Runner Module
+    participant GA as ghagga-runner
+    participant CB as Callback Route
+
+    PR->>WH: PR opened/synchronized
+    WH->>DB: Load repo + delegatedCiPolicy
+    WH->>PE: Evaluate jobs against policy
+    
+    alt Jobs rejected
+        PE->>DB: Insert delegated_ci_runs (state=rejected, reasonCode)
+    else Jobs approved
+        PE->>IG: Send "ghagga/delegated-ci.requested"
+        IG->>DB: Insert delegated_ci_runs (state=approved)
+        IG->>RN: buildDelegatedCiDescriptor + dispatchRunnerWorkflow
+        RN->>GA: workflow_dispatch ghagga-delegated-ci.yml
+        IG->>DB: Update state=dispatched
+        GA->>CB: POST /runner/callback (state=running)
+        CB->>IG: Emit "ghagga/delegated-ci.callback"
+        GA->>CB: POST /runner/callback (state=completed|failed)
+        CB->>IG: Emit "ghagga/delegated-ci.callback"
+        IG->>DB: Update state=completed|failed + summary
+    end
+```
+
+The dispatch packs CI-specific parameters into a single JSON `config` input alongside 6 explicit `workflow_dispatch` inputs (7 total, within GitHub's ~10 input limit):
+
+| Input | Type | Purpose |
+|-------|------|---------|
+| `callbackId` | Explicit | Correlation ID (UUID + timestamp) |
+| `callbackUrl` | Explicit | Server endpoint for results |
+| `callbackSecret` | Explicit | Per-dispatch HMAC secret |
+| `repoFullName` | Explicit | Target repository (`owner/repo`) |
+| `headSha` | Explicit | Commit to checkout |
+| `baseBranch` | Explicit | Base branch for context |
+| `config` | JSON | `{ jobKey, profile, allowArtifacts, allowCache, maxDurationMinutes, prNumber }` |
+
+### Execution Profiles
+
+Delegated CI runs only GHAGGA-curated execution profiles. Arbitrary repo workflows and shell commands are not supported in MVP.
+
+| Profile | Runtime | Command | Default Timeout | Max Timeout | Allowed Artifacts |
+|---------|---------|---------|-----------------|-------------|-------------------|
+| `node-lint` | Node.js 20 | `npm run lint` | 5 min | 10 min | `junit` |
+| `node-unit` | Node.js 20 | `npm test` | 10 min | 30 min | `junit`, `coverage-summary` |
+| `python-lint` | Python 3.12 | `ruff check .` | 5 min | 10 min | `junit` |
+| `python-pytest` | Python 3.12 | `pytest` | 10 min | 30 min | `junit`, `coverage-summary` |
+| `go-test` | Go 1.22 | `go test ./...` | 10 min | 30 min | `junit`, `coverage-summary` |
+
+All profiles have `requiresSecrets: false` as a hard safety boundary. A profile that would need secrets is by definition `sensitive/no-delegable`.
+
+### Policy Model
+
+Delegated CI is controlled by a per-repository policy stored as a JSONB column (`delegatedCiPolicy`) on the `repositories` table. The policy is repo-scoped only and is never inherited from installation-level settings.
+
+```ts
+interface DelegatedCiPolicy {
+  enabled: boolean;              // Global kill switch
+  allowManualTrigger?: boolean;  // Dashboard/API triggers
+  allowPullRequestTrigger?: boolean;
+  jobs: DelegatedCiJobPolicy[];  // Per-job configuration
+}
+```
+
+Each job is classified as either `safe/delegable` or `sensitive/no-delegable`. The policy evaluator applies checks in strict order (first failure wins):
+
+1. Policy exists and is enabled
+2. Job exists in the policy
+3. Job is enabled (per-job opt-out)
+4. Job classification is `safe/delegable`
+5. Profile is supported in the MVP registry
+6. Duration does not exceed profile maximum
+7. Artifact kinds are valid for the profile
+
+Any job that fails a check is rejected with a machine-readable `reasonCode` (e.g., `delegated_ci_disabled`, `job_sensitive`, `profile_unsupported`).
+
+### Inngest Orchestration Lifecycle
+
+Delegated CI uses a dedicated Inngest function (`ghagga-delegated-ci`) separate from the AI review flow. The lifecycle for each approved job:
+
+```mermaid
+stateDiagram-v2
+    [*] --> approved : Policy evaluator approves job
+    approved --> dispatched : Runner workflow dispatched
+    dispatched --> running : "running" callback received
+    running --> completed : "completed" callback received
+    running --> failed : "failed" callback received
+    dispatched --> timed_out : No callback within 15 min
+    running --> timed_out : No final callback within 15 min
+    [*] --> rejected : Policy check fails
+```
+
+The function processes approved jobs sequentially within a single invocation. Each job follows 4 durable steps:
+
+1. **Create run record** — inserts a `delegated_ci_runs` row with `state: approved`
+2. **Dispatch** — builds the descriptor, provisions ephemeral secrets, dispatches `ghagga-delegated-ci.yml`, updates state to `dispatched`
+3. **Wait for callback** — `step.waitForEvent("ghagga/delegated-ci.callback", { match: callbackId, timeout: 15m })`
+4. **Finalize** — updates the run record to `completed`, `failed`, or `timed_out`
+
+### Callback Routing
+
+The callback endpoint (`POST /runner/callback`) is dual-purpose: it handles both static analysis and delegated CI callbacks through a single route, disambiguated by the `executionKind` field in the payload.
+
+| Payload Field | Static Analysis | Delegated CI |
+|--------------|-----------------|--------------|
+| `executionKind` | Absent / undefined | `"delegated-ci"` |
+| Inngest event emitted | `ghagga/runner.completed` | `ghagga/delegated-ci.callback` |
+| Resuming function | Review Inngest function | Delegated CI Inngest function |
+
+Both callback types share the same HMAC verification logic (`verifyCallbackSignature`) and the same `POST /runner/callback` route. The callback router parses the payload, determines the execution kind, and emits the appropriate Inngest event so the correct durable function resumes.
+
+### Delegated CI Security Considerations
+
+See [Security -- Delegated CI Safety Boundaries](security.md#delegated-ci-safety-boundaries) for the full security model. Key points:
+
+- **Code never stored**: The runner clones the private repo, executes the CI profile, then deletes the workspace. No code persists on the runner.
+- **Logs suppressed**: All tool stdout/stderr is redirected to temp files, never printed to workflow logs. Logs are deleted after each run.
+- **Encrypted config transport**: The `config` JSON input is transmitted via `workflow_dispatch` (GitHub's encrypted channel). The `callbackSecret` is set as a GitHub Actions secret.
+- **Profile-based restriction**: Only GHAGGA-curated profiles run — no arbitrary shell commands, no repo-authored workflows.
+- **No secrets fan-out**: Delegated CI jobs receive only the ephemeral `GHAGGA_TOKEN` (installation token) and `GHAGGA_CALLBACK_SECRET`. No repo/environment secrets are copied to the runner.
+
+### Run State Persistence
+
+Delegated CI runs are stored in a dedicated `delegated_ci_runs` table, separate from the `reviews` table. Each row tracks:
+
+- Repository and PR context
+- Job key and execution profile
+- State transitions (`approved` -> `dispatched` -> `running` -> `completed`/`failed`/`timed_out`)
+- Rejection reason codes and details (for policy-rejected jobs)
+- Callback correlation ID
+- Timing data and result summary
+
+### Server Implementation
+
+| File | Purpose |
+|------|---------|
+| `apps/server/src/delegated-ci/profiles.ts` | Curated execution profile registry |
+| `apps/server/src/delegated-ci/policy.ts` | Policy evaluator with classification and MVP guardrails |
+| `apps/server/src/github/runner.ts` | Runner discovery, secret provisioning, generic workflow dispatch |
+| `apps/server/src/inngest/delegated-ci.ts` | Durable orchestration (create, dispatch, wait, finalize) |
+| `apps/server/src/routes/runner-callback.ts` | Dual-purpose callback route (static analysis + delegated CI) |
+| `templates/ghagga-delegated-ci.yml` | Runner workflow template for CI jobs |
+| `packages/db/src/schema.ts` | `delegated_ci_runs` table and `delegatedCiPolicy` JSONB column |
