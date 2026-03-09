@@ -5,6 +5,8 @@
 **Related**: [Product Strategy v2.5](product-strategy-v2.5.md)
 **Inspired by**: [RepoCheckAI](https://github.com/glaucia86/repocheckai)
 
+> Historical proposal: kept for context. Parts of this document informed shipped v2.5 work, but it is not the canonical source for current behavior.
+
 ---
 
 ## Context

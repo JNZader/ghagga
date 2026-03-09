@@ -6,6 +6,9 @@
 **Status**: Proposal  
 **Current Version**: 2.3.0  
 
+> Historical proposal: kept for context. It captures strategy discussion from before the current implementation and should not be read as the source of truth for current behavior.
+
+
 ---
 
 ## Executive Summary

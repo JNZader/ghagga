@@ -40,11 +40,11 @@ Go from zero to your first AI code review in under 5 minutes. This guide walks y
 **[Open the GHAGGA Dashboard](https://jnzader.github.io/ghagga/app/)**
 
 1. Click **"Login"** on the Dashboard
-2. You'll see a **GitHub OAuth Device Flow** screen with a code
-3. Click the link to go to GitHub, enter the code, and click **"Authorize"**
-4. You'll be redirected back to the Dashboard, logged in
+2. You'll be redirected to GitHub's **OAuth Web Flow** consent screen
+3. Approve the GHAGGA OAuth app
+4. GitHub redirects you back to the Dashboard and you are logged in
 
-> **Tip**: The Dashboard uses GitHub Pages — no backend authentication is stored. Your GitHub token is kept in your browser's local storage and never sent to third parties.
+> **Tip**: The Dashboard uses GitHub Pages, but authentication is completed by the GHAGGA server via OAuth Web Flow. If the server is unavailable, the Dashboard falls back to manual PAT entry.
 
 **Verification**: You should see the Dashboard home page with stats cards (they'll show zeros until your first review).
 
@@ -58,18 +58,20 @@ Navigate to **Dashboard** > **Settings** (or **Global Settings** for installatio
 
 | Provider | Model | Cost | API Key Needed? | Notes |
 |----------|-------|------|-----------------|-------|
-| **GitHub Models** | `gpt-4o-mini` | **Free** | No | Default — uses your GitHub OAuth token |
+| **GitHub Models** | `gpt-4o-mini` | GitHub-side pricing | Yes | In SaaS mode, add a PAT with `models:read`; dashboard OAuth alone is not enough for server-side reviews |
 | Anthropic | `claude-sonnet-4-20250514` | BYOK | Yes | Highest quality reviews |
 | OpenAI | `gpt-4o` | BYOK | Yes | Fast and capable |
 | Google | `gemini-2.5-flash` | BYOK | Yes | Low cost per token |
 | Ollama | `qwen2.5-coder:7b` | **Free** (local) | No | Requires local Ollama server |
 | Qwen | `qwen-coder-plus` | BYOK | Yes | Alibaba Cloud |
 
-### Free setup (GitHub Models — recommended for getting started)
+### GitHub Models setup (server mode)
 
 1. In **Settings**, select **"GitHub"** as the provider
-2. That's it — no API key needed. GitHub Models uses your OAuth login automatically
-3. The default model is `gpt-4o-mini`
+2. Paste a GitHub Personal Access Token with `models:read`
+3. Save the provider; the default model is `gpt-4o-mini`
+
+> **Important**: The dashboard login token is used for dashboard/API access and runner setup. Reviews triggered by the SaaS server run with GitHub App installation credentials, so GitHub Models needs its own PAT in the provider chain.
 
 ### BYOK setup (Bring Your Own Key)
 
@@ -177,7 +179,7 @@ sequenceDiagram
 
 ### No review comment posted
 
-1. **Check your LLM provider**: Go to [Dashboard](https://jnzader.github.io/ghagga/app/) > Settings and verify a provider is configured with a valid API key (or "GitHub" selected for the free default)
+1. **Check your LLM provider**: Go to [Dashboard](https://jnzader.github.io/ghagga/app/) > Settings and verify a provider is configured with a valid API key. For **GitHub Models** in SaaS mode, that means a PAT with `models:read`.
 2. **Check the App is installed on that repo**: Go to your GitHub Settings > Applications > GHAGGA > Configure — make sure the repo is in the list
 3. **Check the PR is on the right event type**: GHAGGA triggers on `opened`, `synchronize`, and `reopened` events. Draft PRs may not trigger reviews depending on your config.
 
@@ -205,7 +207,7 @@ If clicking "Enable Runner" triggers a re-authentication prompt, this means your
 |-----------|------|
 | **GHAGGA** | Free and open source (MIT license) |
 | **Hosted SaaS** | Free to use |
-| **GitHub Models** (`gpt-4o-mini`) | Free — no API key needed |
+| **GitHub Models** (`gpt-4o-mini`) | Requires your own PAT with `models:read` in SaaS/server mode |
 | **Other LLM providers** (Anthropic, OpenAI, Google, Qwen) | BYOK — you pay those providers directly at their standard rates |
 | **Ollama** | Free — runs on your own machine |
 | **Static analysis** (Semgrep, Trivy, CPD) | Free — runs on GitHub Actions runners (unlimited free minutes for public repos) |

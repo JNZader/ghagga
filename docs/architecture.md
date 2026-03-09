@@ -128,9 +128,9 @@ Zero infrastructure — no Redis server, no worker processes. 50k events/month f
 
 ### Provider Chain Filtering in SaaS Mode
 
-In SaaS mode, the server uses GitHub App **installation tokens** (`ghs_*`) to authenticate with GitHub. These tokens do **not** have the `models:read` scope required by GitHub Models. As a result, the server silently filters out `github` provider entries from the provider chain when no explicit API key is configured for that entry.
+In SaaS mode, the server uses GitHub App **installation tokens** (`ghs_*`) to authenticate with GitHub. These tokens do **not** have the `models:read` scope required by GitHub Models. As a result, the server silently filters out `github` provider entries from the provider chain when no explicit PAT is configured for that entry.
 
-If a user adds "GitHub Models" to their provider chain in the Dashboard without providing a personal access token, the entry is skipped at review time and the next provider in the chain is used instead. A warning is logged on the server side. This does **not** affect CLI or GitHub Action modes, where the user's own PAT or `GITHUB_TOKEN` is used directly.
+If a user adds "GitHub Models" to their provider chain in the Dashboard without providing a PAT with `models:read`, the entry is skipped at review time and the next provider in the chain is used instead. A warning is logged on the server side. This does **not** affect CLI or GitHub Action modes, where a user-controlled GitHub token is used directly.
 
 ### Binary Execution for Static Analysis
 

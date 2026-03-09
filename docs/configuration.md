@@ -12,14 +12,17 @@
 | `GITHUB_APP_ID` | Yes | GitHub App ID |
 | `GITHUB_PRIVATE_KEY` | Yes | Base64-encoded `.pem` file content |
 | `GITHUB_WEBHOOK_SECRET` | Yes | Secret configured in GitHub App webhook settings |
+| `GITHUB_CLIENT_ID` | No | GitHub OAuth App client ID override for dashboard login (defaults to the hosted public client ID) |
+| `GITHUB_CLIENT_SECRET` | Conditionally | Required for dashboard OAuth Web Flow (`/auth/callback`) |
 | `INNGEST_EVENT_KEY` | No | Inngest event ingestion key (falls back to sync execution without it) |
 | `INNGEST_SIGNING_KEY` | No | Inngest webhook signing key |
 | `ENCRYPTION_KEY` | Yes | 64-character hex string for AES-256-GCM encryption |
+| `STATE_SECRET` | Conditionally | Required for OAuth Web Flow state signing and runner callback HMAC derivation |
 | `CALLBACK_TTL_MINUTES` | No | Runner callback secret TTL in minutes (default: `11`) |
 | `PORT` | No | Server port (default: `3000`) |
 | `NODE_ENV` | No | `development` or `production` |
 
-> **Fail-fast validation**: The server validates all required environment variables (`DATABASE_URL`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`) at startup. Missing variables cause an immediate exit with a clear error message listing which vars are missing.
+> **Startup vs runtime**: The server fails fast on core boot variables (`DATABASE_URL`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`). `GITHUB_CLIENT_SECRET` and `STATE_SECRET` are additionally required when you use dashboard OAuth Web Flow; `STATE_SECRET` is also used for runner callback signing.
 
 ### CLI Mode
 
@@ -126,6 +129,8 @@ ghagga review --config .ghagga.json
 In the SaaS dashboard, you can configure an ordered **provider chain** as a fallback list. If the primary provider fails (rate limit, API error), GHAGGA automatically tries the next provider in the chain.
 
 Example chain: `GitHub Models → OpenAI → Anthropic`
+
+In **SaaS/server mode**, GitHub Models needs a PAT with `models:read` on that provider entry. GitHub App installation tokens do not include that scope, so a `github` entry without an explicit token is skipped at review time. This limitation does **not** apply to the CLI (`ghagga login`) or GitHub Action (`github-token` / `GITHUB_TOKEN`) flows.
 
 Provider chains are configured per-repo or globally (see Global Settings).
 

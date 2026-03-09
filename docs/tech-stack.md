@@ -8,13 +8,13 @@
 | **Language** | TypeScript 5.7 (strict mode) | Type safety across all packages |
 | **Backend** | Hono 4 | Fastest TS framework, 14KB, runs anywhere |
 | **Database** | PostgreSQL 16 + Drizzle ORM, sql.js (CLI/Action), [Engram](https://github.com/Gentleman-Programming/engram) (optional CLI) | Zero-overhead SQL, tsvector FTS, plain TS migrations; WASM SQLite with FTS5 for CLI/Action; Engram HTTP API for cross-tool memory sharing |
-| **AI** | Vercel AI SDK 5 | Multi-provider (6 providers), streaming, structured output, fallback chains |
+| **AI** | Vercel AI SDK 6 | Multi-provider (6 providers), streaming, structured output, fallback chains |
 | **Async** | Inngest 3 | Zero-infra durable functions, step checkpointing, automatic retries |
-| **Frontend** | React 19 + Vite + Tailwind 3 | Lazy-loaded routes, vendor splitting, dark theme |
+| **Frontend** | React 19 + Vite + Tailwind 4 | Lazy-loaded routes, vendor splitting, dark theme |
 | **Data Fetching** | TanStack Query 5 | Caching, background refetching, optimistic updates |
 | **Charts** | Recharts 2 | Composable React chart components |
 | **CLI** | Commander 13 + @clack/prompts 0.9 | Standard CLI framework with styled TUI prompts |
-| **Testing** | Vitest 3 | Fast, ESM-native, compatible with Jest API |
+| **Testing** | Vitest 4 | Fast, ESM-native, compatible with Jest API |
 | **Static Analysis** | 15-tool plugin registry | Security, vulnerabilities, duplication, code quality — zero tokens |
 | **Encryption** | Node.js `crypto` (AES-256-GCM) | No external dependencies for cryptographic operations |
 

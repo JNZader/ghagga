@@ -1,6 +1,6 @@
 # API Reference
 
-The GHAGGA server exposes a REST API for the dashboard, a webhook endpoint for GitHub, and OAuth proxy routes for the Device Flow login.
+The GHAGGA server exposes a REST API for the dashboard, a webhook endpoint for GitHub, and authentication routes for dashboard OAuth Web Flow plus CLI-compatible Device Flow.
 
 **Base URL**: `https://your-server.example.com` (default port `3000` in development)
 
@@ -180,9 +180,37 @@ Receives static analysis results from a delegated GitHub Actions runner. No bear
 
 ---
 
-## OAuth Proxy (Device Flow)
+## OAuth Web Flow (Dashboard)
 
-These endpoints proxy GitHub's OAuth Device Flow for the static SPA dashboard (which cannot call `github.com` directly due to CORS). **No authentication required** — these are used before the user has a token.
+These endpoints power the dashboard login flow. They require `STATE_SECRET`, and `/auth/callback` also requires `GITHUB_CLIENT_SECRET` on the server.
+
+### Start Login
+
+```
+GET /auth/login
+```
+
+Redirects the browser to GitHub's OAuth authorize URL with an HMAC-signed `state` parameter.
+
+**Response**: `302` redirect to `https://github.com/login/oauth/authorize?...`
+
+### OAuth Callback
+
+```
+GET /auth/callback
+```
+
+Validates the signed `state`, exchanges the authorization `code` for a GitHub access token, and redirects back to the dashboard hash route.
+
+**Success response**: `302` redirect to `https://jnzader.github.io/ghagga/app/#/auth/callback?token=...`
+
+**Failure response**: `302` redirect to `https://jnzader.github.io/ghagga/app/#/auth/callback?error=...`
+
+---
+
+## OAuth Proxy (Device Flow, CLI compatibility)
+
+These endpoints proxy GitHub's OAuth Device Flow. They remain available for CLI compatibility and non-browser clients. **No authentication required**.
 
 ### Request Device Code
 
@@ -800,6 +828,8 @@ Internal endpoint used by the [Inngest](https://www.inngest.com/) platform for d
 | `GET` | `/health` | No | Health check |
 | `POST` | `/webhook` | HMAC | GitHub webhook receiver |
 | `POST` | `/runner/callback` | HMAC | Runner static analysis results |
+| `GET` | `/auth/login` | No | Dashboard OAuth Web Flow — redirect to GitHub |
+| `GET` | `/auth/callback` | No | Dashboard OAuth Web Flow — exchange code and redirect back |
 | `POST` | `/auth/device/code` | No | OAuth Device Flow — request codes |
 | `POST` | `/auth/device/token` | No | OAuth Device Flow — poll for token |
 | `GET` | `/api/repositories` | Bearer | List user's repositories |

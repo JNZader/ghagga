@@ -160,7 +160,7 @@ pnpm build
 
 ## Testing
 
-- **Framework**: [Vitest](https://vitest.dev/) 3 across all packages
+- **Framework**: [Vitest](https://vitest.dev/) 4 across all packages
 - **Mutation testing**: [Stryker](https://stryker-mutator.io/) for `@ghagga/core` and `@ghagga/server`
 - **Dashboard testing**: Testing Library + vitest-axe for accessibility
 - **Total**: ~2,859 tests
@@ -232,13 +232,28 @@ docs: update CONTRIBUTING.md with DB setup steps
 4. **Push and open a PR** against `main`
 
 5. **CI must pass** — the pipeline runs these jobs:
-   - **Security Audit** — `pnpm audit --prod`
-   - **Typecheck & Build** — `pnpm exec turbo typecheck && turbo build`
-   - **Lint** — `pnpm lint` (Biome)
-   - **Tests + Coverage** — `pnpm exec turbo test:coverage`
-   - **Mutation Tests** — Stryker on `packages/core` (main branch only, non-blocking)
+    - **Security Audit** — `pnpm audit --prod`
+    - **Typecheck & Build** — `pnpm exec turbo typecheck && turbo build`
+    - **Lint** — `pnpm lint` (Biome)
+    - **Tests + Coverage** — `pnpm exec turbo test:coverage`
+    - **Mutation Tests** — Stryker on `packages/core` (main branch only, non-blocking)
 
 6. **PR review** — a maintainer will review your changes
+
+### Merge policy
+
+- `main` is protected
+- Pull requests merge with **squash only**
+- **Delete branch on merge** is enabled
+- Required CI checks must be green before merge
+
+### Repo automation
+
+- **CI**: `.github/workflows/ci.yml` runs on pushes and PRs to `main`; doc-only changes skip heavy jobs cleanly
+- **Pages**: `.github/workflows/deploy-pages.yml` publishes the landing page, dashboard, and docs from `main`
+- **GHCR**: `.github/workflows/docker.yml` builds and pushes the server image to `ghcr.io`
+- **Render**: `render.yaml` is the canonical Blueprint for the hosted server environment
+- **Dependabot**: `.github/dependabot.yml` opens weekly npm and GitHub Actions update PRs
 
 ## Code Style
 
