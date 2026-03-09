@@ -77,6 +77,72 @@ export interface ReviewRequestedData {
   };
 }
 
+// ─── Delegated CI Event Types ───────────────────────────────────
+
+export interface DelegatedCiRequestedData {
+  /** GitHub installation ID for token exchange */
+  installationId: number;
+
+  /** Internal repository ID in our database */
+  repositoryId: number;
+
+  /** Repository full name (e.g., "owner/repo") */
+  repoFullName: string;
+
+  /** Pull request number (optional for manual triggers) */
+  prNumber?: number;
+
+  /** HEAD commit SHA for the PR */
+  headSha: string;
+
+  /** Base branch name */
+  baseBranch: string;
+
+  /** Jobs that were approved by the policy evaluator */
+  approvedJobs: Array<{
+    jobKey: string;
+    profile: string;
+    allowArtifacts: false | string[];
+    allowCache: boolean;
+    maxDurationMinutes: number;
+  }>;
+}
+
+export interface DelegatedCiCallbackData {
+  /** Unique callback ID for correlation */
+  callbackId: string;
+
+  /** Repository full name (e.g., "owner/repo") */
+  repoFullName: string;
+
+  /** Job key identifying which CI job this callback is for */
+  jobKey: string;
+
+  /** Current state of the job */
+  state: 'running' | 'completed' | 'failed';
+
+  /** When the job started running */
+  startedAt?: string;
+
+  /** When the job completed */
+  completedAt?: string;
+
+  /** Total duration in milliseconds */
+  durationMs?: number;
+
+  /** Human-readable summary of the job result */
+  summary?: string;
+
+  /** Outcome of the job (only present when state is 'completed') */
+  outcome?: 'success' | 'failure';
+
+  /** Error code (only present when state is 'failed') */
+  errorCode?: string;
+
+  /** Error message (only present when state is 'failed') */
+  errorMessage?: string;
+}
+
 // ─── Event Schemas ──────────────────────────────────────────────
 
 export interface RunnerCompletedData {
@@ -102,6 +168,12 @@ type Events = {
   };
   'ghagga/runner.completed': {
     data: RunnerCompletedData;
+  };
+  'ghagga/delegated-ci.requested': {
+    data: DelegatedCiRequestedData;
+  };
+  'ghagga/delegated-ci.callback': {
+    data: DelegatedCiCallbackData;
   };
 };
 
