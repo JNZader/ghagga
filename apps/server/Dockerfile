@@ -89,3 +89,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 CMD ["./start.sh"]
 # CACHE_BUST: mar 10 mar 2026 11:48:18 -03 - Force Northflank to rebuild
 # CACHE_BUST_DEBUG: mar 10 mar 2026 12:25:11 -03
+# CACHE_BUST_FINAL: mar 10 mar 2026 12:35:55 -03
