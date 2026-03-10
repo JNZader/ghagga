@@ -5,7 +5,8 @@
  * Processes code review jobs asynchronously with retry support.
  */
 
-import { formatReviewComment, reviewPipeline } from 'ghagga-core';
+import type { Job } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import type {
   LLMProvider,
   ProviderChainEntry,
@@ -14,10 +15,9 @@ import type {
   ReviewMode,
   StaticAnalysisResult,
 } from 'ghagga-core';
+import { formatReviewComment, reviewPipeline } from 'ghagga-core';
 import type { Database, DbProviderChainEntry } from 'ghagga-db';
 import { createDatabaseFromEnv, decrypt, saveReview } from 'ghagga-db';
-import type { Job } from 'bullmq';
-import { Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import {
   addCommentReaction,
@@ -114,7 +114,9 @@ export const reviewQueue = new Queue<ReviewJobData, unknown, string>('review', {
 
 // ─── Job Processor ──────────────────────────────────────────────
 
-async function processReview(job: Job<ReviewJobData>): Promise<{ success: boolean; reviewId: string }> {
+async function processReview(
+  job: Job<ReviewJobData>,
+): Promise<{ success: boolean; reviewId: string }> {
   const reviewStartTime = Date.now();
   const data = job.data;
 
@@ -222,7 +224,10 @@ async function processReview(job: Job<ReviewJobData>): Promise<{ success: boolea
   let precomputedStaticAnalysis: StaticAnalysisResult | undefined;
 
   if (runnerResult.dispatched) {
-    log.info({ callbackId: runnerResult.callbackId }, 'Runner dispatched - proceeding without precomputed analysis');
+    log.info(
+      { callbackId: runnerResult.callbackId },
+      'Runner dispatched - proceeding without precomputed analysis',
+    );
   }
 
   await job.updateProgress(40);
@@ -281,7 +286,7 @@ async function processReview(job: Job<ReviewJobData>): Promise<{ success: boolea
         if (!envKey) {
           throw new Error(
             `No API key configured for provider ${llmProvider}. ` +
-            `Set a per-repo key or the ${llmProvider?.toUpperCase()}_API_KEY env var.`,
+              `Set a per-repo key or the ${llmProvider?.toUpperCase()}_API_KEY env var.`,
           );
         }
         legacyApiKey = envKey;
@@ -397,7 +402,9 @@ async function processReview(job: Job<ReviewJobData>): Promise<{ success: boolea
 /**
  * Enqueue a review job.
  */
-export async function enqueueReview(data: ReviewJobData): Promise<Job<ReviewJobData, unknown, string>> {
+export async function enqueueReview(
+  data: ReviewJobData,
+): Promise<Job<ReviewJobData, unknown, string>> {
   return reviewQueue.add('process-review', data, {
     jobId: data.reviewId,
     priority: 1,

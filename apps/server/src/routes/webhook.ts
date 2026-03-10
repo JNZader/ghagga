@@ -29,8 +29,8 @@ import {
   getInstallationToken,
   verifyWebhookSignature,
 } from '../github/client.js';
-import { enqueueReview } from '../queues/review.js';
 import { logger as rootLogger } from '../lib/logger.js';
+import { enqueueReview } from '../queues/review.js';
 
 const logger = rootLogger.child({ module: 'webhook' });
 
@@ -312,9 +312,9 @@ async function handlePullRequest(
           {
             repo: payload.repository.full_name,
             pr: payload.number,
-            approvedJobs: approvedJobs.map(j => j.jobKey),
+            approvedJobs: approvedJobs.map((j) => j.jobKey),
           },
-          'Delegated CI jobs approved but not dispatched - BullMQ migration pending'
+          'Delegated CI jobs approved but not dispatched - BullMQ migration pending',
         );
       }
 
