@@ -22,8 +22,8 @@ import { logger as rootLogger } from '../lib/logger.js';
 
 const logger = rootLogger.child({ module: 'oauth' });
 
-/** GHAGGA OAuth App Client ID (public, overridable via env) */
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? 'Ov23liyYpSgDqOLUFa5k';
+/** GHAGGA GitHub App Client ID (public, overridable via env) */
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? 'Iv23liP63ERrlq0eMUfk';
 
 /** Dashboard URL for redirects after OAuth callback */
 const DASHBOARD_URL = 'https://jnzader.github.io/ghagga/app';

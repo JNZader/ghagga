@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe('GITHUB_CLIENT_ID', () => {
   it('exports the expected OAuth client ID', () => {
-    expect(GITHUB_CLIENT_ID).toBe('Ov23liyYpSgDqOLUFa5k');
+    expect(GITHUB_CLIENT_ID).toBe('Iv23liP63ERrlq0eMUfk');
   });
 });
 
