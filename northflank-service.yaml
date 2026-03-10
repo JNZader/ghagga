@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ghagga-server
+  description: GHAGGA AI Code Review Server
+spec:
+  type: external-image
+  image:
+    dockerfile: apps/server/Dockerfile
+    registry: auto-build
+    
+  runtime:
+    command: []
+    args: []
+    environment:
+      - name: PORT
+        value: "3000"
+      - name: NODE_ENV
+        value: "production"
+    # Variables sensibles (setear en dashboard o via CLI):
+    # - DATABASE_URL
+    # - GITHUB_APP_ID
+    # - GITHUB_PRIVATE_KEY
+    # - GITHUB_WEBHOOK_SECRET
+    # - ENCRYPTION_KEY
+    # - STATE_SECRET
+    # - GITHUB_CLIENT_SECRET
+    # - INNGEST_EVENT_KEY (opcional)
+    # - INNGEST_SIGNING_KEY (opcional)
+    
+  networking:
+    ports:
+      - port: 3000
+        protocol: http
+        public: true
+    domain: auto
+    
+  resources:
+    compute:
+      cpu: 100m
+      memory: 512Mi
+      
+  scaling:
+    min: 1
+    max: 1
+    
+  healthCheck:
+    enabled: true
+    path: /health
+    port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+    
+  # Auto-deploy desde GitHub
+  build:
+    type: github
+    repo: JNZader/ghagga
+    branch: main
+    trigger: automatic
