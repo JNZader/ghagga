@@ -8,8 +8,8 @@
  * @see https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
  */
 
-/** GHAGGA OAuth App Client ID (public — safe to embed in code) */
-export const GITHUB_CLIENT_ID = 'Ov23liyYpSgDqOLUFa5k';
+/** GHAGGA GitHub App Client ID (public — safe to embed in code) */
+export const GITHUB_CLIENT_ID = 'Iv23liP63ERrlq0eMUfk';
 
 // ─── Types ──────────────────────────────────────────────────────
 

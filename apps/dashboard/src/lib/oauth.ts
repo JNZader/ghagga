@@ -12,8 +12,8 @@
  * but the Dashboard no longer uses them directly.
  */
 
-/** GHAGGA OAuth App Client ID (public, overridable via env) */
-export const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID ?? 'Ov23liyYpSgDqOLUFa5k';
+/** GHAGGA GitHub App Client ID (public, overridable via env) */
+export const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID ?? 'Iv23liP63ERrlq0eMUfk';
 
 /** Server base URL — used for OAuth and API endpoints */
 export const API_URL =
