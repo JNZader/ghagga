@@ -19,6 +19,8 @@ const mockGetRepoByGithubId = vi.fn();
 const mockGetEffectiveRepoSettings = vi.fn();
 const mockGetInstallationByGitHubId = vi.fn();
 const mockDeleteMappingsByInstallationId = vi.fn();
+const mockGetDelegatedCiPolicy = vi.fn();
+const mockCreateDelegatedCiRun = vi.fn();
 
 vi.mock('ghagga-db', () => ({
   upsertInstallation: (...args: unknown[]) => mockUpsertInstallation(...args),
@@ -29,12 +31,20 @@ vi.mock('ghagga-db', () => ({
   getInstallationByGitHubId: (...args: unknown[]) => mockGetInstallationByGitHubId(...args),
   deleteMappingsByInstallationId: (...args: unknown[]) =>
     mockDeleteMappingsByInstallationId(...args),
+  getDelegatedCiPolicy: (...args: unknown[]) => mockGetDelegatedCiPolicy(...args),
+  createDelegatedCiRun: (...args: unknown[]) => mockCreateDelegatedCiRun(...args),
 }));
 
-// Mock inngest client
-const mockInngestSend = vi.fn();
-vi.mock('../inngest/client.js', () => ({
-  inngest: { send: (...args: unknown[]) => mockInngestSend(...args) },
+// Mock BullMQ review queue (replaces Inngest)
+const mockEnqueueReview = vi.fn();
+vi.mock('../queues/review.js', () => ({
+  enqueueReview: (...args: unknown[]) => mockEnqueueReview(...args),
+}));
+
+// Mock delegated-ci policy (imported by webhook handler)
+vi.mock('../delegated-ci/policy.js', () => ({
+  normalizePolicy: vi.fn().mockReturnValue(null),
+  evaluateAllJobs: vi.fn().mockReturnValue([]),
 }));
 
 // Mock GitHub client functions used by issue_comment handler
@@ -143,7 +153,9 @@ beforeEach(() => {
     },
     source: 'repo',
   });
-  mockInngestSend.mockResolvedValue(undefined);
+  mockEnqueueReview.mockResolvedValue({ id: 'mock-job-id' });
+  mockGetDelegatedCiPolicy.mockResolvedValue(null);
+  mockCreateDelegatedCiRun.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -251,7 +263,7 @@ describe('pull_request event handling', () => {
     installation: { id: 999 },
   };
 
-  it('dispatches review via Inngest for opened PR', async () => {
+  it('dispatches review via BullMQ for opened PR', async () => {
     mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
     const body = JSON.stringify(prPayload);
     const req = makeRequest(body, 'pull_request');
@@ -266,14 +278,13 @@ describe('pull_request event handling', () => {
     expect(json).toHaveProperty('reviewId');
     expect(json.reviewId).toHaveLength(8);
 
-    expect(mockInngestSend).toHaveBeenCalledOnce();
-    const sendArg = mockInngestSend.mock.calls[0]?.[0];
-    expect(sendArg.name).toBe('ghagga/review.requested');
-    expect(sendArg.data.installationId).toBe(999);
-    expect(sendArg.data.repoFullName).toBe('owner/repo');
-    expect(sendArg.data.prNumber).toBe(42);
-    // reviewId propagated to Inngest event
-    expect(sendArg.data.reviewId).toBe(json.reviewId);
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.installationId).toBe(999);
+    expect(jobData.repoFullName).toBe('owner/repo');
+    expect(jobData.prNumber).toBe(42);
+    // reviewId propagated to BullMQ job
+    expect(jobData.reviewId).toBe(json.reviewId);
   });
 
   it('dispatches review for synchronize action', async () => {
@@ -282,7 +293,7 @@ describe('pull_request event handling', () => {
     const req = makeRequest(body, 'pull_request');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('dispatches review for reopened action', async () => {
@@ -291,7 +302,7 @@ describe('pull_request event handling', () => {
     const req = makeRequest(body, 'pull_request');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('ignores non-reviewable actions (closed, edited, labeled)', async () => {
@@ -303,7 +314,7 @@ describe('pull_request event handling', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.message).toContain('ignored');
-      expect(mockInngestSend).not.toHaveBeenCalled();
+      expect(mockEnqueueReview).not.toHaveBeenCalled();
     }
   });
 
@@ -324,23 +335,23 @@ describe('pull_request event handling', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.message).toContain('not tracked');
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
-  it('passes repo settings to Inngest event data', async () => {
+  it('passes repo settings to BullMQ job data', async () => {
     mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
     const body = JSON.stringify(prPayload);
     const req = makeRequest(body, 'pull_request');
     await router.fetch(req);
 
-    const sendArg = mockInngestSend.mock.calls[0]?.[0];
-    expect(sendArg.data.settings.enableSemgrep).toBe(true);
-    expect(sendArg.data.settings.enableTrivy).toBe(true);
-    expect(sendArg.data.settings.enableCpd).toBe(false);
-    expect(sendArg.data.settings.enableMemory).toBe(true);
-    expect(sendArg.data.settings.ignorePatterns).toEqual(['*.md']);
-    expect(sendArg.data.encryptedApiKey).toBe('encrypted-key-123');
-    expect(sendArg.data.llmProvider).toBe('anthropic');
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.settings.enableSemgrep).toBe(true);
+    expect(jobData.settings.enableTrivy).toBe(true);
+    expect(jobData.settings.enableCpd).toBe(false);
+    expect(jobData.settings.enableMemory).toBe(true);
+    expect(jobData.settings.ignorePatterns).toEqual(['*.md']);
+    expect(jobData.encryptedApiKey).toBe('encrypted-key-123');
+    expect(jobData.llmProvider).toBe('anthropic');
   });
 });
 
@@ -485,15 +496,14 @@ describe('issue_comment event handling', () => {
     expect(json).toHaveProperty('reviewId');
     expect(json.reviewId).toHaveLength(8);
 
-    expect(mockInngestSend).toHaveBeenCalledOnce();
-    const sendArg = mockInngestSend.mock.calls[0]?.[0];
-    expect(sendArg.name).toBe('ghagga/review.requested');
-    expect(sendArg.data.prNumber).toBe(42);
-    expect(sendArg.data.triggerCommentId).toBe(777);
-    expect(sendArg.data.headSha).toBe('pr-head-sha-abc');
-    expect(sendArg.data.baseBranch).toBe('main');
-    // reviewId propagated to Inngest event
-    expect(sendArg.data.reviewId).toBe(json.reviewId);
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.prNumber).toBe(42);
+    expect(jobData.triggerCommentId).toBe(777);
+    expect(jobData.headSha).toBe('pr-head-sha-abc');
+    expect(jobData.baseBranch).toBe('main');
+    // reviewId propagated to BullMQ job
+    expect(jobData.reviewId).toBe(json.reviewId);
   });
 
   it('fetches PR details to include headSha and baseBranch', async () => {
@@ -504,9 +514,9 @@ describe('issue_comment event handling', () => {
     await router.fetch(req);
 
     expect(mockFetchPRDetails).toHaveBeenCalledWith('owner', 'repo', 42, 'fake-installation-token');
-    const sendArg = mockInngestSend.mock.calls[0]?.[0];
-    expect(sendArg.data.headSha).toBe('def456');
-    expect(sendArg.data.baseBranch).toBe('develop');
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.headSha).toBe('def456');
+    expect(jobData.baseBranch).toBe('develop');
   });
 
   it('dispatches review without headSha when PR details fetch fails', async () => {
@@ -518,10 +528,10 @@ describe('issue_comment event handling', () => {
 
     // Should still dispatch the review without headSha/baseBranch
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
-    const sendArg = mockInngestSend.mock.calls[0]?.[0];
-    expect(sendArg.data.headSha).toBeUndefined();
-    expect(sendArg.data.baseBranch).toBeUndefined();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.headSha).toBeUndefined();
+    expect(jobData.baseBranch).toBeUndefined();
   });
 
   it('adds 👀 reaction to acknowledge the trigger', async () => {
@@ -549,7 +559,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('triggers when keyword is embedded in longer text', async () => {
@@ -564,7 +574,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('ignores comments without the trigger keyword', async () => {
@@ -577,7 +587,7 @@ describe('issue_comment event handling', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.message).toContain('No review trigger keyword');
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('ignores bot comments (self-trigger prevention)', async () => {
@@ -590,7 +600,7 @@ describe('issue_comment event handling', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.message).toContain('Bot comment ignored');
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('ignores edited or deleted comment actions', async () => {
@@ -602,7 +612,7 @@ describe('issue_comment event handling', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.message).toContain('ignored');
-      expect(mockInngestSend).not.toHaveBeenCalled();
+      expect(mockEnqueueReview).not.toHaveBeenCalled();
     }
   });
 
@@ -616,7 +626,7 @@ describe('issue_comment event handling', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.message).toContain('not on a pull request');
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('rejects users with NONE association', async () => {
@@ -629,7 +639,7 @@ describe('issue_comment event handling', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.message).toContain('Insufficient permissions');
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('rejects MANNEQUIN association', async () => {
@@ -640,7 +650,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(200);
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('allows OWNER association', async () => {
@@ -652,7 +662,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('allows MEMBER association', async () => {
@@ -664,7 +674,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('allows FIRST_TIMER association', async () => {
@@ -676,7 +686,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('allows FIRST_TIME_CONTRIBUTOR association', async () => {
@@ -688,7 +698,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
   it('returns 400 when installation ID is missing', async () => {
@@ -699,7 +709,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(400);
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('returns 200 when repository is not tracked', async () => {
@@ -710,7 +720,7 @@ describe('issue_comment event handling', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.message).toContain('not tracked');
-    expect(mockInngestSend).not.toHaveBeenCalled();
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('continues dispatching even if reaction fails', async () => {
@@ -722,7 +732,7 @@ describe('issue_comment event handling', () => {
 
     // Should still dispatch the review despite reaction failure
     expect(res.status).toBe(202);
-    expect(mockInngestSend).toHaveBeenCalledOnce();
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 });
 
