@@ -30,6 +30,7 @@ GHAGGA is a code review tool that posts intelligent comments on your Pull Reques
 | **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (multi-model voting) |
 | **15 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 8 auto-detect tools — zero tokens |
 | **Delegated Runner** | Static analysis runs on user-owned GitHub Actions runners (7GB RAM, free for public repos) |
+| **Delegated CI** | Run lint/tests on PRs without repo workflows — Dashboard configuration, zero maintenance |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews (PostgreSQL + tsvector FTS for Server / SQLite + FTS5 for CLI & Action) |
 | **Multi-Provider** | 6 providers: GitHub Models (free), Anthropic, OpenAI, Google, Ollama (local), Qwen (Alibaba) — bring your own key |
 | **3 Distribution Modes** | SaaS, GitHub Action, CLI |
@@ -69,14 +70,9 @@ The review engine (`@ghagga/core`) is distribution-agnostic. Each app is a thin 
 ## Quick Links
 
 - **[Quick Start](quick-start.md)** — Get running in 5 minutes
-- **[Health Check](health.md)** — Project health scoring, trends, and recommendations
-- **[Architecture](architecture.md)** — Core + Adapters pattern explained
-- **[Review Modes](review-modes.md)** — Simple, Workflow, and Consensus
-- **[Static Analysis](static-analysis.md)** — 15 tools, tier system, per-tool control
-- **[Runner Architecture](runner-architecture.md)** — Delegated static analysis on GitHub Actions
-- **[Memory System](memory-system.md)** — How GHAGGA learns across reviews
-- **[Configuration](configuration.md)** — Environment variables and config files
-- **[GitHub Action](github-action.md)** — The fastest way to get started
+- **[SaaS Guide](saas-getting-started.md)** — GitHub App setup (easiest)
+- **[Delegated CI](delegated-ci.md)** — Run lint/tests without repo workflows
+- **[GitHub Action](github-action.md)** — CI/CD integration
 - **[CLI](cli.md)** — Review local changes from your terminal
 - **[Self-Hosted](self-hosted.md)** — Full deployment with Docker
 
