@@ -236,7 +236,7 @@ export function createOAuthRouter() {
         return c.redirect(`${DASHBOARD_URL}/#/auth/callback?error=exchange_failed`, 302);
       }
 
-      data = await response.json();
+      data = (await response.json()) as { access_token?: string; error?: string };
     } catch {
       return c.redirect(`${DASHBOARD_URL}/#/auth/callback?error=github_unavailable`, 302);
     }

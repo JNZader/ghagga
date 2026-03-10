@@ -2,7 +2,7 @@
  * Runner callback route tests.
  *
  * Tests POST /runner/callback with mocked HMAC verification
- * and Inngest event dispatching.
+ * and logging (Inngest removed during BullMQ migration).
  */
 
 import { Hono } from 'hono';
@@ -11,14 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ─── Mocks ──────────────────────────────────────────────────────
 
 const mockVerifyCallbackSignature = vi.fn();
-const mockInngestSend = vi.fn();
 
 vi.mock('../github/runner.js', () => ({
   verifyCallbackSignature: (...args: unknown[]) => mockVerifyCallbackSignature(...args),
-}));
-
-vi.mock('../inngest/client.js', () => ({
-  inngest: { send: (...args: unknown[]) => mockInngestSend(...args) },
 }));
 
 // Shared mock logger instance so tests can assert on calls
@@ -75,8 +70,6 @@ function postCallback(app: Hono, body: string, headers: Record<string, string> =
 
 beforeEach(() => {
   mockVerifyCallbackSignature.mockReset();
-  mockInngestSend.mockReset();
-  mockInngestSend.mockResolvedValue(undefined);
   mockLoggerChild.info.mockClear();
   mockLoggerChild.warn.mockClear();
   mockLoggerChild.error.mockClear();
@@ -127,8 +120,13 @@ describe('POST /runner/callback', () => {
 
       expect(mockLoggerChild.info).toHaveBeenCalledOnce();
       expect(mockLoggerChild.info).toHaveBeenCalledWith(
-        { callbackId: 'cb-123', repoFullName: 'owner/repo', prNumber: 42 },
-        'Runner callback accepted — dispatched Inngest event',
+        {
+          callbackId: 'cb-123',
+          repoFullName: 'owner/repo',
+          prNumber: 42,
+          staticAnalysisTools: expect.any(Array),
+        },
+        'Runner callback accepted — feature pending BullMQ migration',
       );
     });
 
@@ -148,7 +146,7 @@ describe('POST /runner/callback', () => {
       );
     });
 
-    it('sends inngest event with correct shape', async () => {
+    it('logs callback data including staticAnalysis tool keys', async () => {
       mockVerifyCallbackSignature.mockReturnValue(true);
 
       const app = createApp();
@@ -157,20 +155,15 @@ describe('POST /runner/callback', () => {
         'x-ghagga-signature': 'sha256=abc',
       });
 
-      expect(mockInngestSend).toHaveBeenCalledOnce();
-      expect(mockInngestSend).toHaveBeenCalledWith({
-        name: 'ghagga/runner.completed',
-        data: {
-          callbackId: VALID_PAYLOAD.callbackId,
-          repoFullName: VALID_PAYLOAD.repoFullName,
-          prNumber: VALID_PAYLOAD.prNumber,
-          headSha: VALID_PAYLOAD.headSha,
-          staticAnalysis: VALID_PAYLOAD.staticAnalysis,
-        },
-      });
+      expect(mockLoggerChild.info).toHaveBeenCalledOnce();
+      const loggedContext = mockLoggerChild.info.mock.calls[0][0];
+      expect(loggedContext.callbackId).toBe('cb-123');
+      expect(loggedContext.repoFullName).toBe('owner/repo');
+      expect(loggedContext.prNumber).toBe(42);
+      expect(loggedContext.staticAnalysisTools).toEqual(['semgrep', 'trivy']);
     });
 
-    it('inngest event name is exactly "ghagga/runner.completed"', async () => {
+    it('log message indicates feature pending BullMQ migration', async () => {
       mockVerifyCallbackSignature.mockReturnValue(true);
 
       const app = createApp();
@@ -179,11 +172,11 @@ describe('POST /runner/callback', () => {
         'x-ghagga-signature': 'sha256=abc',
       });
 
-      const sentEvent = mockInngestSend.mock.calls[0][0];
-      expect(sentEvent.name).toBe('ghagga/runner.completed');
+      const logMessage = mockLoggerChild.info.mock.calls[0][1];
+      expect(logMessage).toBe('Runner callback accepted — feature pending BullMQ migration');
     });
 
-    it('inngest event data includes all payload fields', async () => {
+    it('does not dispatch any external event (Inngest removed)', async () => {
       mockVerifyCallbackSignature.mockReturnValue(true);
 
       const app = createApp();
@@ -192,12 +185,10 @@ describe('POST /runner/callback', () => {
         'x-ghagga-signature': 'sha256=abc',
       });
 
-      const sentEvent = mockInngestSend.mock.calls[0][0];
-      expect(sentEvent.data.callbackId).toBe('cb-123');
-      expect(sentEvent.data.repoFullName).toBe('owner/repo');
-      expect(sentEvent.data.prNumber).toBe(42);
-      expect(sentEvent.data.headSha).toBe('abc123def456');
-      expect(sentEvent.data.staticAnalysis).toEqual(VALID_PAYLOAD.staticAnalysis);
+      // Only info logging should occur, no external dispatch
+      expect(mockLoggerChild.info).toHaveBeenCalledOnce();
+      expect(mockLoggerChild.warn).not.toHaveBeenCalled();
+      expect(mockLoggerChild.error).not.toHaveBeenCalled();
     });
   });
 
@@ -245,12 +236,12 @@ describe('POST /runner/callback', () => {
       expect(mockVerifyCallbackSignature).not.toHaveBeenCalled();
     });
 
-    it('does not send inngest event', async () => {
+    it('does not log info (no successful processing)', async () => {
       const app = createApp();
       const body = JSON.stringify(VALID_PAYLOAD);
       await postCallback(app, body);
 
-      expect(mockInngestSend).not.toHaveBeenCalled();
+      expect(mockLoggerChild.info).not.toHaveBeenCalled();
     });
   });
 
@@ -301,7 +292,7 @@ describe('POST /runner/callback', () => {
       expect(json.error).toBe('Invalid signature');
     });
 
-    it('does not send inngest event when HMAC fails', async () => {
+    it('does not log info when HMAC fails', async () => {
       mockVerifyCallbackSignature.mockReturnValue(false);
 
       const app = createApp();
@@ -310,7 +301,7 @@ describe('POST /runner/callback', () => {
         'x-ghagga-signature': 'sha256=badhex',
       });
 
-      expect(mockInngestSend).not.toHaveBeenCalled();
+      expect(mockLoggerChild.info).not.toHaveBeenCalled();
     });
   });
 
@@ -358,13 +349,13 @@ describe('POST /runner/callback', () => {
       expect(mockVerifyCallbackSignature).not.toHaveBeenCalled();
     });
 
-    it('does not send inngest event for bad JSON', async () => {
+    it('does not log info for bad JSON', async () => {
       const app = createApp();
       await postCallback(app, '<<<invalid>>>', {
         'x-ghagga-signature': 'sha256=abc',
       });
 
-      expect(mockInngestSend).not.toHaveBeenCalled();
+      expect(mockLoggerChild.info).not.toHaveBeenCalled();
     });
   });
 
@@ -467,14 +458,14 @@ describe('POST /runner/callback', () => {
       expect(mockVerifyCallbackSignature).not.toHaveBeenCalled();
     });
 
-    it('does not send inngest event for missing fields', async () => {
+    it('does not log info for missing fields', async () => {
       const { callbackId: _, ...payload } = VALID_PAYLOAD;
       const app = createApp();
       await postCallback(app, JSON.stringify(payload), {
         'x-ghagga-signature': 'sha256=abc',
       });
 
-      expect(mockInngestSend).not.toHaveBeenCalled();
+      expect(mockLoggerChild.info).not.toHaveBeenCalled();
     });
   });
 
