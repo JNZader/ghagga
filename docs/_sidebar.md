@@ -13,6 +13,7 @@
 - Features
   - [Static Analysis](static-analysis.md)
   - [Tool Candidates](static-analysis-candidates.md)
+  - [Delegated CI](delegated-ci.md)
   - [Health Check](health.md)
   - [Memory System](memory-system.md)
   - [Security Policy](security.md)

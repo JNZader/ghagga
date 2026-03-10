@@ -214,8 +214,23 @@ If clicking "Enable Runner" triggers a re-authentication prompt, this means your
 
 ---
 
+## Step 6: Configure Delegated CI (Optional)
+
+Delegated CI allows GHAGGA to run your CI jobs (lint, tests) on Pull Requests without you needing to set up GitHub Actions workflows in your repository.
+
+1. Go to **Dashboard → Settings → [Select Repository] → Delegated CI**
+2. Toggle **"Enabled"** to create a policy
+3. Click **"+ Add Job"** to configure lint or test jobs
+4. Select an execution profile (Node.js Lint, Python Pytest, Go Test, etc.)
+5. Click **"Save Settings"**
+
+See the **[Delegated CI Guide](delegated-ci.md)** for detailed configuration, security model, and troubleshooting.
+
+---
+
 ## Next Steps
 
+- **[Delegated CI](delegated-ci.md)** — Run lint/tests on PRs without repo workflows
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
 - **[Memory System](memory-system.md)** — How GHAGGA learns from past reviews
 - **[Configuration](configuration.md)** — Environment variables and config file options
