@@ -10,6 +10,7 @@
 
 # ── Stage 1: Install + Build ───────────────────────────────────
 # node:22-slim — pinned 2026-03-07
+# CACHE_BUST: 2026-03-10-001 — Force rebuild to pick up runner.ts fix
 FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS builder
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
