@@ -79,8 +79,6 @@ export interface WorkflowDispatchInputs {
   enableSemgrep: string;
   enableTrivy: string;
   enableCpd: string;
-  enabledTools: string;
-  disabledTools: string;
 }
 
 export interface DispatchParams {
@@ -353,6 +351,9 @@ export async function dispatchWorkflow(params: DispatchParams): Promise<string> 
   await setRunnerSecret(runnerRepo, 'GHAGGA_CALLBACK_SECRET', callbackSecret, token);
 
   // Dispatch the workflow — send the raw secret so it can compute HMAC over the actual payload
+  // NOTE: enabledTools/disabledTools are not sent because the runner workflow template
+  // currently only supports legacy enableSemgrep/enableTrivy/enableCpd boolean inputs.
+  // TODO: Update runner template to accept tool arrays.
   const inputs: WorkflowDispatchInputs = {
     callbackId,
     repoFullName,
@@ -364,8 +365,6 @@ export async function dispatchWorkflow(params: DispatchParams): Promise<string> 
     enableSemgrep: String(enableSemgrep),
     enableTrivy: String(enableTrivy),
     enableCpd: String(enableCpd),
-    enabledTools: JSON.stringify(enabledTools ?? []),
-    disabledTools: JSON.stringify(disabledTools ?? []),
   };
 
   const dispatchUrl = `https://api.github.com/repos/${runnerRepo}/actions/workflows/ghagga-analysis.yml/dispatches`;
