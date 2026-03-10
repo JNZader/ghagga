@@ -1,0 +1,38 @@
+# Railway Deployment Configuration for GHAGGA Server
+# Docs: https://docs.railway.app/deploy/config-as-code
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/server/Dockerfile"
+
+[deploy]
+startCommand = ""
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Resource allocation (adjust based on your plan)
+[numReplicas]
+min = 1
+max = 1
+
+[resources]
+cpu = 1
+memory = "1Gi"
+
+# Environment variables (set these in Railway Dashboard or via CLI)
+# Required:
+#   DATABASE_URL
+#   GITHUB_APP_ID
+#   GITHUB_PRIVATE_KEY
+#   GITHUB_WEBHOOK_SECRET
+#   ENCRYPTION_KEY
+#   STATE_SECRET
+#   GITHUB_CLIENT_SECRET
+# Optional:
+#   INNGEST_EVENT_KEY
+#   INNGEST_SIGNING_KEY
+#   CALLBACK_TTL_MINUTES
+#   PORT (Railway sets this automatically)
+#   NODE_ENV
