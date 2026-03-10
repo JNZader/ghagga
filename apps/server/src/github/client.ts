@@ -16,49 +16,56 @@ import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
  *   - Raw PEM with proper newlines
  *   - Base64-encoded PEM
  *   - PEM with spaces instead of newlines
+ *   - PEM wrapped in quotes
  */
 function decodePrivateKey(key: string): string {
-  // DEBUG: Log key characteristics
-  console.error('[DEBUG] Key length:', key.length);
-  console.error('[DEBUG] Has BEGIN:', key.includes('-----BEGIN'));
-  console.error('[DEBUG] Has newline:', key.includes('\n'));
-  console.error('[DEBUG] First 50 chars:', JSON.stringify(key.substring(0, 50)));
-  console.error('[DEBUG] Last 50 chars:', JSON.stringify(key.substring(key.length - 50)));
-
-  // If key already has proper newlines and PEM headers, return as-is
-  if (key.includes('-----BEGIN') && key.includes('\n')) {
-    console.error('[DEBUG] Using key as-is (has newlines)');
-    return key;
+  // Remove surrounding quotes if present
+  let cleanKey = key.trim();
+  if (cleanKey.startsWith('"') && cleanKey.endsWith('"')) {
+    cleanKey = cleanKey.slice(1, -1);
   }
 
-  // Try to decode as base64 first
-  try {
-    const decoded = Buffer.from(key, 'base64').toString('utf8');
-    // Verify it decoded to valid PEM
-    if (decoded.includes('-----BEGIN')) {
-      console.error('[DEBUG] Decoded from base64');
-      return decoded;
+  // If key has proper newlines, return as-is
+  if (cleanKey.includes('-----BEGIN') && cleanKey.includes('\n')) {
+    return cleanKey;
+  }
+
+  // If key has spaces instead of newlines, fix it
+  if (cleanKey.includes(' ') && !cleanKey.includes('\n')) {
+    // Split by spaces and reconstruct with newlines
+    const parts = cleanKey.split(' ');
+    const result: string[] = [];
+    let currentLine = '';
+
+    for (const part of parts) {
+      if (part === '-----BEGIN' || part === '-----END' || part.includes('KEY-----')) {
+        // These are headers/footers - keep them as separate lines
+        if (currentLine) {
+          result.push(currentLine);
+          currentLine = '';
+        }
+        result.push(part);
+      } else {
+        // This is key data - add to current line
+        currentLine += part;
+        // Standard PEM lines are 64 chars
+        if (currentLine.length >= 64) {
+          result.push(currentLine);
+          currentLine = '';
+        }
+      }
     }
-  } catch {
-    // Not valid base64, continue
+
+    // Don't forget the last line
+    if (currentLine) {
+      result.push(currentLine);
+    }
+
+    // Join with newlines
+    return result.join('\n');
   }
 
-  // Fix common formatting issues:
-  // Replace all spaces with newlines (aggressive fix for env var formatting)
-  let fixed = key;
-
-  // Replace spaces between header and body
-  fixed = fixed.replace(/(-----BEGIN RSA PRIVATE KEY-----)\s+/, '$1\n');
-  fixed = fixed.replace(/\s+(-----END RSA PRIVATE KEY-----)/, '\n$1');
-
-  // Replace remaining spaces in the body with newlines (every 64 chars typically)
-  // But only if no newlines exist
-  if (!fixed.includes('\n')) {
-    fixed = fixed.replace(/ /g, '\n');
-  }
-
-  console.error('[DEBUG] Fixed key, now has newlines:', fixed.includes('\n'));
-  return fixed;
+  return cleanKey;
 }
 
 // ─── PR Data ────────────────────────────────────────────────────
