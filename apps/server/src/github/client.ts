@@ -11,27 +11,54 @@ import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 // ─── Helpers ────────────────────────────────────────────────────
 
 /**
- * Decode GitHub App private key from environment variable.
- * Supports both raw PEM and base64-encoded PEM.
+ * Decode and format GitHub App private key from environment variable.
+ * Supports:
+ *   - Raw PEM with proper newlines
+ *   - Base64-encoded PEM
+ *   - PEM with spaces instead of newlines
  */
 function decodePrivateKey(key: string): string {
-  // If key already has PEM headers, return as-is
-  if (key.includes('-----BEGIN')) {
+  // DEBUG: Log key characteristics
+  console.error('[DEBUG] Key length:', key.length);
+  console.error('[DEBUG] Has BEGIN:', key.includes('-----BEGIN'));
+  console.error('[DEBUG] Has newline:', key.includes('\n'));
+  console.error('[DEBUG] First 50 chars:', JSON.stringify(key.substring(0, 50)));
+  console.error('[DEBUG] Last 50 chars:', JSON.stringify(key.substring(key.length - 50)));
+
+  // If key already has proper newlines and PEM headers, return as-is
+  if (key.includes('-----BEGIN') && key.includes('\n')) {
+    console.error('[DEBUG] Using key as-is (has newlines)');
     return key;
   }
 
-  // Try to decode as base64
+  // Try to decode as base64 first
   try {
     const decoded = Buffer.from(key, 'base64').toString('utf8');
     // Verify it decoded to valid PEM
     if (decoded.includes('-----BEGIN')) {
+      console.error('[DEBUG] Decoded from base64');
       return decoded;
     }
   } catch {
-    // Not valid base64, return original
+    // Not valid base64, continue
   }
 
-  return key;
+  // Fix common formatting issues:
+  // Replace all spaces with newlines (aggressive fix for env var formatting)
+  let fixed = key;
+
+  // Replace spaces between header and body
+  fixed = fixed.replace(/(-----BEGIN RSA PRIVATE KEY-----)\s+/, '$1\n');
+  fixed = fixed.replace(/\s+(-----END RSA PRIVATE KEY-----)/, '\n$1');
+
+  // Replace remaining spaces in the body with newlines (every 64 chars typically)
+  // But only if no newlines exist
+  if (!fixed.includes('\n')) {
+    fixed = fixed.replace(/ /g, '\n');
+  }
+
+  console.error('[DEBUG] Fixed key, now has newlines:', fixed.includes('\n'));
+  return fixed;
 }
 
 // ─── PR Data ────────────────────────────────────────────────────
