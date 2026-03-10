@@ -1,13 +1,14 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader } from '@/components/Card';
+import { DelegatedCiEditor } from '@/components/settings/DelegatedCiEditor';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
 import type { ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { ToolGrid } from '@/components/settings/ToolGrid';
 import { useRepositories, useSettings, useUpdateSettings } from '@/lib/api';
 import { useSelectedRepo } from '@/lib/repo-context';
 import type {
-  DelegatedCiPolicyView,
+  DelegatedCiPolicy,
   ProviderChainUpdate,
   ProviderChainView,
   RegisteredTool,
@@ -42,6 +43,9 @@ export function Settings() {
   // ── Review mode ─────────────────────────────────────────────
   const [reviewMode, setReviewMode] = useState<ReviewMode>('simple');
 
+  // ── Delegated CI policy (repo-scoped, not inherited) ──────
+  const [delegatedCiPolicy, setDelegatedCiPolicy] = useState<DelegatedCiPolicy | null>(null);
+
   // ── Other settings ──────────────────────────────────────────
   const [customRules, setCustomRules] = useState('');
   const [ignorePatterns, setIgnorePatterns] = useState('');
@@ -63,6 +67,7 @@ export function Settings() {
       setIgnorePatterns(settings.ignorePatterns.join('\n'));
       setDisabledTools(settings.disabledTools ?? []);
       setRegisteredTools(settings.registeredTools ?? []);
+      setDelegatedCiPolicy((settings.delegatedCiPolicy as DelegatedCiPolicy | null) ?? null);
 
       // Map server chain view to local entry state
       setProviderChain(
@@ -117,10 +122,11 @@ export function Settings() {
     if (!selectedRepo) return;
 
     if (useGlobalSettings) {
-      // Only save the toggle, no need to send settings
+      // Only save the toggle + delegated CI (repo-scoped, not inherited)
       await updateSettings.mutateAsync({
         repoFullName: selectedRepo,
         useGlobalSettings: true,
+        delegatedCiPolicy,
       });
     } else {
       const chainUpdate: ProviderChainUpdate[] = providerChain.map((entry) => ({
@@ -145,6 +151,7 @@ export function Settings() {
           .split('\n')
           .map((p) => p.trim())
           .filter(Boolean),
+        delegatedCiPolicy,
       });
     }
 
@@ -488,13 +495,13 @@ export function Settings() {
               </Card>
 
               {/* ── Delegated CI ──────────────────────────────────── */}
-              <DelegatedCiSection policy={settings?.delegatedCiPolicy ?? null} />
+              <DelegatedCiEditor value={delegatedCiPolicy} onChange={setDelegatedCiPolicy} />
             </>
           ) : null}
 
           {/* ── Delegated CI (always visible — repo-only, not inherited) ── */}
-          {useGlobalSettings && settings?.delegatedCiPolicy != null && (
-            <DelegatedCiSection policy={settings.delegatedCiPolicy} />
+          {useGlobalSettings && (
+            <DelegatedCiEditor value={delegatedCiPolicy} onChange={setDelegatedCiPolicy} />
           )}
 
           {/* ── Save Button ──────────────────────────────────── */}
@@ -512,96 +519,5 @@ export function Settings() {
         </form>
       )}
     </div>
-  );
-}
-
-// ─── Delegated CI Section (read-only MVP) ───────────────────
-
-function DelegatedCiSection({ policy }: { policy: DelegatedCiPolicyView | null }) {
-  if (!policy) {
-    return (
-      <Card>
-        <CardHeader
-          title="Delegated CI"
-          description="Run safe CI jobs directly from GHAGGA reviews"
-        />
-        <p className="text-sm text-text-muted">
-          No delegated CI policy configured for this repository.
-        </p>
-      </Card>
-    );
-  }
-
-  const enabledJobs = policy.jobs.filter((j) => j.enabled);
-
-  return (
-    <Card>
-      <CardHeader
-        title="Delegated CI"
-        description="Run safe CI jobs directly from GHAGGA reviews (repo-scoped)"
-      />
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-              policy.enabled
-                ? 'bg-green-500/20 text-green-400'
-                : 'bg-surface-border text-text-muted'
-            }`}
-          >
-            {policy.enabled ? 'Enabled' : 'Disabled'}
-          </span>
-          <span className="text-sm text-text-secondary">
-            {enabledJobs.length} of {policy.jobs.length} job{policy.jobs.length !== 1 ? 's' : ''}{' '}
-            enabled
-          </span>
-        </div>
-
-        {policy.jobs.length > 0 && (
-          <div className="overflow-hidden rounded-lg border border-surface-border">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-surface-bg text-xs uppercase text-text-muted">
-                <tr>
-                  <th className="px-3 py-2">Job</th>
-                  <th className="px-3 py-2">Profile</th>
-                  <th className="px-3 py-2">Classification</th>
-                  <th className="px-3 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border">
-                {policy.jobs.map((job) => (
-                  <tr key={job.jobKey} className="text-text-secondary">
-                    <td className="px-3 py-2 font-medium text-text-primary">{job.displayName}</td>
-                    <td className="px-3 py-2">
-                      <code className="rounded bg-surface-bg px-1.5 py-0.5 text-xs">
-                        {job.profile}
-                      </code>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`text-xs ${
-                          job.classification === 'safe/delegable'
-                            ? 'text-green-400'
-                            : 'text-yellow-400'
-                        }`}
-                      >
-                        {job.classification}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`text-xs ${job.enabled ? 'text-green-400' : 'text-text-muted'}`}
-                      >
-                        {job.enabled ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </Card>
   );
 }
