@@ -8,6 +8,32 @@
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 
+// ─── Helpers ────────────────────────────────────────────────────
+
+/**
+ * Decode GitHub App private key from environment variable.
+ * Supports both raw PEM and base64-encoded PEM.
+ */
+function decodePrivateKey(key: string): string {
+  // If key already has PEM headers, return as-is
+  if (key.includes('-----BEGIN')) {
+    return key;
+  }
+
+  // Try to decode as base64
+  try {
+    const decoded = Buffer.from(key, 'base64').toString('utf8');
+    // Verify it decoded to valid PEM
+    if (decoded.includes('-----BEGIN')) {
+      return decoded;
+    }
+  } catch {
+    // Not valid base64, return original
+  }
+
+  return key;
+}
+
 // ─── PR Data ────────────────────────────────────────────────────
 
 /**
@@ -303,10 +329,11 @@ export async function getInstallationToken(
   const encodedPayload = base64url(JSON.stringify(payload));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
 
-  // Sign with RS256
+  // Decode and sign with RS256
+  const decodedKey = decodePrivateKey(privateKey);
   const signer = createSign('RSA-SHA256');
   signer.update(signingInput);
-  const signatureBuffer = signer.sign(privateKey);
+  const signatureBuffer = signer.sign(decodedKey);
   const encodedSignature = base64url(signatureBuffer);
 
   const jwt = `${signingInput}.${encodedSignature}`;
