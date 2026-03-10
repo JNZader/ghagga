@@ -16,10 +16,6 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { rateLimiter } from 'hono-rate-limiter';
-import { serve as serveInngest } from 'inngest/hono';
-import { inngest } from './inngest/client.js';
-import { delegatedCiFunction } from './inngest/delegated-ci.js';
-import { reviewFunction } from './inngest/review.js';
 import { githubCircuitBreaker } from './lib/circuit-breaker.js';
 import { getClientIp } from './lib/get-client-ip.js';
 import { logger } from './lib/logger.js';
@@ -208,19 +204,12 @@ app.route('/', webhookRouter);
 const oauthRouter = createOAuthRouter();
 app.route('/', oauthRouter);
 
-// Inngest serve endpoint (before auth middleware — Inngest uses its own signing)
-app.on(
-  ['GET', 'POST', 'PUT'],
-  '/api/inngest',
-  serveInngest({ client: inngest, functions: [reviewFunction, delegatedCiFunction] }),
-);
-
 // Runner callback route — intentionally outside /api/* namespace to avoid the
 // session auth middleware at app.use('/api/*', authMiddleware). Uses per-dispatch HMAC auth.
 const runnerCallbackRouter = createRunnerCallbackRouter();
 app.route('/', runnerCallbackRouter);
 
-// Dashboard API routes (auth required — must be after Inngest mount)
+// Dashboard API routes (auth required)
 app.use('/api/*', authMiddleware(db));
 const apiRouter = createApiRouter(db);
 app.route('/', apiRouter);

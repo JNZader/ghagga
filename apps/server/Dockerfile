@@ -1,17 +1,17 @@
 # ============================================
-# GHAGGA Server — Production Dockerfile
+# GHAGGA Server — Production Dockerfile (Coolify Edition)
 # ============================================
-# Multi-stage build for Render deployment.
-# Builds the full monorepo, prunes dev deps, and
-# runs the Hono server on the specified PORT.
+# Multi-stage build for self-hosted deployment with Coolify.
+# Supports both server (API) and worker (queue processor) modes.
 #
 # Build context must be the monorepo root:
 #   docker build -f apps/server/Dockerfile .
+#
+# Environment:
+#   SERVICE_TYPE=server|worker - Controls startup mode
 
 # ── Stage 1: Install + Build ───────────────────────────────────
-# node:22-slim — pinned 2026-03-07
-# CACHE_BUST: 2026-03-10-001 — Force rebuild to pick up runner.ts fix
-FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS builder
+FROM node:20-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
@@ -40,10 +40,9 @@ RUN pnpm --filter ghagga-db build && \
 RUN pnpm prune --prod
 
 # ── Stage 2: Production Runtime ────────────────────────────────
-# node:22-slim — pinned 2026-03-07
-FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS runner
+FROM node:20-slim AS runner
 
-# Minimal system deps (static analysis tools now run in GitHub Actions)
+# Minimal system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
@@ -77,7 +76,7 @@ COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 
 ENV NODE_ENV=production
 
-# Startup: run migrations then start server
+# Startup: run migrations then start server (or worker based on SERVICE_TYPE)
 COPY apps/server/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
@@ -87,6 +86,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
 
 CMD ["./start.sh"]
-# CACHE_BUST: mar 10 mar 2026 11:48:18 -03 - Force Northflank to rebuild
-# CACHE_BUST_DEBUG: mar 10 mar 2026 12:25:11 -03
-# CACHE_BUST_FINAL: mar 10 mar 2026 12:35:55 -03

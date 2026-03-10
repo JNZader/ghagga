@@ -2,7 +2,7 @@
  * GitHub webhook handler.
  *
  * Processes incoming webhook events:
- *   - pull_request: Dispatch review via Inngest
+ *   - pull_request: Dispatch review via BullMQ queue
  *   - issue_comment: Re-trigger review on "ghagga review" keyword
  *   - installation: Track app installations
  *   - installation_repositories: Track repo additions/removals
@@ -29,7 +29,7 @@ import {
   getInstallationToken,
   verifyWebhookSignature,
 } from '../github/client.js';
-import { inngest } from '../inngest/client.js';
+import { enqueueReview } from '../queues/review.js';
 import { logger as rootLogger } from '../lib/logger.js';
 
 const logger = rootLogger.child({ module: 'webhook' });
@@ -246,36 +246,33 @@ async function handlePullRequest(
   // Resolve effective settings (global vs per-repo)
   const effective = await getEffectiveRepoSettings(db, repo);
 
-  // Dispatch review to Inngest
-  await inngest.send({
-    name: 'ghagga/review.requested',
-    data: {
-      reviewId,
-      installationId: payload.installation.id,
-      repoFullName: payload.repository.full_name,
-      prNumber: payload.number,
-      repositoryId: repo.id,
-      headSha: payload.pull_request.head.sha,
-      baseBranch: payload.pull_request.base.ref,
-      // Resolved provider chain (from global or repo)
-      providerChain: effective.providerChain,
-      aiReviewEnabled: effective.aiReviewEnabled,
-      // Legacy flat fields (kept for backward compat during transition)
-      llmProvider: repo.llmProvider,
-      llmModel: repo.llmModel ?? 'gpt-4o-mini',
-      reviewMode: effective.reviewMode,
-      encryptedApiKey: repo.encryptedApiKey,
-      settings: {
-        enableSemgrep: effective.settings.enableSemgrep,
-        enableTrivy: effective.settings.enableTrivy,
-        enableCpd: effective.settings.enableCpd,
-        enableMemory: effective.settings.enableMemory,
-        customRules: effective.settings.customRules,
-        ignorePatterns: effective.settings.ignorePatterns,
-        reviewLevel: effective.settings.reviewLevel,
-        enabledTools: effective.settings.enabledTools,
-        disabledTools: effective.settings.disabledTools,
-      },
+  // Dispatch review to BullMQ queue
+  await enqueueReview({
+    reviewId,
+    installationId: payload.installation.id,
+    repoFullName: payload.repository.full_name,
+    prNumber: payload.number,
+    repositoryId: repo.id,
+    headSha: payload.pull_request.head.sha,
+    baseBranch: payload.pull_request.base.ref,
+    // Resolved provider chain (from global or repo)
+    providerChain: effective.providerChain,
+    aiReviewEnabled: effective.aiReviewEnabled,
+    // Legacy flat fields (kept for backward compat during transition)
+    llmProvider: repo.llmProvider,
+    llmModel: repo.llmModel ?? 'gpt-4o-mini',
+    reviewMode: effective.reviewMode,
+    encryptedApiKey: repo.encryptedApiKey,
+    settings: {
+      enableSemgrep: effective.settings.enableSemgrep,
+      enableTrivy: effective.settings.enableTrivy,
+      enableCpd: effective.settings.enableCpd,
+      enableMemory: effective.settings.enableMemory,
+      customRules: effective.settings.customRules,
+      ignorePatterns: effective.settings.ignorePatterns,
+      reviewLevel: effective.settings.reviewLevel,
+      enabledTools: effective.settings.enabledTools,
+      disabledTools: effective.settings.disabledTools,
     },
   });
 
@@ -309,28 +306,16 @@ async function handlePullRequest(
       }
 
       if (approvedJobs.length > 0) {
-        // Dispatch Inngest event for approved jobs
-        await inngest.send({
-          name: 'ghagga/delegated-ci.requested',
-          data: {
-            installationId: payload.installation.id,
-            repositoryId: repo.id,
-            repoFullName: payload.repository.full_name,
-            prNumber: payload.number,
-            headSha: payload.pull_request.head.sha,
-            baseBranch: payload.pull_request.base.ref,
-            approvedJobs: approvedJobs.map((j) => {
-              const policyJob = normalizedPolicy.jobs.find((pj) => pj.jobKey === j.jobKey);
-              return {
-                jobKey: j.jobKey,
-                profile: j.profile!,
-                allowArtifacts: policyJob?.allowArtifacts ?? false,
-                allowCache: policyJob?.allowCache ?? false,
-                maxDurationMinutes: policyJob?.maxDurationMinutes ?? 10,
-              };
-            }),
+        // TODO: Implement delegated CI with BullMQ
+        // For now, log that delegated CI jobs were approved but not dispatched
+        logger.info(
+          {
+            repo: payload.repository.full_name,
+            pr: payload.number,
+            approvedJobs: approvedJobs.map(j => j.jobKey),
           },
-        });
+          'Delegated CI jobs approved but not dispatched - BullMQ migration pending'
+        );
       }
 
       logger.info(
@@ -456,34 +441,31 @@ async function handleIssueComment(
   // Resolve effective settings and dispatch review
   const effective = await getEffectiveRepoSettings(db, repo);
 
-  await inngest.send({
-    name: 'ghagga/review.requested',
-    data: {
-      reviewId,
-      installationId: payload.installation.id,
-      repoFullName: payload.repository.full_name,
-      prNumber,
-      repositoryId: repo.id,
-      triggerCommentId: payload.comment.id,
-      headSha,
-      baseBranch,
-      providerChain: effective.providerChain,
-      aiReviewEnabled: effective.aiReviewEnabled,
-      llmProvider: repo.llmProvider,
-      llmModel: repo.llmModel ?? 'gpt-4o-mini',
-      reviewMode: effective.reviewMode,
-      encryptedApiKey: repo.encryptedApiKey,
-      settings: {
-        enableSemgrep: effective.settings.enableSemgrep,
-        enableTrivy: effective.settings.enableTrivy,
-        enableCpd: effective.settings.enableCpd,
-        enableMemory: effective.settings.enableMemory,
-        customRules: effective.settings.customRules,
-        ignorePatterns: effective.settings.ignorePatterns,
-        reviewLevel: effective.settings.reviewLevel,
-        enabledTools: effective.settings.enabledTools,
-        disabledTools: effective.settings.disabledTools,
-      },
+  await enqueueReview({
+    reviewId,
+    installationId: payload.installation.id,
+    repoFullName: payload.repository.full_name,
+    prNumber,
+    repositoryId: repo.id,
+    triggerCommentId: payload.comment.id,
+    headSha,
+    baseBranch,
+    providerChain: effective.providerChain,
+    aiReviewEnabled: effective.aiReviewEnabled,
+    llmProvider: repo.llmProvider,
+    llmModel: repo.llmModel ?? 'gpt-4o-mini',
+    reviewMode: effective.reviewMode,
+    encryptedApiKey: repo.encryptedApiKey,
+    settings: {
+      enableSemgrep: effective.settings.enableSemgrep,
+      enableTrivy: effective.settings.enableTrivy,
+      enableCpd: effective.settings.enableCpd,
+      enableMemory: effective.settings.enableMemory,
+      customRules: effective.settings.customRules,
+      ignorePatterns: effective.settings.ignorePatterns,
+      reviewLevel: effective.settings.reviewLevel,
+      enabledTools: effective.settings.enabledTools,
+      disabledTools: effective.settings.disabledTools,
     },
   });
 

@@ -1,48 +1,149 @@
-# ============================================
-# GHAGGA v2 — Local Development Stack
-# ============================================
+# =============================================================================
+# GHAGGA Docker Compose Stack (Coolify Edition)
+# =============================================================================
+# Complete self-hosted stack with:
+#   - API Server (webhook handler)
+#   - Worker (BullMQ job processor)
+#   - PostgreSQL (database)
+#   - Redis (message queue)
+#   - Bull Dashboard (queue monitoring)
+#
 # Usage:
-#   docker compose up -d        # Start PostgreSQL + server
-#   docker compose up postgres  # Start only PostgreSQL
-#   docker compose down         # Stop everything
+#   docker-compose up -d
+#   docker-compose logs -f server
+#
+# Environment:
+#   Create a .env file from .env.example before starting
+
+version: '3.8'
 
 services:
-  postgres:
-    # postgres:16-alpine — pinned 2026-03-07
-    image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ghagga
-      POSTGRES_USER: ghagga
-      POSTGRES_PASSWORD: ghagga_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ghagga"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
+  # ===========================================================================
+  # API Server - Handles webhooks and API requests
+  # ===========================================================================
   server:
-    build: .
-    restart: unless-stopped
-    ports:
-      - "${PORT:-3000}:3000"
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
     environment:
-      DATABASE_URL: postgresql://ghagga:ghagga_dev@postgres:5432/ghagga
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3000
-      GITHUB_APP_ID: ${GITHUB_APP_ID}
-      GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY}
-      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
-      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY}
-      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      - SERVICE_TYPE=server
+      - NODE_ENV=production
+      - PORT=3000
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      # Redis / BullMQ
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      # GitHub App
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_PRIVATE_KEY=${GITHUB_PRIVATE_KEY}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      # Security
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - STATE_SECRET=${STATE_SECRET}
+      # Optional: Default LLM API keys
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+    ports:
+      - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================================================
+  # Worker - Processes review jobs from BullMQ queue
+  # ===========================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      - SERVICE_TYPE=worker
+      - NODE_ENV=production
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-3}
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      # Redis / BullMQ
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      # GitHub App
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_PRIVATE_KEY=${GITHUB_PRIVATE_KEY}
+      # Security
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # Optional: Default LLM API keys
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+
+  # ===========================================================================
+  # PostgreSQL - Main database
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER:-ghagga}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-ghagga}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ghagga}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # Redis - Message queue for BullMQ
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --save 60 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ===========================================================================
+  # Bull Dashboard - Queue monitoring UI
+  # ===========================================================================
+  bull-dashboard:
+    image: vitalyliber/bull-board:latest
+    environment:
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - redis
+    restart: unless-stopped
 
 volumes:
-  pgdata:
+  postgres-data:
+  redis-data:

@@ -40,7 +40,6 @@
 import type { StaticAnalysisResult } from 'ghagga-core';
 import { Hono } from 'hono';
 import { verifyCallbackSignature } from '../github/runner.js';
-import { inngest } from '../inngest/client.js';
 import { logger as rootLogger } from '../lib/logger.js';
 
 const logger = rootLogger.child({ module: 'runner-callback' });
@@ -112,27 +111,18 @@ export function createRunnerCallbackRouter() {
         return c.json({ error: 'Invalid signature' }, 401);
       }
 
-      // Emit delegated CI callback event
-      await inngest.send({
-        name: 'ghagga/delegated-ci.callback',
-        data: {
-          callbackId: payload.callbackId,
-          repoFullName: payload.repoFullName,
+      // TODO: Re-implement with BullMQ - store callback data for job pickup
+      // For now, log the callback but don't dispatch (feature pending migration)
+      logger.info(
+        {
+          callbackId,
+          repoFullName,
           jobKey: payload.jobKey,
           state: payload.state,
-          startedAt: payload.startedAt,
-          completedAt: payload.completedAt,
-          durationMs: payload.durationMs,
           summary: payload.summary,
           outcome: payload.outcome,
-          errorCode: payload.errorCode,
-          errorMessage: payload.errorMessage,
         },
-      });
-
-      logger.info(
-        { callbackId, repoFullName, jobKey: payload.jobKey, state: payload.state },
-        'Delegated CI callback accepted — dispatched Inngest event',
+        'Delegated CI callback accepted — feature pending BullMQ migration',
       );
     } else {
       // ── Static analysis callback (existing behavior) ──
@@ -157,21 +147,11 @@ export function createRunnerCallbackRouter() {
         return c.json({ error: 'Invalid signature' }, 401);
       }
 
-      // Send Inngest event to resume the waiting review function
-      await inngest.send({
-        name: 'ghagga/runner.completed',
-        data: {
-          callbackId,
-          repoFullName,
-          prNumber,
-          headSha,
-          staticAnalysis,
-        },
-      });
-
+      // TODO: Re-implement with BullMQ - store static analysis results for job pickup
+      // For now, log the callback but don't dispatch (feature pending migration)
       logger.info(
-        { callbackId, repoFullName, prNumber },
-        'Runner callback accepted — dispatched Inngest event',
+        { callbackId, repoFullName, prNumber, staticAnalysisTools: Object.keys(staticAnalysis) },
+        'Runner callback accepted — feature pending BullMQ migration',
       );
     }
 

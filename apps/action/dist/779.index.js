@@ -3,7 +3,7 @@ exports.id = 779;
 exports.ids = [779,760];
 exports.modules = {
 
-/***/ 22453:
+/***/ 2453:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 
@@ -41,8 +41,8 @@ __export(auth_config_exports, {
   writeAuthConfig: () => writeAuthConfig
 });
 module.exports = __toCommonJS(auth_config_exports);
-var fs = __toESM(__webpack_require__(79896));
-var path = __toESM(__webpack_require__(16928));
+var fs = __toESM(__webpack_require__(9896));
+var path = __toESM(__webpack_require__(6928));
 var import_token_util = __webpack_require__(8148);
 function getAuthConfigPath() {
   const dataDir = (0, import_token_util.getVercelDataDir)();
@@ -90,7 +90,7 @@ function isValidAccessToken(authConfig) {
 
 /***/ }),
 
-/***/ 69681:
+/***/ 9681:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 
@@ -117,7 +117,7 @@ __export(oauth_exports, {
   refreshTokenRequest: () => refreshTokenRequest
 });
 module.exports = __toCommonJS(oauth_exports);
-var import_os = __webpack_require__(70857);
+var import_os = __webpack_require__(857);
 const VERCEL_ISSUER = "https://vercel.com";
 const VERCEL_CLI_CLIENT_ID = "cl_HYyOPBNtFMfHhaUn9L4QPfTZz6TP47bp";
 const userAgent = `@vercel/oidc node-${process.version} ${(0, import_os.platform)()} (${(0, import_os.arch)()}) ${(0, import_os.hostname)()}`;
@@ -182,7 +182,7 @@ async function processTokenResponse(response) {
 
 /***/ }),
 
-/***/ 33720:
+/***/ 3720:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 
@@ -219,10 +219,10 @@ __export(token_io_exports, {
   getUserDataDir: () => getUserDataDir
 });
 module.exports = __toCommonJS(token_io_exports);
-var import_path = __toESM(__webpack_require__(16928));
-var import_fs = __toESM(__webpack_require__(79896));
-var import_os = __toESM(__webpack_require__(70857));
-var import_token_error = __webpack_require__(96816);
+var import_path = __toESM(__webpack_require__(6928));
+var import_fs = __toESM(__webpack_require__(9896));
+var import_os = __toESM(__webpack_require__(857));
+var import_token_error = __webpack_require__(6816);
 function findRootDir() {
   try {
     let dir = process.cwd();
@@ -308,12 +308,12 @@ __export(token_util_exports, {
   saveToken: () => saveToken
 });
 module.exports = __toCommonJS(token_util_exports);
-var path = __toESM(__webpack_require__(16928));
-var fs = __toESM(__webpack_require__(79896));
-var import_token_error = __webpack_require__(96816);
-var import_token_io = __webpack_require__(33720);
-var import_auth_config = __webpack_require__(22453);
-var import_oauth = __webpack_require__(69681);
+var path = __toESM(__webpack_require__(6928));
+var fs = __toESM(__webpack_require__(9896));
+var import_token_error = __webpack_require__(6816);
+var import_token_io = __webpack_require__(3720);
+var import_auth_config = __webpack_require__(2453);
+var import_oauth = __webpack_require__(9681);
 function getVercelDataDir() {
   const vercelFolder = "com.vercel.cli";
   const dataDir = (0, import_token_io.getUserDataDir)();
@@ -459,7 +459,7 @@ function isExpired(token) {
 
 /***/ }),
 
-/***/ 30779:
+/***/ 779:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 
@@ -485,7 +485,7 @@ __export(token_exports, {
   refreshToken: () => refreshToken
 });
 module.exports = __toCommonJS(token_exports);
-var import_token_error = __webpack_require__(96816);
+var import_token_error = __webpack_require__(6816);
 var import_token_util = __webpack_require__(8148);
 async function refreshToken() {
   const { projectId, teamId } = (0, import_token_util.findProjectInfo)();
