@@ -25,6 +25,12 @@ function decodePrivateKey(key: string): string {
     cleanKey = cleanKey.slice(1, -1);
   }
 
+  // Replace literal \n sequences with real newlines
+  // (Coolify and other platforms may double-escape newlines)
+  if (cleanKey.includes('\\n')) {
+    cleanKey = cleanKey.replace(/\\n/g, '\n');
+  }
+
   // If key has proper newlines, return as-is
   if (cleanKey.includes('-----BEGIN') && cleanKey.includes('\n')) {
     return cleanKey;
