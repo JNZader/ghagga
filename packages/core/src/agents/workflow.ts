@@ -16,8 +16,8 @@
  * deduplicates findings into the final STATUS/SUMMARY/FINDINGS.
  */
 
-import { generateText } from 'ai';
 import { createModel } from '../providers/index.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import type {
   LLMProvider,
   ProgressCallback,
@@ -110,12 +110,20 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
       .filter(Boolean)
       .join('\n');
 
-    const result = await generateText({
-      model: languageModel,
-      system,
-      prompt: userPrompt,
-      temperature: 0.3,
-    });
+    const result = await generateTextWithTimeout(
+      {
+        model: languageModel,
+        system,
+        prompt: userPrompt,
+        temperature: 0.3,
+      },
+      { provider, model },
+    );
+
+    // Timeout: treat as a failed specialist (synthesis will be aware of the gap)
+    if (result === null) {
+      throw new Error(`LLM call timed out for specialist ${specialist.label}`);
+    }
 
     return {
       name: specialist.name,
@@ -176,18 +184,40 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     .filter(Boolean)
     .join('\n');
 
-  const synthesisResult = await generateText({
-    model: languageModel,
-    system: synthesisSystem,
-    prompt: synthesisPrompt,
-    temperature: 0.3,
-  });
+  const synthesisResult = await generateTextWithTimeout(
+    {
+      model: languageModel,
+      system: synthesisSystem,
+      prompt: synthesisPrompt,
+      temperature: 0.3,
+    },
+    { provider, model },
+  );
+
+  const executionTimeMs = Date.now() - startTime;
+
+  // If synthesis timed out, return a fallback result
+  if (synthesisResult === null) {
+    emit({
+      step: 'workflow-synthesis',
+      message: 'Synthesis LLM call timed out — falling back to static-analysis-only results',
+    });
+
+    const reviewResult = parseReviewResponse(
+      'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: LLM synthesis timed out. Only static analysis results are available.\nFINDINGS:\n',
+      provider,
+      model,
+      totalTokens,
+      executionTimeMs,
+      memoryContext,
+    );
+    reviewResult.metadata.mode = 'workflow';
+    return reviewResult;
+  }
 
   const synthesisTokens =
     (synthesisResult.usage?.inputTokens ?? 0) + (synthesisResult.usage?.outputTokens ?? 0);
   totalTokens += synthesisTokens;
-
-  const executionTimeMs = Date.now() - startTime;
 
   // Parse the synthesis output using the same parser as simple mode
   const reviewResult = parseReviewResponse(

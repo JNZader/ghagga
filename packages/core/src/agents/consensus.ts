@@ -12,8 +12,8 @@
  *   - If thresholds not met → NEEDS_HUMAN_REVIEW
  */
 
-import { generateText } from 'ai';
 import { createModel } from '../providers/index.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import type {
   ConsensusStance,
   ConsensusVote,
@@ -217,12 +217,20 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
 
     const languageModel = createModel(config.provider, config.model, config.apiKey);
 
-    const result = await generateText({
-      model: languageModel,
-      system,
-      prompt: userPrompt,
-      temperature: 0.3,
-    });
+    const result = await generateTextWithTimeout(
+      {
+        model: languageModel,
+        system,
+        prompt: userPrompt,
+        temperature: 0.3,
+      },
+      { provider: config.provider, model: config.model },
+    );
+
+    // Timeout: treat as a failed vote (consensus handles missing votes gracefully)
+    if (result === null) {
+      throw new Error(`LLM call timed out for ${config.provider}/${config.model} (stance: ${config.stance})`);
+    }
 
     const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
 

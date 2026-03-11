@@ -6,8 +6,8 @@
  * Client errors (4xx) are NOT retried — they indicate misconfiguration.
  */
 
-import { generateText } from 'ai';
 import type { LLMProvider } from '../types.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import { createModel } from './index.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -106,12 +106,24 @@ export async function generateWithFallback(options: FallbackOptions): Promise<Fa
     try {
       const languageModel = createModel(provider, model, apiKey);
 
-      const result = await generateText({
-        model: languageModel,
-        system,
-        prompt,
-        temperature,
-      });
+      const result = await generateTextWithTimeout(
+        {
+          model: languageModel,
+          system,
+          prompt,
+          temperature,
+        },
+        { provider, model },
+      );
+
+      // Timeout: treat as a retryable error and try next provider
+      if (result === null) {
+        lastError = new Error(`LLM call timed out for ${provider}/${model}`);
+        console.warn(
+          `[ghagga] Provider ${provider}/${model} timed out, trying next...`,
+        );
+        continue;
+      }
 
       // Calculate tokens used from the response
       const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);

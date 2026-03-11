@@ -5,8 +5,8 @@
  * Failures are non-blocking — returns empty result on any error.
  */
 
-import { generateText } from 'ai';
 import { createModel } from '../providers/index.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import type { LLMProvider, ReviewFinding } from '../types.js';
 import {
   buildEnhancePrompt,
@@ -64,12 +64,28 @@ export async function enhanceFindings(
 
     // Call LLM
     const model = createModel(input.provider as LLMProvider, input.model, input.apiKey);
-    const response = await generateText({
-      model,
-      system: ENHANCE_SYSTEM_PROMPT,
-      prompt,
-      maxOutputTokens: 2000,
-    });
+    const response = await generateTextWithTimeout(
+      {
+        model,
+        system: ENHANCE_SYSTEM_PROMPT,
+        prompt,
+        maxOutputTokens: 2000,
+      },
+      { provider: input.provider, model: input.model },
+    );
+
+    // Timeout: return empty result (enhance is already non-blocking)
+    if (response === null) {
+      return {
+        result: EMPTY_RESULT,
+        metadata: {
+          model: input.model,
+          tokenUsage: { input: 0, output: 0 },
+          groupCount: 0,
+          filteredCount: 0,
+        },
+      };
+    }
 
     // Parse response
     const parsed = parseEnhanceResponse(response.text);
