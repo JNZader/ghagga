@@ -15,8 +15,6 @@
 # Environment:
 #   Create a .env file from .env.example before starting
 
-version: '3.8'
-
 services:
   # ===========================================================================
   # API Server - Handles webhooks and API requests
@@ -93,8 +91,6 @@ services:
       - postgres
       - redis
     restart: unless-stopped
-    deploy:
-      replicas: ${WORKER_REPLICAS:-2}
 
   # ===========================================================================
   # PostgreSQL - Main database
