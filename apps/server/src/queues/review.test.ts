@@ -184,7 +184,7 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     const job = makeFakeJob(data);
 
     // Should NOT throw
-    await expect(capturedProcessor!(job)).resolves.toEqual({
+    await expect(capturedProcessor?.(job)).resolves.toEqual({
       success: true,
       reviewId: 'rev-001',
     });
@@ -198,7 +198,7 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     });
     const job = makeFakeJob(data);
 
-    await capturedProcessor!(job);
+    await capturedProcessor?.(job);
 
     expect(mockLogger.warn).toHaveBeenCalledWith(
       { provider: 'openai' },
@@ -214,7 +214,7 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     });
     const job = makeFakeJob(data);
 
-    await capturedProcessor!(job);
+    await capturedProcessor?.(job);
 
     expect(mockLogger.info).toHaveBeenCalledWith(
       'No LLM provider available — AI review disabled, static analysis only',
@@ -230,7 +230,7 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     });
     const job = makeFakeJob(data);
 
-    await capturedProcessor!(job);
+    await capturedProcessor?.(job);
 
     expect(mockReviewPipeline).toHaveBeenCalledOnce();
     const input = mockReviewPipeline.mock.calls[0][0];
@@ -248,7 +248,7 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     });
     const job = makeFakeJob(data);
 
-    await capturedProcessor!(job);
+    await capturedProcessor?.(job);
 
     expect(mockReviewPipeline).toHaveBeenCalledOnce();
     const input = mockReviewPipeline.mock.calls[0][0];
@@ -265,7 +265,7 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     });
     const job = makeFakeJob(data);
 
-    await capturedProcessor!(job);
+    await capturedProcessor?.(job);
 
     expect(mockReviewPipeline).toHaveBeenCalledOnce();
     const input = mockReviewPipeline.mock.calls[0][0];
@@ -276,13 +276,11 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
 
   it('passes aiReviewEnabled: true when providerChain is available', async () => {
     const data = makeJobData({
-      providerChain: [
-        { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-key' },
-      ],
+      providerChain: [{ provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-key' }],
     });
     const job = makeFakeJob(data);
 
-    await capturedProcessor!(job);
+    await capturedProcessor?.(job);
 
     expect(mockReviewPipeline).toHaveBeenCalledOnce();
     const input = mockReviewPipeline.mock.calls[0][0];
@@ -301,7 +299,7 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     });
     const job = makeFakeJob(data);
 
-    await capturedProcessor!(job);
+    await capturedProcessor?.(job);
 
     expect(mockReviewPipeline).toHaveBeenCalledOnce();
     const input = mockReviewPipeline.mock.calls[0][0];
