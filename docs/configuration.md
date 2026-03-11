@@ -35,9 +35,11 @@
 | `GHAGGA_API_KEY` | No | LLM provider API key (not needed for GitHub Models — use `ghagga login` instead) |
 | `GHAGGA_PROVIDER` | No | Provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` (default: `github`) |
 | `GHAGGA_MODEL` | No | Model identifier (auto-selects best per provider) |
-| `GHAGGA_MEMORY_BACKEND` | No | Memory backend: `sqlite` (default) or `engram` |
-| `GHAGGA_ENGRAM_HOST` | No | Engram server URL (default: `http://localhost:7437`) |
+| `GHAGGA_MEMORY_BACKEND` | No | Memory backend: `sqlite` (default, FTS5 at `~/.config/ghagga/memory.db`) or `engram` (HTTP API for cross-tool memory sharing) |
+| `GHAGGA_ENGRAM_HOST` | No | Engram server URL (default: `http://localhost:7437`). Falls back to SQLite if unreachable. |
 | `GHAGGA_ENGRAM_TIMEOUT` | No | Engram connection timeout in seconds (default: `5`) |
+
+> See [Memory System](memory-system.md) for full details on storage backends, search engines, deduplication, and privacy stripping.
 
 ### GitHub Action Mode
 

@@ -35,7 +35,7 @@ console.log(result.findings);
 |------|-----------|----------|
 | **simple** | 1 | Small PRs, quick feedback |
 | **workflow** | 6 | Thorough review with 5 specialist agents + synthesis |
-| **consensus** | 3 | Balanced review with for/against/neutral voting |
+| **consensus** | 3 | Same model, three perspectives (for/against/neutral) + algorithmic vote |
 
 ## Providers
 

@@ -17,7 +17,7 @@ GHAGGA is a multi-agent AI code reviewer that analyzes your code changes using L
 |------|-------|-------|-----------|
 | **simple** | ~2s | Single-pass review | 1 |
 | **workflow** | ~15s | 5 specialist agents + synthesis | 6 |
-| **consensus** | ~7s | For/against/neutral voting | 3 |
+| **consensus** | ~7s | Same model, three perspectives + algorithmic vote | 3 |
 
 ## Quick Start
 

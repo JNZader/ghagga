@@ -9,7 +9,7 @@
 | **API key encryption** | AES-256-GCM with per-installation encryption keys. Keys are never stored in plaintext. |
 | **Webhook verification** | HMAC-SHA256 signature verification with `crypto.timingSafeEqual` (constant-time comparison to prevent timing attacks) |
 | **JWT generation** | RS256 manual JWT construction for GitHub App installation tokens |
-| **Privacy stripping** | 16 regex patterns remove secrets before storing to memory |
+| **Privacy stripping** | 13 regex patterns remove secrets before storing to memory |
 | **No secret logging** | Console outputs and error messages never contain sensitive data |
 | **BYOK model** | Users provide their own LLM API keys. GHAGGA never pays for or sees your LLM usage in plaintext. |
 | **Installation scoping** | API routes are scoped by GitHub installation ID — users can only access their own repos |
@@ -51,7 +51,7 @@ Invalid signatures are rejected with HTTP 401.
 
 ## Privacy Stripping
 
-See [Memory System — Privacy Stripping](memory-system.md) for the full list of 16 patterns that are stripped before storing observations.
+See [Memory System -- Privacy Stripping](memory-system.md#privacy-stripping) for the full list of 13 patterns that are stripped before storing observations.
 
 ## Automated Security Tests
 
@@ -63,7 +63,7 @@ The test suite includes 14 dedicated security audit tests that verify:
 - AES-256-GCM encryption roundtrip correctness
 - Tampered ciphertext detection
 - `timingSafeEqual` usage for webhook signature comparison
-- Privacy stripping covers all 16 secret patterns
+- Privacy stripping covers all 13 secret patterns
 
 ## Runner Security Model
 
