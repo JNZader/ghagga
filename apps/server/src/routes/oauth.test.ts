@@ -10,12 +10,16 @@
  * - Web Flow: GET /auth/callback exchange code, redirect to Dashboard
  */
 
-// Set env vars BEFORE importing oauth module (module-level constants read process.env at import time)
-process.env.GITHUB_CLIENT_ID = 'test-github-client-id';
-process.env.SERVER_URL = 'https://api.javierzader.com';
-
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// vi.hoisted runs before any imports, ensuring env vars are set
+// before oauth.ts evaluates its module-level constants
+vi.hoisted(() => {
+  process.env.GITHUB_CLIENT_ID = 'test-github-client-id';
+  process.env.SERVER_URL = 'https://api.javierzader.com';
+});
+
 import { createOAuthRouter, generateState, validateState } from './oauth.js';
 
 // ─── Mocks ──────────────────────────────────────────────────────
