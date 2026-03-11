@@ -1,7 +1,7 @@
 /**
  * @ghagga/server — Hono API server entry point.
  *
- * Serves the GitHub webhook endpoint, Inngest durable functions,
+ * Serves the GitHub webhook endpoint, BullMQ durable job queues,
  * and the dashboard REST API.
  */
 

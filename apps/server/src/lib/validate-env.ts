@@ -10,7 +10,7 @@ import { logger } from './logger.js';
 
 /**
  * Env vars that MUST be set for the server to function.
- * Optional vars (RENDER_EXTERNAL_URL, INNGEST_*, PORT, etc.) are not checked.
+ * Optional vars (RENDER_EXTERNAL_URL, REDIS_URL, PORT, etc.) are not checked.
  */
 export const REQUIRED_ENV_VARS = [
   'DATABASE_URL',

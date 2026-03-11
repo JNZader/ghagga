@@ -2,13 +2,13 @@
   <img src="assets/logo.svg" alt="GHAGGA Logo — AI-powered code review with static analysis" width="200" height="200" />
 </p>
 
-# GHAGGA — AI-Powered Code Review
+# GHAGGA -- AI-Powered Code Review
 
 > Inspired by [Gentleman Guardian Angel (GGA)](https://github.com/Gentleman-Programming/gentleman-guardian-angel) and [Engram](https://github.com/Gentleman-Programming/engram), two projects by [Gentleman Programming](https://youtube.com/@GentlemanProgramming).
 
-**Multi-agent code reviewer** that posts intelligent comments on your Pull Requests. Combines LLM analysis with up to 15 static analysis tools and project memory that learns across reviews.
+**Multi-agent code reviewer** that posts intelligent comments on your Pull Requests. Combines LLM analysis with 15+ static analysis tools and project memory that learns across reviews. Self-hosted on Coolify (Hetzner VPS) with BullMQ + Redis for async job processing.
 
-**[Website](https://jnzader.github.io/ghagga/)** · **[Documentation](https://jnzader.github.io/ghagga/docs/)** · **[Dashboard](https://jnzader.github.io/ghagga/app/)**
+**[Website](https://jnzader.github.io/ghagga/)** | **[Documentation](https://jnzader.github.io/ghagga/docs/)** | **[Dashboard](https://jnzader.github.io/ghagga/app/)**
 
 ## Table of Contents
 
@@ -35,48 +35,50 @@
 GHAGGA is an AI code review tool that:
 
 1. **Receives** a PR diff (via webhook, CLI, or GitHub Action)
-2. **Scans** it with static analysis tools — zero LLM tokens for known issues
+2. **Scans** it with static analysis tools -- zero LLM tokens for known issues
 3. **Searches** project memory for past decisions, patterns, and bug fixes
 4. **Sends** the diff + static analysis context + memory to AI agents
 5. **Posts** a structured review comment on the PR with findings, severity, and suggestions
 6. **Learns** by extracting observations from the review and storing them for next time
 
-You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plaintext — they're encrypted with AES-256-GCM at rest.
+You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plaintext -- they're encrypted with AES-256-GCM at rest.
 
 ### Key Features
 
 | Feature | Description |
 |---------|-------------|
-| **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (multi-model voting) |
-| **15 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 8 auto-detect tools — zero tokens |
+| **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (multi-model voting with proportional verbosity) |
+| **15+ Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 8 auto-detect tools -- zero tokens |
+| **Static-Analysis-Only Fallback** | When no LLM API key is configured, GHAGGA runs all applicable static analysis tools and posts results without any LLM call |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews (PostgreSQL + tsvector FTS) |
-| **Multi-Provider** | 6 providers: GitHub Models, Anthropic, OpenAI, Google, Ollama (local), Qwen (Alibaba). **Mode note**: SaaS/server mode needs a PAT with `models:read` for GitHub Models; CLI and GitHub Action mode can use the GitHub token you already control. |
-| **3 Distribution Modes** | SaaS, GitHub Action, CLI |
-| **Pagination** | Full GitHub API pagination for PRs with >100 files/commits — no silent truncation |
+| **Multi-Provider** | 6 providers: Anthropic, OpenAI, Google, GitHub Models (free), Ollama (local), Qwen (Alibaba). LLM timeout (60s) with provider fallback chain. **Mode note**: SaaS/server mode needs a PAT with `models:read` for GitHub Models; CLI and GitHub Action mode can use the GitHub token you already control. |
+| **3 Distribution Modes** | Self-hosted (Coolify), GitHub Action, CLI |
+| **Delegated CI** | CI job auto-discovery with orchestrated execution on user-owned GitHub Actions runners |
+| **Pagination** | Full GitHub API pagination for PRs with >100 files/commits -- no silent truncation |
 | **Comment Trigger** | Type `ghagga review` on any PR to re-trigger a review on demand |
-| **Dashboard** | React SPA on GitHub Pages — review history, stats, settings, memory browser |
+| **Dashboard** | React 19 SPA on GitHub Pages -- review history, stats, settings, memory browser |
 | **BYOK Security** | AES-256-GCM encryption, HMAC-SHA256 webhook verification, privacy stripping |
 
 ---
 
 ## Quick Start
 
-### Option 0: GitHub App (SaaS) — ⭐ Recommended
+### Option 0: GitHub App (SaaS) -- Recommended
 
 The easiest way to get started. Install the App, configure in the Dashboard, get reviews.
 
 1. **[Install the GHAGGA GitHub App](https://github.com/apps/ghagga-review/installations/new)** on your repositories
 2. **[Open the Dashboard](https://jnzader.github.io/ghagga/app/)** and log in with GitHub
-3. **Configure your LLM provider** — in SaaS mode, GitHub Models requires a PAT with `models:read`, or bring your own provider key
-4. **Open a PR** — get an AI-powered review in ~1-2 minutes
+3. **Configure your LLM provider** -- in SaaS mode, GitHub Models requires a PAT with `models:read`, or bring your own provider key
+4. **Open a PR** -- get an AI-powered review in ~1-2 minutes
 
-> **Important**: After installing the App, reviews won't work until you configure an LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/). See the [full SaaS guide](https://jnzader.github.io/ghagga/docs/#/saas-getting-started) for detailed steps.
+> **Important**: After installing the App, reviews won't work until you configure an LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/). If no LLM provider is configured, GHAGGA falls back to static-analysis-only mode. See the [full SaaS guide](https://jnzader.github.io/ghagga/docs/#/saas-getting-started) for detailed steps.
 
 ---
 
 ### Option 1: GitHub Action (Free for Public Repos)
 
-No server needed — runs directly in GitHub's infrastructure. 100% free for public repos with GitHub Models.
+No server needed -- runs directly in GitHub's infrastructure. 100% free for public repos with GitHub Models.
 
 ```yaml
 # .github/workflows/ghagga.yml
@@ -104,10 +106,10 @@ jobs:
 | `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` |
 | `model` | No | Auto | Model identifier (auto-selects best per provider) |
 | `mode` | No | `simple` | Review mode: `simple`, `workflow`, `consensus` |
-| `api-key` | No | — | LLM provider API key. Not required for `github` provider (free default). |
+| `api-key` | No | -- | LLM provider API key. Not required for `github` provider (free default). |
 | `github-token` | No | `${{ github.token }}` | GitHub token for PR access. Automatic. |
-| `enabled-tools` | No | — | Comma-separated list of tools to force-enable |
-| `disabled-tools` | No | — | Comma-separated list of tools to force-disable |
+| `enabled-tools` | No | -- | Comma-separated list of tools to force-enable |
+| `disabled-tools` | No | -- | Comma-separated list of tools to force-disable |
 | `enable-memory` | No | `true` | Enable SQLite review memory (cached across runs) |
 
 #### Action Outputs
@@ -117,15 +119,15 @@ jobs:
 | `status` | Review result: `PASSED`, `FAILED`, `NEEDS_HUMAN_REVIEW`, `SKIPPED` |
 | `findings-count` | Number of findings detected |
 
-> Static analysis tools (up to 15) run **directly on the GitHub Actions runner** — no server or Docker image required. First run installs tools (~3-5 min), subsequent runs use `@actions/cache` (~1-2 min).
+> Static analysis tools (up to 15) run **directly on the GitHub Actions runner** -- no server or Docker image required. First run installs tools (~3-5 min), subsequent runs use `@actions/cache` (~1-2 min).
 
-> ⚠️ **FAILED status**: When the review finds critical issues, the Action calls `core.setFailed()` which fails the CI check. Add `continue-on-error: true` to the step for advisory-only (non-blocking) reviews. See the [full GitHub Action Guide](docs/github-action.md) for details.
+> **FAILED status**: When the review finds critical issues, the Action calls `core.setFailed()` which fails the CI check. Add `continue-on-error: true` to the step for advisory-only (non-blocking) reviews. See the [full GitHub Action Guide](docs/github-action.md) for details.
 
-📋 **[Full GitHub Action Guide](docs/github-action.md)** — Complete setup guide with provider examples, troubleshooting, and configuration reference.
+**[Full GitHub Action Guide](docs/github-action.md)** -- Complete setup guide with provider examples, troubleshooting, and configuration reference.
 
 ### Option 2: CLI
 
-Review local changes from your terminal. No server required.
+Review local changes from your terminal. No server required. Published on npm as `ghagga`.
 
 ```bash
 # Install
@@ -170,27 +172,27 @@ ghagga hooks install
 
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
-| `[path]` | — | `.` | Path to repository or subdirectory |
+| `[path]` | -- | `.` | Path to repository or subdirectory |
 | `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus` |
 | `--provider <provider>` | `-p` | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` |
-| `--model <model>` | — | Auto | Model identifier (or `GHAGGA_MODEL` env var) |
-| `--api-key <key>` | — | — | API key (or `GHAGGA_API_KEY` env var) |
+| `--model <model>` | -- | Auto | Model identifier (or `GHAGGA_MODEL` env var) |
+| `--api-key <key>` | -- | -- | API key (or `GHAGGA_API_KEY` env var) |
 | `--output <format>` | `-o` | `markdown` | Output format: `markdown`, `json`, `sarif` |
-| `--format <format>` | `-f` | — | **Deprecated** — use `--output`. Output format |
-| `--enhance` | — | — | AI-powered post-analysis enhancement (groups findings, adds fix suggestions) |
-| `--issue <target>` | — | — | Create (`new`) or update (`<number>`) a GitHub issue with review results |
-| `--enable-tool <name>` | — | — | Force-enable a specific tool |
-| `--disable-tool <name>` | — | — | Force-disable a specific tool |
-| `--list-tools` | — | — | Show all 15 tools with status |
-| `--no-memory` | — | — | Disable review memory |
-| `--staged` | — | — | Review only staged files (for pre-commit hook usage) |
-| `--quick` | — | — | Static analysis only, skip AI review (~5-10s vs ~30-60s) |
-| `--commit-msg <file>` | — | — | Validate commit message from file |
-| `--exit-on-issues` | — | — | Exit with code 1 if critical/high issues found |
-| `--memory-backend <type>` | — | `sqlite` | Memory backend: `sqlite` or `engram` |
-| `--plain` | — | — | Disable styled terminal output (auto-enabled in non-TTY/CI) |
+| `--format <format>` | `-f` | -- | **Deprecated** -- use `--output`. Output format |
+| `--enhance` | -- | -- | AI-powered post-analysis enhancement (groups findings, adds fix suggestions) |
+| `--issue <target>` | -- | -- | Create (`new`) or update (`<number>`) a GitHub issue with review results |
+| `--enable-tool <name>` | -- | -- | Force-enable a specific tool |
+| `--disable-tool <name>` | -- | -- | Force-disable a specific tool |
+| `--list-tools` | -- | -- | Show all 15 tools with status |
+| `--no-memory` | -- | -- | Disable review memory |
+| `--staged` | -- | -- | Review only staged files (for pre-commit hook usage) |
+| `--quick` | -- | -- | Static analysis only, skip AI review (~5-10s vs ~30-60s) |
+| `--commit-msg <file>` | -- | -- | Validate commit message from file |
+| `--exit-on-issues` | -- | -- | Exit with code 1 if critical/high issues found |
+| `--memory-backend <type>` | -- | `sqlite` | Memory backend: `sqlite` or `engram` |
+| `--plain` | -- | -- | Disable styled terminal output (auto-enabled in non-TTY/CI) |
 | `--config <path>` | `-c` | `.ghagga.json` | Path to config file |
-| `--verbose` | `-v` | — | Show real-time progress of each pipeline step |
+| `--verbose` | `-v` | -- | Show real-time progress of each pipeline step |
 
 #### Exit Codes
 
@@ -220,11 +222,11 @@ Use `--config` to point to a specific config file: `ghagga review --config .ghag
 
 Priority: CLI flags > config file > env vars > defaults.
 
-📋 **[Full CLI Guide](docs/cli.md)** — Complete setup guide with all commands, provider examples, and troubleshooting.
+**[Full CLI Guide](docs/cli.md)** -- Complete setup guide with all commands, provider examples, and troubleshooting.
 
-### Option 3: Self-Hosted (Docker)
+### Option 3: Self-Hosted (Docker on Coolify)
 
-Full deployment with PostgreSQL, memory, and dashboard support.
+Full deployment with PostgreSQL, Redis, BullMQ worker, and dashboard support. Designed for self-hosting on Coolify (Hetzner VPS) or any Docker-capable host.
 
 ```bash
 # Clone
@@ -239,9 +241,12 @@ cp .env.example .env
 docker compose up -d
 ```
 
-This starts:
-- **PostgreSQL 16** on port 5432 with health checks
-- **GHAGGA Server** (Hono) on port 3000 with static analysis tools pre-installed
+This starts 4 services:
+
+- **PostgreSQL 16** on port 5432 with health checks and persistent volume
+- **Redis 7** with AOF persistence for BullMQ message queue
+- **GHAGGA Server** (Hono) on port 3000 -- handles webhooks and API requests
+- **GHAGGA Worker** (BullMQ) -- processes review jobs asynchronously with configurable concurrency
 
 ---
 
@@ -250,9 +255,14 @@ This starts:
 ```mermaid
 graph TB
   subgraph Distribution["Distribution Layer"]
-    Server["Server<br/>Hono"]
+    Server["Server<br/>Hono + BullMQ"]
     Action["Action<br/>GitHub Action"]
     CLI["CLI"]
+  end
+
+  subgraph Worker["Async Worker"]
+    BullMQ["BullMQ Worker<br/>Review Jobs"]
+    DelegatedCI["Delegated CI<br/>Job Orchestration"]
   end
 
   subgraph Runner["Delegated Runner"]
@@ -261,22 +271,29 @@ graph TB
   end
 
   subgraph Core["@ghagga/core"]
-    SA["Static Analysis<br/>15-tool registry"]
-    Agents["AI Agents<br/>Simple · Workflow · Consensus"]
-    Memory["Memory<br/>Search · Persist · Privacy"]
+    SA["Static Analysis<br/>15+ tool registry"]
+    Agents["AI Agents<br/>Simple / Workflow / Consensus"]
+    Memory["Memory<br/>Search / Persist / Privacy"]
   end
 
   subgraph DB["@ghagga/db"]
-    PG["PostgreSQL<br/>+ tsvector"]
+    PG["PostgreSQL 16<br/>+ tsvector FTS"]
     Drizzle["Drizzle ORM<br/>+ Migrations"]
     Crypto["AES-256-GCM<br/>Encryption"]
   end
 
-  Server -- "workflow_dispatch" --> RunnerRepo
+  subgraph Queue["Message Queue"]
+    Redis["Redis 7<br/>BullMQ"]
+  end
+
+  Server -- "enqueue job" --> Redis
+  Redis -- "dequeue" --> BullMQ
+  BullMQ --> Core
+  BullMQ -- "dispatch" --> DelegatedCI
+  DelegatedCI -- "workflow_dispatch" --> RunnerRepo
   RunnerRepo --> RunnerTools
   RunnerTools -- "callback" --> Server
 
-  Server --> Core
   Action --> Core
   CLI --> Core
   Core --> DB
@@ -311,7 +328,7 @@ flowchart LR
   S8 --> Output["ReviewResult"]
 ```
 
-Each step degrades gracefully — if static analysis fails, or memory is unavailable, the pipeline continues with what it has.
+Each step degrades gracefully -- if static analysis fails, or memory is unavailable, the pipeline continues with what it has. If no LLM provider is configured, the pipeline returns static analysis results only.
 
 ---
 
@@ -354,7 +371,7 @@ flowchart LR
 
 ### Consensus Mode
 
-Multiple models review with assigned stances (for/against/neutral), then a weighted vote determines the outcome.
+Multiple models review with assigned stances (for/against/neutral), then a weighted vote determines the outcome. Uses proportional verbosity -- higher-confidence verdicts produce shorter summaries.
 
 ```mermaid
 flowchart LR
@@ -376,7 +393,7 @@ flowchart LR
 
 Layer 0 analysis runs **before** any LLM call. Zero tokens consumed. Known issues are injected into agent prompts so the AI focuses on logic, architecture, and things static analysis can't detect.
 
-GHAGGA supports **15 static analysis tools** across 5 categories, organized into two tiers:
+GHAGGA supports **15+ static analysis tools** across 5 categories, organized into two tiers:
 
 - **7 always-on tools** run on every review: Semgrep (security), Trivy (SCA), CPD (duplication), Gitleaks (secrets), ShellCheck (shell lint), markdownlint (docs lint), Lizard (complexity)
 - **8 auto-detect tools** activate when matching files are in the diff: Ruff (Python), Bandit (Python security), golangci-lint (Go), Biome (JS/TS), PMD (Java), Psalm (PHP), clippy (Rust), Hadolint (Docker)
@@ -385,7 +402,7 @@ GHAGGA supports **15 static analysis tools** across 5 categories, organized into
 
 ### Graceful Degradation
 
-Tools are optional. If a tool isn't installed, it's silently skipped. The review continues with whatever tools are available.
+Tools are optional. If a tool isn't installed, it's silently skipped. The review continues with whatever tools are available. When no LLM API key is configured, GHAGGA runs all applicable static analysis tools and posts the results without any LLM call (static-analysis-only fallback).
 
 | Distribution | Tools Available | How |
 |-------------|---------------|-----|
@@ -393,7 +410,7 @@ Tools are optional. If a tool isn't installed, it's silently skipped. The review
 | GitHub Action (node20) | All auto-installed + cached | `@actions/cache` on runner |
 | CLI | If installed locally | Uses local binaries |
 
-> The GitHub Action installs tools directly on the `ubuntu-latest` runner and caches binaries with `@actions/cache`. First run takes ~3-5 minutes (installation); subsequent runs use cache (~1-2 minutes). Tool failures degrade gracefully — the review continues with whatever tools succeed.
+> The GitHub Action installs tools directly on the `ubuntu-latest` runner and caches binaries with `@actions/cache`. First run takes ~3-5 minutes (installation); subsequent runs use cache (~1-2 minutes). Tool failures degrade gracefully -- the review continues with whatever tools succeed.
 
 ### Custom Semgrep Rules
 
@@ -411,17 +428,21 @@ GHAGGA ships with 20 security rules in `packages/core/src/tools/semgrep-rules.ym
 
 > SaaS mode only. GitHub Action and CLI run tools directly.
 
-The Render free tier (512MB RAM) can't run all static analysis tools simultaneously. GHAGGA solves this by delegating static analysis to **user-owned GitHub Actions runners** on public repos (unlimited free minutes, 7GB RAM).
+The self-hosted server delegates static analysis to **user-owned GitHub Actions runners** on public repos (unlimited free minutes, 7GB RAM), keeping the server container lightweight.
 
 ### How It Works
 
 1. **Setup**: User creates a public repo from the [`ghagga-runner-template`](https://github.com/JNZader/ghagga-runner-template)
-2. **Discovery**: Server checks if `{owner}/ghagga-runner` exists (convention-based, GET → 200/404)
+2. **Discovery**: Server checks if `{owner}/ghagga-runner` exists (convention-based, GET -> 200/404)
 3. **Secret**: Server sets a per-dispatch HMAC secret on the runner repo via GitHub API
 4. **Dispatch**: Server triggers `workflow_dispatch` with 10 inputs (repo, PR, SHA, callback URL, tools config)
 5. **Execution**: Runner installs/caches static analysis tools and runs analysis (~18 seconds)
 6. **Callback**: Runner POSTs results to `POST /runner/callback` with HMAC-SHA256 signature
 7. **Merge**: Server merges static findings with AI review and posts the combined comment
+
+### Delegated CI Orchestration
+
+GHAGGA includes a delegated CI system that auto-discovers CI jobs in target repositories and orchestrates their execution on user-owned runners. Jobs are classified as `safe/delegable` or `sensitive/no-delegable` based on configurable policies, with curated execution profiles (`node-lint`, `node-unit`, `python-lint`, `python-pytest`, `go-test`). Run state and results are tracked in the `delegated_ci_runs` database table.
 
 ### Security Model
 
@@ -429,7 +450,7 @@ Private repo code analyzed via public runner is protected by **4 security layers
 
 | Layer | Protection |
 |-------|-----------|
-| **Output suppression** | All tool output redirected to `/dev/null` — nothing in workflow logs |
+| **Output suppression** | All tool output redirected to `/dev/null` -- nothing in workflow logs |
 | **Log masking** | `::add-mask::` applied to all sensitive values |
 | **Log deletion** | Workflow run logs deleted via GitHub API after completion |
 | **Retention policy** | Runner repo configured with 1-day log retention |
@@ -438,13 +459,13 @@ Each dispatch generates a unique `callbackSecret` stored in an in-memory Map wit
 
 ### Graceful Fallback
 
-If no runner repo is discovered, the server falls back to **LLM-only review** (no static analysis). The review still works — it just skips Layer 0.
+If no runner repo is discovered, the server falls back to **LLM-only review** (no static analysis). The review still works -- it just skips Layer 0.
 
 ---
 
 ## Memory System
 
-GHAGGA learns from past reviews using PostgreSQL full-text search. Design patterns inspired by [Engram](https://github.com/Gentleman-Programming/engram) (session model, topic-key upserts, deduplication, privacy stripping) — implemented directly in PostgreSQL for multi-tenancy and scalability.
+GHAGGA learns from past reviews using PostgreSQL full-text search. Design patterns inspired by [Engram](https://github.com/Gentleman-Programming/engram) (session model, topic-key upserts, deduplication, privacy stripping) -- implemented directly in PostgreSQL for multi-tenancy and scalability.
 
 ### How It Works
 
@@ -501,15 +522,15 @@ React SPA deployed on GitHub Pages. Dark theme with GitHub-dark palette and purp
 | **Login** | GitHub OAuth Web Flow login with PAT fallback |
 | **Dashboard** | 4 stat cards (total reviews, pass rate, avg findings, avg time) + Recharts area chart with review trends |
 | **Reviews** | Filterable table with status badges, severity indicators, detail expansion, and pagination |
-| **Settings** | Per-repo or global settings — provider chain, review mode, tools, ignore patterns |
+| **Settings** | Per-repo or global settings -- provider chain, review mode, tools, ignore patterns |
 | **Global Settings** | Installation-wide provider chain and defaults that apply to all repos |
 | **Memory** | Observation list with severity badges, StatsBar (counts by type/project), session sidebar, delete/clear/purge actions (3-tier confirmation), ObservationDetailModal (PR links, file paths, revision count, relative timestamps), severity and sort filters |
 
 ### Tech Details
 
-- React 19 + TypeScript + Vite
+- React 19 + TypeScript + Vite 7
 - TanStack Query 5 for data fetching and caching
-- Recharts for data visualization
+- Recharts 3 for data visualization
 - Tailwind CSS 4 with dark theme
 - HashRouter for GitHub Pages compatibility (no server-side routing needed)
 - Code-split: lazy-loaded page components with vendor chunk splitting
@@ -526,8 +547,8 @@ The Memory page provides full CRUD management of review observations and session
 | **Tier 3** | Purge ALL observations | Type "DELETE ALL" + 5-second countdown | Wipe entire memory database |
 
 Additional management actions:
-- **Delete sessions** — remove individual memory sessions
-- **Clean up empty sessions** — remove sessions with no remaining observations
+- **Delete sessions** -- remove individual memory sessions
+- **Clean up empty sessions** -- remove sessions with no remaining observations
 
 The **ObservationDetailModal** shows full observation details including PR links, file paths, revision count, and relative timestamps. All destructive actions trigger **Toast notifications** confirming success or failure.
 
@@ -543,11 +564,12 @@ The **ObservationDetailModal** shows full observation details including PR links
 | **Privacy stripping** | 16 regex patterns remove API keys, tokens, passwords, and secrets before storing to memory |
 | **No secret logging** | Console outputs and error messages never contain sensitive data (verified by automated security tests) |
 | **BYOK model** | Users provide their own LLM API keys. GHAGGA never pays for or sees your LLM usage in plaintext. |
-| **Installation scoping** | API routes are scoped by GitHub installation ID — users can only access their own repos |
+| **Installation scoping** | API routes are scoped by GitHub installation ID -- users can only access their own repos |
+| **LLM timeout** | All LLM calls enforce a 60-second timeout to prevent hanging requests and resource exhaustion |
 | **HTTP timeouts** | All `fetch()` calls use `AbortSignal.timeout()` (10s/15s/5s) to prevent resource exhaustion |
 | **Env validation (fail-fast)** | Server validates all required environment variables at startup, exiting immediately with a clear error if any are missing |
 | **Error IDs** | All 500 responses include an `errorId` (8-char UUID) for support ticket correlation with server logs |
-| **Correlation IDs** | Each review generates a `reviewId` propagated through webhook → Inngest → pipeline → PR comment for end-to-end tracing |
+| **Correlation IDs** | Each review generates a `reviewId` propagated through webhook -> BullMQ worker -> pipeline -> PR comment for end-to-end tracing |
 | **FK cascade delete** | All foreign keys use `ON DELETE CASCADE` to prevent orphaned data when installations are removed |
 | **Dockerfile HEALTHCHECK** | Container health monitoring via Docker `HEALTHCHECK` instruction |
 
@@ -569,146 +591,182 @@ The test suite includes 14 dedicated security audit tests that verify:
 
 ```
 ghagga/
-├── packages/
-│   ├── core/                  # @ghagga/core — Review engine
-│   │   └── src/
-│   │       ├── pipeline.ts        # Main orchestrator (validate → analyze → agent → persist)
-│   │       ├── types.ts           # All TypeScript interfaces and types
-│   │       ├── index.ts           # Public API exports
-│   │       ├── agents/
-│   │       │   ├── prompts.ts     # All agent prompts (rescued from v1)
-│   │       │   ├── simple.ts      # Simple single-pass review
-│   │       │   ├── workflow.ts    # 5-specialist parallel workflow
-│   │       │   └── consensus.ts   # Multi-model voting
-│   │       ├── tools/
-│   │       │   ├── semgrep.ts     # Semgrep runner + JSON parser
-│   │       │   ├── trivy.ts       # Trivy runner + JSON parser
-│   │       │   ├── cpd.ts         # PMD/CPD runner + XML parser
-│   │       │   ├── runner.ts      # Parallel orchestrator
-│   │       │   └── semgrep-rules.yml  # 20 custom security rules
-│   │       ├── memory/
-│   │       │   ├── search.ts      # tsvector full-text search
-│   │       │   ├── persist.ts     # Observation extraction + dedup
-│   │       │   ├── context.ts     # Format observations as markdown
-│   │       │   └── privacy.ts     # Privacy stripping (16 patterns)
-│   │       ├── providers/
-│   │       │   ├── index.ts       # Vercel AI SDK provider factory
-│   │       │   └── fallback.ts    # Fallback chain with retry logic
-│   │       └── utils/
-│   │           ├── diff.ts        # Diff parsing, filtering, truncation
-│   │           ├── stack-detect.ts # File extension → tech stack
-│   │           └── token-budget.ts # Model-aware token allocation
-│   │
-│   └── db/                    # @ghagga/db — Database layer
-│       └── src/
-│           ├── schema.ts          # Drizzle table definitions (7 tables)
-│           ├── client.ts          # Database connection factory
-│           ├── crypto.ts          # AES-256-GCM encrypt/decrypt
-│           ├── queries.ts         # All typed query functions
-│           └── index.ts           # Re-exports
-│
-├── apps/
-│   ├── server/                # @ghagga/server — Hono API
-│   │   └── src/
-│   │       ├── index.ts           # Hono app (CORS, health, webhook, Inngest, API)
-│   │       ├── middleware/auth.ts  # GitHub PAT authentication middleware
-│   │       ├── inngest/           # Durable review function (7 steps + runner dispatch)
-│   │       ├── github/
-│   │       │   ├── client.ts      # GitHub API client (diff, comment, verify, JWT)
-│   │       │   └── runner.ts      # Runner discovery, secret setup, dispatch
-│   │       ├── routes/
-│   │       │   ├── runner-callback.ts # POST /runner/callback (HMAC verification)
-│   │       │   └── ...               # Webhook + 8 REST API endpoints
-│   │
-│   ├── dashboard/             # @ghagga/dashboard — React SPA
-│   │   └── src/
-│   │       ├── App.tsx            # HashRouter with lazy-loaded routes
-│   │       ├── lib/               # API hooks, auth context, utilities
-│   │       ├── components/        # Layout, Card, StatusBadge, SeverityBadge,
-│   │       │   │                  #   ConfirmDialog (3-tier), Toast, ObservationDetailModal
-│   │       │   ├── ConfirmDialog.tsx      # 3-tier destructive action confirmation
-│   │       │   ├── Toast.tsx              # Non-blocking success/error notifications
-│   │       │   └── ObservationDetailModal.tsx  # Full observation detail with PR links
-│   │       └── pages/             # Login, Dashboard, Reviews, Settings, Memory
-│   │
-│   ├── cli/                   # ghagga — CLI tool
-│   │   └── src/
-│   │       ├── index.ts           # Commander entry point
-│   │       ├── commands/
-│   │       │   ├── review.ts      # Git diff → pipeline → output
-│   │       │   ├── review-commit-msg.ts  # Commit message validation
-│   │       │   ├── hooks/         # Git hooks management
-│   │       │   │   ├── index.ts   # Hooks command group
-│   │       │   │   ├── install.ts # Install pre-commit/commit-msg hooks
-│   │       │   │   ├── uninstall.ts # Remove GHAGGA-managed hooks
-│   │       │   │   └── status.ts  # Show hook status
-│   │       │   └── memory/        # Memory management subcommands
-│   │       │       ├── list.ts    # List observations (with filters)
-│   │       │       ├── search.ts  # Full-text search across memory
-│   │       │       ├── show.ts    # Show observation/session detail
-│   │       │       ├── delete.ts  # Delete observation or session
-│   │       │       ├── stats.ts   # Memory statistics by type/repo
-│   │       │       ├── clear.ts   # Clear repo or all observations
-│   │       │       └── utils.ts   # Shared formatting helpers
-│   │       └── ui/                # Terminal UI components
-│   │           ├── tui.ts         # Interactive TUI renderer
-│   │           ├── theme.ts       # Color theme and styling
-│   │           └── format.ts      # Output formatters (table, json)
-│   │
-│   └── action/                # @ghagga/action — GitHub Action
-│       ├── action.yml             # Action definition (node20 runtime)
-│       ├── Dockerfile             # Docker variant with static analysis tools
-│       └── src/index.ts           # Fetch diff → pipeline → comment
-│
-├── templates/                 # Runner dispatch templates
-│   ├── ghagga-analysis.yml       # GitHub Actions workflow for static analysis
-│   └── ghagga-runner-README.md   # Template repo README
-│
-├── landing/                   # Marketing landing page
-│   └── index.html                # Static HTML (GitHub Pages)
-│
-├── docs/                      # Documentation site (Docsify)
-│   ├── index.html                # Docsify configuration
-│   ├── _sidebar.md               # Navigation structure
-│   └── *.md                      # Documentation pages
-│
-├── openspec/                  # Spec-Driven Development artifacts
-│   └── changes/ghagga-v2-rewrite/
-│       ├── proposal.md            # Full rewrite proposal
-│       ├── design.md              # Architecture decisions
-│       ├── tasks.md               # 10 phases, tracked tasks
-│       └── specs/                 # Detailed specs per module
-│
-├── Dockerfile                 # Multi-stage build (static analysis tools pre-installed)
-├── docker-compose.yml         # PostgreSQL + server for local dev
-├── render.yaml                # Render Blueprint for SaaS deployment
-├── .github/workflows/
-│   ├── ci.yml                 # Typecheck + build + test pipeline
-│   └── deploy-pages.yml       # Auto-deploy dashboard to GitHub Pages
-└── README.md
+|-- packages/
+|   |-- core/                  # ghagga-core -- Review engine
+|   |   +-- src/
+|   |       |-- pipeline.ts        # Main orchestrator (validate -> analyze -> agent -> persist)
+|   |       |-- types.ts           # All TypeScript interfaces and types
+|   |       |-- index.ts           # Public API exports
+|   |       |-- agents/
+|   |       |   |-- prompts.ts     # All agent prompts (rescued from v1)
+|   |       |   |-- simple.ts      # Simple single-pass review
+|   |       |   |-- workflow.ts    # 5-specialist parallel workflow
+|   |       |   +-- consensus.ts   # Multi-model voting with proportional verbosity
+|   |       |-- tools/
+|   |       |   |-- registry.ts    # 15+ tool plugin registry
+|   |       |   |-- orchestrator.ts # Parallel tool orchestration
+|   |       |   |-- execution.ts   # Tool binary execution
+|   |       |   |-- semgrep.ts     # Semgrep runner + JSON parser
+|   |       |   |-- trivy.ts       # Trivy runner + JSON parser
+|   |       |   |-- cpd.ts         # PMD/CPD runner + XML parser
+|   |       |   |-- runner.ts      # Parallel orchestrator
+|   |       |   |-- plugins/       # Auto-detect tool plugins (ruff, bandit, biome, etc.)
+|   |       |   +-- semgrep-rules.yml  # 20 custom security rules
+|   |       |-- memory/
+|   |       |   |-- search.ts      # tsvector full-text search
+|   |       |   |-- persist.ts     # Observation extraction + dedup
+|   |       |   |-- context.ts     # Format observations as markdown
+|   |       |   |-- privacy.ts     # Privacy stripping (16 patterns)
+|   |       |   |-- sqlite.ts      # SQLite memory backend (CLI/Action)
+|   |       |   +-- engram.ts      # Engram memory adapter
+|   |       |-- providers/
+|   |       |   |-- index.ts       # AI SDK 6 provider factory (6 providers)
+|   |       |   +-- fallback.ts    # Fallback chain with retry logic + 60s timeout
+|   |       +-- utils/
+|   |           |-- diff.ts        # Diff parsing, filtering, truncation
+|   |           |-- stack-detect.ts # File extension -> tech stack
+|   |           +-- token-budget.ts # Model-aware token allocation
+|   |
+|   |-- db/                    # ghagga-db -- Database layer
+|   |   +-- src/
+|   |       |-- schema.ts          # Drizzle table definitions (8 tables)
+|   |       |-- client.ts          # Database connection factory
+|   |       |-- crypto.ts          # AES-256-GCM encrypt/decrypt
+|   |       |-- queries.ts         # All typed query functions
+|   |       |-- migrate.ts         # Migration runner
+|   |       +-- index.ts           # Re-exports
+|   |
+|   +-- types/                 # @ghagga/types -- Shared API types
+|       +-- src/
+|           +-- index.ts           # Shared type definitions for dashboard <-> server
+|
+|-- apps/
+|   |-- server/                # @ghagga/server -- Hono API + BullMQ
+|   |   +-- src/
+|   |       |-- index.ts           # Hono app (CORS, health, webhook, API routes)
+|   |       |-- middleware/auth.ts  # GitHub PAT authentication middleware
+|   |       |-- queues/
+|   |       |   |-- review.ts      # BullMQ review queue + worker factory
+|   |       |   +-- delegated-ci.ts # BullMQ delegated CI queue
+|   |       |-- workers/
+|   |       |   +-- review.ts      # Worker entry point (review + delegated CI)
+|   |       |-- delegated-ci/
+|   |       |   |-- policy.ts      # CI job classification and policy
+|   |       |   +-- profiles.ts    # Curated execution profiles
+|   |       |-- github/
+|   |       |   |-- client.ts      # GitHub API client (diff, comment, verify, JWT)
+|   |       |   +-- runner.ts      # Runner discovery, secret setup, dispatch
+|   |       +-- routes/
+|   |           |-- webhook.ts     # GitHub webhook handler
+|   |           |-- api/           # REST API endpoints
+|   |           |-- oauth.ts       # GitHub OAuth flow
+|   |           +-- runner-callback.ts # POST /runner/callback (HMAC verification)
+|   |
+|   |-- dashboard/             # @ghagga/dashboard -- React SPA
+|   |   +-- src/
+|   |       |-- App.tsx            # HashRouter with lazy-loaded routes
+|   |       |-- lib/               # API hooks, auth context, utilities
+|   |       |-- components/        # Layout, Card, StatusBadge, SeverityBadge,
+|   |       |   |                  #   ConfirmDialog (3-tier), Toast, ObservationDetailModal
+|   |       |   |-- ConfirmDialog.tsx      # 3-tier destructive action confirmation
+|   |       |   |-- Toast.tsx              # Non-blocking success/error notifications
+|   |       |   +-- ObservationDetailModal.tsx  # Full observation detail with PR links
+|   |       +-- pages/             # Login, Dashboard, Reviews, Settings, Memory
+|   |
+|   |-- cli/                   # ghagga -- CLI tool (npm: ghagga)
+|   |   +-- src/
+|   |       |-- index.ts           # Commander entry point
+|   |       |-- commands/
+|   |       |   |-- review.ts      # Git diff -> pipeline -> output
+|   |       |   |-- review-commit-msg.ts  # Commit message validation
+|   |       |   |-- hooks/         # Git hooks management
+|   |       |   |   |-- index.ts   # Hooks command group
+|   |       |   |   |-- install.ts # Install pre-commit/commit-msg hooks
+|   |       |   |   |-- uninstall.ts # Remove GHAGGA-managed hooks
+|   |       |   |   +-- status.ts  # Show hook status
+|   |       |   +-- memory/        # Memory management subcommands
+|   |       |       |-- list.ts    # List observations (with filters)
+|   |       |       |-- search.ts  # Full-text search across memory
+|   |       |       |-- show.ts    # Show observation/session detail
+|   |       |       |-- delete.ts  # Delete observation or session
+|   |       |       |-- stats.ts   # Memory statistics by type/repo
+|   |       |       |-- clear.ts   # Clear repo or all observations
+|   |       |       +-- utils.ts   # Shared formatting helpers
+|   |       +-- ui/                # Terminal UI components
+|   |           |-- tui.ts         # Interactive TUI renderer
+|   |           |-- theme.ts       # Color theme and styling
+|   |           +-- format.ts      # Output formatters (table, json)
+|   |
+|   +-- action/                # @ghagga/action -- GitHub Action
+|       |-- action.yml             # Action definition (node20 runtime)
+|       |-- Dockerfile             # Docker variant with static analysis tools
+|       +-- src/index.ts           # Fetch diff -> pipeline -> comment
+|
+|-- templates/                 # Runner dispatch templates
+|   |-- ghagga-analysis.yml       # GitHub Actions workflow for static analysis
+|   +-- ghagga-runner-README.md   # Template repo README
+|
+|-- landing/                   # Marketing landing page
+|   +-- index.html                # Static HTML (GitHub Pages)
+|
+|-- docs/                      # Documentation site (Docsify)
+|   |-- index.html                # Docsify configuration
+|   |-- _sidebar.md               # Navigation structure
+|   +-- *.md                      # Documentation pages
+|
+|-- openspec/                  # Spec-Driven Development artifacts
+|   +-- changes/ghagga-v2-rewrite/
+|       |-- proposal.md            # Full rewrite proposal
+|       |-- design.md              # Architecture decisions
+|       |-- tasks.md               # 10 phases, tracked tasks
+|       +-- specs/                 # Detailed specs per module
+|
+|-- Dockerfile                 # Multi-stage build (static analysis tools pre-installed)
+|-- docker-compose.yml         # PostgreSQL + Redis + Server + Worker (Coolify stack)
+|-- .github/workflows/
+|   |-- ci.yml                 # Typecheck + build + test pipeline
+|   |-- deploy-pages.yml       # Auto-deploy dashboard to GitHub Pages
+|   |-- docker.yml             # Docker image build and push
+|   +-- publish.yml            # npm publish workflow
++-- README.md
 ```
 
 ---
 
 ## Configuration
 
-### Environment Variables
+### Environment Variables (Server)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Server only | PostgreSQL connection string |
-| `GITHUB_APP_ID` | Server only | GitHub App ID |
-| `GITHUB_PRIVATE_KEY` | Server only | Base64-encoded `.pem` file content |
-| `GITHUB_WEBHOOK_SECRET` | Server only | Secret configured in GitHub App webhook settings |
-| `INNGEST_EVENT_KEY` | Server only | Inngest event ingestion key |
-| `INNGEST_SIGNING_KEY` | Server only | Inngest webhook signing key |
-| `ENCRYPTION_KEY` | Server only | 64-character hex string for AES-256-GCM encryption |
-| `GHAGGA_MEMORY_BACKEND` | CLI only | Memory backend: `sqlite` (default) or `engram` |
-| `GHAGGA_ENGRAM_HOST` | CLI only | Engram server URL (default: `http://localhost:7437`) |
-| `GHAGGA_ENGRAM_TIMEOUT` | CLI only | Engram connection timeout in seconds (default: `5`) |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `REDIS_URL` | No | Redis connection string (default: `redis://redis:6379`) |
+| `REDIS_HOST` | No | Redis hostname (default: `redis` in Docker, `localhost` otherwise) |
+| `REDIS_PORT` | No | Redis port (default: `6379`) |
+| `WORKER_CONCURRENCY` | No | Number of concurrent BullMQ workers (default: `3`) |
+| `GITHUB_APP_ID` | Yes | GitHub App ID |
+| `GITHUB_PRIVATE_KEY` | Yes | Base64-encoded `.pem` file content |
+| `GITHUB_WEBHOOK_SECRET` | Yes | Secret configured in GitHub App webhook settings |
+| `GITHUB_CLIENT_ID` | Yes | GitHub OAuth App client ID (for dashboard login) |
+| `GITHUB_CLIENT_SECRET` | Yes | GitHub OAuth App client secret |
+| `ENCRYPTION_KEY` | Yes | 64-character hex string for AES-256-GCM encryption |
+| `STATE_SECRET` | No | Secret for OAuth state parameter signing |
+| `ANTHROPIC_API_KEY` | No | Default Anthropic API key (fallback when user has none) |
+| `OPENAI_API_KEY` | No | Default OpenAI API key (fallback when user has none) |
+| `GOOGLE_AI_API_KEY` | No | Default Google AI API key (fallback when user has none) |
 | `CALLBACK_TTL_MINUTES` | No | Runner callback secret TTL in minutes (default: `11`) |
 | `PORT` | No | Server port (default: `3000`) |
 | `NODE_ENV` | No | `development` or `production` |
+
+### Environment Variables (CLI)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GHAGGA_API_KEY` | No | LLM provider API key |
+| `GHAGGA_MODEL` | No | LLM model identifier |
+| `GHAGGA_MEMORY_BACKEND` | No | Memory backend: `sqlite` (default) or `engram` |
+| `GHAGGA_ENGRAM_HOST` | No | Engram server URL (default: `http://localhost:7437`) |
+| `GHAGGA_ENGRAM_TIMEOUT` | No | Engram connection timeout in seconds (default: `5`) |
 
 ### Default Models
 
@@ -736,9 +794,10 @@ The diff is automatically truncated to fit each model's context window using a 7
 
 ### Prerequisites
 
-- **Node.js** 22+
+- **Node.js** 20+ (22+ recommended)
 - **pnpm** 9+ (exact version managed via `packageManager` in package.json)
 - **PostgreSQL** 16+ (or use Docker)
+- **Redis** 7+ (or use Docker)
 
 ### Setup
 
@@ -748,15 +807,15 @@ git clone https://github.com/JNZader/ghagga.git
 cd ghagga
 pnpm install
 
-# Start PostgreSQL (via Docker)
-docker compose up postgres -d
+# Start PostgreSQL and Redis (via Docker)
+docker compose up postgres redis -d
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your credentials
 
 # Run database migrations
-pnpm --filter @ghagga/db db:push
+pnpm --filter ghagga-db db:push
 
 # Start development server
 pnpm --filter @ghagga/server dev
@@ -769,24 +828,24 @@ pnpm --filter @ghagga/dashboard dev
 
 ```bash
 pnpm exec turbo typecheck    # Typecheck all packages
-pnpm exec turbo build         # Build all packages
-pnpm exec turbo test          # Run all ~2,859 tests
+pnpm exec turbo build        # Build all packages
+pnpm exec turbo test         # Run all tests
 ```
 
 ### Test Suite
 
-~2,859 tests across 8 packages. All passing. 4 audit rounds completed (62 improvements).
+Comprehensive test suite with Vitest across all packages. All passing. 4 audit rounds completed (62 improvements).
 
-| Package | Tests | What's Covered |
-|---------|------:|----------------|
-| `@ghagga/core` | 1,328 | Pipeline, diff parsing, stack detection, token budget, prompts, agents (simple, workflow, consensus), fallback provider, privacy, memory (search, persist, context), static analysis tools (semgrep, trivy, cpd), parsers, security audit, review calibration, Engram memory adapter, circuit breaker |
-| `@ghagga/db` | 118 | Queries (CRUD, effective settings, provider chain), AES-256-GCM crypto (roundtrip, tamper, edge cases), index verification |
-| `@ghagga/server` | 523 | API routes (6 domain modules), webhook handlers, auth middleware + token cache, provider validation, Inngest review function, GitHub client, runner dispatch, callback verification, graceful shutdown, health checks, correlation IDs, error IDs, HTTP timeouts, env validation, Zod negative tests |
-| `ghagga` (CLI) | 272 | Config resolution, review command — input validation, output formatting, exit codes, git hooks (install, uninstall, status) |
-| `@ghagga/action` | 195 | Input parsing, output setting, comment formatting, error handling, tool installation, cache management |
-| `@ghagga/dashboard` | 342 | Component rendering, ErrorBoundary, a11y (7 axe tests), focus trap, virtual scrolling |
-| `@ghagga/types` | 24 | Shared API type exports and contract validation |
-| E2E | 14 | Webhook→pipeline→comment, CLI review flow, Action review flow |
+| Package | What's Covered |
+|---------|----------------|
+| `ghagga-core` | Pipeline, diff parsing, stack detection, token budget, prompts, agents (simple, workflow, consensus), fallback provider with 60s timeout, privacy, memory (search, persist, context, SQLite, Engram adapter), static analysis tools (semgrep, trivy, cpd, registry, orchestrator, execution), parsers, security audit, review calibration, circuit breaker |
+| `ghagga-db` | Queries (CRUD, effective settings, provider chain), AES-256-GCM crypto (roundtrip, tamper, edge cases), schema validation, index verification |
+| `@ghagga/server` | API routes (domain modules), webhook handlers, auth middleware + token cache, provider validation, BullMQ review queue + worker, delegated CI queue + policy, GitHub client, runner dispatch, callback verification, graceful shutdown, health checks, correlation IDs, error IDs, HTTP timeouts, env validation, Zod negative tests |
+| `ghagga` (CLI) | Config resolution, review command -- input validation, output formatting, exit codes, git hooks (install, uninstall, status), memory commands |
+| `@ghagga/action` | Input parsing, output setting, comment formatting, error handling, tool installation, cache management |
+| `@ghagga/dashboard` | Component rendering, ErrorBoundary, a11y (axe tests), focus trap, virtual scrolling |
+| `@ghagga/types` | Shared API type exports and contract validation |
+| E2E | Webhook -> BullMQ -> pipeline -> comment, CLI review flow, Action review flow |
 
 ---
 
@@ -795,27 +854,28 @@ pnpm exec turbo test          # Run all ~2,859 tests
 | Layer | Technology | Why |
 |-------|-----------|-----|
 | **Monorepo** | pnpm workspaces + Turborepo | Fast installs, parallel builds, caching |
-| **Language** | TypeScript 5.7 (strict mode) | Type safety across all packages |
+| **Language** | TypeScript ^5.9.0 (strict mode) | Type safety across all packages |
 | **Backend** | Hono 4 | Fastest TS framework, 14KB, runs anywhere |
 | **Database** | PostgreSQL 16 + Drizzle ORM | Zero-overhead SQL, tsvector FTS, plain TS migrations |
-| **AI** | Vercel AI SDK 6 | Multi-provider (6 providers), streaming, structured output, fallback chains |
-| **Async** | Inngest 3 | Zero-infra durable functions, step checkpointing, automatic retries |
-| **Frontend** | React 19 + Vite + Tailwind 4 | Lazy-loaded routes, vendor splitting, dark theme |
+| **Queue** | BullMQ 5 + Redis 7 | Reliable job processing, configurable concurrency, graceful shutdown |
+| **AI** | Vercel AI SDK 6 | Multi-provider (6 providers), streaming, structured output, fallback chains with 60s LLM timeout |
+| **Frontend** | React 19 + Vite 7 + Tailwind CSS 4 | Lazy-loaded routes, vendor splitting, dark theme |
 | **Data Fetching** | TanStack Query 5 | Caching, background refetching, optimistic updates |
-| **Charts** | Recharts 2 | Composable React chart components |
+| **Charts** | Recharts ^3.8.0 | Composable React chart components |
 | **UI Patterns** | ConfirmDialog (3-tier) + Toast | Tiered destructive action safety, non-blocking notifications |
-| **CLI** | Commander 13 | Standard CLI framework for Node.js |
+| **CLI** | Commander ^14.0.3 + @clack/prompts ^1.1.0 | Standard CLI framework with interactive prompts |
 | **Testing** | Vitest 4 | Fast, ESM-native, compatible with Jest API |
-| **Static Analysis** | 15-tool plugin registry | Security, SCA, duplication, linting, complexity — zero tokens |
+| **Static Analysis** | 15+ tool plugin registry | Security, SCA, duplication, linting, complexity -- zero tokens |
 | **Encryption** | Node.js `crypto` (AES-256-GCM) | No external dependencies for cryptographic operations |
+| **Deployment** | Coolify on Hetzner VPS | Self-hosted Docker orchestration with auto-deploy |
 
 ### Why These Choices
 
-- **Vercel AI SDK over LangGraph/agentlib**: GHAGGA's review flow is predictable (not a dynamic graph). AI SDK gives multi-provider support with less overhead. [agentlib](https://github.com/sammwy) was evaluated but is OpenAI only and has zero multi-agent support.
+- **Vercel AI SDK over LangGraph/agentlib**: GHAGGA's review flow is predictable (not a dynamic graph). AI SDK gives multi-provider support with less overhead.
 - **Hono over Express/Fastify**: 14KB, fastest benchmarks, runs on Node/Bun/Deno/Workers. Express is legacy, Fastify is heavier than needed.
 - **Drizzle over Prisma**: Zero-overhead SQL, no binary dependencies, supports raw tsvector operations.
 - **PostgreSQL memory over Engram**: Engram has great design patterns but no multi-tenancy, no auth, and is SQLite single-writer. We adopted its patterns (sessions, topic_key upserts, deduplication, privacy stripping) in PostgreSQL.
-- **Inngest over BullMQ**: Zero infrastructure (no Redis). 50k events/month free. Step-based checkpointing means LLM retries don't re-run static analysis.
+- **BullMQ + Redis over Inngest**: Full control over job processing, no external SaaS dependency, configurable concurrency, works seamlessly with self-hosted Coolify deployment. Redis provides reliable message persistence with AOF.
 
 ---
 
@@ -837,11 +897,11 @@ GHAGGA v2 is a **complete rewrite** from scratch. The v1 codebase (~11,000 lines
 
 | Component | Details |
 |-----------|---------|
-| **Agent prompts** | All system prompts (simple, 5 workflow specialists, synthesis, consensus stances) — battle-tested and well-designed |
+| **Agent prompts** | All system prompts (simple, 5 workflow specialists, synthesis, consensus stances) -- battle-tested and well-designed |
 | **Multi-provider abstraction** | Concept of supporting multiple LLM providers with fallback |
 | **Crypto module** | AES-256-GCM encryption pattern for API keys |
 | **Semgrep rules** | 20 custom security rules across 7+ languages |
-| **Stack detection** | File extension → tech stack mapping for review hints |
+| **Stack detection** | File extension -> tech stack mapping for review hints |
 | **Privacy stripping** | Pattern-based secret redaction before memory persistence |
 
 ### v1 vs v2 Comparison
@@ -850,16 +910,17 @@ GHAGGA v2 is a **complete rewrite** from scratch. The v1 codebase (~11,000 lines
 |--------|----|----|
 | Lines of code | ~11,000 | ~6,000 (implementation) + ~3,000 (tests) |
 | Runtime | Deno + Node.js + Python | Node.js only |
-| Database | Supabase (hosted PostgreSQL) | Any PostgreSQL (self-hosted or cloud) |
-| Deploy steps | 10+ manual steps | 3 env vars + `docker compose up` |
-| Test suite | 0 tests | ~2,859 tests |
-| Distribution modes | 1 (webhook only) | 3 (SaaS, Action, CLI) |
-| Static analysis | Semgrep only (via microservice) | 15 tools via plugin registry (direct binary execution) |
-| Memory | Partial (stored but never consumed) | Full pipeline (search → inject → review → extract → persist) |
+| Database | Supabase (hosted PostgreSQL) | PostgreSQL 16 (self-hosted via Coolify) |
+| Async processing | None (inline webhook) | BullMQ + Redis (configurable concurrency) |
+| Deploy steps | 10+ manual steps | `docker compose up -d` on Coolify |
+| Test suite | 0 tests | Comprehensive test suite with Vitest |
+| Distribution modes | 1 (webhook only) | 3 (Self-hosted, Action, CLI) |
+| Static analysis | Semgrep only (via microservice) | 15+ tools via plugin registry (direct binary execution) |
+| Memory | Partial (stored but never consumed) | Full pipeline (search -> inject -> review -> extract -> persist) |
 | Dead code | ~40% of codebase | 0% |
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT -- see [LICENSE](LICENSE) for details.

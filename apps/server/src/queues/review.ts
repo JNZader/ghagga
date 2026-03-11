@@ -1,7 +1,7 @@
 /**
  * Review Queue - BullMQ implementation for review processing.
  *
- * Replaces Inngest durable functions with BullMQ for self-hosted deployment.
+ * BullMQ durable job queue for self-hosted deployment.
  * Processes code review jobs asynchronously with retry support.
  */
 

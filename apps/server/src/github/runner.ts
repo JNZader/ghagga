@@ -473,7 +473,7 @@ export function buildDelegatedCiDescriptor(
  * descriptor. Returns the callbackId for correlation.
  *
  * This is the new generic dispatch path used by delegated CI (Phase 5
- * Inngest will call this). The existing `dispatchWorkflow()` for
+ * BullMQ worker will call this). The existing `dispatchWorkflow()` for
  * static analysis remains unchanged.
  */
 export async function dispatchRunnerWorkflow(

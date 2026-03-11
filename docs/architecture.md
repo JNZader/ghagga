@@ -66,13 +66,15 @@ ghagga/
 │   │       ├── memory/         # Search, persist, privacy, engram.ts
 │   │       ├── providers/      # Vercel AI SDK multi-provider
 │   │       └── utils/          # Diff parsing, stack detect, tokens
-│   └── db/             # @ghagga/db — Database layer
-│       └── src/
-│           ├── schema.ts       # Drizzle table definitions
-│           ├── crypto.ts       # AES-256-GCM encrypt/decrypt
-│           └── queries.ts      # Typed database queries
+│   ├── db/             # @ghagga/db — Database layer
+│   │   └── src/
+│   │       ├── schema.ts       # Drizzle table definitions
+│   │       ├── crypto.ts       # AES-256-GCM encrypt/decrypt
+│   │       └── queries.ts      # Typed database queries
+│   └── types/          # @ghagga/types — Shared TypeScript interfaces
 ├── apps/
-│   ├── server/         # Hono API (webhook + REST + Inngest + runner)
+│   ├── server/         # Hono API (webhook + REST + BullMQ + runner)
+│   │   └── Dockerfile  # Multi-stage with 15 static analysis tools
 │   ├── dashboard/      # React SPA (GitHub Pages)
 │   ├── cli/            # CLI tool (Commander.js)
 │   └── action/         # GitHub Action (node20 + Docker)
@@ -80,13 +82,12 @@ ghagga/
 ├── templates/                 # Runner dispatch templates
 │   ├── ghagga-analysis.yml       # GitHub Actions workflow for analysis
 │   └── ghagga-runner-README.md   # Template repo README
-├── Dockerfile          # Multi-stage with 15 static analysis tools
-└── docker-compose.yml  # PostgreSQL + server for local dev
+└── docker-compose.yml  # PostgreSQL + Redis + server + worker
 ```
 
-## Runner Architecture (SaaS Mode)
+## Runner Architecture
 
-In SaaS mode, static analysis is delegated to a user-owned GitHub Actions runner. The Render free tier (512MB RAM) can't run all 15 static analysis tools simultaneously, so tools run on the user's public `ghagga-runner` repo (7GB RAM, unlimited free minutes).
+Static analysis can be delegated to a **user-owned GitHub Actions runner** on public repos. This is useful for deployments where the server container has limited RAM, or when you want to offload analysis to GitHub's free compute (7GB RAM, unlimited free minutes for public repos).
 
 ```mermaid
 sequenceDiagram
@@ -122,9 +123,9 @@ Zero-overhead SQL with excellent TypeScript inference. No binary dependencies (u
 
 [Engram](https://github.com/Gentleman-Programming/engram) has great design patterns (session model, topic-key upserts, deduplication, privacy stripping) but no multi-tenancy, no auth, and is SQLite single-writer. We adopted its patterns directly in PostgreSQL.
 
-### Inngest over BullMQ
+### BullMQ over Inngest
 
-Zero infrastructure — no Redis server, no worker processes. 50k events/month free. Step-based checkpointing means LLM retries don't re-run static analysis. Fallback to sync execution if unavailable.
+GHAGGA migrated from Inngest (SaaS) to BullMQ + Redis (self-hosted). BullMQ eliminates the external SaaS dependency, runs entirely on infrastructure we control (Hetzner VPS), and uses Redis as a battle-tested job queue backend. No vendor lock-in, no event quotas, no external webhooks to register. The worker process runs alongside the API server in the same docker-compose stack.
 
 ### Provider Chain Filtering in SaaS Mode
 

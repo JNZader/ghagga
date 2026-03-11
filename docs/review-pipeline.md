@@ -112,12 +112,12 @@ The on-demand trigger uses the same pipeline and settings as automatic reviews. 
 
 **Who can trigger?** Anyone with a contribution relationship to the repository: owners, members, collaborators, contributors, and first-time contributors. Users with no association (`NONE`) or placeholder accounts (`MANNEQUIN`) are rejected.
 
-## SaaS Mode (Inngest)
+## Self-Hosted Mode (BullMQ)
 
-In server mode, the pipeline runs inside an Inngest durable function with step-based checkpointing. Each review generates a **correlation ID** (`reviewId`) that is propagated through all steps and included in the PR comment for end-to-end tracing.
+In server mode, the pipeline runs via a **BullMQ job queue** backed by Redis. When a webhook receives a PR event, it enqueues a job in the `review` queue. A separate worker process picks up the job and executes the review pipeline. Each review generates a **correlation ID** (`reviewId`) that is propagated through all steps and included in the PR comment for end-to-end tracing.
 
 ```typescript
-// Each step is checkpointed — retries resume from the last successful step
+// Webhook handler enqueues the job; worker executes the steps
 // All steps carry the reviewId for correlation
 Step 1: Fetch PR diff from GitHub API
 Step 2: Discover runner repo ({owner}/ghagga-runner)
@@ -130,7 +130,7 @@ Step 7: Post PR Comment + React to trigger
 
 All GitHub API calls use **HTTP timeouts** (`AbortSignal.timeout()`) to prevent resource exhaustion: 10s for standard API calls, 15s for diff fetching, 5s for keepalive pings.
 
-If an LLM call fails and retries, static analysis doesn't re-run. If memory search fails, the pipeline continues without it.
+BullMQ provides automatic retries with configurable backoff. If an LLM call fails, the job can be retried without re-running static analysis. If memory search fails, the pipeline continues without it.
 
 ## Graceful Degradation
 
@@ -140,4 +140,4 @@ If an LLM call fails and retries, static analysis doesn't re-run. If memory sear
 | Memory (PostgreSQL or SQLite) | No database connection | Skipped, no memory context |
 | LLM Provider | API error | Fallback chain attempts next provider |
 | Runner repo | Not configured | LLM-only review (no static analysis) |
-| Inngest | Not configured | Sync execution (no checkpointing) |
+| Redis/BullMQ | Not connected | Sync execution (no queue-based processing) |

@@ -18,7 +18,7 @@
 | **HTTP timeouts** | All `fetch()` calls use `AbortSignal.timeout()` (10s for API calls, 15s for diff fetching, 5s for keepalive) to prevent resource exhaustion |
 | **Env validation (fail-fast)** | Server validates all required environment variables at startup, exiting immediately with a clear error if any are missing |
 | **Error IDs** | All 500 responses include an `errorId` (8-char UUID) for support ticket correlation with server logs |
-| **Correlation IDs** | Each review generates a `reviewId` propagated through webhook → Inngest → pipeline → PR comment for end-to-end tracing |
+| **Correlation IDs** | Each review generates a `reviewId` propagated through webhook -> BullMQ -> pipeline -> PR comment for end-to-end tracing |
 | **FK cascade delete** | All foreign keys use `ON DELETE CASCADE` to prevent orphaned data when installations are removed |
 | **Idempotent migrations** | All SQL migrations use `IF NOT EXISTS` guards for safe re-execution |
 

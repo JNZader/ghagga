@@ -1,5 +1,13 @@
-# Render Blueprint — GHAGGA Server
-# Deploy: connect repo on Render Dashboard, or use render.yaml auto-detect.
+# =============================================================================
+# LEGACY: Render Blueprint -- GHAGGA Server
+# =============================================================================
+# NOTE: GHAGGA has migrated to self-hosted deployment via Coolify on Hetzner.
+# This file is kept for reference only. The recommended deployment method is
+# documented in docs/deployment.md.
+#
+# If you still want to deploy on Render, you will also need a Redis add-on
+# or external Redis instance for BullMQ job processing.
+# =============================================================================
 # Docs: https://docs.render.com/blueprint-spec
 
 services:
@@ -23,6 +31,8 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: REDIS_URL
+        sync: false
       - key: ENCRYPTION_KEY
         sync: false
       - key: GITHUB_APP_ID
@@ -31,10 +41,8 @@ services:
         sync: false
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
-      - key: INNGEST_EVENT_KEY
-        sync: false
-      - key: INNGEST_SIGNING_KEY
-        sync: false
+      - key: WORKER_CONCURRENCY
+        value: "3"
       - key: PORT
         value: "3000"
       - key: NODE_ENV

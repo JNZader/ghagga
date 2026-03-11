@@ -1,3 +1,14 @@
+# =============================================================================
+# LEGACY: Northflank Service Configuration -- GHAGGA Server
+# =============================================================================
+# NOTE: GHAGGA has migrated to self-hosted deployment via Coolify on Hetzner.
+# This file is kept for reference only. The recommended deployment method is
+# documented in docs/deployment.md.
+#
+# If you still want to deploy on Northflank, you will also need a Redis
+# add-on or external Redis instance for BullMQ job processing.
+# =============================================================================
+
 apiVersion: v1
 kind: Service
 metadata:
@@ -17,16 +28,16 @@ spec:
         value: "3000"
       - name: NODE_ENV
         value: "production"
-    # Variables sensibles (setear en dashboard o via CLI):
+    # Sensitive variables (set in dashboard or via CLI):
     # - DATABASE_URL
+    # - REDIS_URL
     # - GITHUB_APP_ID
     # - GITHUB_PRIVATE_KEY
     # - GITHUB_WEBHOOK_SECRET
     # - ENCRYPTION_KEY
     # - STATE_SECRET
     # - GITHUB_CLIENT_SECRET
-    # - INNGEST_EVENT_KEY (opcional)
-    # - INNGEST_SIGNING_KEY (opcional)
+    # - WORKER_CONCURRENCY (optional, default: 3)
     
   networking:
     ports:
@@ -53,7 +64,7 @@ spec:
     timeoutSeconds: 5
     failureThreshold: 3
     
-  # Auto-deploy desde GitHub
+  # Auto-deploy from GitHub
   build:
     type: github
     repo: JNZader/ghagga

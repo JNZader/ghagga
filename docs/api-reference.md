@@ -6,7 +6,7 @@ The GHAGGA server exposes a REST API for the dashboard, a webhook endpoint for G
 
 ## Authentication
 
-All `/api/*` endpoints (except `/api/inngest`) require a GitHub access token:
+All `/api/*` endpoints require a GitHub access token:
 
 ```
 Authorization: Bearer <github_token>
@@ -14,7 +14,7 @@ Authorization: Bearer <github_token>
 
 The server calls `GET https://api.github.com/user` to verify the token and resolve the user's identity. It then looks up which GHAGGA installations the user belongs to — only data from those installations is accessible.
 
-**Unauthenticated endpoints**: `/health`, `/webhook`, `/auth/*`, `/api/inngest`.
+**Unauthenticated endpoints**: `/health`, `/webhook`, `/auth/*`.
 
 ## Response Format
 
@@ -95,7 +95,7 @@ Receives GitHub webhook events. No bearer auth — validated via HMAC-SHA256 sig
 
 | Event | Actions | Behavior |
 |-------|---------|----------|
-| `pull_request` | `opened`, `synchronize`, `reopened` | Dispatches an AI review via Inngest |
+| `pull_request` | `opened`, `synchronize`, `reopened` | Enqueues an AI review job via BullMQ |
 | `installation` | `created` | Tracks the installation and its repositories |
 | `installation` | `deleted` | Deactivates the installation |
 | `installation_repositories` | `added`, `removed` | Updates tracked repositories |
@@ -155,7 +155,7 @@ Receives static analysis results from a delegated GitHub Actions runner. No bear
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `callbackId` | `string` | UUID matching the dispatch (links callback to waiting Inngest step) |
+| `callbackId` | `string` | UUID matching the dispatch (links callback to the waiting job) |
 | `findings` | `array` | Static analysis findings with source, severity, file, line, message |
 | `toolVersions` | `object` | Versions of tools that ran |
 | `durationMs` | `number` | Total analysis duration in milliseconds |
@@ -608,47 +608,6 @@ Updates the global settings for an installation. These settings apply to all rep
 { "data": { "message": "Installation settings updated" } }
 ```
 
-### Validate Provider API Key
-
-```
-POST /api/providers/validate
-```
-
-Tests whether a provider API key is valid. Returns the list of available models if the key works.
-
-**Body**:
-
-```json
-{
-  "provider": "anthropic",
-  "apiKey": "sk-ant-api03-..."
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen` |
-| `apiKey` | `string` | Conditional | Required for all providers except `github` (which uses the session token) |
-
-**Response** `200` (valid key):
-
-```json
-{
-  "valid": true,
-  "models": ["claude-sonnet-4-20250514", "claude-haiku-4-20250414"]
-}
-```
-
-**Response** `200` (invalid key):
-
-```json
-{
-  "valid": false,
-  "models": [],
-  "error": "Validation request failed"
-}
-```
-
 ### List Memory Sessions
 
 ```
@@ -811,13 +770,229 @@ Deletes all sessions that have zero observations.
 
 ---
 
-## Inngest Endpoint
+## CI Discovery
+
+### Discover CI Jobs
 
 ```
-GET|POST|PUT /api/inngest
+GET /api/repositories/:repoId/discover-ci
 ```
 
-Internal endpoint used by the [Inngest](https://www.inngest.com/) platform for durable function execution. Mounted **before** the auth middleware — Inngest uses its own request signing. Not intended for direct client access.
+Auto-discovers CI job configurations for a repository by analyzing its workflow files.
+
+**Path Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `repoId` | Numeric repository ID |
+
+**Response** `200`:
+
+```json
+{
+  "data": {
+    "jobs": [
+      {
+        "key": "lint",
+        "name": "Lint",
+        "profile": "node-lint",
+        "classification": "safe/delegable"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Delegated CI
+
+### List Delegated CI Runs
+
+```
+GET /api/delegated-ci/runs
+```
+
+Returns delegated CI runs, optionally filtered by repository or PR.
+
+**Query Parameters**:
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `repo` | No | Full repository name (`owner/repo`) |
+| `pr` | No | Pull request number |
+| `state` | No | Filter by state (e.g., `completed`, `failed`) |
+
+**Response** `200`:
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "repositoryId": 10,
+      "prNumber": 42,
+      "jobKey": "lint",
+      "classification": "safe/delegable",
+      "state": "completed",
+      "profile": "node-lint",
+      "summary": "Lint passed",
+      "createdAt": "2025-01-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Get Delegated CI Run
+
+```
+GET /api/delegated-ci/runs/:id
+```
+
+Returns a single delegated CI run by ID.
+
+**Path Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `id` | Numeric run ID |
+
+**Response** `200`:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "repositoryId": 10,
+    "prNumber": 42,
+    "jobKey": "lint",
+    "classification": "safe/delegable",
+    "state": "completed",
+    "reasonCode": null,
+    "reasonDetail": null,
+    "callbackId": "uuid-123",
+    "workflowRunId": 456,
+    "profile": "node-lint",
+    "summary": "Lint passed",
+    "resultSummary": { "exitCode": 0, "durationMs": 12000 },
+    "createdAt": "2025-01-15T12:00:00.000Z",
+    "updatedAt": "2025-01-15T12:01:00.000Z"
+  }
+}
+```
+
+**Response** `404`:
+
+```json
+{ "error": "Not found" }
+```
+
+---
+
+## Runner Management
+
+### Check Runner Status
+
+```
+GET /api/runner/status
+```
+
+Checks whether the authenticated user's `ghagga-runner` repo exists.
+
+**Response** `200`:
+
+```json
+{
+  "data": {
+    "exists": true,
+    "fullName": "user/ghagga-runner"
+  }
+}
+```
+
+### Create Runner Repository
+
+```
+POST /api/runner/create
+```
+
+Creates a `ghagga-runner` repo from the template repository in the user's account.
+
+**Response** `201`:
+
+```json
+{
+  "data": {
+    "fullName": "user/ghagga-runner",
+    "url": "https://github.com/user/ghagga-runner"
+  }
+}
+```
+
+**Response** `409`:
+
+```json
+{ "error": "Runner repository already exists" }
+```
+
+### Configure Runner Secret
+
+```
+POST /api/runner/configure-secret
+```
+
+Sets the callback secret on the user's runner repository.
+
+**Response** `200`:
+
+```json
+{ "data": { "message": "Secret configured" } }
+```
+
+---
+
+## Provider Validation
+
+### Validate Provider API Key
+
+```
+POST /api/providers/validate
+```
+
+Tests whether a provider API key is valid. Returns the list of available models if the key works.
+
+**Body**:
+
+```json
+{
+  "provider": "anthropic",
+  "apiKey": "sk-ant-api03-..."
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen` |
+| `apiKey` | `string` | Conditional | Required for all providers except `github` (which uses the session token) |
+
+**Response** `200` (valid key):
+
+```json
+{
+  "valid": true,
+  "models": ["claude-sonnet-4-20250514", "claude-haiku-4-20250414"]
+}
+```
+
+**Response** `200` (invalid key):
+
+```json
+{
+  "valid": false,
+  "models": [],
+  "error": "Validation request failed"
+}
+```
 
 ---
 
@@ -828,11 +1003,12 @@ Internal endpoint used by the [Inngest](https://www.inngest.com/) platform for d
 | `GET` | `/health` | No | Health check |
 | `POST` | `/webhook` | HMAC | GitHub webhook receiver |
 | `POST` | `/runner/callback` | HMAC | Runner static analysis results |
-| `GET` | `/auth/login` | No | Dashboard OAuth Web Flow — redirect to GitHub |
-| `GET` | `/auth/callback` | No | Dashboard OAuth Web Flow — exchange code and redirect back |
-| `POST` | `/auth/device/code` | No | OAuth Device Flow — request codes |
-| `POST` | `/auth/device/token` | No | OAuth Device Flow — poll for token |
+| `GET` | `/auth/login` | No | Dashboard OAuth Web Flow -- redirect to GitHub |
+| `GET` | `/auth/callback` | No | Dashboard OAuth Web Flow -- exchange code and redirect back |
+| `POST` | `/auth/device/code` | No | OAuth Device Flow -- request codes |
+| `POST` | `/auth/device/token` | No | OAuth Device Flow -- poll for token |
 | `GET` | `/api/repositories` | Bearer | List user's repositories |
+| `GET` | `/api/repositories/:repoId/discover-ci` | Bearer | Discover CI jobs for a repository |
 | `GET` | `/api/installations` | Bearer | List user's installations |
 | `GET` | `/api/reviews` | Bearer | List reviews (paginated) |
 | `GET` | `/api/stats` | Bearer | Review statistics |
@@ -841,6 +1017,11 @@ Internal endpoint used by the [Inngest](https://www.inngest.com/) platform for d
 | `GET` | `/api/installation-settings` | Bearer | Get global installation settings |
 | `PUT` | `/api/installation-settings` | Bearer | Update global installation settings |
 | `POST` | `/api/providers/validate` | Bearer | Validate provider API key |
+| `GET` | `/api/delegated-ci/runs` | Bearer | List delegated CI runs |
+| `GET` | `/api/delegated-ci/runs/:id` | Bearer | Get single delegated CI run |
+| `GET` | `/api/runner/status` | Bearer | Check runner repo exists |
+| `POST` | `/api/runner/create` | Bearer | Create runner from template |
+| `POST` | `/api/runner/configure-secret` | Bearer | Set callback secret on runner |
 | `GET` | `/api/memory/sessions` | Bearer | List memory sessions |
 | `GET` | `/api/memory/sessions/:id/observations` | Bearer | List session observations |
 | `DELETE` | `/api/memory/observations/:id` | Bearer | Delete a single observation |
@@ -848,4 +1029,3 @@ Internal endpoint used by the [Inngest](https://www.inngest.com/) platform for d
 | `DELETE` | `/api/memory/observations` | Bearer | Purge all observations for the installation |
 | `DELETE` | `/api/memory/sessions/:id` | Bearer | Delete a single session |
 | `DELETE` | `/api/memory/sessions/empty` | Bearer | Clean up empty sessions |
-| `*` | `/api/inngest` | Inngest | Inngest durable functions (internal) |

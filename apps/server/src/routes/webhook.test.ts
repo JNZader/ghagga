@@ -35,7 +35,7 @@ vi.mock('ghagga-db', () => ({
   createDelegatedCiRun: (...args: unknown[]) => mockCreateDelegatedCiRun(...args),
 }));
 
-// Mock BullMQ review queue (replaces Inngest)
+// Mock BullMQ review queue
 const mockEnqueueReview = vi.fn();
 vi.mock('../queues/review.js', () => ({
   enqueueReview: (...args: unknown[]) => mockEnqueueReview(...args),
