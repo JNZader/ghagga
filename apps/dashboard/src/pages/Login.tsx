@@ -13,6 +13,18 @@ export function Login() {
   // If navigated from AuthCallback with showPat flag, start with PAT form
   const showPatFromState = (location.state as { showPat?: boolean })?.showPat === true;
 
+  // Check if the user was redirected here due to an expired session
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('expired') === '1') {
+      setSessionExpired(true);
+      // Clean the URL parameter so it doesn't persist on refresh
+      navigate('/login', { replace: true });
+    }
+  }, [location.search, navigate]);
+
   // Server availability (determines which login method to show)
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [showPatFallback, setShowPatFallback] = useState(showPatFromState);
@@ -68,6 +80,13 @@ export function Login() {
 
         {/* Login Card */}
         <div className="rounded-lg border border-surface-border bg-surface-card p-6">
+          {/* ─── Session Expired Banner ──────────────────────── */}
+          {sessionExpired && (
+            <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+              Your session has expired. Please log in again.
+            </div>
+          )}
+
           {/* ─── Main Login (Web Flow or PAT when server offline) ─ */}
           {!showPatFallback && (
             <>
