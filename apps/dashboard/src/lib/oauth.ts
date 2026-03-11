@@ -13,14 +13,14 @@
  */
 
 /** GHAGGA GitHub App Client ID (public, overridable via env) */
-export const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID ?? 'Iv23liP63ERrlq0eMUfk';
+export const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID ?? '';
 
 /** Server base URL — used for OAuth and API endpoints */
 export const API_URL =
   import.meta.env.VITE_API_URL ||
   (window.location.hostname === 'localhost'
     ? 'http://localhost:3000'
-    : 'https://p01--ghagga--yl8qpjgjkht8.code.run');
+    : 'https://api.javierzader.com');
 
 // ─── Types ──────────────────────────────────────────────────────
 

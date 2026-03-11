@@ -9,7 +9,7 @@
  */
 
 /** GHAGGA GitHub App Client ID (public — safe to embed in code) */
-export const GITHUB_CLIENT_ID = 'Iv23liP63ERrlq0eMUfk';
+export const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? '';
 
 // ─── Types ──────────────────────────────────────────────────────
 
