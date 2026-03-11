@@ -52,6 +52,17 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
+    // ── Global 401 handler: clear token and redirect to login ──
+    if (response.status === 401) {
+      const currentPath = window.location.hash;
+      if (!currentPath.includes('/login') && !currentPath.includes('/auth/callback')) {
+        localStorage.removeItem('ghagga_token');
+        localStorage.removeItem('ghagga_user');
+        window.location.hash = '#/login?expired=1';
+      }
+      throw new ApiError(401, 'Session expired');
+    }
+
     let message = 'Request failed';
     try {
       const body = await response.text();

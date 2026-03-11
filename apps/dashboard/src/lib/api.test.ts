@@ -10,6 +10,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient, createWrapper } from '../test/test-utils';
 import {
+  ApiError,
   useBatchDeleteObservations,
   useBatchDeleteReviews,
   useCleanupEmptySessions,
@@ -38,16 +39,18 @@ import {
 // ─── Mocks ──────────────────────────────────────────────────────
 
 const mockFetch = vi.fn();
+let mockLocalStorage: Record<string, ReturnType<typeof vi.fn>>;
 
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch);
   mockFetch.mockReset();
   // Set up localStorage token (required by fetchApi)
-  vi.stubGlobal('localStorage', {
+  mockLocalStorage = {
     getItem: vi.fn().mockReturnValue('ghp_test-token'),
     setItem: vi.fn(),
     removeItem: vi.fn(),
-  });
+  };
+  vi.stubGlobal('localStorage', mockLocalStorage);
 });
 
 afterEach(() => {
@@ -62,6 +65,94 @@ function mockJsonResponse(data: unknown, status = 200) {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// fetchApi — Global 401 Handler
+// ═══════════════════════════════════════════════════════════════════
+
+describe('fetchApi 401 handler', () => {
+  it('clears token and redirects to login on 401', async () => {
+    // Simulate being on a dashboard page
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/dashboard' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // Should clear both token and user from localStorage
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('ghagga_token');
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('ghagga_user');
+
+    // Should redirect to login with expired param
+    expect(window.location.hash).toBe('#/login?expired=1');
+  });
+
+  it('does NOT redirect if already on login page', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/login' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // Should NOT have cleared localStorage (we're already on login)
+    expect(mockLocalStorage.removeItem).not.toHaveBeenCalled();
+
+    // Hash should remain on login (no redirect loop)
+    expect(window.location.hash).toBe('#/login');
+  });
+
+  it('does NOT redirect if on auth callback page', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/auth/callback?token=abc' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // Should NOT redirect
+    expect(mockLocalStorage.removeItem).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#/auth/callback?token=abc');
+  });
+
+  it('throws ApiError with status 401 and "Session expired" message', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/login' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toBeInstanceOf(ApiError);
+    expect((result.current.error as InstanceType<typeof ApiError>).status).toBe(401);
+    expect(result.current.error?.message).toBe('Session expired');
+  });
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // useRunnerStatus
