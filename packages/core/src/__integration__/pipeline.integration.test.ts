@@ -145,7 +145,7 @@ const STATIC_WITH_FINDINGS = {
   cpd: { status: 'skipped' as const, findings: [], executionTimeMs: 0 },
 };
 
-const SKIPPED_STATIC = {
+const _SKIPPED_STATIC = {
   semgrep: { status: 'skipped' as const, findings: [], error: 'not installed', executionTimeMs: 0 },
   trivy: { status: 'skipped' as const, findings: [], error: 'not installed', executionTimeMs: 0 },
   cpd: { status: 'skipped' as const, findings: [], error: 'not installed', executionTimeMs: 0 },

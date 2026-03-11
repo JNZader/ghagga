@@ -4,7 +4,7 @@
 // reasons, and the normalizePolicy helper.
 
 import { describe, expect, it } from 'vitest';
-import type { DelegatedCiJobPolicy, DelegatedCiPolicy, JobEvaluationResult } from './policy.js';
+import type { DelegatedCiJobPolicy, DelegatedCiPolicy } from './policy.js';
 import { evaluateAllJobs, evaluateJob, normalizePolicy } from './policy.js';
 import { EXECUTION_PROFILES, getProfile, isSupportedProfile } from './profiles.js';
 
@@ -209,7 +209,7 @@ describe('evaluateJob', () => {
         jobs: [
           makeJob({
             profile: 'node-lint',
-            maxDurationMinutes: profile!.maxTimeoutMinutes + 1,
+            maxDurationMinutes: profile?.maxTimeoutMinutes + 1,
           }),
         ],
       });
@@ -219,7 +219,7 @@ describe('evaluateJob', () => {
         approved: false,
         reasonCode: 'duration_exceeded',
       });
-      expect(result.reasonDetail).toContain(String(profile!.maxTimeoutMinutes));
+      expect(result.reasonDetail).toContain(String(profile?.maxTimeoutMinutes));
     });
 
     it('allows maxDurationMinutes equal to profile limit', () => {
@@ -228,7 +228,7 @@ describe('evaluateJob', () => {
         jobs: [
           makeJob({
             profile: 'node-lint',
-            maxDurationMinutes: profile!.maxTimeoutMinutes,
+            maxDurationMinutes: profile?.maxTimeoutMinutes,
           }),
         ],
       });
@@ -565,8 +565,8 @@ describe('normalizePolicy', () => {
   it('normalizes empty object with safe defaults', () => {
     const result = normalizePolicy({});
     expect(result).not.toBeNull();
-    expect(result!.enabled).toBe(false);
-    expect(result!.jobs).toEqual([]);
+    expect(result?.enabled).toBe(false);
+    expect(result?.jobs).toEqual([]);
   });
 
   // ── Full valid policy ──
@@ -591,38 +591,38 @@ describe('normalizePolicy', () => {
 
     const result = normalizePolicy(raw);
     expect(result).not.toBeNull();
-    expect(result!.enabled).toBe(true);
-    expect(result!.allowManualTrigger).toBe(true);
-    expect(result!.allowPullRequestTrigger).toBe(false);
-    expect(result!.jobs).toHaveLength(1);
-    expect(result!.jobs[0].jobKey).toBe('lint');
+    expect(result?.enabled).toBe(true);
+    expect(result?.allowManualTrigger).toBe(true);
+    expect(result?.allowPullRequestTrigger).toBe(false);
+    expect(result?.jobs).toHaveLength(1);
+    expect(result?.jobs[0].jobKey).toBe('lint');
   });
 
   // ── Partial policy ──
 
   it('defaults enabled to false when missing', () => {
     const result = normalizePolicy({ jobs: [] });
-    expect(result!.enabled).toBe(false);
+    expect(result?.enabled).toBe(false);
   });
 
   it('defaults enabled to false for non-boolean value', () => {
     const result = normalizePolicy({ enabled: 'yes', jobs: [] });
-    expect(result!.enabled).toBe(false);
+    expect(result?.enabled).toBe(false);
   });
 
   it('omits allowManualTrigger when not boolean', () => {
     const result = normalizePolicy({ enabled: true, allowManualTrigger: 'yes', jobs: [] });
-    expect(result!.allowManualTrigger).toBeUndefined();
+    expect(result?.allowManualTrigger).toBeUndefined();
   });
 
   it('defaults jobs to empty array when missing', () => {
     const result = normalizePolicy({ enabled: true });
-    expect(result!.jobs).toEqual([]);
+    expect(result?.jobs).toEqual([]);
   });
 
   it('defaults jobs to empty array for non-array value', () => {
     const result = normalizePolicy({ enabled: true, jobs: 'not-an-array' });
-    expect(result!.jobs).toEqual([]);
+    expect(result?.jobs).toEqual([]);
   });
 
   // ── Job normalization ──
@@ -632,7 +632,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test' }],
     });
-    expect(result!.jobs[0].classification).toBe('sensitive/no-delegable');
+    expect(result?.jobs[0].classification).toBe('sensitive/no-delegable');
   });
 
   it('defaults job enabled to false (safe default)', () => {
@@ -640,7 +640,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test' }],
     });
-    expect(result!.jobs[0].enabled).toBe(false);
+    expect(result?.jobs[0].enabled).toBe(false);
   });
 
   it('defaults job allowArtifacts to false', () => {
@@ -648,7 +648,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test' }],
     });
-    expect(result!.jobs[0].allowArtifacts).toBe(false);
+    expect(result?.jobs[0].allowArtifacts).toBe(false);
   });
 
   it('defaults job allowCache to false', () => {
@@ -656,7 +656,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test' }],
     });
-    expect(result!.jobs[0].allowCache).toBe(false);
+    expect(result?.jobs[0].allowCache).toBe(false);
   });
 
   it('uses jobKey as displayName when displayName is missing', () => {
@@ -664,7 +664,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'my-test' }],
     });
-    expect(result!.jobs[0].displayName).toBe('my-test');
+    expect(result?.jobs[0].displayName).toBe('my-test');
   });
 
   it('defaults jobKey to "unknown" when missing', () => {
@@ -672,7 +672,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{}],
     });
-    expect(result!.jobs[0].jobKey).toBe('unknown');
+    expect(result?.jobs[0].jobKey).toBe('unknown');
   });
 
   it('preserves valid classification value', () => {
@@ -680,7 +680,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test', classification: 'safe/delegable' }],
     });
-    expect(result!.jobs[0].classification).toBe('safe/delegable');
+    expect(result?.jobs[0].classification).toBe('safe/delegable');
   });
 
   it('filters out null entries in jobs array', () => {
@@ -688,8 +688,8 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [null, { jobKey: 'valid' }, undefined, 42, 'string'],
     });
-    expect(result!.jobs).toHaveLength(1);
-    expect(result!.jobs[0].jobKey).toBe('valid');
+    expect(result?.jobs).toHaveLength(1);
+    expect(result?.jobs[0].jobKey).toBe('valid');
   });
 
   it('normalizes allowArtifacts array by filtering non-string values', () => {
@@ -697,7 +697,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test', allowArtifacts: ['junit', 42, null, 'coverage-summary'] }],
     });
-    expect(result!.jobs[0].allowArtifacts).toEqual(['junit', 'coverage-summary']);
+    expect(result?.jobs[0].allowArtifacts).toEqual(['junit', 'coverage-summary']);
   });
 
   it('skips maxDurationMinutes when not a positive number', () => {
@@ -705,7 +705,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test', maxDurationMinutes: -5 }],
     });
-    expect(result!.jobs[0].maxDurationMinutes).toBeUndefined();
+    expect(result?.jobs[0].maxDurationMinutes).toBeUndefined();
   });
 
   it('preserves maxDurationMinutes when valid', () => {
@@ -713,7 +713,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test', maxDurationMinutes: 15 }],
     });
-    expect(result!.jobs[0].maxDurationMinutes).toBe(15);
+    expect(result?.jobs[0].maxDurationMinutes).toBe(15);
   });
 
   it('skips rationale when not a string', () => {
@@ -721,7 +721,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test', rationale: 123 }],
     });
-    expect(result!.jobs[0].rationale).toBeUndefined();
+    expect(result?.jobs[0].rationale).toBeUndefined();
   });
 
   it('preserves rationale when valid', () => {
@@ -729,7 +729,7 @@ describe('normalizePolicy', () => {
       enabled: true,
       jobs: [{ jobKey: 'test', rationale: 'Only runs linting, no secrets needed' }],
     });
-    expect(result!.jobs[0].rationale).toBe('Only runs linting, no secrets needed');
+    expect(result?.jobs[0].rationale).toBe('Only runs linting, no secrets needed');
   });
 });
 

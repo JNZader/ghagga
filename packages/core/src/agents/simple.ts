@@ -6,7 +6,6 @@
  * would be overkill.
  */
 
-import { generateText } from 'ai';
 import { createModel } from '../providers/index.js';
 import type {
   FindingSeverity,
@@ -18,6 +17,7 @@ import type {
   ReviewResult,
   ReviewStatus,
 } from '../types.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
@@ -173,14 +173,35 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     message: `Calling ${provider}/${model} for single-pass review...`,
   });
 
-  const result = await generateText({
-    model: languageModel,
-    system,
-    prompt,
-    temperature: 0.3,
-  });
+  const result = await generateTextWithTimeout(
+    {
+      model: languageModel,
+      system,
+      prompt,
+      temperature: 0.3,
+    },
+    { provider, model },
+  );
 
   const executionTimeMs = Date.now() - startTime;
+
+  // Timeout: fall back to empty AI result (static analysis still applies)
+  if (result === null) {
+    emit({
+      step: 'simple-done',
+      message: `LLM timed out — falling back to static-analysis-only results`,
+    });
+
+    return parseReviewResponse(
+      'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: LLM call timed out. Only static analysis results are available.\nFINDINGS:\n',
+      provider,
+      model,
+      0,
+      executionTimeMs,
+      memoryContext,
+    );
+  }
+
   const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
 
   emit({

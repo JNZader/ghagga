@@ -286,7 +286,7 @@ async function handlePullRequest(
     const rawPolicy = await getDelegatedCiPolicy(db, repo.id);
     const normalizedPolicy = normalizePolicy(rawPolicy);
 
-    if (normalizedPolicy && normalizedPolicy.enabled) {
+    if (normalizedPolicy?.enabled) {
       const evaluations = evaluateAllJobs(normalizedPolicy);
       const approvedJobs = evaluations.filter((e) => e.approved);
       const rejectedJobs = evaluations.filter((e) => !e.approved);

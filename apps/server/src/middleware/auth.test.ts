@@ -760,7 +760,7 @@ describe('token cache — periodic cleanup', () => {
     expect(tokenCache.size).toBe(1);
     expect(tokenCache.has('expired')).toBe(false);
     expect(tokenCache.has('valid')).toBe(true);
-    expect(tokenCache.get('valid')!.user.login).toBe('valid-user');
+    expect(tokenCache.get('valid')?.user.login).toBe('valid-user');
   });
 
   it('cleanupInterval is a valid timer with .unref() applied', () => {

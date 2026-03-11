@@ -65,13 +65,13 @@ describe('buildSarif', () => {
       'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
     );
     expect(sarif.runs).toHaveLength(1);
-    expect(sarif.runs[0]!.results).toEqual([]);
-    expect(sarif.runs[0]!.tool.driver.rules).toEqual([]);
+    expect(sarif.runs[0]?.results).toEqual([]);
+    expect(sarif.runs[0]?.tool.driver.rules).toEqual([]);
   });
 
   it('tool driver info has correct name, version, and informationUri', () => {
     const sarif = buildSarif(mockResult(), '2.5.0');
-    const driver = sarif.runs[0]!.tool.driver;
+    const driver = sarif.runs[0]?.tool.driver;
 
     expect(driver.name).toBe('ghagga');
     expect(driver.version).toBe('2.5.0');
@@ -89,8 +89,8 @@ describe('buildSarif', () => {
     expect(result.message.text).toBe('Hardcoded secret detected');
     expect(result.level).toBe('error');
     expect(result.locations).toHaveLength(1);
-    expect(result.locations[0]!.physicalLocation.artifactLocation.uri).toBe('src/api.ts');
-    expect(result.locations[0]!.physicalLocation.region?.startLine).toBe(42);
+    expect(result.locations[0]?.physicalLocation.artifactLocation.uri).toBe('src/api.ts');
+    expect(result.locations[0]?.physicalLocation.region?.startLine).toBe(42);
   });
 
   // ── Severity mapping ──────────────────────────────────────────
@@ -98,46 +98,46 @@ describe('buildSarif', () => {
   it('severity mapping — critical → error', () => {
     const finding: ReviewFinding = { ...semgrepFinding, severity: 'critical' };
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    expect(sarif.runs[0]!.results[0]!.level).toBe('error');
+    expect(sarif.runs[0]?.results[0]?.level).toBe('error');
   });
 
   it('severity mapping — high → error', () => {
     const finding: ReviewFinding = { ...semgrepFinding, severity: 'high' };
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    expect(sarif.runs[0]!.results[0]!.level).toBe('error');
+    expect(sarif.runs[0]?.results[0]?.level).toBe('error');
   });
 
   it('severity mapping — medium → warning', () => {
     const finding: ReviewFinding = { ...semgrepFinding, severity: 'medium' };
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    expect(sarif.runs[0]!.results[0]!.level).toBe('warning');
+    expect(sarif.runs[0]?.results[0]?.level).toBe('warning');
   });
 
   it('severity mapping — low → note', () => {
     const finding: ReviewFinding = { ...semgrepFinding, severity: 'low' };
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    expect(sarif.runs[0]!.results[0]!.level).toBe('note');
+    expect(sarif.runs[0]?.results[0]?.level).toBe('note');
   });
 
   it('severity mapping — info → note', () => {
     const finding: ReviewFinding = { ...semgrepFinding, severity: 'info' };
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    expect(sarif.runs[0]!.results[0]!.level).toBe('note');
+    expect(sarif.runs[0]?.results[0]?.level).toBe('note');
   });
 
   // ── Location handling ─────────────────────────────────────────
 
   it('finding with line number → region with startLine', () => {
     const sarif = buildSarif(mockResult([semgrepFinding]), '1.0.0');
-    const location = sarif.runs[0]!.results[0]!.locations[0]!;
+    const location = sarif.runs[0]?.results[0]?.locations[0]!;
 
     expect(location.physicalLocation.region).toBeDefined();
-    expect(location.physicalLocation.region!.startLine).toBe(42);
+    expect(location.physicalLocation.region?.startLine).toBe(42);
   });
 
   it('finding without line → no region property on physicalLocation', () => {
     const sarif = buildSarif(mockResult([trivyFinding]), '1.0.0');
-    const location = sarif.runs[0]!.results[0]!.locations[0]!;
+    const location = sarif.runs[0]?.results[0]?.locations[0]!;
 
     expect(location.physicalLocation.artifactLocation.uri).toBe('package.json');
     expect(location.physicalLocation.region).toBeUndefined();
@@ -181,11 +181,11 @@ describe('buildSarif', () => {
 
     expect(run.results).toHaveLength(2);
     expect(run.tool.driver.rules).toHaveLength(1);
-    expect(run.tool.driver.rules[0]!.id).toBe('semgrep/security');
+    expect(run.tool.driver.rules[0]?.id).toBe('semgrep/security');
 
     // Both results reference the same ruleId
-    expect(run.results[0]!.ruleId).toBe('semgrep/security');
-    expect(run.results[1]!.ruleId).toBe('semgrep/security');
+    expect(run.results[0]?.ruleId).toBe('semgrep/security');
+    expect(run.results[1]?.ruleId).toBe('semgrep/security');
   });
 
   // ── Edge cases ────────────────────────────────────────────────
@@ -201,7 +201,7 @@ describe('buildSarif', () => {
     };
 
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    const result = sarif.runs[0]!.results[0]!;
+    const result = sarif.runs[0]?.results[0]!;
 
     expect(result.message.text).toBe('Unescaped 日本語 string with émojis 🚀 and «special» chars');
 
@@ -224,7 +224,7 @@ describe('buildSarif', () => {
     };
 
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    const ruleId = sarif.runs[0]!.results[0]!.ruleId;
+    const ruleId = sarif.runs[0]?.results[0]?.ruleId;
 
     expect(ruleId).toBe('trivy/dependency-vulnerability');
   });

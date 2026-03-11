@@ -167,11 +167,11 @@ describe('runLocalAnalysis with registry-driven orchestrator', () => {
 
     // ruff should be force-enabled
     expect(result).toHaveProperty('ruff');
-    const ruffResult = result['ruff'] as ToolResult;
+    const ruffResult = result.ruff as ToolResult;
     expect(ruffResult).toBeDefined();
 
     // gitleaks should be disabled (skipped via legacy key guarantee)
-    const _gitleaksResult = result['gitleaks'] as ToolResult | undefined;
+    const _gitleaksResult = result.gitleaks as ToolResult | undefined;
     // gitleaks shouldn't have run as a tool
     // It may be absent or skipped — depends on legacy key handling
   });

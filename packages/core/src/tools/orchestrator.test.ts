@@ -12,8 +12,8 @@
  * - Result aggregation
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReviewFinding, ToolResult } from '../types.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { ReviewFinding } from '../types.js';
 import { runTools } from './orchestrator.js';
 import type { ActivatedTool } from './resolve.js';
 import type { ExecutionContext, RawToolOutput, ToolDefinition } from './types.js';
@@ -103,20 +103,20 @@ describe('runTools', () => {
 
       const results = await runTools(ctx, tools, '/repo', ['src/app.ts'], 600_000);
 
-      expect(results['semgrep']).toBeDefined();
-      expect(results['semgrep']?.status).toBe('success');
-      expect(results['semgrep']?.findings).toEqual(findings);
+      expect(results.semgrep).toBeDefined();
+      expect(results.semgrep?.status).toBe('success');
+      expect(results.semgrep?.findings).toEqual(findings);
 
-      expect(results['trivy']).toBeDefined();
-      expect(results['trivy']?.status).toBe('success');
-      expect(results['trivy']?.findings).toEqual([]);
+      expect(results.trivy).toBeDefined();
+      expect(results.trivy?.status).toBe('success');
+      expect(results.trivy?.findings).toEqual([]);
     });
 
     it('records execution time', async () => {
       const tools = [makeActivated({ name: 'semgrep' })];
       const results = await runTools(ctx, tools, '/repo', [], 600_000);
 
-      expect(results['semgrep']?.executionTimeMs).toBeGreaterThanOrEqual(0);
+      expect(results.semgrep?.executionTimeMs).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -140,11 +140,11 @@ describe('runTools', () => {
 
       const results = await runTools(ctx, tools, '/repo', [], 600_000);
 
-      expect(results['semgrep']?.status).toBe('error');
-      expect(results['semgrep']?.error).toContain('Segmentation fault');
-      expect(results['trivy']?.status).toBe('success');
-      expect(results['trivy']?.findings).toHaveLength(1);
-      expect(results['cpd']?.status).toBe('success');
+      expect(results.semgrep?.status).toBe('error');
+      expect(results.semgrep?.error).toContain('Segmentation fault');
+      expect(results.trivy?.status).toBe('success');
+      expect(results.trivy?.findings).toHaveLength(1);
+      expect(results.cpd?.status).toBe('success');
     });
 
     it('install failure produces error status but others run', async () => {
@@ -160,9 +160,9 @@ describe('runTools', () => {
 
       const results = await runTools(ctx, tools, '/repo', [], 600_000);
 
-      expect(results['semgrep']?.status).toBe('error');
-      expect(results['semgrep']?.error).toContain('Network timeout');
-      expect(results['trivy']?.status).toBe('success');
+      expect(results.semgrep?.status).toBe('error');
+      expect(results.semgrep?.error).toContain('Network timeout');
+      expect(results.trivy?.status).toBe('success');
     });
   });
 
@@ -184,9 +184,9 @@ describe('runTools', () => {
 
       const results = await runTools(ctx, tools, '/repo', [], 600_000);
 
-      expect(results['semgrep']?.status).toBe('error');
-      expect(results['semgrep']?.error).toBe('timeout');
-      expect(results['semgrep']?.findings).toEqual([]);
+      expect(results.semgrep?.status).toBe('error');
+      expect(results.semgrep?.error).toBe('timeout');
+      expect(results.semgrep?.findings).toEqual([]);
     });
   });
 
@@ -206,8 +206,8 @@ describe('runTools', () => {
       const results = await runTools(ctx, tools, '/repo', [], 600_000);
 
       // Parse error is caught internally — tool still reports "success" because run succeeded
-      expect(results['semgrep']?.status).toBe('success');
-      expect(results['semgrep']?.findings).toEqual([]);
+      expect(results.semgrep?.status).toBe('success');
+      expect(results.semgrep?.findings).toEqual([]);
     });
   });
 
@@ -225,15 +225,15 @@ describe('runTools', () => {
       const results = await runTools(ctx, tools, '/repo', [], 600_000);
 
       // gitleaks ran
-      expect(results['gitleaks']?.status).toBe('success');
+      expect(results.gitleaks?.status).toBe('success');
 
       // Legacy keys always present as skipped
-      expect(results['semgrep']).toBeDefined();
-      expect(results['semgrep']?.status).toBe('skipped');
-      expect(results['trivy']).toBeDefined();
-      expect(results['trivy']?.status).toBe('skipped');
-      expect(results['cpd']).toBeDefined();
-      expect(results['cpd']?.status).toBe('skipped');
+      expect(results.semgrep).toBeDefined();
+      expect(results.semgrep?.status).toBe('skipped');
+      expect(results.trivy).toBeDefined();
+      expect(results.trivy?.status).toBe('skipped');
+      expect(results.cpd).toBeDefined();
+      expect(results.cpd?.status).toBe('skipped');
     });
 
     it('does not overwrite legacy keys if they already ran', async () => {
@@ -247,8 +247,8 @@ describe('runTools', () => {
 
       const results = await runTools(ctx, tools, '/repo', [], 600_000);
 
-      expect(results['semgrep']?.status).toBe('success');
-      expect(results['semgrep']?.findings).toEqual(findings);
+      expect(results.semgrep?.status).toBe('success');
+      expect(results.semgrep?.findings).toEqual(findings);
     });
   });
 
@@ -322,9 +322,9 @@ describe('runTools', () => {
       const results = await runTools(ctx, [], '/repo', [], 600_000);
 
       // Legacy keys still present
-      expect(results['semgrep']?.status).toBe('skipped');
-      expect(results['trivy']?.status).toBe('skipped');
-      expect(results['cpd']?.status).toBe('skipped');
+      expect(results.semgrep?.status).toBe('skipped');
+      expect(results.trivy?.status).toBe('skipped');
+      expect(results.cpd?.status).toBe('skipped');
     });
   });
 });

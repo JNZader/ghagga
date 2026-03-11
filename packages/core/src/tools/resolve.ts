@@ -49,7 +49,7 @@ export function resolveActivatedTools(input: ToolActivationInput): ActivatedTool
 
   // Step 2: Run detect(files) for each auto-detect tool
   for (const tool of registry.getByTier('auto-detect')) {
-    if (tool.detect && tool.detect(files)) {
+    if (tool.detect?.(files)) {
       activated.set(tool.name, { definition: tool, reason: 'auto-detect' });
     }
   }
