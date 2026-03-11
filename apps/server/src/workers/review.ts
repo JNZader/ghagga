@@ -15,6 +15,7 @@
  */
 
 import { logger } from '../lib/logger.js';
+import { createDelegatedCiWorker } from '../queues/delegated-ci.js';
 import { createReviewWorker } from '../queues/review.js';
 
 logger.info('🚀 Starting GHAGGA Review Worker...');
@@ -38,18 +39,32 @@ worker.on('progress', (job, progress) => {
 
 logger.info(`✅ Worker started with concurrency: ${WORKER_CONCURRENCY}`);
 
+// ─── Delegated CI Worker ────────────────────────────────────────
+
+const ciWorker = createDelegatedCiWorker(2);
+
+ciWorker.on('completed', (job) => {
+  logger.info({ jobId: job.id }, '✅ Delegated CI job completed');
+});
+
+ciWorker.on('failed', (job, err) => {
+  logger.error({ jobId: job?.id, err: err.message }, '❌ Delegated CI job failed');
+});
+
+logger.info('✅ Delegated CI worker started with concurrency: 2');
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, closing worker gracefully...');
-  await worker.close();
-  logger.info('Worker closed');
+  logger.info('SIGTERM received, closing workers gracefully...');
+  await Promise.all([worker.close(), ciWorker.close()]);
+  logger.info('Workers closed');
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  logger.info('SIGINT received, closing worker gracefully...');
-  await worker.close();
-  logger.info('Worker closed');
+  logger.info('SIGINT received, closing workers gracefully...');
+  await Promise.all([worker.close(), ciWorker.close()]);
+  logger.info('Workers closed');
   process.exit(0);
 });
 

@@ -111,19 +111,33 @@ export function createRunnerCallbackRouter() {
         return c.json({ error: 'Invalid signature' }, 401);
       }
 
-      // TODO: Re-implement with BullMQ - store callback data for job pickup
-      // For now, log the callback but don't dispatch (feature pending migration)
-      logger.info(
-        {
-          callbackId,
-          repoFullName,
-          jobKey: payload.jobKey,
-          state: payload.state,
-          summary: payload.summary,
-          outcome: payload.outcome,
-        },
-        'Delegated CI callback accepted — feature pending BullMQ migration',
-      );
+      // Update the delegated CI run record with callback data
+      try {
+        const { updateDelegatedCiRunByCallbackId } = await import('ghagga-db');
+        const { createDatabaseFromEnv } = await import('ghagga-db');
+        const db = createDatabaseFromEnv();
+
+        const newState =
+          payload.state === 'completed'
+            ? payload.outcome === 'success'
+              ? 'completed'
+              : 'failed'
+            : payload.state;
+
+        await updateDelegatedCiRunByCallbackId(db, callbackId, {
+          state: newState,
+          summary: payload.summary ?? null,
+          resultSummary: null,
+          completedAt: new Date(),
+        });
+
+        logger.info(
+          { callbackId, repoFullName, jobKey: payload.jobKey, state: newState },
+          'Delegated CI callback processed — run record updated',
+        );
+      } catch (err) {
+        logger.error({ err, callbackId }, 'Failed to process delegated CI callback');
+      }
     } else {
       // ── Static analysis callback (existing behavior) ──
       const saPayload = payload as StaticAnalysisCallbackPayload;
