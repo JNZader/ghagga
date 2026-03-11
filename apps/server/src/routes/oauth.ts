@@ -23,7 +23,10 @@ import { logger as rootLogger } from '../lib/logger.js';
 const logger = rootLogger.child({ module: 'oauth' });
 
 /** GHAGGA GitHub App Client ID (public, overridable via env) */
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? 'Iv23liP63ERrlq0eMUfk';
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? '';
+
+/** Server base URL for OAuth redirect_uri */
+const SERVER_URL = process.env.SERVER_URL ?? 'https://api.javierzader.com';
 
 /** Dashboard URL for redirects after OAuth callback */
 const DASHBOARD_URL = 'https://jnzader.github.io/ghagga/app';
@@ -171,7 +174,7 @@ export function createOAuthRouter() {
     const state = generateState(STATE_SECRET);
     const url = new URL('https://github.com/login/oauth/authorize');
     url.searchParams.set('client_id', GITHUB_CLIENT_ID);
-    url.searchParams.set('redirect_uri', 'https://ghagga.onrender.com/auth/callback');
+    url.searchParams.set('redirect_uri', `${SERVER_URL}/auth/callback`);
     url.searchParams.set('scope', 'public_repo');
     url.searchParams.set('state', state);
 

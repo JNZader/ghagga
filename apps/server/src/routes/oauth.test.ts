@@ -369,10 +369,10 @@ describe('GET /auth/login', () => {
     // biome-ignore lint/style/noNonNullAssertion: test assertion on known response
     const location = new URL(res.headers.get('Location')!);
 
-    expect(location.searchParams.get('client_id')).toBe('Iv23liP63ERrlq0eMUfk');
+    expect(location.searchParams.get('client_id')).toBeTruthy();
     expect(location.searchParams.get('scope')).toBe('public_repo');
     expect(location.searchParams.get('redirect_uri')).toBe(
-      'https://ghagga.onrender.com/auth/callback',
+      'https://api.javierzader.com/auth/callback',
     );
     // State should be present and non-empty
     const state = location.searchParams.get('state');
