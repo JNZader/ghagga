@@ -37,4 +37,6 @@ export type {
   DiscoveredCiJob,
   DiscoveredCiRuntime,
   DiscoveredCiSource,
+  JobRecommendation,
+  RecommendationConfidence,
 } from './delegated-ci.js';
