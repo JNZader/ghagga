@@ -47,7 +47,7 @@ You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plai
 
 | Feature | Description |
 |---------|-------------|
-| **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (multi-model voting with proportional verbosity) |
+| **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (same model, three perspectives with algorithmic voting) |
 | **15+ Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 8 auto-detect tools -- zero tokens |
 | **Static-Analysis-Only Fallback** | When no LLM API key is configured, GHAGGA runs all applicable static analysis tools and posts results without any LLM call |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews (PostgreSQL + tsvector FTS) |
@@ -371,20 +371,20 @@ flowchart LR
 
 ### Consensus Mode
 
-Multiple models review with assigned stances (for/against/neutral), then a weighted vote determines the outcome. Uses proportional verbosity -- higher-confidence verdicts produce shorter summaries.
+The same model runs 3 times in parallel with different system prompts (stances: advocate, critic, observer). Each returns a decision with a confidence score. The final status is computed by a pure algorithmic function (`calculateConsensus()`) -- no additional LLM call. Uses `Promise.allSettled` so partial failures still produce a result.
 
 ```mermaid
 flowchart LR
-  Input["Diff + Context"] --> A["Advocate<br/>looks for good"]
-  Input --> C["Critic<br/>looks for problems"]
-  Input --> O["Observer<br/>balanced view"]
-  A --> Vote["Weighted Vote"]
-  C --> Vote
-  O --> Vote
-  Vote --> Status["Final STATUS"]
+  Input["Diff + Context"] --> A["Advocate<br/>(FOR stance)"]
+  Input --> C["Critic<br/>(AGAINST stance)"]
+  Input --> O["Observer<br/>(NEUTRAL stance)"]
+  A --> Algo["calculateConsensus()<br/>weighted voting algorithm"]
+  C --> Algo
+  O --> Algo
+  Algo --> Status["Final STATUS"]
 ```
 
-**Token usage**: ~3x (3 stances)
+**Token usage**: ~3x (exactly 3 LLM calls, same model)
 **Best for**: Critical code paths, high-confidence decisions, security-sensitive changes
 
 ---
@@ -465,15 +465,31 @@ If no runner repo is discovered, the server falls back to **LLM-only review** (n
 
 ## Memory System
 
-GHAGGA learns from past reviews using PostgreSQL full-text search. Design patterns inspired by [Engram](https://github.com/Gentleman-Programming/engram) (session model, topic-key upserts, deduplication, privacy stripping) -- implemented directly in PostgreSQL for multi-tenancy and scalability.
+GHAGGA learns from past reviews using full-text search. Design patterns inspired by [Engram](https://github.com/Gentleman-Programming/engram) (session model, topic-key upserts, deduplication, privacy stripping) -- implemented directly in PostgreSQL for multi-tenancy and scalability.
+
+### Storage Backends
+
+All three backends implement the same `MemoryStorage` interface:
+
+| Backend | Used By | Search Engine |
+|---------|---------|---------------|
+| **PostgreSQL** | Server (SaaS/self-hosted) | `tsvector` + GIN index, `ts_rank` |
+| **SQLite** (sql.js WASM) | CLI, GitHub Action | FTS5 virtual table, BM25 |
+| **Engram** | CLI (optional, `--memory-backend engram`) | Delegated to Engram server |
 
 ### How It Works
 
-1. **After each review**, observations are automatically extracted (decisions, patterns, bugs, learnings)
-2. **Deduplication** prevents storing the same observation twice (content hash + 15-minute rolling window)
-3. **Topic-key upserts** evolve existing knowledge instead of creating duplicates
-4. **Before each review**, relevant observations are retrieved via tsvector full-text search and injected into agent prompts
-5. **Privacy stripping** removes API keys, tokens, and secrets before anything is stored
+**Before each review** (Step 5, parallel with static analysis):
+1. `buildSearchQuery()` extracts terms from file paths (strips noise dirs like `src/lib/dist/test`, removes extensions, caps at 10 terms)
+2. Full-text search retrieves max **3 past observations**
+3. `formatMemoryContext()` injects them into the LLM prompt as `## Past Review Memory`
+
+**After each review** (Step 8, fire-and-forget):
+1. Only **significant findings** saved (critical/high/medium severity)
+2. `stripPrivateData()` redacts 13 types of secrets before storage
+3. Creates session, saves observations, saves PR summary
+4. **Content deduplication**: SHA-256 hash of `type:title:content`, 15-min dedup window
+5. **Topic-key upsert**: Re-reviews of same PR update existing summary instead of duplicating
 
 ### Observation Types
 
@@ -489,14 +505,14 @@ GHAGGA learns from past reviews using PostgreSQL full-text search. Design patter
 
 ### Privacy Stripping
 
-Before any observation is stored in memory, GHAGGA strips sensitive data using 16 regex patterns:
+Before any observation is stored in memory, GHAGGA strips sensitive data using 13 regex patterns via `stripPrivateData()`:
 
 | Pattern | Example | Redacted As |
 |---------|---------|-------------|
 | Anthropic API keys | `sk-ant-api03-...` | `[REDACTED_ANTHROPIC_KEY]` |
 | OpenAI API keys | `sk-proj-...` | `[REDACTED_OPENAI_KEY]` |
 | AWS Access Key IDs | `AKIA...` | `[REDACTED_AWS_KEY]` |
-| GitHub tokens | `ghp_...`, `gho_...`, `ghs_...`, `github_pat_...` | `[REDACTED_GITHUB_*]` |
+| GitHub tokens | `ghp_...`, `gho_...`, `ghs_...`, `ghr_...`, `github_pat_...` | `[REDACTED_GITHUB_*]` |
 | Google API keys | `AIza...` | `[REDACTED_GOOGLE_KEY]` |
 | Slack tokens | `xoxb-...`, `xoxp-...` | `[REDACTED_SLACK_TOKEN]` |
 | Bearer tokens | `Bearer eyJ...` | `Bearer [REDACTED_TOKEN]` |
@@ -505,7 +521,7 @@ Before any observation is stored in memory, GHAGGA strips sensitive data using 1
 | Password/secret assignments | `password = "..."` | `[REDACTED]` |
 | Base64 credentials | `SECRET=aGVsbG8...` | `[REDACTED_BASE64]` |
 
-> Memory is available in **all 3 distribution modes**: Server uses PostgreSQL + tsvector FTS, Action uses SQLite, and CLI uses SQLite by default with an optional [Engram](https://github.com/Gentleman-Programming/engram) backend (`--memory-backend engram`). The Engram backend connects via HTTP API and enables cross-tool memory sharing with Claude Code, OpenCode, Gemini CLI, and other Engram-compatible tools. If Engram is unreachable, the CLI falls back to SQLite automatically.
+> Memory is available in **all 3 distribution modes**: Server uses PostgreSQL + tsvector FTS, Action uses SQLite (FTS5 + BM25), and CLI uses SQLite by default with an optional [Engram](https://github.com/Gentleman-Programming/engram) backend (`--memory-backend engram`). The Engram backend connects via HTTP API (default: `localhost:7437`) and enables cross-tool memory sharing with Claude Code, OpenCode, Gemini CLI, and other Engram-compatible tools. If Engram is unreachable, the CLI falls back to SQLite automatically. See the [Memory System docs](docs/memory-system.md) for full architecture details.
 
 ---
 
@@ -524,7 +540,7 @@ React SPA deployed on GitHub Pages. Dark theme with GitHub-dark palette and purp
 | **Reviews** | Filterable table with status badges, severity indicators, detail expansion, and pagination |
 | **Settings** | Per-repo or global settings -- provider chain, review mode, tools, ignore patterns |
 | **Global Settings** | Installation-wide provider chain and defaults that apply to all repos |
-| **Memory** | Observation list with severity badges, StatsBar (counts by type/project), session sidebar, delete/clear/purge actions (3-tier confirmation), ObservationDetailModal (PR links, file paths, revision count, relative timestamps), severity and sort filters |
+| **Memory** | Observation list with severity badges, StatsBar (counts by type/project), session sidebar, 5-tier progressive deletion confirmation, ObservationDetailModal (PR links, file paths, revision count, relative timestamps), debounced search (300ms), severity and sort filters, virtualization for 20+ observations |
 
 ### Tech Details
 
@@ -538,19 +554,17 @@ React SPA deployed on GitHub Pages. Dark theme with GitHub-dark palette and purp
 
 ### Memory Management
 
-The Memory page provides full CRUD management of review observations and sessions with a **3-tier confirmation system** for destructive actions:
+The Memory page provides full CRUD management of review observations and sessions with a **5-tier progressive deletion confirmation** system:
 
-| Tier | Action | Confirmation | Example |
-|------|--------|-------------|---------|
-| **Tier 1** | Delete single observation | Simple confirm modal | Delete one observation |
-| **Tier 2** | Clear repo observations | Type repo name to confirm | Clear all observations for `owner/repo` |
-| **Tier 3** | Purge ALL observations | Type "DELETE ALL" + 5-second countdown | Wipe entire memory database |
+| Tier | Action | Confirmation |
+|------|--------|-------------|
+| **Tier 1** | Delete single observation | Simple confirm modal |
+| **Tier 2** | Delete batch of observations | Confirm with count display |
+| **Tier 3** | Clear repo observations | Type repo name to confirm |
+| **Tier 4** | Purge ALL observations | Type "DELETE ALL" + 5-second countdown |
+| **Tier 5** | Delete sessions | Confirm with session detail |
 
-Additional management actions:
-- **Delete sessions** -- remove individual memory sessions
-- **Clean up empty sessions** -- remove sessions with no remaining observations
-
-The **ObservationDetailModal** shows full observation details including PR links, file paths, revision count, and relative timestamps. All destructive actions trigger **Toast notifications** confirming success or failure.
+The Memory page features search (debounced 300ms) across titles, content, types, and file paths; filters by severity (all/critical/high/medium/low/info) and sort order (newest/oldest/severity/most revised); and virtualization for 20+ observations. The **ObservationDetailModal** shows full observation details including PR links, file paths, revision count, and relative timestamps. All destructive actions trigger **Toast notifications** confirming success or failure.
 
 ---
 
@@ -561,7 +575,7 @@ The **ObservationDetailModal** shows full observation details including PR links
 | **API key encryption** | AES-256-GCM with per-installation encryption keys. Keys are never stored in plaintext. |
 | **Webhook verification** | HMAC-SHA256 signature verification with `crypto.timingSafeEqual` (constant-time comparison to prevent timing attacks) |
 | **JWT generation** | RS256 manual JWT construction for GitHub App installation tokens (no external JWT library needed) |
-| **Privacy stripping** | 16 regex patterns remove API keys, tokens, passwords, and secrets before storing to memory |
+| **Privacy stripping** | 13 regex patterns remove API keys, tokens, passwords, and secrets before storing to memory |
 | **No secret logging** | Console outputs and error messages never contain sensitive data (verified by automated security tests) |
 | **BYOK model** | Users provide their own LLM API keys. GHAGGA never pays for or sees your LLM usage in plaintext. |
 | **Installation scoping** | API routes are scoped by GitHub installation ID -- users can only access their own repos |
@@ -583,7 +597,7 @@ The test suite includes 14 dedicated security audit tests that verify:
 - AES-256-GCM encryption roundtrip correctness
 - Tampered ciphertext detection
 - `timingSafeEqual` usage for webhook signature comparison
-- Privacy stripping covers all 16 secret patterns
+- Privacy stripping covers all 13 secret patterns
 
 ---
 
@@ -601,7 +615,7 @@ ghagga/
 |   |       |   |-- prompts.ts     # All agent prompts (rescued from v1)
 |   |       |   |-- simple.ts      # Simple single-pass review
 |   |       |   |-- workflow.ts    # 5-specialist parallel workflow
-|   |       |   +-- consensus.ts   # Multi-model voting with proportional verbosity
+|   |       |   +-- consensus.ts   # Three-perspective voting with algorithmic consensus
 |   |       |-- tools/
 |   |       |   |-- registry.ts    # 15+ tool plugin registry
 |   |       |   |-- orchestrator.ts # Parallel tool orchestration
@@ -616,7 +630,7 @@ ghagga/
 |   |       |   |-- search.ts      # tsvector full-text search
 |   |       |   |-- persist.ts     # Observation extraction + dedup
 |   |       |   |-- context.ts     # Format observations as markdown
-|   |       |   |-- privacy.ts     # Privacy stripping (16 patterns)
+|   |       |   |-- privacy.ts     # Privacy stripping (13 patterns)
 |   |       |   |-- sqlite.ts      # SQLite memory backend (CLI/Action)
 |   |       |   +-- engram.ts      # Engram memory adapter
 |   |       |-- providers/
@@ -902,7 +916,7 @@ GHAGGA v2 is a **complete rewrite** from scratch. The v1 codebase (~11,000 lines
 | **Crypto module** | AES-256-GCM encryption pattern for API keys |
 | **Semgrep rules** | 20 custom security rules across 7+ languages |
 | **Stack detection** | File extension -> tech stack mapping for review hints |
-| **Privacy stripping** | Pattern-based secret redaction before memory persistence |
+| **Privacy stripping** | Pattern-based secret redaction (13 patterns) before memory persistence |
 
 ### v1 vs v2 Comparison
 

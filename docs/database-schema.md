@@ -124,7 +124,13 @@ Individual observations extracted from reviews.
 - `idx_observations_type` on `type`
 - `idx_observations_content_hash` on `content_hash`
 
-A `tsvector` column and GIN index are added via raw SQL migration (`migrations/0001_add_tsvector.sql`) for full-text search.
+**Hidden columns** (added via raw SQL migration `migrations/0001_add_tsvector.sql`):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `search_observations` | tsvector | Auto-generated full-text search vector from `title` and `content` |
+
+A **GIN index** on `search_observations` enables fast full-text search. A **database trigger** (`tsvector_update_trigger`) automatically regenerates the `search_observations` column on INSERT and UPDATE, combining the `title` (weight A) and `content` (weight B) fields. Queries use `ts_rank()` to order results by relevance.
 
 > **Idempotent migrations**: All custom SQL migrations use `IF NOT EXISTS` / `DROP ... IF EXISTS` guards, making them safe to re-execute without errors.
 

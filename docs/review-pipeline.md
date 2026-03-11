@@ -61,12 +61,17 @@ graph TB
       AutoDetect["Auto-detect<br/>(matched by diff files)<br/>Ruff, Bandit, golangci-lint,<br/>Biome, PMD, Psalm,<br/>clippy, Hadolint"]
     end
     subgraph Mem["Memory Search"]
-      FTS["tsvector<br/>full-text search"]
+      BuildQ["buildSearchQuery()<br/>extract terms from file paths"]
+      FTS["Full-text search<br/>max 3 observations"]
+      Format["formatMemoryContext()<br/>inject as markdown"]
+      BuildQ --> FTS --> Format
     end
   end
   Static --> Combined["Combined context for agents"]
   Mem --> Combined
 ```
+
+**Memory search details**: `buildSearchQuery()` extracts meaningful terms from file paths in the diff, stripping noise directories (`src/`, `lib/`, `dist/`, `test/`) and extensions, capping at 10 terms. Full-text search retrieves up to 3 past observations. `formatMemoryContext()` formats them as markdown injected into the LLM prompt under `## Past Review Memory`.
 
 ### Step 5.5: AI Enhance (Optional)
 
@@ -85,7 +90,7 @@ The combined context (diff + static findings + memory) is sent to the selected r
 
 - **Simple**: 1 LLM call — fast and cheap
 - **Workflow**: 5 specialist agents in parallel + 1 synthesis — thorough
-- **Consensus**: 3 stanced reviews + weighted vote — high confidence
+- **Consensus**: 3 stanced reviews (same model) + algorithmic weighted vote — high confidence
 
 See [Review Modes](review-modes.md) for details.
 
@@ -95,7 +100,16 @@ Static analysis findings are merged into the agent's response. Deduplication ens
 
 ### Step 8: Memory Persistence
 
-Observations are extracted from the review and stored to the memory database — PostgreSQL in Server mode, SQLite in CLI and Action modes (fire-and-forget). This step never blocks the response — if it fails, the review is still returned successfully.
+Observations are extracted from the review and stored to the memory database -- PostgreSQL in Server mode, SQLite in CLI and Action modes (fire-and-forget). This step never blocks the response -- if it fails, the review is still returned successfully.
+
+**Persist pipeline**:
+1. **Significance filter**: Only **critical**, **high**, and **medium** severity findings are saved
+2. **`stripPrivateData()`**: 13 regex patterns redact secrets (API keys, tokens, passwords, PEM keys, JWTs) before storage
+3. **Create session**: Scoped to the repository and PR number
+4. **Save observations**: Content deduplication via SHA-256 hash (`type:title:content`) with a 15-minute dedup window
+5. **Save PR summary**: Topic-key upsert -- re-reviews of the same PR update the existing summary instead of duplicating
+
+See [Memory System](memory-system.md) for full details on backends, search, deduplication, and privacy stripping.
 
 ## Trigger Modes
 

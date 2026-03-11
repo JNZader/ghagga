@@ -53,29 +53,46 @@ Each specialist has a focused system prompt that constrains its analysis to a sp
 
 ## Consensus Mode
 
-Multiple models review with assigned stances (for/against/neutral), then a weighted vote determines the outcome.
+The same model runs **3 times in parallel** with different system prompts (stances), then a pure algorithmic function computes the final decision -- no additional LLM call.
+
+The three stances are:
+- **Advocate (FOR)**: "Argue in favor of approving this change"
+- **Critic (AGAINST)**: "Argue against approving this change"
+- **Observer (NEUTRAL)**: "Provide balanced analysis of this change"
 
 ```mermaid
 flowchart LR
-  Input["Diff + Context"] --> A["Advocate<br/>looks for good"]
-  Input --> C["Critic<br/>looks for problems"]
-  Input --> O["Observer<br/>balanced view"]
-  A --> Vote["Weighted Vote"]
-  C --> Vote
-  O --> Vote
-  Vote --> Status["Final STATUS"]
+  Input["Diff + Context"] --> A["Advocate<br/>(FOR stance)"]
+  Input --> C["Critic<br/>(AGAINST stance)"]
+  Input --> O["Observer<br/>(NEUTRAL stance)"]
+  A --> Algo["calculateConsensus()<br/>weighted voting algorithm"]
+  C --> Algo
+  O --> Algo
+  Algo --> Status["Final STATUS"]
 ```
 
-**Token usage**: ~3x (3 stances)
+**Token usage**: ~3x (exactly 3 LLM calls, same model)
 **Best for**: Critical code paths, high-confidence decisions, security-sensitive changes
+
+> **Note**: The `ConsensusReviewInput` interface supports specifying different models per stance, but this is not currently exposed in the UI or CLI configuration. All three stances use the same model configured for the review.
 
 ### How Voting Works
 
-Each reviewer assigns a status (`PASSED`, `FAILED`, or `NEEDS_HUMAN_REVIEW`) with a confidence score. The final status is determined by weighted majority:
+Each stance returns a decision (`PASSED`, `FAILED`, or `NEEDS_HUMAN_REVIEW`) with a confidence score (0.0 to 1.0). The final status is determined by the `calculateConsensus()` algorithm using weighted voting:
 
-- All agree → that status
-- Critic says `FAILED` with high confidence → `NEEDS_HUMAN_REVIEW` at minimum
-- Split vote → `NEEDS_HUMAN_REVIEW`
+1. Each vote's **weight** equals its confidence score
+2. **Abstain** votes (if any) contribute zero weight
+3. The algorithm requires **two thresholds** to declare a winner:
+   - The gap between the winning side and losing side must be **>= 30%** of total weight
+   - The winning side must hold **>= 60%** of total weight
+4. If both thresholds are met, the winning decision is the final status
+5. If either threshold is not met, the result is `NEEDS_HUMAN_REVIEW`
+
+### Failure Handling
+
+Consensus uses `Promise.allSettled` for the 3 parallel LLM calls:
+- If **1 vote fails**, the remaining 2 still count and are fed to `calculateConsensus()`
+- If **all 3 fail**, the result is `NEEDS_HUMAN_REVIEW`
 
 ### When to Use Each Mode
 
