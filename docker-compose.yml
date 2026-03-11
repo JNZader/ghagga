@@ -126,19 +126,17 @@ services:
       retries: 5
 
   # ===========================================================================
-  # Bull Dashboard - Queue monitoring UI
+  # Bull Dashboard - Queue monitoring UI (optional, add later)
   # ===========================================================================
-  bull-dashboard:
-    image: vitalyliber/bull-board:latest
-    environment:
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-    ports:
-      - "3001:3000"
-    depends_on:
-      - redis
-    restart: unless-stopped
+  # bull-dashboard:
+  #   image: deadly0/bull-board:latest
+  #   environment:
+  #     - REDIS_HOST=${REDIS_HOST:-redis}
+  #     - REDIS_PORT=${REDIS_PORT:-6379}
+  #   ports:
+  #     - "3001:3000"
+  #   depends_on:
+  #     - redis
 
 volumes:
   postgres-data:
