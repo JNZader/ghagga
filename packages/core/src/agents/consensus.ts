@@ -279,17 +279,24 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
 
   const executionTimeMs = Date.now() - startTime;
 
-  // Build detailed reasoning from all votes
+  // Build formatted vote details with visual distinction per stance
+  const STANCE_EMOJI: Record<string, string> = {
+    for: '🟢',
+    against: '🔴',
+    neutral: '🟡',
+  };
+
   const voteDetails = votes
-    .map(
-      (v) =>
-        `[${v.provider}/${v.model}] Stance: ${v.stance} | Decision: ${v.decision} | Confidence: ${v.confidence}\n${v.reasoning}`,
-    )
-    .join('\n\n---\n\n');
+    .map((v) => {
+      const emoji = STANCE_EMOJI[v.stance] ?? '⚪';
+      const decisionLabel = v.decision.charAt(0).toUpperCase() + v.decision.slice(1);
+      return `### ${emoji} ${v.stance.charAt(0).toUpperCase() + v.stance.slice(1)} — ${decisionLabel} (confidence: ${v.confidence})\n${v.reasoning}`;
+    })
+    .join('\n\n');
 
   return {
     status,
-    summary: `${summary}\n\n## Individual Votes\n\n${voteDetails}`,
+    summary: `${summary}\n### Individual Votes\n\n${voteDetails}`,
     findings: [], // Consensus mode produces votes, not individual findings
     staticAnalysis: {
       semgrep: { status: 'skipped', findings: [], executionTimeMs: 0 },
