@@ -50,6 +50,17 @@ export type DiscoveredCiSource = 'github-actions' | 'package-json' | 'makefile';
 /** Runtime detected for a repository */
 export type DiscoveredCiRuntime = 'node' | 'python' | 'go' | 'unknown';
 
+/** Confidence level for a job delegation recommendation */
+export type RecommendationConfidence = 'high' | 'medium' | 'low';
+
+/** AI-generated recommendation for whether a job is safe to delegate */
+export interface JobRecommendation {
+  delegable: boolean;
+  confidence: RecommendationConfidence;
+  reason: string;
+  suggestedProfile: string | null;
+}
+
 /** A CI job discovered by scanning the repository */
 export interface DiscoveredCiJob {
   source: DiscoveredCiSource;
@@ -59,4 +70,5 @@ export interface DiscoveredCiJob {
   command: string | null;
   suggestedProfile: DelegatedCiProfile;
   runtime: DiscoveredCiRuntime;
+  recommendation?: JobRecommendation;
 }

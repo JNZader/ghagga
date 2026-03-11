@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { Card, CardHeader } from '@/components/Card';
 import { useDiscoverCi } from '@/lib/api';
-import type { DelegatedCiJobPolicy, DelegatedCiPolicy, DiscoveredCiJob } from '@/lib/types';
+import type {
+  DelegatedCiJobPolicy,
+  DelegatedCiPolicy,
+  DiscoveredCiJob,
+  JobRecommendation,
+} from '@/lib/types';
 import { DelegatedCiJobEntry } from './DelegatedCiJobEntry';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -57,6 +62,66 @@ function SourceBadge({ source }: { source: DiscoveredCiJob['source'] }) {
       {labels[source] ?? source}
     </span>
   );
+}
+
+// ─── Recommendation Badge ───────────────────────────────────────
+
+function RecommendationBadge({ recommendation }: { recommendation?: JobRecommendation }) {
+  if (!recommendation) return null;
+
+  const { delegable, confidence } = recommendation;
+
+  if (delegable && confidence !== 'low') {
+    return (
+      <span className="rounded-sm bg-green-500/20 px-1.5 py-0.5 text-xs font-medium text-green-400">
+        Recommended
+      </span>
+    );
+  }
+
+  if (confidence === 'low') {
+    return (
+      <span className="rounded-sm bg-yellow-500/20 px-1.5 py-0.5 text-xs font-medium text-yellow-400">
+        Review
+      </span>
+    );
+  }
+
+  return (
+    <span className="rounded-sm bg-red-500/20 px-1.5 py-0.5 text-xs font-medium text-red-400">
+      Not recommended
+    </span>
+  );
+}
+
+// ─── Profile Suggestion Note ────────────────────────────────────
+
+function ProfileSuggestionNote({
+  recommendation,
+  currentProfile,
+}: {
+  recommendation?: JobRecommendation;
+  currentProfile: string;
+}) {
+  if (!recommendation?.suggestedProfile) return null;
+  if (recommendation.suggestedProfile === currentProfile) return null;
+
+  return (
+    <span className="text-xs text-yellow-400">
+      Suggested profile: {recommendation.suggestedProfile}
+    </span>
+  );
+}
+
+function NoProfileNote({ recommendation }: { recommendation?: JobRecommendation }) {
+  if (!recommendation) return null;
+  // Show "no matching profile" when suggestedProfile is explicitly null
+  // and the job is not delegable due to runtime mismatch
+  if (recommendation.suggestedProfile !== null) return null;
+  if (recommendation.delegable) return null;
+  if (!recommendation.reason.includes('no matching execution profile')) return null;
+
+  return <span className="text-xs text-red-400/80">No matching profile available</span>;
 }
 
 // ─── Component ──────────────────────────────────────────────────
@@ -283,40 +348,64 @@ export function DelegatedCiEditor({ value, onChange, repoId }: DelegatedCiEditor
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {availableJobs.map((job) => (
-                    <div
-                      key={`${job.source}-${job.jobKey}`}
-                      className="flex items-center justify-between rounded-lg border border-surface-border bg-surface-bg p-3"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-text-primary">
-                            {job.jobKey}
-                          </span>
-                          <SourceBadge source={job.source} />
-                          <span className="rounded-sm bg-surface-border/50 px-1.5 py-0.5 text-xs text-text-secondary">
-                            {job.suggestedProfile}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-2">
-                          <span className="text-xs text-text-secondary">{job.sourceFile}</span>
-                          {job.command && (
-                            <code className="rounded-sm bg-surface-border/30 px-1 py-0.5 text-xs text-text-secondary">
-                              {job.command}
-                            </code>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleAddDiscoveredJob(job)}
-                        disabled={value.jobs.length >= 10}
-                        className="ml-3 rounded-md bg-primary-600/20 px-3 py-1.5 text-xs font-medium text-primary-400 transition-colors hover:bg-primary-600/30 disabled:opacity-50"
+                  {availableJobs.map((job) => {
+                    const isDiscouraged =
+                      job.recommendation &&
+                      !job.recommendation.delegable &&
+                      job.recommendation.confidence !== 'low';
+
+                    return (
+                      <div
+                        key={`${job.source}-${job.jobKey}`}
+                        className="flex items-center justify-between rounded-lg border border-surface-border bg-surface-bg p-3"
                       >
-                        + Add
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-text-primary">
+                              {job.jobKey}
+                            </span>
+                            <SourceBadge source={job.source} />
+                            <RecommendationBadge recommendation={job.recommendation} />
+                            <span className="rounded-sm bg-surface-border/50 px-1.5 py-0.5 text-xs text-text-secondary">
+                              {job.suggestedProfile}
+                            </span>
+                          </div>
+                          {job.recommendation?.reason && (
+                            <p className="mt-1 text-xs text-text-secondary">
+                              {job.recommendation.reason}
+                            </p>
+                          )}
+                          <div className="mt-1 flex items-center gap-2">
+                            <span className="text-xs text-text-secondary">{job.sourceFile}</span>
+                            {job.command && (
+                              <code className="rounded-sm bg-surface-border/30 px-1 py-0.5 text-xs text-text-secondary">
+                                {job.command}
+                              </code>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <ProfileSuggestionNote
+                              recommendation={job.recommendation}
+                              currentProfile={job.suggestedProfile}
+                            />
+                            <NoProfileNote recommendation={job.recommendation} />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddDiscoveredJob(job)}
+                          disabled={value.jobs.length >= 10}
+                          className={
+                            isDiscouraged
+                              ? 'ml-3 rounded-md bg-surface-border/20 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-border/30 disabled:opacity-50'
+                              : 'ml-3 rounded-md bg-primary-600/20 px-3 py-1.5 text-xs font-medium text-primary-400 transition-colors hover:bg-primary-600/30 disabled:opacity-50'
+                          }
+                        >
+                          {isDiscouraged ? 'Add anyway' : '+ Add'}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -9,6 +9,7 @@
 import type { Database } from 'ghagga-db';
 import { getInstallationById, getRepositoryById } from 'ghagga-db';
 import { Hono } from 'hono';
+import { analyzeDiscoveredJobs } from '../../delegated-ci/analyze-jobs.js';
 import { getInstallationToken } from '../../github/client.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import { generateErrorId, logger } from './utils.js';
@@ -423,12 +424,22 @@ export function createDiscoverCiRouter(db: Database) {
 
       discovered.push(...workflowJobs, ...packageJsonJobs, ...makefileJobs);
 
+      // Analyze each job and sort by recommendation priority
+      const analyzed = analyzeDiscoveredJobs(discovered);
+
       logger.info(
-        { repoId, repoFullName: repo.fullName, runtime, jobCount: discovered.length },
-        'CI job discovery completed',
+        {
+          repoId,
+          repoFullName: repo.fullName,
+          runtime,
+          jobCount: analyzed.length,
+          recommended: analyzed.filter((j) => j.recommendation?.delegable).length,
+          notRecommended: analyzed.filter((j) => !j.recommendation?.delegable).length,
+        },
+        'CI job discovery and analysis completed',
       );
 
-      return c.json({ data: discovered });
+      return c.json({ data: analyzed });
     } catch (err) {
       const errorId = generateErrorId();
       logger.error({ err, errorId, repoId, user: user.githubLogin }, 'Failed to discover CI jobs');
