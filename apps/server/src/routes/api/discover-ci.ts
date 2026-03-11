@@ -69,6 +69,19 @@ async function detectRuntime(fullName: string, token: string): Promise<Runtime> 
   if (goMod) return 'go';
   if (pyprojectToml || requirementsTxt) return 'python';
   if (packageJson) return 'node';
+
+  // All checks failed or returned non-OK -- log details for diagnostics
+  const failures = checks
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)));
+  const statuses = checks
+    .filter((r): r is PromiseFulfilledResult<Response> => r.status === 'fulfilled')
+    .map((r) => r.value.status);
+  logger.warn(
+    { repoFullName: fullName, failures, statuses },
+    'Runtime detection failed -- all checks returned non-OK or were rejected',
+  );
+
   return 'unknown';
 }
 
@@ -262,14 +275,21 @@ async function fetchFileContent(
       signal: AbortSignal.timeout(10_000),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logger.debug({ path, status: response.status }, 'GitHub Contents API returned non-OK');
+      return null;
+    }
 
     const data = (await response.json()) as { content?: string; encoding?: string };
     if (data.content && data.encoding === 'base64') {
       return Buffer.from(data.content, 'base64').toString('utf-8');
     }
     return null;
-  } catch {
+  } catch (error) {
+    logger.debug(
+      { path, error: error instanceof Error ? error.message : error },
+      'fetchFileContent failed',
+    );
     return null;
   }
 }
@@ -314,6 +334,12 @@ export function createDiscoverCiRouter(db: Database) {
         appId,
         privateKey,
       );
+
+      logger.info(
+        { repoId, repoFullName: repo.fullName },
+        'Starting CI discovery -- installation token obtained',
+      );
+
       const discovered: DiscoveredCiJob[] = [];
 
       // Detect runtime first (parallel HEAD checks)
@@ -332,7 +358,13 @@ export function createDiscoverCiRouter(db: Database) {
               },
             );
 
-            if (!response.ok) return [];
+            if (!response.ok) {
+              logger.debug(
+                { repoFullName: repo.fullName, status: response.status },
+                'GitHub Actions workflows directory not accessible',
+              );
+              return [];
+            }
 
             const files = (await response.json()) as Array<{
               name: string;
@@ -359,7 +391,11 @@ export function createDiscoverCiRouter(db: Database) {
               }
             }
             return jobs;
-          } catch {
+          } catch (error) {
+            logger.warn(
+              { error: error instanceof Error ? error.message : error },
+              'Failed to scan GitHub Actions workflows',
+            );
             return [];
           }
         })(),
@@ -367,14 +403,20 @@ export function createDiscoverCiRouter(db: Database) {
         // 2. package.json scripts
         (async (): Promise<DiscoveredCiJob[]> => {
           const content = await fetchFileContent(repo.fullName, 'package.json', token);
-          if (!content) return [];
+          if (!content) {
+            logger.debug({ repoFullName: repo.fullName }, 'Could not fetch package.json');
+            return [];
+          }
           return parsePackageJsonScripts(content);
         })(),
 
         // 3. Makefile targets
         (async (): Promise<DiscoveredCiJob[]> => {
           const content = await fetchFileContent(repo.fullName, 'Makefile', token);
-          if (!content) return [];
+          if (!content) {
+            logger.debug({ repoFullName: repo.fullName }, 'Could not fetch Makefile');
+            return [];
+          }
           return parseMakefileTargets(content, runtime);
         })(),
       ]);
