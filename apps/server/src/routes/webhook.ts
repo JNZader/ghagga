@@ -23,6 +23,7 @@ import {
 } from 'ghagga-db';
 import { Hono } from 'hono';
 import { evaluateAllJobs, normalizePolicy } from '../delegated-ci/policy.js';
+import { getProfile } from '../delegated-ci/profiles.js';
 import {
   addCommentReaction,
   fetchPRDetails,
@@ -30,6 +31,7 @@ import {
   verifyWebhookSignature,
 } from '../github/client.js';
 import { logger as rootLogger } from '../lib/logger.js';
+import { enqueueDelegatedCiJob } from '../queues/delegated-ci.js';
 import { enqueueReview } from '../queues/review.js';
 
 const logger = rootLogger.child({ module: 'webhook' });
@@ -306,16 +308,22 @@ async function handlePullRequest(
       }
 
       if (approvedJobs.length > 0) {
-        // TODO: Implement delegated CI with BullMQ
-        // For now, log that delegated CI jobs were approved but not dispatched
-        logger.info(
-          {
-            repo: payload.repository.full_name,
-            pr: payload.number,
-            approvedJobs: approvedJobs.map((j) => j.jobKey),
-          },
-          'Delegated CI jobs approved but not dispatched - BullMQ migration pending',
-        );
+        for (const approved of approvedJobs) {
+          const profile = getProfile(approved.profile ?? 'node-lint');
+          await enqueueDelegatedCiJob({
+            repositoryId: repo.id,
+            repoFullName: payload.repository.full_name,
+            prNumber: payload.number,
+            headSha: payload.pull_request.head.sha,
+            baseBranch: payload.pull_request.base.ref,
+            installationId: repo.installationId,
+            jobKey: approved.jobKey,
+            profile: approved.profile ?? 'node-lint',
+            allowArtifacts: false,
+            allowCache: true,
+            maxDurationMinutes: profile?.defaultTimeoutMinutes ?? 10,
+          });
+        }
       }
 
       logger.info(

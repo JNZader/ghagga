@@ -1165,6 +1165,24 @@ export async function getDelegatedCiRunByCallbackId(db: Database, callbackId: st
   return row ?? null;
 }
 
+export async function updateDelegatedCiRunByCallbackId(
+  db: Database,
+  callbackId: string,
+  updates: {
+    state: string;
+    summary?: string | null;
+    resultSummary?: unknown | null;
+    completedAt?: Date;
+  },
+) {
+  const [result] = await db
+    .update(delegatedCiRuns)
+    .set({ ...updates, updatedAt: new Date() })
+    .where(eq(delegatedCiRuns.callbackId, callbackId))
+    .returning();
+  return result ?? null;
+}
+
 export async function getDelegatedCiRunsByRepoId(
   db: Database,
   repositoryId: number,
