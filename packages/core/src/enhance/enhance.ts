@@ -6,14 +6,9 @@
  */
 
 import { createModel } from '../providers/index.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import type { LLMProvider, ReviewFinding } from '../types.js';
-import {
-  buildEnhancePrompt,
-  ENHANCE_SYSTEM_PROMPT,
-  serializeFindings,
-  truncateByTokenBudget,
-} from './prompt.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
+import { buildEnhancePrompt, ENHANCE_SYSTEM_PROMPT, truncateByTokenBudget } from './prompt.js';
 import type { EnhanceInput, EnhanceMetadata, EnhanceResult } from './types.js';
 
 /** A ReviewFinding augmented with AI enhance metadata. */

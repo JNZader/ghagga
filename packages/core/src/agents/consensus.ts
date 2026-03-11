@@ -13,7 +13,6 @@
  */
 
 import { createModel } from '../providers/index.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import type {
   ConsensusStance,
   ConsensusVote,
@@ -23,6 +22,7 @@ import type {
   ReviewResult,
   ReviewStatus,
 } from '../types.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
@@ -229,7 +229,9 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
 
     // Timeout: treat as a failed vote (consensus handles missing votes gracefully)
     if (result === null) {
-      throw new Error(`LLM call timed out for ${config.provider}/${config.model} (stance: ${config.stance})`);
+      throw new Error(
+        `LLM call timed out for ${config.provider}/${config.model} (stance: ${config.stance})`,
+      );
     }
 
     const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);

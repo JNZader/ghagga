@@ -164,7 +164,7 @@ function buildApp() {
 function apiRequest(path: string, token?: string, init?: RequestInit): Request {
   const headers: Record<string, string> = {};
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
   return new Request(`http://localhost${path}`, {
     ...init,
@@ -184,7 +184,7 @@ beforeEach(() => {
 
     // Mock GitHub /user API for auth middleware
     if (url === 'https://api.github.com/user') {
-      const authHeader = (_init?.headers as Record<string, string>)?.['Authorization'] ?? '';
+      const authHeader = (_init?.headers as Record<string, string>)?.Authorization ?? '';
       const token = authHeader.replace('Bearer ', '');
 
       if (token === VALID_TOKEN) {

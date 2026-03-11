@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useCallback, useEffect, useRef } from 'react';
+import { type KeyboardEvent, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/cn';

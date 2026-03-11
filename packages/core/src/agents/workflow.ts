@@ -17,7 +17,6 @@
  */
 
 import { createModel } from '../providers/index.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import type {
   LLMProvider,
   ProgressCallback,
@@ -25,6 +24,7 @@ import type {
   ReviewResult,
   WorkflowSpecialist,
 } from '../types.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,

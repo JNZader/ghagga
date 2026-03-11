@@ -74,7 +74,7 @@ export function saveHistory(configDir: string, entry: HealthHistoryEntry): void 
     for (const e of all) {
       const key = e.projectPath;
       if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key)!.push(e);
+      grouped.get(key)?.push(e);
     }
 
     const pruned: HealthHistoryEntry[] = [];

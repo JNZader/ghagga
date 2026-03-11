@@ -26,7 +26,7 @@ function createDefaultJob(): DelegatedCiJobPolicy {
 // ─── Component ──────────────────────────────────────────────────
 
 export function DelegatedCiEditor({ value, onChange }: DelegatedCiEditorProps) {
-  const isEnabled = value !== null && value.enabled;
+  const isEnabled = value?.enabled;
 
   const handleToggle = (checked: boolean) => {
     if (checked) {
@@ -108,7 +108,7 @@ export function DelegatedCiEditor({ value, onChange }: DelegatedCiEditorProps) {
       )}
 
       {/* Enabled state — show full editor */}
-      {value !== null && value.enabled && (
+      {value?.enabled && (
         <div className="mt-4 space-y-4">
           {/* Trigger Options */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

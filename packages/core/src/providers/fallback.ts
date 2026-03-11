@@ -119,9 +119,7 @@ export async function generateWithFallback(options: FallbackOptions): Promise<Fa
       // Timeout: treat as a retryable error and try next provider
       if (result === null) {
         lastError = new Error(`LLM call timed out for ${provider}/${model}`);
-        console.warn(
-          `[ghagga] Provider ${provider}/${model} timed out, trying next...`,
-        );
+        console.warn(`[ghagga] Provider ${provider}/${model} timed out, trying next...`);
         continue;
       }
 

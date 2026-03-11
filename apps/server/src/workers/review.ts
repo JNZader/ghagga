@@ -15,7 +15,7 @@
  */
 
 import { logger } from '../lib/logger.js';
-import { createReviewWorker, reviewQueue } from '../queues/review.js';
+import { createReviewWorker } from '../queues/review.js';
 
 logger.info('🚀 Starting GHAGGA Review Worker...');
 

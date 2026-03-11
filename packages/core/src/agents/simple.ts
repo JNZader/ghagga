@@ -7,7 +7,6 @@
  */
 
 import { createModel } from '../providers/index.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import type {
   FindingSeverity,
   FindingSource,
@@ -18,6 +17,7 @@ import type {
   ReviewResult,
   ReviewStatus,
 } from '../types.js';
+import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,

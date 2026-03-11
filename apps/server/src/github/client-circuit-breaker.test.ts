@@ -7,12 +7,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { githubCircuitBreaker, SimpleCircuitBreaker } from '../lib/circuit-breaker.js';
+import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 import {
   addCommentReaction,
   fetchPRDetails,
   fetchPRDiff,
-  getInstallationToken,
   getPRCommitMessages,
   getPRFileList,
   postComment,
