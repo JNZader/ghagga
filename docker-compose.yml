@@ -48,6 +48,21 @@ services:
       - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
     ports:
       - "3000:3000"
+    networks:
+      - default
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ghagga-server.rule=Host(`api.javierzader.com`)
+      - traefik.http.routers.ghagga-server.entrypoints=https
+      - traefik.http.routers.ghagga-server.tls=true
+      - traefik.http.routers.ghagga-server.tls.certresolver=letsencrypt
+      - traefik.http.services.ghagga-server.loadbalancer.server.port=3000
+      # HTTP → HTTPS redirect
+      - traefik.http.routers.ghagga-server-http.rule=Host(`api.javierzader.com`)
+      - traefik.http.routers.ghagga-server-http.entrypoints=http
+      - traefik.http.routers.ghagga-server-http.middlewares=redirect-to-https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,6 +152,10 @@ services:
   #     - "3001:3000"
   #   depends_on:
   #     - redis
+
+networks:
+  coolify:
+    external: true
 
 volumes:
   postgres-data:
