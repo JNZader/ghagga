@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   DelegatedCiRunsResponse,
   DelegatedCiRunView,
+  DiscoveredCiJob,
   Installation,
   InstallationSettings,
   MemorySession,
@@ -409,6 +410,18 @@ export function useDelegatedCiRuns(repo: string, page = 1) {
       return result.data;
     },
     enabled: !!repo,
+  });
+}
+
+export function useDiscoverCi(repoId: number | null) {
+  return useQuery<DiscoveredCiJob[]>({
+    queryKey: ['discover-ci', repoId],
+    queryFn: () => {
+      if (!repoId) return Promise.resolve([]);
+      return fetchData<DiscoveredCiJob[]>(`/api/repositories/${repoId}/discover-ci`);
+    },
+    enabled: !!repoId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 }
 

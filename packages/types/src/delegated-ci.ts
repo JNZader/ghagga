@@ -41,3 +41,22 @@ export interface DelegatedCiPolicy {
   allowPullRequestTrigger?: boolean;
   jobs: DelegatedCiJobPolicy[];
 }
+
+// ─── CI Job Discovery ───────────────────────────────────────────
+
+/** Source type for a discovered CI job */
+export type DiscoveredCiSource = 'github-actions' | 'package-json' | 'makefile';
+
+/** Runtime detected for a repository */
+export type DiscoveredCiRuntime = 'node' | 'python' | 'go' | 'unknown';
+
+/** A CI job discovered by scanning the repository */
+export interface DiscoveredCiJob {
+  source: DiscoveredCiSource;
+  sourceFile: string;
+  jobKey: string;
+  displayName: string;
+  command: string | null;
+  suggestedProfile: DelegatedCiProfile;
+  runtime: DiscoveredCiRuntime;
+}

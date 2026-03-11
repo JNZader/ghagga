@@ -34,4 +34,7 @@ export type {
   DelegatedCiPolicy,
   DelegatedCiProfile,
   DelegatedCiRunState,
+  DiscoveredCiJob,
+  DiscoveredCiRuntime,
+  DiscoveredCiSource,
 } from './delegated-ci.js';

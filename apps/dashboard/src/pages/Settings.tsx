@@ -159,6 +159,9 @@ export function Settings() {
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
+  // Find the repo ID for the selected repo (needed for CI job discovery)
+  const selectedRepoId = repos?.find((r) => r.fullName === selectedRepo)?.id ?? undefined;
+
   const globalSettings = settings?.globalSettings;
 
   return (
@@ -495,13 +498,21 @@ export function Settings() {
               </Card>
 
               {/* ── Delegated CI ──────────────────────────────────── */}
-              <DelegatedCiEditor value={delegatedCiPolicy} onChange={setDelegatedCiPolicy} />
+              <DelegatedCiEditor
+                value={delegatedCiPolicy}
+                onChange={setDelegatedCiPolicy}
+                repoId={selectedRepoId}
+              />
             </>
           ) : null}
 
           {/* ── Delegated CI (always visible — repo-only, not inherited) ── */}
           {useGlobalSettings && (
-            <DelegatedCiEditor value={delegatedCiPolicy} onChange={setDelegatedCiPolicy} />
+            <DelegatedCiEditor
+              value={delegatedCiPolicy}
+              onChange={setDelegatedCiPolicy}
+              repoId={selectedRepoId}
+            />
           )}
 
           {/* ── Save Button ──────────────────────────────────── */}

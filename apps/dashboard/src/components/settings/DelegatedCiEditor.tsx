@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Card, CardHeader } from '@/components/Card';
-import type { DelegatedCiJobPolicy, DelegatedCiPolicy } from '@/lib/types';
+import { useDiscoverCi } from '@/lib/api';
+import type { DelegatedCiJobPolicy, DelegatedCiPolicy, DiscoveredCiJob } from '@/lib/types';
 import { DelegatedCiJobEntry } from './DelegatedCiJobEntry';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -7,6 +9,7 @@ import { DelegatedCiJobEntry } from './DelegatedCiJobEntry';
 interface DelegatedCiEditorProps {
   value: DelegatedCiPolicy | null;
   onChange: (policy: DelegatedCiPolicy | null) => void;
+  repoId?: number;
 }
 
 // ─── Defaults ───────────────────────────────────────────────────
@@ -23,10 +26,50 @@ function createDefaultJob(): DelegatedCiJobPolicy {
   };
 }
 
+function discoveredJobToPolicy(job: DiscoveredCiJob): DelegatedCiJobPolicy {
+  return {
+    jobKey: job.jobKey,
+    displayName: job.displayName,
+    profile: job.suggestedProfile,
+    classification: 'safe/delegable',
+    enabled: true,
+    allowArtifacts: false,
+    allowCache: true,
+  };
+}
+
+// ─── Source Badge ───────────────────────────────────────────────
+
+function SourceBadge({ source }: { source: DiscoveredCiJob['source'] }) {
+  const styles: Record<string, string> = {
+    'github-actions': 'bg-blue-500/20 text-blue-400',
+    'package-json': 'bg-green-500/20 text-green-400',
+    makefile: 'bg-yellow-500/20 text-yellow-400',
+  };
+  const labels: Record<string, string> = {
+    'github-actions': 'Actions',
+    'package-json': 'npm',
+    makefile: 'Make',
+  };
+
+  return (
+    <span className={`rounded-sm px-1.5 py-0.5 text-xs font-medium ${styles[source] ?? ''}`}>
+      {labels[source] ?? source}
+    </span>
+  );
+}
+
 // ─── Component ──────────────────────────────────────────────────
 
-export function DelegatedCiEditor({ value, onChange }: DelegatedCiEditorProps) {
+export function DelegatedCiEditor({ value, onChange, repoId }: DelegatedCiEditorProps) {
   const isEnabled = value?.enabled;
+  const [showDiscovery, setShowDiscovery] = useState(false);
+
+  const {
+    data: discoveredJobs,
+    isLoading: isDiscovering,
+    refetch: refetchDiscovery,
+  } = useDiscoverCi(showDiscovery ? (repoId ?? null) : null);
 
   const handleToggle = (checked: boolean) => {
     if (checked) {
@@ -65,11 +108,29 @@ export function DelegatedCiEditor({ value, onChange }: DelegatedCiEditorProps) {
     onChange({ ...value, jobs: [...value.jobs, createDefaultJob()] });
   };
 
+  const handleDiscoverJobs = () => {
+    setShowDiscovery(true);
+    if (discoveredJobs) {
+      void refetchDiscovery();
+    }
+  };
+
+  const handleAddDiscoveredJob = (job: DiscoveredCiJob) => {
+    if (!value) return;
+    // Don't add duplicates
+    if (value.jobs.some((j) => j.jobKey === job.jobKey)) return;
+    onChange({ ...value, jobs: [...value.jobs, discoveredJobToPolicy(job)] });
+  };
+
   const handleRemovePolicy = () => {
     if (window.confirm('Remove the entire Delegated CI configuration? This cannot be undone.')) {
       onChange(null);
     }
   };
+
+  // Filter out already-added jobs from discovery list
+  const existingJobKeys = new Set(value?.jobs.map((j) => j.jobKey) ?? []);
+  const availableJobs = discoveredJobs?.filter((j) => !existingJobKeys.has(j.jobKey)) ?? [];
 
   return (
     <Card>
@@ -158,21 +219,108 @@ export function DelegatedCiEditor({ value, onChange }: DelegatedCiEditorProps) {
                 ))
               )}
 
-              {value.jobs.length < 10 ? (
-                <button
-                  type="button"
-                  onClick={handleAddJob}
-                  className="w-full rounded-lg border border-dashed border-surface-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-primary-600/50 hover:text-primary-400"
-                >
-                  + Add Job
-                </button>
-              ) : (
+              {value.jobs.length < 10 && (
+                <div className="flex gap-2">
+                  {repoId && (
+                    <button
+                      type="button"
+                      onClick={handleDiscoverJobs}
+                      disabled={isDiscovering}
+                      className="flex-1 rounded-lg border border-dashed border-primary-600/50 px-4 py-2 text-sm text-primary-400 transition-colors hover:border-primary-600 hover:bg-primary-600/10 disabled:opacity-50"
+                    >
+                      {isDiscovering ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary-400 border-t-transparent" />
+                          Scanning repository...
+                        </span>
+                      ) : (
+                        'Discover Jobs from Repo'
+                      )}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddJob}
+                    className="flex-1 rounded-lg border border-dashed border-surface-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-primary-600/50 hover:text-primary-400"
+                  >
+                    + Add Custom Job
+                  </button>
+                </div>
+              )}
+
+              {value.jobs.length >= 10 && (
                 <p className="text-center text-xs text-text-secondary">
                   Maximum of 10 jobs reached.
                 </p>
               )}
             </div>
           </div>
+
+          {/* Discovery Results */}
+          {showDiscovery && !isDiscovering && discoveredJobs && (
+            <div className="rounded-lg border border-primary-600/30 bg-primary-600/5 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-text-primary">
+                  Discovered Jobs
+                  <span className="ml-2 font-normal text-text-secondary">
+                    ({availableJobs.length} available)
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowDiscovery(false)}
+                  className="text-xs text-text-secondary hover:text-text-primary"
+                >
+                  Close
+                </button>
+              </div>
+
+              {availableJobs.length === 0 ? (
+                <p className="text-sm text-text-secondary">
+                  {discoveredJobs.length === 0
+                    ? 'No CI jobs found in this repository.'
+                    : 'All discovered jobs have already been added.'}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {availableJobs.map((job) => (
+                    <div
+                      key={`${job.source}-${job.jobKey}`}
+                      className="flex items-center justify-between rounded-lg border border-surface-border bg-surface-bg p-3"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-text-primary">
+                            {job.jobKey}
+                          </span>
+                          <SourceBadge source={job.source} />
+                          <span className="rounded-sm bg-surface-border/50 px-1.5 py-0.5 text-xs text-text-secondary">
+                            {job.suggestedProfile}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-xs text-text-secondary">{job.sourceFile}</span>
+                          {job.command && (
+                            <code className="rounded-sm bg-surface-border/30 px-1 py-0.5 text-xs text-text-secondary">
+                              {job.command}
+                            </code>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleAddDiscoveredJob(job)}
+                        disabled={value.jobs.length >= 10}
+                        className="ml-3 rounded-md bg-primary-600/20 px-3 py-1.5 text-xs font-medium text-primary-400 transition-colors hover:bg-primary-600/30 disabled:opacity-50"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Remove Policy */}
           <button

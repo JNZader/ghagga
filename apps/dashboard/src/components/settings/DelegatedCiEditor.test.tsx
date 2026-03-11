@@ -5,10 +5,21 @@
  * add/remove job actions, and remove-policy confirmation flow.
  */
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DelegatedCiJobPolicy, DelegatedCiPolicy } from '@/lib/types';
 import { DelegatedCiEditor } from './DelegatedCiEditor';
+
+// ─── Mock useDiscoverCi ────────────────────────────────────────
+
+vi.mock('@/lib/api', () => ({
+  useDiscoverCi: () => ({
+    data: undefined,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -35,6 +46,13 @@ function createTestPolicy(overrides: Partial<DelegatedCiPolicy> = {}): Delegated
   };
 }
 
+function renderWithProviders(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
+
 // ─── Setup ─────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -46,7 +64,7 @@ beforeEach(() => {
 describe('DelegatedCiEditor', () => {
   it('renders null state with disabled label and info text', () => {
     const onChange = vi.fn();
-    render(<DelegatedCiEditor value={null} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={null} onChange={onChange} />);
 
     expect(screen.getByText('Disabled')).toBeInTheDocument();
     expect(screen.getByText(/no delegated ci policy configured/i)).toBeInTheDocument();
@@ -55,7 +73,7 @@ describe('DelegatedCiEditor', () => {
   it('renders disabled state when value.enabled is false', () => {
     const onChange = vi.fn();
     const policy = createTestPolicy({ enabled: false });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
     expect(screen.getByText('Disabled')).toBeInTheDocument();
     expect(screen.getByText(/delegated ci is disabled/i)).toBeInTheDocument();
@@ -64,18 +82,18 @@ describe('DelegatedCiEditor', () => {
   it('renders enabled state with empty jobs, trigger options, and add button', () => {
     const onChange = vi.fn();
     const policy = createTestPolicy({ enabled: true, jobs: [] });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
     expect(screen.getByText('Enabled')).toBeInTheDocument();
     expect(screen.getByText(/run on pull requests/i)).toBeInTheDocument();
     expect(screen.getByText(/allow manual trigger/i)).toBeInTheDocument();
     expect(screen.getByText(/add at least one job/i)).toBeInTheDocument();
-    expect(screen.getByText(/\+ add job/i)).toBeInTheDocument();
+    expect(screen.getByText(/\+ add custom job/i)).toBeInTheDocument();
   });
 
   it('enables from null and creates a fresh policy', () => {
     const onChange = vi.fn();
-    render(<DelegatedCiEditor value={null} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={null} onChange={onChange} />);
 
     const checkbox = screen.getByRole('checkbox');
     fireEvent.click(checkbox);
@@ -93,7 +111,7 @@ describe('DelegatedCiEditor', () => {
     const onChange = vi.fn();
     const jobs = [createTestJob({ jobKey: 'lint' }), createTestJob({ jobKey: 'test' })];
     const policy = createTestPolicy({ enabled: true, jobs });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
     // The main toggle is the first checkbox in the DOM
     const allCheckboxes = screen.getAllByRole('checkbox');
@@ -111,7 +129,7 @@ describe('DelegatedCiEditor', () => {
     const onChange = vi.fn();
     const jobs = [createTestJob({ jobKey: 'build' })];
     const policy = createTestPolicy({ enabled: false, jobs });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
     const checkbox = screen.getByRole('checkbox');
     fireEvent.click(checkbox);
@@ -123,12 +141,12 @@ describe('DelegatedCiEditor', () => {
     expect(result.jobs[0].jobKey).toBe('build');
   });
 
-  it('adds a job with default values when clicking "+ Add Job"', () => {
+  it('adds a job with default values when clicking "+ Add Custom Job"', () => {
     const onChange = vi.fn();
     const policy = createTestPolicy({ enabled: true, jobs: [createTestJob()] });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
-    fireEvent.click(screen.getByText(/\+ add job/i));
+    fireEvent.click(screen.getByText(/\+ add custom job/i));
 
     expect(onChange).toHaveBeenCalledOnce();
     const result = onChange.mock.calls[0]?.[0] as DelegatedCiPolicy;
@@ -144,13 +162,13 @@ describe('DelegatedCiEditor', () => {
     expect(newJob.allowCache).toBe(true);
   });
 
-  it('hides "+ Add Job" and shows max message when 10 jobs exist', () => {
+  it('hides add buttons and shows max message when 10 jobs exist', () => {
     const onChange = vi.fn();
     const jobs = Array.from({ length: 10 }, (_, i) => createTestJob({ jobKey: `job-${i}` }));
     const policy = createTestPolicy({ enabled: true, jobs });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
-    expect(screen.queryByText(/\+ add job/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\+ add custom job/i)).not.toBeInTheDocument();
     expect(screen.getByText(/maximum of 10 jobs reached/i)).toBeInTheDocument();
   });
 
@@ -158,7 +176,7 @@ describe('DelegatedCiEditor', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onChange = vi.fn();
     const policy = createTestPolicy({ enabled: true, jobs: [createTestJob()] });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
     fireEvent.click(screen.getByText(/remove delegated ci configuration/i));
 
@@ -171,7 +189,7 @@ describe('DelegatedCiEditor', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const onChange = vi.fn();
     const policy = createTestPolicy({ enabled: true, jobs: [createTestJob()] });
-    render(<DelegatedCiEditor value={policy} onChange={onChange} />);
+    renderWithProviders(<DelegatedCiEditor value={policy} onChange={onChange} />);
 
     fireEvent.click(screen.getByText(/remove delegated ci configuration/i));
 

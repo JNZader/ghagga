@@ -193,6 +193,11 @@ export async function getEffectiveRepoSettings(
 
 // ─── Repositories ───────────────────────────────────────────────
 
+export async function getRepositoryById(db: Database, id: number) {
+  const [row] = await db.select().from(repositories).where(eq(repositories.id, id)).limit(1);
+  return row ?? null;
+}
+
 export async function upsertRepository(
   db: Database,
   data: {

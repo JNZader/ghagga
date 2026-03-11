@@ -21,6 +21,11 @@ vi.mock('@/lib/api', () => ({
   useRepositories: () => mockUseRepositories(),
   useSettings: () => mockUseSettings(),
   useUpdateSettings: () => mockUseUpdateSettings(),
+  useDiscoverCi: () => ({
+    data: undefined,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 const mockUseSelectedRepo = vi.fn();
