@@ -241,7 +241,7 @@ async function handlePullRequest(
   }
 
   // Check if all changed files match ignore patterns
-  // We'll do the full file check in the Inngest function,
+  // We'll do the full file check in the BullMQ queue,
   // but we can skip dispatch if the repo has very broad patterns.
   // For now, dispatch unconditionally and let the pipeline handle filtering.
 

@@ -1,4 +1,13 @@
-# Railway Deployment Configuration for GHAGGA Server
+# =============================================================================
+# LEGACY: Railway Deployment Configuration for GHAGGA Server
+# =============================================================================
+# NOTE: GHAGGA has migrated to self-hosted deployment via Coolify on Hetzner.
+# This file is kept for reference only. The recommended deployment method is
+# documented in docs/deployment.md.
+#
+# If you still want to deploy on Railway, you will also need a Redis add-on
+# or external Redis instance for BullMQ job processing.
+# =============================================================================
 # Docs: https://docs.railway.app/deploy/config-as-code
 
 [build]
@@ -24,6 +33,7 @@ memory = "1Gi"
 # Environment variables (set these in Railway Dashboard or via CLI)
 # Required:
 #   DATABASE_URL
+#   REDIS_URL
 #   GITHUB_APP_ID
 #   GITHUB_PRIVATE_KEY
 #   GITHUB_WEBHOOK_SECRET
@@ -31,8 +41,7 @@ memory = "1Gi"
 #   STATE_SECRET
 #   GITHUB_CLIENT_SECRET
 # Optional:
-#   INNGEST_EVENT_KEY
-#   INNGEST_SIGNING_KEY
+#   WORKER_CONCURRENCY (default: 3)
 #   CALLBACK_TTL_MINUTES
 #   PORT (Railway sets this automatically)
 #   NODE_ENV

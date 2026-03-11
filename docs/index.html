@@ -127,7 +127,7 @@
               if (el.getAttribute('data-mermaid-processed')) return;
 
               var graphDef = el.textContent.trim();
-              var id = `mermaid-${mermaidId++}`;
+              var id = `mermaid-${_mermaidId++}`;
 
               try {
                 mermaid.render(id, graphDef).then((result) => {

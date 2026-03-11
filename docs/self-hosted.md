@@ -1,12 +1,11 @@
 # Self-Hosted Deployment Guide
 
-Complete step-by-step guide to deploy GHAGGA with full capabilities: webhook reviews, project memory, dashboard, and static analysis tools.
+Complete step-by-step guide to deploy GHAGGA on a Hetzner VPS with Coolify, using Docker Compose for all services: API server, worker, PostgreSQL, and Redis.
 
 ## Prerequisites
 
-- **Docker** and **Docker Compose** installed
+- A **Hetzner VPS** (or any Linux server with 2GB+ RAM) — CX22 or higher recommended
 - A **GitHub account** (to create a GitHub App)
-- An **Inngest account** (free tier — [inngest.com](https://www.inngest.com/))
 - **Optional**: LLM API key from Anthropic, OpenAI, Google, or Qwen. For GitHub Models in server mode, use a PAT with `models:read`.
 
 ## Overview
@@ -16,10 +15,11 @@ By the end of this guide you'll have:
 ```mermaid
 flowchart LR
   GH["GitHub PR Event"] --> Server["GHAGGA Server<br/>port 3000"]
-  Server --> PG["PostgreSQL<br/>port 5432"]
-  Server --> Inngest["Inngest<br/>async processing"]
-  Server --> LLM["LLM Provider<br/>Anthropic / OpenAI / Google"]
-  Server --> Comment["PR Comment"]
+  Server --> Worker["GHAGGA Worker<br/>BullMQ"]
+  Worker --> PG["PostgreSQL<br/>port 5432"]
+  Worker --> Redis["Redis<br/>port 6379"]
+  Worker --> LLM["LLM Provider<br/>Anthropic / OpenAI / Google"]
+  Worker --> Comment["PR Comment"]
 ```
 
 ---
@@ -126,40 +126,9 @@ Click **"Install"** and select which repositories GHAGGA should have access to. 
 
 ---
 
-## Step 2: Create an Inngest Account
+## Step 2: Generate Security Keys
 
-Inngest handles the async webhook processing. Without it, GHAGGA falls back to synchronous execution (which may timeout on large PRs).
-
-### 2.1 Sign up
-
-Go to **[inngest.com](https://www.inngest.com/)** and create a free account.
-
-Free tier includes **50,000 events/month** — more than enough for most teams.
-
-### 2.2 Create an App
-
-In the Inngest dashboard:
-
-1. Click **"Create App"** (or use the default app)
-2. Go to **"Manage"** → **"Signing Key"**
-3. Copy the **Signing Key** — this is your `INNGEST_SIGNING_KEY`
-4. Go to **"Manage"** → **"Event Keys"**
-5. Create a new event key or copy the default one — this is your `INNGEST_EVENT_KEY`
-
-### 2.3 Set up the Inngest webhook
-
-After deploying GHAGGA (Step 4), you'll need to register the Inngest endpoint:
-
-- In Inngest dashboard, go to **"Manage"** → **"Apps"**
-- Click **"Sync new app"**
-- Enter: `https://your-domain.com/api/inngest`
-- Click **"Sync"**
-
----
-
-## Step 3: Generate Security Keys
-
-### 3.1 Encryption Key
+### 2.1 Encryption Key
 
 Used to encrypt LLM API keys at rest with AES-256-GCM:
 
@@ -171,9 +140,9 @@ This outputs a 64-character hex string. Save it as `ENCRYPTION_KEY`.
 
 > **This key encrypts all stored API keys.** If you lose it, users will need to re-enter their API keys.
 
-### 3.1b State Secret (OAuth CSRF protection)
+### 2.2 State Secret (OAuth CSRF protection)
 
-Used to sign the OAuth state parameter for CSRF protection:
+Used to sign the OAuth state parameter for CSRF protection and runner callback HMAC derivation:
 
 ```bash
 openssl rand -hex 32
@@ -181,7 +150,7 @@ openssl rand -hex 32
 
 Save this as `STATE_SECRET`.
 
-### 3.2 Summary of all credentials
+### 2.3 Summary of all credentials
 
 By now you should have all of these:
 
@@ -190,41 +159,99 @@ By now you should have all of these:
 | `GITHUB_APP_ID` | Step 1.7 | `123456` |
 | `GITHUB_PRIVATE_KEY` | Step 1.8 | `LS0tLS1CRUdJTi...` (base64) |
 | `GITHUB_WEBHOOK_SECRET` | Step 1.2 | `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2` |
-| `INNGEST_EVENT_KEY` | Step 2.2 | `evt_xxxx` |
-| `INNGEST_SIGNING_KEY` | Step 2.2 | `signkey-xxxx` |
-| `ENCRYPTION_KEY` | Step 3.1 | `a1b2c3d4...` (64 hex chars) |
+| `ENCRYPTION_KEY` | Step 2.1 | `a1b2c3d4...` (64 hex chars) |
 | `GITHUB_CLIENT_ID` | Step 1.8b | `Ov23li...` |
 | `GITHUB_CLIENT_SECRET` | Step 1.8b | `abcdef...` (keep secret!) |
-| `STATE_SECRET` | Step 3.1b | `a1b2c3d4...` (64 hex chars) |
+| `STATE_SECRET` | Step 2.2 | `a1b2c3d4...` (64 hex chars) |
 
 ---
 
-## Step 4: Deploy
+## Step 3: Set Up Hetzner VPS
 
-Choose your deployment method:
+### 3.1 Create a VPS
 
-### Option A: Docker Compose (VPS / Local)
+1. Go to [Hetzner Cloud Console](https://console.hetzner.cloud/)
+2. Create a new project (or use an existing one)
+3. Create a server:
+   - **Location**: Choose closest to your team
+   - **Image**: Ubuntu 22.04 or 24.04
+   - **Type**: CX22 (2 vCPU, 4GB RAM) or higher recommended
+   - **Networking**: Enable public IPv4
+   - **SSH Key**: Add your SSH public key
 
-Best for: Running on your own server, local development, or a VPS.
+4. Note the server's public IP address
 
-#### 4A.1 Clone the repository
+### 3.2 Point your domain
 
-```bash
-git clone https://github.com/JNZader/ghagga.git
-cd ghagga
+Create a DNS A record pointing your domain to the server IP:
+
+```
+api.yourdomain.com  ->  YOUR_SERVER_IP
 ```
 
-#### 4A.2 Create the `.env` file
+---
+
+## Step 4: Install Coolify
+
+[Coolify](https://coolify.io/) is a self-hosted PaaS that manages Docker deployments, SSL certificates, and environment variables.
+
+### 4.1 SSH into your server
 
 ```bash
-cp .env.example .env
+ssh root@YOUR_SERVER_IP
 ```
 
-Edit `.env` and fill in all the credentials from Step 3.2:
+### 4.2 Install Coolify
+
+```bash
+curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+```
+
+This installs Coolify and all dependencies (Docker, Docker Compose, Traefik). The installation takes 2-5 minutes.
+
+### 4.3 Access Coolify dashboard
+
+Open `http://YOUR_SERVER_IP:8000` in your browser and complete the initial setup:
+
+1. Create your admin account
+2. Configure your server (localhost is auto-detected)
+
+---
+
+## Step 5: Deploy GHAGGA via Coolify
+
+### 5.1 Create a new project in Coolify
+
+In the Coolify dashboard:
+1. Click **"New Project"**
+2. Name it `ghagga`
+
+### 5.2 Deploy using Docker Compose
+
+GHAGGA's `docker-compose.yml` defines four services:
+
+| Service | Role | Description |
+|---------|------|-------------|
+| **server** | API | Hono HTTP server — receives webhooks, serves dashboard API |
+| **worker** | Queue processor | BullMQ worker — processes review jobs from the Redis queue |
+| **postgres** | Database | PostgreSQL 16 with persistent volume |
+| **redis** | Queue backend | Redis 7 for BullMQ job queues |
+
+In Coolify:
+1. Add a new resource → **Docker Compose**
+2. Connect your GitHub repository (`JNZader/ghagga`) or paste the `docker-compose.yml` content
+3. Coolify will detect the services automatically
+
+### 5.3 Configure environment variables
+
+In Coolify's environment variables section, add all credentials from Step 2.3:
 
 ```bash
 # Database (provided by Docker Compose — don't change)
 DATABASE_URL=postgresql://ghagga:ghagga_dev@postgres:5432/ghagga
+
+# Redis (provided by Docker Compose — don't change)
+REDIS_URL=redis://redis:6379
 
 # GitHub App
 GITHUB_APP_ID=123456
@@ -233,10 +260,6 @@ GITHUB_WEBHOOK_SECRET=a1b2c3d4e5f6...
 GITHUB_CLIENT_ID=Ov23li...
 GITHUB_CLIENT_SECRET=abcdef...
 
-# Inngest
-INNGEST_EVENT_KEY=evt_xxxx
-INNGEST_SIGNING_KEY=signkey-xxxx
-
 # Encryption
 ENCRYPTION_KEY=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
 STATE_SECRET=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
@@ -244,72 +267,73 @@ STATE_SECRET=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
 # Server
 PORT=3000
 NODE_ENV=production
+SERVER_URL=https://api.yourdomain.com
+WORKER_CONCURRENCY=3
 ```
 
-#### 4A.3 Start the services
+### 5.4 Configure domain and SSL
+
+In Coolify:
+1. Go to the **server** service settings
+2. Set the domain to `api.yourdomain.com`
+3. Coolify auto-provisions SSL via Let's Encrypt through its built-in Traefik proxy
+
+### 5.5 Deploy
+
+Click **"Deploy"**. Coolify builds the Docker images and starts all four services.
+
+---
+
+## Alternative: Manual Docker Compose (without Coolify)
+
+If you prefer to deploy directly without Coolify:
+
+### Clone and configure
+
+```bash
+git clone https://github.com/JNZader/ghagga.git
+cd ghagga
+cp .env.example .env
+# Edit .env with your credentials (see Step 5.3 above)
+```
+
+### Start the services
 
 ```bash
 docker compose up -d
 ```
 
-This starts:
-- **PostgreSQL 16** on port 5432 (with health checks and persistent volume)
-- **GHAGGA Server** on port 3000 (with 15 static analysis tools pre-installed, Docker `HEALTHCHECK` enabled)
+This starts all four services: PostgreSQL, Redis, GHAGGA server, and GHAGGA worker.
 
-#### 4A.4 Verify it's running
+### Expose with a reverse proxy
 
-```bash
-# Check container status
-docker compose ps
-
-# Check server health
-curl http://localhost:3000/health
-# Should return: {"status":"ok"}
-
-# Check logs
-docker compose logs server -f
-```
-
-#### 4A.5 Expose to the internet
-
-GHAGGA needs a public URL for GitHub webhooks. Options:
-
-| Method | Best For |
-|--------|----------|
-| **Reverse proxy** (nginx, Caddy, Traefik) | Production VPS |
-| **ngrok** (`ngrok http 3000`) | Local testing |
-| **Cloudflare Tunnel** | Production without opening ports |
-
-Example with **Caddy** (auto-HTTPS):
+Use Caddy (auto-HTTPS), nginx, or Traefik:
 
 ```
-ghagga.yourdomain.com {
+# Caddyfile example
+api.yourdomain.com {
     reverse_proxy localhost:3000
 }
 ```
 
-#### 4A.6 Update the webhook URL
+---
+
+## Step 6: Update GitHub App Webhook URL
 
 Go back to your GitHub App settings (Step 1) and update the **Webhook URL** to:
 
 ```
-https://ghagga.yourdomain.com/webhook
-```
-
-Also update the Inngest webhook (Step 2.3):
-
-```
-https://ghagga.yourdomain.com/api/inngest
+https://api.yourdomain.com/webhook
 ```
 
 ---
 
-## Step 5: Verify the Deployment
+## Step 7: Verify the Deployment
 
-### 5.1 Health check
+### 7.1 Health check
 
 ```bash
-curl https://your-domain.com/health
+curl https://api.yourdomain.com/health
 ```
 
 Expected response:
@@ -318,49 +342,47 @@ Expected response:
 {"status":"ok"}
 ```
 
-### 5.2 Test the webhook
+### 7.2 Test the webhook
 
 Create a test Pull Request on a repository where you installed the GitHub App. You should see:
 
 1. **In GHAGGA server logs**: A webhook event received
-2. **In Inngest dashboard**: An event `ghagga/review.requested` processed
+2. **In worker logs**: A review job processed from the BullMQ queue
 3. **On the PR**: A review comment posted by GHAGGA
 
-### 5.3 Check the dashboard
+### 7.3 Check the dashboard
 
-Navigate to `https://your-domain.com` (or use the [GitHub Pages dashboard](https://jnzader.github.io/ghagga/app/) with your server URL configured).
+Navigate to the [GitHub Pages dashboard](https://jnzader.github.io/ghagga/app/) with your server URL configured, or host the dashboard on your own domain.
 
 Log in with your GitHub account (OAuth) or a Personal Access Token. OAuth login requires `GITHUB_CLIENT_SECRET` and `STATE_SECRET` to be configured.
 
 ---
 
-## Step 6: Configure Repositories
+## Step 8: Configure Repositories
 
 Once deployed, configure your LLM providers:
 
 1. Open the GHAGGA dashboard
 2. Go to **Global Settings** to set installation-wide defaults
-3. Configure a **provider chain** — ordered list of providers with fallback (e.g., GitHub Models → OpenAI → Anthropic)
+3. Configure a **provider chain** — ordered list of providers with fallback (e.g., GitHub Models -> OpenAI -> Anthropic)
 4. Each provider needs an API key or token. For **GitHub Models** in server mode, use a PAT with `models:read` because GitHub App installation tokens do not have that scope.
 5. Choose review mode (Simple, Workflow, or Consensus)
 6. Configure which static analysis tools to enable
-7. Individual repos can override global settings via **Settings** → toggle "Use global settings" off
+7. Individual repos can override global settings via **Settings** -> toggle "Use global settings" off
 
 ---
 
-## Step 6.5: Configure Runner (Optional)
+## Step 8.5: Configure Runner (Optional)
 
-For self-hosted deployments running on machines with 1GB+ RAM, static analysis tools run directly inside the Docker container — no runner needed.
+For self-hosted deployments on machines with 1GB+ RAM, static analysis tools run directly inside the Docker container -- no runner needed.
 
-For deployments on limited-memory platforms (like Render free tier), delegate static analysis to a runner:
+For deployments where you want to offload static analysis to GitHub's free compute:
 
 1. Each user creates a public repo from [`JNZader/ghagga-runner-template`](https://github.com/JNZader/ghagga-runner-template) named `ghagga-runner`
 2. The server auto-discovers runner repos by convention (`GET /repos/{owner}/ghagga-runner`)
-3. The server needs the callback endpoint accessible: `https://your-domain.com/runner/callback`
+3. The server needs the callback endpoint accessible: `https://api.yourdomain.com/runner/callback`
 
-The runner setup is per-user — each GitHub user/org that installs GHAGGA can have their own runner repo.
-
-> **Note**: The SaaS Dashboard has an "Enable Runner" button that auto-creates the runner repo via the GitHub Template API. This feature is **SaaS-only** — self-hosted users must create the runner repo manually from the template as described above.
+The runner setup is per-user -- each GitHub user/org that installs GHAGGA can have their own runner repo.
 
 ---
 
@@ -368,16 +390,17 @@ The runner setup is per-user — each GitHub user/org that installs GHAGGA can h
 
 ### Webhook not received
 
-- Verify the webhook URL matches exactly: `https://your-domain.com/webhook`
+- Verify the webhook URL matches exactly: `https://api.yourdomain.com/webhook`
 - Check the webhook secret matches `GITHUB_WEBHOOK_SECRET`
-- In GitHub App settings → **"Advanced"** → **"Recent Deliveries"**, check for failed deliveries
+- In GitHub App settings -> **"Advanced"** -> **"Recent Deliveries"**, check for failed deliveries
 - Ensure your server is publicly accessible (not behind a firewall)
 
-### Inngest events not processing
+### Worker not processing jobs
 
-- Verify `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` are correct
-- Check that you synced the app in Inngest dashboard (Step 2.3)
-- In Inngest dashboard → **"Events"**, look for `ghagga/review.requested` events
+- Check that Redis is running: `docker compose logs redis`
+- Check worker logs: `docker compose logs worker -f`
+- Verify `REDIS_URL` is correct and accessible from the worker container
+- Check worker concurrency: default is 3, adjust with `WORKER_CONCURRENCY`
 
 ### Server won't start
 
@@ -388,17 +411,17 @@ The server validates all required environment variables (`DATABASE_URL`, `GITHUB
 docker compose logs server
 
 # Common issues:
-# - Missing required env vars → server exits with "Missing required env vars: ..." message
-# - DATABASE_URL is wrong → check PostgreSQL is running first
-# - GITHUB_PRIVATE_KEY is not base64-encoded → re-encode it
-# - ENCRYPTION_KEY is not 64 hex characters → regenerate with openssl
+# - Missing required env vars -> server exits with "Missing required env vars: ..." message
+# - DATABASE_URL is wrong -> check PostgreSQL is running first
+# - GITHUB_PRIVATE_KEY is not base64-encoded -> re-encode it
+# - ENCRYPTION_KEY is not 64 hex characters -> regenerate with openssl
 ```
 
 ### Static analysis tools not working
 
 ```bash
 # Check tools via the diagnostic endpoint
-curl https://your-domain.com/health/tools
+curl https://api.yourdomain.com/health/tools
 
 # Or check directly in the container
 docker compose exec server semgrep --version
@@ -408,7 +431,7 @@ docker compose exec server pmd --version
 
 If any tool is missing or fails, the review continues without it (graceful degradation).
 
-> **Memory requirements**: Semgrep (Python) and PMD/CPD (Java) need >512MB RAM. On hosting plans with limited memory (e.g., Render free tier at 512MB), static analysis is delegated to a [runner](runner-architecture.md) instead. If running Docker locally with 1GB+ RAM, all tools work directly in the container.
+> **Memory requirements**: Semgrep (Python) and PMD/CPD (Java) need >512MB RAM. On the recommended Hetzner CX22 (4GB RAM), all tools work directly in the container without needing a runner.
 
 ---
 
@@ -421,29 +444,34 @@ flowchart TB
     Runner["ghagga-runner<br/>GitHub Actions"]
   end
 
-  subgraph Docker["Docker Compose"]
-    Server["GHAGGA Server<br/>Hono · port 3000"]
+  subgraph Hetzner["Hetzner VPS (Coolify)"]
+    Server["GHAGGA Server<br/>Hono - port 3000"]
+    Worker["GHAGGA Worker<br/>BullMQ"]
     PG["PostgreSQL 16<br/>port 5432"]
+    Redis["Redis 7<br/>port 6379"]
   end
 
   subgraph External
-    Inngest["Inngest<br/>async processing"]
     LLM["LLM Provider<br/>Anthropic / OpenAI / Google"]
   end
 
   PR -->|webhook| Server
+  Server -->|enqueue job| Redis
+  Redis -->|dequeue job| Worker
   Server -->|workflow_dispatch| Runner
   Runner -->|callback| Server
-  Server --> PG
-  Server --> Inngest
-  Inngest --> Server
-  Server --> LLM
-  Server -->|PR comment| GitHub
+  Worker --> PG
+  Worker --> LLM
+  Worker -->|PR comment| GitHub
 ```
 
 ## Updating
 
 To update to the latest version:
+
+**With Coolify**: Click **"Redeploy"** in the Coolify dashboard after pulling the latest changes.
+
+**Manual Docker Compose**:
 
 ```bash
 cd ghagga
@@ -452,4 +480,4 @@ docker compose build
 docker compose up -d
 ```
 
-The PostgreSQL data is persisted in a Docker volume (`pgdata`) and survives rebuilds.
+The PostgreSQL data is persisted in a Docker volume (`pgdata`) and survives rebuilds. Redis data is ephemeral (job queues are transient).

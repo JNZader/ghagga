@@ -14,15 +14,19 @@
 | `GITHUB_WEBHOOK_SECRET` | Yes | Secret configured in GitHub App webhook settings |
 | `GITHUB_CLIENT_ID` | No | GitHub OAuth App client ID override for dashboard login (defaults to the hosted public client ID) |
 | `GITHUB_CLIENT_SECRET` | Conditionally | Required for dashboard OAuth Web Flow (`/auth/callback`) |
-| `INNGEST_EVENT_KEY` | No | Inngest event ingestion key (falls back to sync execution without it) |
-| `INNGEST_SIGNING_KEY` | No | Inngest webhook signing key |
+| `REDIS_URL` | No | Full Redis connection URL (e.g., `redis://localhost:6379`). Takes precedence over `REDIS_HOST`/`REDIS_PORT` |
+| `REDIS_HOST` | No | Redis hostname (default: `localhost`). Used when `REDIS_URL` is not set |
+| `REDIS_PORT` | No | Redis port (default: `6379`). Used when `REDIS_URL` is not set |
+| `WORKER_CONCURRENCY` | No | Number of concurrent BullMQ worker jobs (default: `3`) |
+| `SERVICE_TYPE` | No | Service role: `server` (API only), `worker` (queue processor only), or omit for both |
+| `SERVER_URL` | No | Public server URL for callbacks (default: `https://api.javierzader.com`) |
 | `ENCRYPTION_KEY` | Yes | 64-character hex string for AES-256-GCM encryption |
 | `STATE_SECRET` | Conditionally | Required for OAuth Web Flow state signing and runner callback HMAC derivation |
 | `CALLBACK_TTL_MINUTES` | No | Runner callback secret TTL in minutes (default: `11`) |
 | `PORT` | No | Server port (default: `3000`) |
 | `NODE_ENV` | No | `development` or `production` |
 
-> **Startup vs runtime**: The server fails fast on core boot variables (`DATABASE_URL`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`). `GITHUB_CLIENT_SECRET` and `STATE_SECRET` are additionally required when you use dashboard OAuth Web Flow; `STATE_SECRET` is also used for runner callback signing.
+> **Startup vs runtime**: The server fails fast on core boot variables (`DATABASE_URL`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`). `GITHUB_CLIENT_SECRET` and `STATE_SECRET` are additionally required when you use dashboard OAuth Web Flow; `STATE_SECRET` is also used for runner callback signing. Redis connection is required for the worker service; without it, the server falls back to synchronous execution.
 
 ### CLI Mode
 

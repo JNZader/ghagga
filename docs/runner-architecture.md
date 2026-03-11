@@ -4,7 +4,7 @@
 
 ## The Problem
 
-The Render free tier (512MB RAM) can't run Semgrep (Python ~400MB) + PMD/CPD (JVM ~300MB) and the other static analysis tools simultaneously. Running all tools requires significant RAM.
+Running Semgrep (Python ~400MB) + PMD/CPD (JVM ~300MB) and the other static analysis tools simultaneously requires significant RAM. On memory-constrained servers, this can be a bottleneck.
 
 ## The Solution
 
@@ -114,7 +114,7 @@ If the runner repo doesn't exist or the dispatch fails, the server falls back to
 |------|---------|
 | `apps/server/src/github/runner.ts` | Runner discovery, secret setup, workflow dispatch |
 | `apps/server/src/routes/runner-callback.ts` | Callback endpoint, HMAC verification |
-| `apps/server/src/inngest/review.ts` | 7-step Inngest function with runner dispatch/wait |
+| `apps/server/src/queues/review.ts` | BullMQ review queue with runner dispatch/wait |
 | `templates/ghagga-analysis.yml` | The workflow that runs on the runner |
 
 ## Template Repository
@@ -166,7 +166,7 @@ sequenceDiagram
     participant WH as Webhook Handler
     participant PE as Policy Evaluator
     participant DB as PostgreSQL
-    participant IG as Inngest
+    participant WK as BullMQ Worker
     participant RN as Runner Module
     participant GA as ghagga-runner
     participant CB as Callback Route
@@ -178,16 +178,16 @@ sequenceDiagram
     alt Jobs rejected
         PE->>DB: Insert delegated_ci_runs (state=rejected, reasonCode)
     else Jobs approved
-        PE->>IG: Send "ghagga/delegated-ci.requested"
-        IG->>DB: Insert delegated_ci_runs (state=approved)
-        IG->>RN: buildDelegatedCiDescriptor + dispatchRunnerWorkflow
+        PE->>WK: Enqueue "delegated-ci" job
+        WK->>DB: Insert delegated_ci_runs (state=approved)
+        WK->>RN: buildDelegatedCiDescriptor + dispatchRunnerWorkflow
         RN->>GA: workflow_dispatch ghagga-delegated-ci.yml
-        IG->>DB: Update state=dispatched
+        WK->>DB: Update state=dispatched
         GA->>CB: POST /runner/callback (state=running)
-        CB->>IG: Emit "ghagga/delegated-ci.callback"
+        CB->>WK: Resume job processing
         GA->>CB: POST /runner/callback (state=completed|failed)
-        CB->>IG: Emit "ghagga/delegated-ci.callback"
-        IG->>DB: Update state=completed|failed + summary
+        CB->>WK: Resume job processing
+        WK->>DB: Update state=completed|failed + summary
     end
 ```
 
@@ -242,9 +242,9 @@ Each job is classified as either `safe/delegable` or `sensitive/no-delegable`. T
 
 Any job that fails a check is rejected with a machine-readable `reasonCode` (e.g., `delegated_ci_disabled`, `job_sensitive`, `profile_unsupported`).
 
-### Inngest Orchestration Lifecycle
+### BullMQ Orchestration Lifecycle
 
-Delegated CI uses a dedicated Inngest function (`ghagga-delegated-ci`) separate from the AI review flow. The lifecycle for each approved job:
+Delegated CI uses a dedicated BullMQ queue (`delegated-ci`) separate from the AI review queue. The lifecycle for each approved job:
 
 ```mermaid
 stateDiagram-v2
@@ -258,12 +258,12 @@ stateDiagram-v2
     [*] --> rejected : Policy check fails
 ```
 
-The function processes approved jobs sequentially within a single invocation. Each job follows 4 durable steps:
+The worker processes approved jobs sequentially within a single job execution. Each job follows 4 steps:
 
-1. **Create run record** — inserts a `delegated_ci_runs` row with `state: approved`
-2. **Dispatch** — builds the descriptor, provisions ephemeral secrets, dispatches `ghagga-delegated-ci.yml`, updates state to `dispatched`
-3. **Wait for callback** — `step.waitForEvent("ghagga/delegated-ci.callback", { match: callbackId, timeout: 15m })`
-4. **Finalize** — updates the run record to `completed`, `failed`, or `timed_out`
+1. **Create run record** -- inserts a `delegated_ci_runs` row with `state: approved`
+2. **Dispatch** -- builds the descriptor, provisions ephemeral secrets, dispatches `ghagga-delegated-ci.yml`, updates state to `dispatched`
+3. **Wait for callback** -- polls for the runner callback with a 15-minute timeout
+4. **Finalize** -- updates the run record to `completed`, `failed`, or `timed_out`
 
 ### Callback Routing
 
@@ -272,10 +272,10 @@ The callback endpoint (`POST /runner/callback`) is dual-purpose: it handles both
 | Payload Field | Static Analysis | Delegated CI |
 |--------------|-----------------|--------------|
 | `executionKind` | Absent / undefined | `"delegated-ci"` |
-| Inngest event emitted | `ghagga/runner.completed` | `ghagga/delegated-ci.callback` |
-| Resuming function | Review Inngest function | Delegated CI Inngest function |
+| Queue notified | `review` queue | `delegated-ci` queue |
+| Resuming job | Review worker job | Delegated CI worker job |
 
-Both callback types share the same HMAC verification logic (`verifyCallbackSignature`) and the same `POST /runner/callback` route. The callback router parses the payload, determines the execution kind, and emits the appropriate Inngest event so the correct durable function resumes.
+Both callback types share the same HMAC verification logic (`verifyCallbackSignature`) and the same `POST /runner/callback` route. The callback router parses the payload, determines the execution kind, and notifies the appropriate BullMQ job so the correct worker resumes processing.
 
 ### Delegated CI Security Considerations
 
@@ -305,7 +305,7 @@ Delegated CI runs are stored in a dedicated `delegated_ci_runs` table, separate 
 | `apps/server/src/delegated-ci/profiles.ts` | Curated execution profile registry |
 | `apps/server/src/delegated-ci/policy.ts` | Policy evaluator with classification and MVP guardrails |
 | `apps/server/src/github/runner.ts` | Runner discovery, secret provisioning, generic workflow dispatch |
-| `apps/server/src/inngest/delegated-ci.ts` | Durable orchestration (create, dispatch, wait, finalize) |
+| `apps/server/src/queues/delegated-ci.ts` | BullMQ orchestration (create, dispatch, wait, finalize) |
 | `apps/server/src/routes/runner-callback.ts` | Dual-purpose callback route (static analysis + delegated CI) |
 | `templates/ghagga-delegated-ci.yml` | Runner workflow template for CI jobs |
 | `packages/db/src/schema.ts` | `delegated_ci_runs` table and `delegatedCiPolicy` JSONB column |

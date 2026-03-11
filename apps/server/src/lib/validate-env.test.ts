@@ -92,7 +92,7 @@ describe('getMissingEnvVars', () => {
     const env = {
       ...fullEnv(),
       RENDER_EXTERNAL_URL: 'https://example.com',
-      INNGEST_EVENT_KEY: 'key',
+      REDIS_URL: 'redis://localhost:6379',
     };
     expect(getMissingEnvVars(env)).toEqual([]);
   });

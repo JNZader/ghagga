@@ -77,7 +77,7 @@ function decodePrivateKey(key: string): string {
 
 /**
  * Fetch pull request details (head SHA, base branch, etc.).
- * Used by the issue_comment handler to enrich the Inngest event.
+ * Used by the issue_comment handler to enrich the BullMQ job.
  */
 export async function fetchPRDetails(
   owner: string,

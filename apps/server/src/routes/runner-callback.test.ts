@@ -2,7 +2,7 @@
  * Runner callback route tests.
  *
  * Tests POST /runner/callback with mocked HMAC verification
- * and logging (Inngest removed during BullMQ migration).
+ * and logging (uses BullMQ for job processing).
  */
 
 import { Hono } from 'hono';
@@ -176,7 +176,7 @@ describe('POST /runner/callback', () => {
       expect(logMessage).toBe('Runner callback accepted — feature pending BullMQ migration');
     });
 
-    it('does not dispatch any external event (Inngest removed)', async () => {
+    it('does not dispatch any external event (uses BullMQ)', async () => {
       mockVerifyCallbackSignature.mockReturnValue(true);
 
       const app = createApp();
