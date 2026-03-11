@@ -284,13 +284,21 @@ async function processReview(
       } else {
         const envKey = process.env[`${llmProvider?.toUpperCase()}_API_KEY`];
         if (!envKey) {
-          throw new Error(
-            `No API key configured for provider ${llmProvider}. ` +
-              `Set a per-repo key or the ${llmProvider?.toUpperCase()}_API_KEY env var.`,
+          log.warn(
+            { provider: llmProvider },
+            `No API key configured for provider ${llmProvider} — falling back to static-analysis-only`,
           );
+          legacyProvider = undefined;
+          legacyApiKey = undefined;
+        } else {
+          legacyApiKey = envKey;
         }
-        legacyApiKey = envKey;
       }
+    }
+
+    // If no provider available at all, force AI review off
+    if (!providerChain && !legacyProvider) {
+      log.info('No LLM provider available — AI review disabled, static analysis only');
     }
 
     let db: Database | undefined;
@@ -306,7 +314,7 @@ async function processReview(
       diff,
       mode: reviewMode as ReviewMode,
       providerChain,
-      aiReviewEnabled: aiReviewEnabled ?? true,
+      aiReviewEnabled: (aiReviewEnabled ?? true) && !!(providerChain || legacyProvider),
       provider: legacyProvider,
       model: legacyModel,
       apiKey: legacyApiKey,
