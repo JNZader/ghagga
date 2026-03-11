@@ -17,6 +17,7 @@ import {
   getDelegatedCiPolicy,
   getEffectiveRepoSettings,
   getInstallationByGitHubId,
+  getInstallationById,
   getRepoByGithubId,
   upsertInstallation,
   upsertRepository,
@@ -308,21 +309,30 @@ async function handlePullRequest(
       }
 
       if (approvedJobs.length > 0) {
-        for (const approved of approvedJobs) {
-          const profile = getProfile(approved.profile ?? 'node-lint');
-          await enqueueDelegatedCiJob({
-            repositoryId: repo.id,
-            repoFullName: payload.repository.full_name,
-            prNumber: payload.number,
-            headSha: payload.pull_request.head.sha,
-            baseBranch: payload.pull_request.base.ref,
-            installationId: repo.installationId,
-            jobKey: approved.jobKey,
-            profile: approved.profile ?? 'node-lint',
-            allowArtifacts: false,
-            allowCache: true,
-            maxDurationMinutes: profile?.defaultTimeoutMinutes ?? 10,
-          });
+        // Resolve internal DB installation ID to GitHub's installation ID
+        const ciInstallation = await getInstallationById(db, repo.installationId);
+        if (!ciInstallation) {
+          logger.warn(
+            { repoId: repo.id, installationId: repo.installationId },
+            'Installation record not found for delegated CI dispatch',
+          );
+        } else {
+          for (const approved of approvedJobs) {
+            const profile = getProfile(approved.profile ?? 'node-lint');
+            await enqueueDelegatedCiJob({
+              repositoryId: repo.id,
+              repoFullName: payload.repository.full_name,
+              prNumber: payload.number,
+              headSha: payload.pull_request.head.sha,
+              baseBranch: payload.pull_request.base.ref,
+              installationId: ciInstallation.githubInstallationId,
+              jobKey: approved.jobKey,
+              profile: approved.profile ?? 'node-lint',
+              allowArtifacts: false,
+              allowCache: true,
+              maxDurationMinutes: profile?.defaultTimeoutMinutes ?? 10,
+            });
+          }
         }
       }
 

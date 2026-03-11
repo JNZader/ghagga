@@ -7,7 +7,7 @@
  */
 
 import type { Database } from 'ghagga-db';
-import { getRepositoryById } from 'ghagga-db';
+import { getInstallationById, getRepositoryById } from 'ghagga-db';
 import { Hono } from 'hono';
 import { getInstallationToken } from '../../github/client.js';
 import type { AuthUser } from '../../middleware/auth.js';
@@ -303,7 +303,17 @@ export function createDiscoverCiRouter(db: Database) {
         );
       }
 
-      const token = await getInstallationToken(repo.installationId, appId, privateKey);
+      // Resolve internal DB installation ID to GitHub's installation ID
+      const installation = await getInstallationById(db, repo.installationId);
+      if (!installation) {
+        return c.json({ error: 'CONFIG_ERROR', message: 'Installation record not found' }, 500);
+      }
+
+      const token = await getInstallationToken(
+        installation.githubInstallationId,
+        appId,
+        privateKey,
+      );
       const discovered: DiscoveredCiJob[] = [];
 
       // Detect runtime first (parallel HEAD checks)

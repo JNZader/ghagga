@@ -215,7 +215,12 @@ export async function upsertRepository(
   if (existing.length > 0) {
     await db
       .update(repositories)
-      .set({ fullName: data.fullName, isActive: true, updatedAt: new Date() })
+      .set({
+        fullName: data.fullName,
+        installationId: data.installationId,
+        isActive: true,
+        updatedAt: new Date(),
+      })
       .where(eq(repositories.githubRepoId, data.githubRepoId));
     // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert/update
     return existing[0]!;
