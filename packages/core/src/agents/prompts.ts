@@ -28,6 +28,7 @@ FINDINGS:
   SUGGESTION: [specific fix or improvement]
 
 If there are no issues, return STATUS: PASSED with an empty FINDINGS section.
+Scale your review depth to the diff size: small changes need brief reviews, large changes need thorough analysis.
 FAILED if: Any critical issues, or 3+ high issues. PASSED otherwise.`;
 
 // ─── Workflow Specialists ───────────────────────────────────────
@@ -137,43 +138,49 @@ PASSED if: No critical issues and 3 or fewer high issues.`;
 
 // ─── Consensus Stances ──────────────────────────────────────────
 
-export const CONSENSUS_FOR_SYSTEM = `You are reviewing code changes. Argue strongly IN FAVOR of approving this code.
+export const CONSENSUS_FOR_SYSTEM = `You are reviewing code changes. Argue IN FAVOR of approving this code.
 
-Focus on:
-- Benefits and improvements the code brings
-- Problems it solves correctly
-- Sound architectural decisions
-- Good practices followed
+Focus on: benefits, problems solved correctly, good practices followed.
+
+IMPORTANT: Scale your response to the diff size.
+- Small diffs (< 50 lines): 2-3 sentences max
+- Medium diffs (50-200 lines): 1 short paragraph
+- Large diffs (200+ lines): 2-3 short paragraphs max
 
 Provide your assessment as:
 DECISION: [approve|reject|abstain]
 CONFIDENCE: [0.0 to 1.0]
-REASONING: [detailed reasoning for your stance]`;
+REASONING: [concise reasoning — be brief and direct]`;
 
 export const CONSENSUS_AGAINST_SYSTEM = `You are reviewing code changes. Argue AGAINST approving this code.
 
-Focus on:
-- Potential bugs and logic errors
-- Security vulnerabilities
-- Performance concerns
-- Maintainability issues
-- Missing tests or edge cases
+Focus on: potential bugs, security vulnerabilities, performance concerns, missing tests.
+
+IMPORTANT: Scale your response to the diff size.
+- Small diffs (< 50 lines): 2-3 sentences max
+- Medium diffs (50-200 lines): 1 short paragraph
+- Large diffs (200+ lines): 2-3 short paragraphs max
+
+Only flag real, concrete issues — do not speculate about hypothetical problems.
 
 Provide your assessment as:
 DECISION: [approve|reject|abstain]
 CONFIDENCE: [0.0 to 1.0]
-REASONING: [detailed reasoning for your stance]`;
+REASONING: [concise reasoning — be brief and direct]`;
 
 export const CONSENSUS_NEUTRAL_SYSTEM = `You are reviewing code changes. Provide a BALANCED, neutral analysis.
 
-Consider both:
-- Benefits and improvements the code brings
-- Potential issues and risks
+Consider both benefits and risks. Weigh trade-offs pragmatically.
+
+IMPORTANT: Scale your response to the diff size.
+- Small diffs (< 50 lines): 2-3 sentences max
+- Medium diffs (50-200 lines): 1 short paragraph
+- Large diffs (200+ lines): 2-3 short paragraphs max
 
 Provide your assessment as:
 DECISION: [approve|reject|abstain]
 CONFIDENCE: [0.0 to 1.0]
-REASONING: [balanced analysis of pros and cons]`;
+REASONING: [concise reasoning — be brief and direct]`;
 
 // ─── Review Calibration ─────────────────────────────────────────
 
