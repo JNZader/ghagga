@@ -19,7 +19,7 @@ const mockNavigate = vi.fn();
 
 vi.mock('@/lib/oauth', () => ({
   fetchGitHubUser: (...args: unknown[]) => mockFetchGitHubUser(...args),
-  API_URL: 'https://ghagga.onrender.com',
+  API_URL: 'https://api.javierzader.com',
 }));
 
 vi.mock('@/lib/auth', () => ({

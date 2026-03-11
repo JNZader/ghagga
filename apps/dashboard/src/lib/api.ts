@@ -22,7 +22,7 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   (window.location.hostname === 'localhost'
     ? 'http://localhost:3000'
-    : 'https://p01--ghagga--yl8qpjgjkht8.code.run');
+    : 'https://api.javierzader.com');
 
 class ApiError extends Error {
   constructor(

@@ -17,7 +17,7 @@ function getAllowedOrigins(): string[] {
   if (envOrigins) {
     return envOrigins.split(',').map((o) => o.trim());
   }
-  const defaults = ['https://jnzader.github.io', 'https://ghagga.onrender.com'];
+  const defaults = ['https://jnzader.github.io', 'https://api.javierzader.com'];
   if (process.env.NODE_ENV !== 'production') {
     defaults.push('http://localhost:3000', 'http://localhost:5173');
   }

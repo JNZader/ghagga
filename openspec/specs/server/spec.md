@@ -158,7 +158,7 @@ The system MUST restrict Cross-Origin Resource Sharing to an explicit allowlist 
 
 The default allowed origins MUST be:
 - `https://jnzader.github.io` (dashboard)
-- `https://ghagga.onrender.com` (same-origin API)
+- `https://api.javierzader.com` (same-origin API)
 
 When `NODE_ENV` is `development`, the system MUST additionally allow:
 - `http://localhost:3000`

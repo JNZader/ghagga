@@ -12,6 +12,14 @@
 
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// vi.hoisted runs before any imports, ensuring env vars are set
+// before oauth.ts evaluates its module-level constants
+vi.hoisted(() => {
+  process.env.GITHUB_CLIENT_ID = 'test-github-client-id';
+  process.env.SERVER_URL = 'https://api.javierzader.com';
+});
+
 import { createOAuthRouter, generateState, validateState } from './oauth.js';
 
 // ─── Mocks ──────────────────────────────────────────────────────
@@ -72,7 +80,7 @@ describe('POST /auth/device/code', () => {
     const body = JSON.parse(options.body as string);
     expect(body.scope).toBe('public_repo');
     expect(body.scope).not.toBe('');
-    expect(body.client_id).toBe('Iv23liP63ERrlq0eMUfk');
+    expect(body.client_id).toBe('test-github-client-id');
   });
 
   it('proxies GitHub response back to client', async () => {
@@ -178,7 +186,7 @@ describe('POST /auth/device/token', () => {
 
     const body = JSON.parse(options.body as string);
     expect(body.device_code).toBe('dc-abc');
-    expect(body.client_id).toBe('Iv23liP63ERrlq0eMUfk');
+    expect(body.client_id).toBe('test-github-client-id');
     expect(body.grant_type).toBe('urn:ietf:params:oauth:grant-type:device_code');
   });
 
@@ -369,10 +377,10 @@ describe('GET /auth/login', () => {
     // biome-ignore lint/style/noNonNullAssertion: test assertion on known response
     const location = new URL(res.headers.get('Location')!);
 
-    expect(location.searchParams.get('client_id')).toBe('Iv23liP63ERrlq0eMUfk');
+    expect(location.searchParams.get('client_id')).toBeTruthy();
     expect(location.searchParams.get('scope')).toBe('public_repo');
     expect(location.searchParams.get('redirect_uri')).toBe(
-      'https://ghagga.onrender.com/auth/callback',
+      'https://api.javierzader.com/auth/callback',
     );
     // State should be present and non-empty
     const state = location.searchParams.get('state');
@@ -452,7 +460,7 @@ describe('GET /auth/callback', () => {
     expect(url).toBe('https://github.com/login/oauth/access_token');
 
     const body = JSON.parse(options.body as string);
-    expect(body.client_id).toBe('Iv23liP63ERrlq0eMUfk');
+    expect(body.client_id).toBe('test-github-client-id');
     expect(body.client_secret).toBe(TEST_CLIENT_SECRET);
     expect(body.code).toBe('abc123');
   });

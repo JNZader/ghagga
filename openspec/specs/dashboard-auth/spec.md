@@ -16,7 +16,7 @@ El servidor Hono MUST implementar dos nuevos endpoints públicos (sin auth middl
 
 1. **`GET /auth/login`** — MUST redirigir al usuario a `https://github.com/login/oauth/authorize` con los parámetros:
    - `client_id`: El Client ID de la OAuth App de GHAGGA (`Ov23liyYpSgDqOLUFa5k`)
-   - `redirect_uri`: La URL de callback del servidor (`https://ghagga.onrender.com/auth/callback`)
+   - `redirect_uri`: La URL de callback del servidor (`https://api.javierzader.com/auth/callback`)
    - `scope`: `public_repo`
    - `state`: Parámetro HMAC-signed (ver R2)
 2. **`GET /auth/callback`** — MUST recibir `code` y `state` de GitHub, validar el state (ver R2), intercambiar el code por un access_token via `POST https://github.com/login/oauth/access_token` usando `CLIENT_ID` + `CLIENT_SECRET`, y redirigir al Dashboard con el token en el URL fragment.
@@ -36,7 +36,7 @@ Los endpoints MUST NOT requerir autenticación previa (son usados ANTES del logi
 - AND la URL incluye `client_id=Ov23liyYpSgDqOLUFa5k`
 - AND la URL incluye `scope=public_repo`
 - AND la URL incluye un parámetro `state` no vacío
-- AND la URL incluye `redirect_uri=https://ghagga.onrender.com/auth/callback`
+- AND la URL incluye `redirect_uri=https://api.javierzader.com/auth/callback`
 
 #### Scenario: S-R1.2 — Callback intercambia code por token y redirige
 

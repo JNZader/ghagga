@@ -20,7 +20,7 @@ let locationHref = '';
 
 vi.mock('@/lib/oauth', () => ({
   isServerAvailable: (...args: unknown[]) => mockIsServerAvailable(...args),
-  API_URL: 'https://ghagga.onrender.com',
+  API_URL: 'https://api.javierzader.com',
 }));
 
 vi.mock('@/lib/auth', () => ({
@@ -120,7 +120,7 @@ describe('Login — server online', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Sign in with GitHub/i }));
 
-    expect(locationHref).toBe('https://ghagga.onrender.com/auth/login');
+    expect(locationHref).toBe('https://api.javierzader.com/auth/login');
   });
 
   it('stores redirect destination in sessionStorage before redirect', async () => {

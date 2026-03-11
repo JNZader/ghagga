@@ -53,7 +53,7 @@ jobs:
       - name: Build dashboard
         run: pnpm exec turbo build --filter=@ghagga/dashboard
         env:
-          VITE_API_URL: ${{ vars.API_URL || 'https://ghagga.onrender.com' }}
+          VITE_API_URL: ${{ vars.API_URL || 'https://api.javierzader.com' }}
 
       - name: Assemble Pages artifact
         run: |

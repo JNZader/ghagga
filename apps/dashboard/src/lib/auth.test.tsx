@@ -17,7 +17,7 @@ const mockFetchGitHubUser = vi.fn();
 
 vi.mock('./oauth', () => ({
   fetchGitHubUser: (...args: unknown[]) => mockFetchGitHubUser(...args),
-  API_URL: 'https://ghagga.onrender.com',
+  API_URL: 'https://api.javierzader.com',
 }));
 
 // ─── localStorage mock ──────────────────────────────────────────
@@ -228,7 +228,7 @@ describe('reAuthenticate', () => {
       result.current.reAuthenticate();
     });
 
-    expect(locationHref).toBe('https://ghagga.onrender.com/auth/login');
+    expect(locationHref).toBe('https://api.javierzader.com/auth/login');
   });
 });
 
