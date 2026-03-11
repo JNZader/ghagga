@@ -17,7 +17,18 @@ export type DelegatedCiProfile =
   | 'node-unit'
   | 'python-lint'
   | 'python-pytest'
-  | 'go-test';
+  | 'go-test'
+  | 'go-lint'
+  | 'jvm-gradle-build'
+  | 'jvm-gradle-test'
+  | 'jvm-maven-build'
+  | 'jvm-maven-test'
+  | 'rust-build'
+  | 'rust-test'
+  | 'dotnet-build'
+  | 'dotnet-test'
+  | 'php-lint'
+  | 'php-test';
 
 /** Per-job policy within a repository's delegated CI configuration */
 export interface DelegatedCiJobPolicy {
@@ -304,6 +315,17 @@ const VALID_PROFILES = new Set<string>([
   'python-lint',
   'python-pytest',
   'go-test',
+  'go-lint',
+  'jvm-gradle-build',
+  'jvm-gradle-test',
+  'jvm-maven-build',
+  'jvm-maven-test',
+  'rust-build',
+  'rust-test',
+  'dotnet-build',
+  'dotnet-test',
+  'php-lint',
+  'php-test',
 ]);
 
 function isValidProfile(value: unknown): value is DelegatedCiProfile {

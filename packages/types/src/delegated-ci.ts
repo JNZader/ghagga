@@ -19,7 +19,18 @@ export type DelegatedCiProfile =
   | 'node-unit'
   | 'python-lint'
   | 'python-pytest'
-  | 'go-test';
+  | 'go-test'
+  | 'go-lint'
+  | 'jvm-gradle-build'
+  | 'jvm-gradle-test'
+  | 'jvm-maven-build'
+  | 'jvm-maven-test'
+  | 'rust-build'
+  | 'rust-test'
+  | 'dotnet-build'
+  | 'dotnet-test'
+  | 'php-lint'
+  | 'php-test';
 
 /** Per-job policy within a repository's delegated CI configuration */
 export interface DelegatedCiJobPolicy {
@@ -48,7 +59,15 @@ export interface DelegatedCiPolicy {
 export type DiscoveredCiSource = 'github-actions' | 'package-json' | 'makefile';
 
 /** Runtime detected for a repository */
-export type DiscoveredCiRuntime = 'node' | 'python' | 'go' | 'unknown';
+export type DiscoveredCiRuntime =
+  | 'node'
+  | 'python'
+  | 'go'
+  | 'jvm'
+  | 'rust'
+  | 'dotnet'
+  | 'php'
+  | 'unknown';
 
 /** Confidence level for a job delegation recommendation */
 export type RecommendationConfidence = 'high' | 'medium' | 'low';

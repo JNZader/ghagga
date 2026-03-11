@@ -34,8 +34,8 @@ function makePolicy(overrides: Partial<DelegatedCiPolicy> = {}): DelegatedCiPoli
 // ─── Profiles Registry ──────────────────────────────────────────
 
 describe('Execution Profiles', () => {
-  it('has exactly 5 MVP profiles', () => {
-    expect(EXECUTION_PROFILES.size).toBe(5);
+  it('has exactly 16 execution profiles', () => {
+    expect(EXECUTION_PROFILES.size).toBe(16);
   });
 
   it.each([
@@ -44,6 +44,17 @@ describe('Execution Profiles', () => {
     'python-lint',
     'python-pytest',
     'go-test',
+    'go-lint',
+    'jvm-gradle-build',
+    'jvm-gradle-test',
+    'jvm-maven-build',
+    'jvm-maven-test',
+    'rust-build',
+    'rust-test',
+    'dotnet-build',
+    'dotnet-test',
+    'php-lint',
+    'php-test',
   ])('supports profile "%s"', (id) => {
     expect(isSupportedProfile(id)).toBe(true);
   });
@@ -335,6 +346,17 @@ describe('evaluateJob', () => {
         'python-lint',
         'python-pytest',
         'go-test',
+        'go-lint',
+        'jvm-gradle-build',
+        'jvm-gradle-test',
+        'jvm-maven-build',
+        'jvm-maven-test',
+        'rust-build',
+        'rust-test',
+        'dotnet-build',
+        'dotnet-test',
+        'php-lint',
+        'php-test',
       ];
 
       for (const profile of profiles) {
