@@ -26,11 +26,9 @@ function decodePrivateKey(key: string): string {
   }
 
   // Replace any escaped newline sequences with real newlines.
-  // Coolify/Docker can multi-escape: \n → \\n → \\\\n etc.
-  // Repeatedly replace until no more escaped sequences remain.
-  while (cleanKey.includes('\\n')) {
-    cleanKey = cleanKey.replace(/\\n/g, '\n');
-  }
+  // Coolify/Docker can multi-escape: \n → \\n → \\\\n in env vars.
+  // Match one or more backslashes followed by 'n' and replace with real newline.
+  cleanKey = cleanKey.replace(/\\+n/g, '\n');
 
   // If key has proper newlines, return as-is
   if (cleanKey.includes('-----BEGIN') && cleanKey.includes('\n')) {
