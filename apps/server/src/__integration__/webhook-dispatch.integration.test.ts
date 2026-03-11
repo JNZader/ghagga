@@ -23,6 +23,8 @@ const mockUpsertRepository = vi.fn();
 const mockGetInstallationByGitHubId = vi.fn();
 const mockDeleteMappingsByInstallationId = vi.fn();
 
+const mockGetInstallationById = vi.fn();
+
 vi.mock('ghagga-db', () => ({
   getRepoByGithubId: (...args: unknown[]) => mockGetRepoByGithubId(...args),
   getEffectiveRepoSettings: (...args: unknown[]) => mockGetEffectiveRepoSettings(...args),
@@ -30,6 +32,7 @@ vi.mock('ghagga-db', () => ({
   deactivateInstallation: (...args: unknown[]) => mockDeactivateInstallation(...args),
   upsertRepository: (...args: unknown[]) => mockUpsertRepository(...args),
   getInstallationByGitHubId: (...args: unknown[]) => mockGetInstallationByGitHubId(...args),
+  getInstallationById: (...args: unknown[]) => mockGetInstallationById(...args),
   deleteMappingsByInstallationId: (...args: unknown[]) =>
     mockDeleteMappingsByInstallationId(...args),
   getDelegatedCiPolicy: vi.fn().mockResolvedValue(null),
@@ -155,6 +158,7 @@ beforeEach(() => {
   mockUpsertInstallation.mockResolvedValue({ id: 1 });
   mockUpsertRepository.mockResolvedValue({ id: 1 });
   mockGetInstallationToken.mockResolvedValue('ghs-fake-token');
+  mockGetInstallationById.mockResolvedValue({ id: 1, githubInstallationId: 99999 });
   mockFetchPRDetails.mockResolvedValue({ headSha: 'abc123def', baseBranch: 'main' });
   mockAddCommentReaction.mockResolvedValue(undefined);
 });

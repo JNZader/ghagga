@@ -482,6 +482,12 @@ describe('upsertRepository', () => {
 
     expect(result).toEqual(existing);
     expect(mockUpdate).toHaveBeenCalled();
+    // Verify installationId is included in the update (Bug fix: reinstall updates the FK)
+    const setArg = mockSet.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(setArg.installationId).toBe(5);
+    expect(setArg.fullName).toBe('new/repo');
+    expect(setArg.isActive).toBe(true);
+    expect(setArg.updatedAt).toBeInstanceOf(Date);
   });
 
   it('should insert new repo with DEFAULT_REPO_SETTINGS', async () => {
