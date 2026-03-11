@@ -7,7 +7,7 @@
  * to static-analysis-only results.
  */
 
-import { generateText, type GenerateTextResult } from 'ai';
+import { type GenerateTextResult, generateText } from 'ai';
 
 /** Default timeout for LLM calls: 60 seconds. */
 export const LLM_TIMEOUT_MS = 60_000;
@@ -37,7 +37,7 @@ type GenerateTextParams = Parameters<typeof generateText>[0];
 export async function generateTextWithTimeout(
   params: GenerateTextParams,
   context?: { provider?: string; model?: string },
-): Promise<GenerateTextResult<Record<string, never>, never> | null> {
+): Promise<GenerateTextResult<any, any> | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
@@ -60,9 +60,8 @@ export async function generateTextWithTimeout(
 
     // Check if this was an abort/timeout
     if (isAbortError(error)) {
-      const providerInfo = context?.provider && context?.model
-        ? `${context.provider}/${context.model}`
-        : 'unknown';
+      const providerInfo =
+        context?.provider && context?.model ? `${context.provider}/${context.model}` : 'unknown';
 
       console.warn(
         `[ghagga] LLM call timed out after ${(elapsed / 1000).toFixed(1)}s ` +

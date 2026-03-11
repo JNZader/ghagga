@@ -35,7 +35,9 @@ describe('generateTextWithTimeout', () => {
       text: 'STATUS: PASSED\nSUMMARY: Looks good.',
       usage: { inputTokens: 100, outputTokens: 50 },
     };
-    mockGenerateText.mockResolvedValue(mockResult as ReturnType<typeof generateText> extends Promise<infer T> ? T : never);
+    mockGenerateText.mockResolvedValue(
+      mockResult as ReturnType<typeof generateText> extends Promise<infer T> ? T : never,
+    );
 
     const promise = generateTextWithTimeout(
       { model: {} as Parameters<typeof generateText>[0]['model'], prompt: 'test' },
@@ -56,9 +58,10 @@ describe('generateTextWithTimeout', () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     } as ReturnType<typeof generateText> extends Promise<infer T> ? T : never);
 
-    const promise = generateTextWithTimeout(
-      { model: {} as Parameters<typeof generateText>[0]['model'], prompt: 'test' },
-    );
+    const promise = generateTextWithTimeout({
+      model: {} as Parameters<typeof generateText>[0]['model'],
+      prompt: 'test',
+    });
 
     await vi.advanceTimersByTimeAsync(0);
     await promise;
@@ -98,12 +101,8 @@ describe('generateTextWithTimeout', () => {
     const result = await promise;
 
     expect(result).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('LLM call timed out'),
-    );
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('google/gemini-2.5-flash'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('LLM call timed out'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('google/gemini-2.5-flash'));
 
     warnSpy.mockRestore();
   });
@@ -133,17 +132,16 @@ describe('generateTextWithTimeout', () => {
       });
     });
 
-    const promise = generateTextWithTimeout(
-      { model: {} as Parameters<typeof generateText>[0]['model'], prompt: 'test' },
-    );
+    const promise = generateTextWithTimeout({
+      model: {} as Parameters<typeof generateText>[0]['model'],
+      prompt: 'test',
+    });
 
     await vi.advanceTimersByTimeAsync(LLM_TIMEOUT_MS + 100);
 
     const result = await promise;
     expect(result).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('unknown'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('unknown'));
 
     warnSpy.mockRestore();
   });
