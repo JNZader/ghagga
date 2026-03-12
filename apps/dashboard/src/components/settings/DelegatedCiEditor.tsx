@@ -4,6 +4,7 @@ import { useDiscoverCi } from '@/lib/api';
 import type {
   DelegatedCiJobPolicy,
   DelegatedCiPolicy,
+  DelegatedCiProfile,
   DiscoveredCiJob,
   JobRecommendation,
 } from '@/lib/types';
@@ -35,7 +36,7 @@ function discoveredJobToPolicy(job: DiscoveredCiJob): DelegatedCiJobPolicy {
   return {
     jobKey: job.jobKey,
     displayName: job.displayName,
-    profile: job.suggestedProfile,
+    profile: (job.recommendation?.suggestedProfile as DelegatedCiProfile) ?? job.suggestedProfile,
     classification: 'safe/delegable',
     enabled: true,
     allowArtifacts: false,
@@ -367,7 +368,7 @@ export function DelegatedCiEditor({ value, onChange, repoId }: DelegatedCiEditor
                             <SourceBadge source={job.source} />
                             <RecommendationBadge recommendation={job.recommendation} />
                             <span className="rounded-sm bg-surface-border/50 px-1.5 py-0.5 text-xs text-text-secondary">
-                              {job.suggestedProfile}
+                              {job.recommendation?.suggestedProfile ?? job.suggestedProfile}
                             </span>
                           </div>
                           {job.recommendation?.reason && (

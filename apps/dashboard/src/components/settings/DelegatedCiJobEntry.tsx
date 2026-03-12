@@ -21,6 +21,17 @@ const PROFILE_OPTIONS: { value: DelegatedCiProfile; label: string }[] = [
   { value: 'python-lint', label: 'Python Lint' },
   { value: 'python-pytest', label: 'Python Pytest' },
   { value: 'go-test', label: 'Go Test' },
+  { value: 'go-lint', label: 'Go Lint' },
+  { value: 'jvm-gradle-build', label: 'JVM Gradle Build' },
+  { value: 'jvm-gradle-test', label: 'JVM Gradle Test' },
+  { value: 'jvm-maven-build', label: 'JVM Maven Build' },
+  { value: 'jvm-maven-test', label: 'JVM Maven Test' },
+  { value: 'rust-build', label: 'Rust Build' },
+  { value: 'rust-test', label: 'Rust Test' },
+  { value: 'dotnet-build', label: '.NET Build' },
+  { value: 'dotnet-test', label: '.NET Test' },
+  { value: 'php-lint', label: 'PHP Lint' },
+  { value: 'php-test', label: 'PHP Test' },
 ];
 
 const CLASSIFICATION_OPTIONS: { value: DelegatedCiClassification; label: string }[] = [

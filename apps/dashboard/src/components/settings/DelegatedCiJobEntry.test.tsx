@@ -110,19 +110,30 @@ describe('DelegatedCiJobEntry', () => {
     expect(onRemove).toHaveBeenCalledOnce();
   });
 
-  it('shows correct profile options (5 profiles)', () => {
+  it('shows correct profile options (16 profiles)', () => {
     render(<DelegatedCiJobEntry index={0} job={createTestJob()} onChange={noop} onRemove={noop} />);
 
     const profileSelect = screen.getByDisplayValue('Node.js Lint');
     const options = within(profileSelect).getAllByRole('option');
 
-    expect(options).toHaveLength(5);
+    expect(options).toHaveLength(16);
     expect(options.map((o) => o.textContent)).toEqual([
       'Node.js Lint',
       'Node.js Unit Tests',
       'Python Lint',
       'Python Pytest',
       'Go Test',
+      'Go Lint',
+      'JVM Gradle Build',
+      'JVM Gradle Test',
+      'JVM Maven Build',
+      'JVM Maven Test',
+      'Rust Build',
+      'Rust Test',
+      '.NET Build',
+      '.NET Test',
+      'PHP Lint',
+      'PHP Test',
     ]);
   });
 
