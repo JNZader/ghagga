@@ -138,7 +138,7 @@ All configuration is done via Action inputs in the workflow YAML. The Action doe
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` |
+| `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `model` | No | Auto | Model identifier (auto-selects best model per provider, e.g. `gpt-4o-mini` for GitHub) |
 | `mode` | No | `simple` | Review mode: `simple` (1 LLM call), `workflow` (5 specialists), `consensus` (3 perspectives + algorithmic vote) |
 | `api-key` | No | — | LLM provider API key. **Not required** for `github` provider unless you want to override the token used for GitHub Models |

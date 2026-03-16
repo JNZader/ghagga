@@ -290,7 +290,7 @@ The health command inherits `--output json` from global options for CI integrati
 |--------|-------|---------|-------------|
 | `[path]` | — | `.` | Optional path to repository or subdirectory |
 | `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus` |
-| `--provider <provider>` | `-p` | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` |
+| `--provider <provider>` | `-p` | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `--model <model>` | — | Auto | Model identifier (auto-selects best model per provider) |
 | `--api-key <key>` | — | — | LLM provider API key (or use env vars) |
 | `--output <format>` | `-o` | `markdown` | Output format: `markdown`, `json`, `sarif` |

@@ -117,5 +117,9 @@ GHAGGA never sees or stores your keys in plaintext. They're encrypted with AES-2
 | Google | `gemini-2.5-flash` |
 | Ollama | `qwen2.5-coder:7b` |
 | Qwen | `qwen-coder-plus` |
+| Groq | `llama-3.3-70b-versatile` |
+| Cerebras | `llama-3.3-70b` |
+| DeepSeek | `deepseek-chat` |
+| OpenRouter | `deepseek/deepseek-chat` |
 
 Static analysis tools (Semgrep, Trivy, CPD) are always free — they run on GitHub Actions runners (unlimited free minutes for public repos).

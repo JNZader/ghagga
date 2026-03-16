@@ -103,7 +103,7 @@ jobs:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` |
+| `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `model` | No | Auto | Model identifier (auto-selects best per provider) |
 | `mode` | No | `simple` | Review mode: `simple`, `workflow`, `consensus` |
 | `api-key` | No | -- | LLM provider API key. Not required for `github` provider (free default). |
@@ -174,7 +174,7 @@ ghagga hooks install
 |--------|-------|---------|-------------|
 | `[path]` | -- | `.` | Path to repository or subdirectory |
 | `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus` |
-| `--provider <provider>` | `-p` | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` |
+| `--provider <provider>` | `-p` | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `--model <model>` | -- | Auto | Model identifier (or `GHAGGA_MODEL` env var) |
 | `--api-key <key>` | -- | -- | API key (or `GHAGGA_API_KEY` env var) |
 | `--output <format>` | `-o` | `markdown` | Output format: `markdown`, `json`, `sarif` |
@@ -792,6 +792,10 @@ ghagga/
 | Google | `gemini-2.5-flash` |
 | Ollama | `qwen2.5-coder:7b` |
 | Qwen | `qwen-coder-plus` |
+| Groq | `llama-3.3-70b-versatile` |
+| Cerebras | `llama-3.3-70b` |
+| DeepSeek | `deepseek-chat` |
+| OpenRouter | `deepseek/deepseek-chat` |
 
 ### Token Budget
 

@@ -200,7 +200,7 @@ Each entry in a `provider_chain` JSONB column. Encrypted API keys are stored per
 
 ```typescript
 interface DbProviderChainEntry {
-  provider: 'anthropic' | 'openai' | 'google' | 'github' | 'qwen';
+  provider: 'anthropic' | 'openai' | 'google' | 'github' | 'qwen' | 'groq' | 'cerebras' | 'deepseek' | 'openrouter';
   model: string;
   encryptedApiKey: string | null; // null for GitHub Models (uses session token)
 }

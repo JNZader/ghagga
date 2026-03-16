@@ -33,7 +33,7 @@
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GHAGGA_API_KEY` | No | LLM provider API key (not needed for GitHub Models — use `ghagga login` instead) |
-| `GHAGGA_PROVIDER` | No | Provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen` (default: `github`) |
+| `GHAGGA_PROVIDER` | No | Provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` (default: `github`) |
 | `GHAGGA_MODEL` | No | Model identifier (auto-selects best per provider) |
 | `GHAGGA_MEMORY_BACKEND` | No | Memory backend: `sqlite` (default, FTS5 at `~/.config/ghagga/memory.db`) or `engram` (HTTP API for cross-tool memory sharing) |
 | `GHAGGA_ENGRAM_HOST` | No | Engram server URL (default: `http://localhost:7437`). Falls back to SQLite if unreachable. |
@@ -76,6 +76,10 @@ Place a `.ghagga.json` in your repo root for project-level defaults:
 | Google | `gemini-2.5-flash` |
 | Ollama | `qwen2.5-coder:7b` |
 | Qwen | `qwen-coder-plus` |
+| Groq | `llama-3.3-70b-versatile` |
+| Cerebras | `llama-3.3-70b` |
+| DeepSeek | `deepseek-chat` |
+| OpenRouter | `deepseek/deepseek-chat` |
 
 ## Token Budget
 
