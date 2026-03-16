@@ -276,7 +276,7 @@ export function DelegatedCiEditor({ value, onChange, repoId }: DelegatedCiEditor
               ) : (
                 value.jobs.map((job, index) => (
                   <DelegatedCiJobEntry
-                    key={`${job.jobKey || 'new'}-${index}`}
+                    key={job.jobKey ? `job-${job.jobKey}` : `job-new-${index}`}
                     index={index}
                     job={job}
                     onChange={(updated) => handleEntryChange(index, updated)}

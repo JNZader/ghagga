@@ -70,13 +70,19 @@ export function ObservationDetailModal({ observation, onClose }: ObservationDeta
   const typeConfig = observationTypeConfig[observation.type];
 
   return createPortal(
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onKeyDown={handleKeyDown}>
-      {/* Backdrop */}
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+    <div
+      role="presentation"
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onKeyDown={handleKeyDown}
+    >
+      {/* Backdrop — acts as a dismiss button for keyboard/mouse */}
       <div
+        role="button"
+        tabIndex={-1}
+        aria-label="Close dialog"
         className="absolute inset-0 bg-black/60"
         onClick={handleBackdropClick}
+        onKeyDown={handleKeyDown}
         data-testid="detail-backdrop"
       />
 
@@ -119,6 +125,7 @@ export function ObservationDetailModal({ observation, onClose }: ObservationDeta
 
             {/* Close button */}
             <button
+              type="button"
               onClick={onClose}
               className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
               aria-label="Close"
@@ -129,7 +136,9 @@ export function ObservationDetailModal({ observation, onClose }: ObservationDeta
                 viewBox="0 0 24 24"
                 stroke="currentColor"
                 strokeWidth={1.5}
+                aria-hidden="true"
               >
+                <title>Close icon</title>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>

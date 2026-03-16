@@ -227,6 +227,7 @@ export function Layout({ children }: LayoutProps) {
                 <p className="truncate text-sm font-medium text-text-primary">{user.githubLogin}</p>
               </div>
               <button
+                type="button"
                 onClick={handleLogout}
                 className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
                 title="Logout"
