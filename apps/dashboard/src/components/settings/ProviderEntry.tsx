@@ -35,6 +35,10 @@ interface ProviderEntryProps {
 
 const PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
   { value: 'github', label: 'GitHub Models (Free)' },
+  { value: 'groq', label: 'Groq (Free)' },
+  { value: 'cerebras', label: 'Cerebras (Free)' },
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'openrouter', label: 'OpenRouter (Multi-Model)' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'google', label: 'Google' },
