@@ -36,11 +36,21 @@ beforeEach(() => {
 // ─── CURATED_MODELS ─────────────────────────────────────────────
 
 describe('CURATED_MODELS', () => {
-  it('has all 5 SaaS providers', () => {
+  it('has all 9 SaaS providers', () => {
     expect(Object.keys(CURATED_MODELS)).toEqual(
-      expect.arrayContaining(['anthropic', 'openai', 'google', 'github', 'qwen']),
+      expect.arrayContaining([
+        'anthropic',
+        'openai',
+        'google',
+        'github',
+        'qwen',
+        'groq',
+        'cerebras',
+        'deepseek',
+        'openrouter',
+      ]),
     );
-    expect(Object.keys(CURATED_MODELS)).toHaveLength(5);
+    expect(Object.keys(CURATED_MODELS)).toHaveLength(9);
   });
 
   it('each provider has at least one model', () => {
@@ -383,6 +393,112 @@ describe('validateProviderKey — google', () => {
 
     // json() fails → msg defaults to "Invalid API key" but doesn't include "api key" lowercase match
     // Actually: data.error?.message is undefined, msg = "Invalid API key", which does include "api key"
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Invalid API key');
+  });
+});
+
+// ─── New OpenAI-Compatible Providers (Groq, Cerebras, DeepSeek, OpenRouter) ───
+
+describe('validateProviderKey — groq', () => {
+  it('returns models from /models endpoint on success', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: [{ id: 'llama-3.3-70b-versatile' }, { id: 'mixtral-8x7b-32768' }],
+        }),
+    });
+
+    const result = await validateProviderKey('groq', 'gsk-key');
+
+    expect(result.valid).toBe(true);
+    expect(result.models).toContain('llama-3.3-70b-versatile');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.groq.com/openai/v1/models',
+      expect.objectContaining({ headers: { Authorization: 'Bearer gsk-key' } }),
+    );
+  });
+
+  it('returns 401 as invalid key', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401, text: () => Promise.resolve('') });
+
+    const result = await validateProviderKey('groq', 'bad-key');
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Invalid API key');
+  });
+});
+
+describe('validateProviderKey — cerebras', () => {
+  it('returns models from /models endpoint on success', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: [{ id: 'llama-3.3-70b' }] }),
+    });
+
+    const result = await validateProviderKey('cerebras', 'csk-key');
+
+    expect(result.valid).toBe(true);
+    expect(result.models).toContain('llama-3.3-70b');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.cerebras.ai/v1/models',
+      expect.objectContaining({ headers: { Authorization: 'Bearer csk-key' } }),
+    );
+  });
+
+  it('falls back to curated list when /models returns non-auth error', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('Internal Error'),
+    });
+
+    const result = await validateProviderKey('cerebras', 'csk-key');
+    expect(result.valid).toBe(true);
+    expect(result.models).toEqual(CURATED_MODELS.cerebras);
+  });
+});
+
+describe('validateProviderKey — deepseek', () => {
+  it('returns models on success', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }] }),
+    });
+
+    const result = await validateProviderKey('deepseek', 'dsk-key');
+
+    expect(result.valid).toBe(true);
+    expect(result.models).toContain('deepseek-chat');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.deepseek.com/v1/models',
+      expect.objectContaining({ headers: { Authorization: 'Bearer dsk-key' } }),
+    );
+  });
+});
+
+describe('validateProviderKey — openrouter', () => {
+  it('returns models on success', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({ data: [{ id: 'deepseek/deepseek-chat' }, { id: 'openai/gpt-4o' }] }),
+    });
+
+    const result = await validateProviderKey('openrouter', 'sk-or-key');
+
+    expect(result.valid).toBe(true);
+    expect(result.models).toContain('deepseek/deepseek-chat');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://openrouter.ai/api/v1/models',
+      expect.objectContaining({ headers: { Authorization: 'Bearer sk-or-key' } }),
+    );
+  });
+
+  it('returns 403 as invalid key', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403, text: () => Promise.resolve('') });
+
+    const result = await validateProviderKey('openrouter', 'bad-key');
     expect(result.valid).toBe(false);
     expect(result.error).toBe('Invalid API key');
   });

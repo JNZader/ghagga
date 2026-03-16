@@ -164,7 +164,17 @@ export function createInstallationsRouter(db: Database) {
         apiKey?: string;
       }>;
 
-      const VALID_SAAS_PROVIDERS = ['anthropic', 'openai', 'google', 'github', 'qwen', 'groq', 'cerebras', 'deepseek', 'openrouter'];
+      const VALID_SAAS_PROVIDERS = [
+        'anthropic',
+        'openai',
+        'google',
+        'github',
+        'qwen',
+        'groq',
+        'cerebras',
+        'deepseek',
+        'openrouter',
+      ];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {
           return c.json(

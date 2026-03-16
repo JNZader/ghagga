@@ -260,7 +260,17 @@ export function createSettingsRouter(db: Database) {
         apiKey?: string;
       }>;
 
-      const VALID_SAAS_PROVIDERS = ['anthropic', 'openai', 'google', 'github', 'qwen', 'groq', 'cerebras', 'deepseek', 'openrouter'];
+      const VALID_SAAS_PROVIDERS = [
+        'anthropic',
+        'openai',
+        'google',
+        'github',
+        'qwen',
+        'groq',
+        'cerebras',
+        'deepseek',
+        'openrouter',
+      ];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {
           return c.json(
@@ -486,7 +496,17 @@ export function createSettingsRouter(db: Database) {
       );
     }
 
-    const validProviders = ['anthropic', 'openai', 'google', 'github', 'qwen', 'groq', 'cerebras', 'deepseek', 'openrouter'];
+    const validProviders = [
+      'anthropic',
+      'openai',
+      'google',
+      'github',
+      'qwen',
+      'groq',
+      'cerebras',
+      'deepseek',
+      'openrouter',
+    ];
     if (!validProviders.includes(provider)) {
       return c.json({ error: 'VALIDATION_ERROR', message: `Unknown provider: ${provider}` }, 400);
     }
