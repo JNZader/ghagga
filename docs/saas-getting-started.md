@@ -64,6 +64,10 @@ Navigate to **Dashboard** > **Settings** (or **Global Settings** for installatio
 | Google | `gemini-2.5-flash` | BYOK | Yes | Low cost per token |
 | Ollama | `qwen2.5-coder:7b` | **Free** (local) | No | Requires local Ollama server |
 | Qwen | `qwen-coder-plus` | BYOK | Yes | Alibaba Cloud |
+| Groq | `llama-3.3-70b-versatile` | **Free** tier | Yes | Free tier, fast inference |
+| Cerebras | `llama-3.3-70b` | **Free** tier | Yes | Ultra-fast (~3000 tok/s) |
+| DeepSeek | `deepseek-chat` | Near-free ($0.004/day) | Yes | High quality, low cost |
+| OpenRouter | `deepseek/deepseek-chat` | BYOK | Yes | Multi-model gateway |
 
 ### GitHub Models setup (server mode)
 

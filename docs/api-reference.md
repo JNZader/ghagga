@@ -513,13 +513,13 @@ Updates configuration for a repository. Supports partial updates — only includ
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen` |
+| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `model` | `string` | Yes | Model identifier (e.g., `gpt-4o-mini`, `claude-sonnet-4-20250514`) |
 | `apiKey` | `string` | No | API key (omit to keep existing key; `github` provider never needs one) |
 
 > **API Key Behavior**: When you send a `providerChain` entry without an `apiKey`, the server preserves the previously stored encrypted key for that provider. Send a new `apiKey` to rotate it. The `github` provider uses the user's session token and never requires an API key.
 
-> **Valid Providers**: `github`, `anthropic`, `openai`, `google`, `qwen`. The `ollama` provider is **not** available in the SaaS dashboard — use the CLI or GitHub Action instead.
+> **Valid Providers**: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter`. The `ollama` provider is **not** available in the SaaS dashboard — use the CLI or GitHub Action instead.
 
 **Response** `200`:
 
@@ -972,7 +972,7 @@ Tests whether a provider API key is valid. Returns the list of available models 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen` |
+| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `apiKey` | `string` | Conditional | Required for all providers except `github` (which uses the session token) |
 
 **Response** `200` (valid key):

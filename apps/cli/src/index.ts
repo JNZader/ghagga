@@ -14,7 +14,7 @@
  *
  * Environment variables (override stored config):
  *   GHAGGA_API_KEY          API key for the LLM provider
- *   GHAGGA_PROVIDER         LLM provider: anthropic, openai, google, github, ollama, qwen
+ *   GHAGGA_PROVIDER         LLM provider: anthropic, openai, google, github, ollama, qwen, groq, cerebras, deepseek, openrouter
  *   GHAGGA_MODEL            Model identifier
  *   GITHUB_TOKEN            GitHub token (fallback for github provider)
  *   GHAGGA_MEMORY_BACKEND   Memory backend: sqlite (default) or engram
