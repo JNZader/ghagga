@@ -1,4 +1,4 @@
-import { useAvailableKeys, type AvailableKeysMap } from '@/lib/api';
+import { type AvailableKeysMap, useAvailableKeys } from '@/lib/api';
 import type { SaaSProvider } from '@/lib/types';
 import { ProviderEntry, type ProviderEntryState } from './ProviderEntry';
 
@@ -18,7 +18,11 @@ const DEFAULT_ENTRY: ProviderEntryState = {
   validated: false,
 };
 
-export function ProviderChainEditor({ chain, onChange, availableKeys: keysProp }: ProviderChainEditorProps) {
+export function ProviderChainEditor({
+  chain,
+  onChange,
+  availableKeys: keysProp,
+}: ProviderChainEditorProps) {
   // Fetch available keys if not provided as a prop (self-contained usage)
   const { data: fetchedKeys } = useAvailableKeys();
   const availableKeys: AvailableKeysMap = keysProp ?? fetchedKeys ?? {};

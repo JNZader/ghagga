@@ -52,7 +52,7 @@ describe('CardHeader', () => {
   });
 
   it('renders action slot when provided', () => {
-    render(<CardHeader title="Title" action={<button>Action</button>} />);
+    render(<CardHeader title="Title" action={<button type="button">Action</button>} />);
     expect(screen.getByText('Action')).toBeInTheDocument();
   });
 });

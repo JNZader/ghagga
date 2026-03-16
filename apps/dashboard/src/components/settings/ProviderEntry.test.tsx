@@ -167,7 +167,9 @@ describe('ProviderEntry', () => {
 
     // After switching, the password input should be visible
     expect(screen.getByPlaceholderText(/enter api key/i)).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: /select a saved api key/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: /select a saved api key/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('calls onChange with hasExistingKey=true when a saved key is selected', () => {
@@ -198,7 +200,9 @@ describe('ProviderEntry', () => {
     );
 
     // Should show the manual input (not the selector) — placeholder uses the maskedApiKey
-    expect(screen.queryByRole('combobox', { name: /select a saved api key/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: /select a saved api key/i }),
+    ).not.toBeInTheDocument();
     // The password input shows the repo's own masked key as placeholder
     expect(screen.getByPlaceholderText('sk-...repo')).toBeInTheDocument();
   });
@@ -210,7 +214,9 @@ describe('ProviderEntry', () => {
     // openai entry but only anthropic is in availableKeys
     renderEntry(createEntry({ provider: 'openai' }), noop, availableKeys);
 
-    expect(screen.queryByRole('combobox', { name: /select a saved api key/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: /select a saved api key/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText(/enter api key/i)).toBeInTheDocument();
   });
 });

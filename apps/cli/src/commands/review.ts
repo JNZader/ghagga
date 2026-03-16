@@ -364,7 +364,7 @@ async function handleIssueExport(result: ReviewResult, options: ReviewOptions): 
       });
       issueLog(options, `✅ Issue created: ${url}`);
     } else {
-      const issueNumber = Number.parseInt(options.issue!, 10);
+      const issueNumber = Number.parseInt(options.issue ?? '', 10);
       if (Number.isNaN(issueNumber) || issueNumber <= 0) {
         tui.log.warn(`⚠️  Invalid issue number "${options.issue}". Use "new" or a valid number.`);
         return;

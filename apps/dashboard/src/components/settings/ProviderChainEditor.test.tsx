@@ -95,7 +95,9 @@ describe('ProviderChainEditor', () => {
     const availableKeys: AvailableKeysMap = {
       openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
     };
-    const chain = [createEntry({ provider: 'openai', hasExistingKey: false, apiKey: '', validated: false })];
+    const chain = [
+      createEntry({ provider: 'openai', hasExistingKey: false, apiKey: '', validated: false }),
+    ];
 
     renderWithQuery(
       <ProviderChainEditor chain={chain} onChange={onChange} availableKeys={availableKeys} />,

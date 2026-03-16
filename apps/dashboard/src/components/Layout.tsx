@@ -24,7 +24,9 @@ const navItems: NavItem[] = [
         viewBox="0 0 24 24"
         stroke="currentColor"
         strokeWidth={1.5}
+        aria-hidden="true"
       >
+        <title>Dashboard icon</title>
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -43,7 +45,9 @@ const navItems: NavItem[] = [
         viewBox="0 0 24 24"
         stroke="currentColor"
         strokeWidth={1.5}
+        aria-hidden="true"
       >
+        <title>Reviews icon</title>
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -62,7 +66,9 @@ const navItems: NavItem[] = [
         viewBox="0 0 24 24"
         stroke="currentColor"
         strokeWidth={1.5}
+        aria-hidden="true"
       >
+        <title>Settings icon</title>
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -86,7 +92,9 @@ const navItems: NavItem[] = [
         viewBox="0 0 24 24"
         stroke="currentColor"
         strokeWidth={1.5}
+        aria-hidden="true"
       >
+        <title>Memory icon</title>
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -105,7 +113,9 @@ const navItems: NavItem[] = [
         viewBox="0 0 24 24"
         stroke="currentColor"
         strokeWidth={1.5}
+        aria-hidden="true"
       >
+        <title>Global Settings icon</title>
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -173,7 +183,9 @@ export function Layout({ children }: LayoutProps) {
                 viewBox="0 0 24 24"
                 stroke="currentColor"
                 strokeWidth={1.5}
+                aria-hidden="true"
               >
+                <title>Home icon</title>
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -192,7 +204,9 @@ export function Layout({ children }: LayoutProps) {
                 viewBox="0 0 24 24"
                 stroke="currentColor"
                 strokeWidth={1.5}
+                aria-hidden="true"
               >
+                <title>Documentation icon</title>
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -223,7 +237,9 @@ export function Layout({ children }: LayoutProps) {
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                   strokeWidth={1.5}
+                  aria-hidden="true"
                 >
+                  <title>Logout icon</title>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
