@@ -22,10 +22,12 @@ import type {
   ReviewResult,
   ReviewStatus,
 } from '../types.js';
+import { runWithConcurrency } from '../utils/concurrency.js';
 import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
+  COMPACT_CALIBRATION,
   CONSENSUS_AGAINST_SYSTEM,
   CONSENSUS_FOR_SYSTEM,
   CONSENSUS_NEUTRAL_SYSTEM,
@@ -49,6 +51,17 @@ export interface ConsensusReviewInput {
   stackHints: string;
   reviewLevel: ReviewLevel;
   onProgress?: ProgressCallback;
+
+  /**
+   * Max concurrent votes (default: 1 — sequential for TPM safety).
+   * Set to 3 for full parallel (original behavior).
+   */
+  concurrency?: number;
+
+  /**
+   * Delay in ms between concurrency batches (default: 0).
+   */
+  delayMs?: number;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -190,6 +203,8 @@ export function calculateConsensus(votes: ConsensusVote[]): {
 export async function runConsensusReview(input: ConsensusReviewInput): Promise<ReviewResult> {
   const { diff, models, staticContext, memoryContext, stackHints, reviewLevel } = input;
   const emit = input.onProgress ?? (() => {});
+  const concurrency = input.concurrency ?? 1;
+  const delayMs = input.delayMs ?? 0;
 
   const startTime = Date.now();
 
@@ -198,51 +213,56 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
 
   emit({
     step: 'consensus-start',
-    message: `Launching ${models.length} model votes in parallel`,
+    message: `Launching ${models.length} model votes (concurrency: ${concurrency})`,
     detail: models.map((m) => `  → ${m.provider}/${m.model} (stance: ${m.stance})`).join('\n'),
   });
 
-  // ── Step 1: Run all model votes in parallel ────────────────
-  const votePromises = models.map(async (config) => {
-    const system = [
-      STANCE_PROMPTS[config.stance],
-      staticContext,
-      buildMemoryContext(memoryContext),
-      stackHints,
-      buildReviewLevelInstruction(reviewLevel),
-      REVIEW_CALIBRATION,
-    ]
-      .filter(Boolean)
-      .join('\n');
+  // ── Step 1: Run model votes with bounded concurrency ───────
+  //
+  // First vote gets full context; subsequent votes get compact calibration.
+  const voteTasks = models.map((config, index) => {
+    return async () => {
+      const isFirst = index === 0;
+      const system = [
+        STANCE_PROMPTS[config.stance],
+        isFirst ? staticContext : '',
+        isFirst ? buildMemoryContext(memoryContext) : '',
+        isFirst ? stackHints : '',
+        buildReviewLevelInstruction(reviewLevel),
+        isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+      ]
+        .filter(Boolean)
+        .join('\n');
 
-    const languageModel = createModel(config.provider, config.model, config.apiKey);
+      const languageModel = createModel(config.provider, config.model, config.apiKey);
 
-    const result = await generateTextWithTimeout(
-      {
-        model: languageModel,
-        system,
-        prompt: userPrompt,
-        temperature: 0.3,
-      },
-      { provider: config.provider, model: config.model },
-    );
-
-    // Timeout: treat as a failed vote (consensus handles missing votes gracefully)
-    if (result === null) {
-      throw new Error(
-        `LLM call timed out for ${config.provider}/${config.model} (stance: ${config.stance})`,
+      const result = await generateTextWithTimeout(
+        {
+          model: languageModel,
+          system,
+          prompt: userPrompt,
+          temperature: 0.3,
+        },
+        { provider: config.provider, model: config.model },
       );
-    }
 
-    const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+      // Timeout: treat as a failed vote (consensus handles missing votes gracefully)
+      if (result === null) {
+        throw new Error(
+          `LLM call timed out for ${config.provider}/${config.model} (stance: ${config.stance})`,
+        );
+      }
 
-    return {
-      vote: parseVote(result.text, config.provider, config.model, config.stance),
-      tokensUsed,
+      const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+
+      return {
+        vote: parseVote(result.text, config.provider, config.model, config.stance),
+        tokensUsed,
+      };
     };
   });
 
-  const results = await Promise.allSettled(votePromises);
+  const results = await runWithConcurrency(voteTasks, { concurrency, delayMs });
 
   // ── Step 2: Collect votes and token usage ──────────────────
   const votes: ConsensusVote[] = [];

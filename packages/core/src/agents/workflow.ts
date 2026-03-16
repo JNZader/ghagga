@@ -24,10 +24,12 @@ import type {
   ReviewResult,
   WorkflowSpecialist,
 } from '../types.js';
+import { runWithConcurrency } from '../utils/concurrency.js';
 import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
+  COMPACT_CALIBRATION,
   REVIEW_CALIBRATION,
   WORKFLOW_ERRORS_SYSTEM,
   WORKFLOW_PERFORMANCE_SYSTEM,
@@ -50,6 +52,19 @@ export interface WorkflowReviewInput {
   stackHints: string;
   reviewLevel: ReviewLevel;
   onProgress?: ProgressCallback;
+
+  /**
+   * Max specialist agents running concurrently (default: 2).
+   * Set to 1 for strict sequential, 5 for full parallel (original behavior).
+   * Lower values reduce peak TPM usage for free-tier providers.
+   */
+  concurrency?: number;
+
+  /**
+   * Delay in ms between concurrency batches (default: 0).
+   * Useful for RPM-limited providers (e.g., Gemini free at 20 RPM).
+   */
+  delayMs?: number;
 }
 
 interface SpecialistConfig {
@@ -84,56 +99,66 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   const { diff, provider, model, apiKey, staticContext, memoryContext, stackHints, reviewLevel } =
     input;
   const emit = input.onProgress ?? (() => {});
+  const concurrency = input.concurrency ?? 2;
+  const delayMs = input.delayMs ?? 0;
 
   const startTime = Date.now();
   const languageModel = createModel(provider, model, apiKey);
 
   emit({
     step: 'workflow-start',
-    message: `Launching ${SPECIALISTS.length} specialist reviewers in parallel`,
+    message: `Launching ${SPECIALISTS.length} specialist reviewers (concurrency: ${concurrency})`,
     detail: SPECIALISTS.map((s) => `  → ${s.label}`).join('\n'),
   });
 
   // Build the user prompt (same for all specialists)
   const userPrompt = `Review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
 
-  // ── Step 1: Run all specialists in parallel ────────────────
-  const specialistPromises = SPECIALISTS.map(async (specialist) => {
-    const system = [
-      specialist.system,
-      staticContext,
-      buildMemoryContext(memoryContext),
-      stackHints,
-      buildReviewLevelInstruction(reviewLevel),
-      REVIEW_CALIBRATION,
-    ]
-      .filter(Boolean)
-      .join('\n');
+  // ── Step 1: Run specialists with bounded concurrency ───────
+  //
+  // Only the first specialist gets the full shared context (staticContext,
+  // memoryContext, stackHints, full calibration). Subsequent specialists
+  // get a compact calibration to save ~750 tokens per call.
+  const specialistTasks = SPECIALISTS.map((specialist, index) => {
+    return async () => {
+      const isFirstSpecialist = index === 0;
+      const system = [
+        specialist.system,
+        // Full context only for the first specialist; compact for the rest
+        isFirstSpecialist ? staticContext : '',
+        isFirstSpecialist ? buildMemoryContext(memoryContext) : '',
+        isFirstSpecialist ? stackHints : '',
+        buildReviewLevelInstruction(reviewLevel),
+        isFirstSpecialist ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+      ]
+        .filter(Boolean)
+        .join('\n');
 
-    const result = await generateTextWithTimeout(
-      {
-        model: languageModel,
-        system,
-        prompt: userPrompt,
-        temperature: 0.3,
-      },
-      { provider, model },
-    );
+      const result = await generateTextWithTimeout(
+        {
+          model: languageModel,
+          system,
+          prompt: userPrompt,
+          temperature: 0.3,
+        },
+        { provider, model },
+      );
 
-    // Timeout: treat as a failed specialist (synthesis will be aware of the gap)
-    if (result === null) {
-      throw new Error(`LLM call timed out for specialist ${specialist.label}`);
-    }
+      // Timeout: treat as a failed specialist (synthesis will be aware of the gap)
+      if (result === null) {
+        throw new Error(`LLM call timed out for specialist ${specialist.label}`);
+      }
 
-    return {
-      name: specialist.name,
-      label: specialist.label,
-      text: result.text,
-      tokensUsed: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+      return {
+        name: specialist.name,
+        label: specialist.label,
+        text: result.text,
+        tokensUsed: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+      };
     };
   });
 
-  const results = await Promise.allSettled(specialistPromises);
+  const results = await runWithConcurrency(specialistTasks, { concurrency, delayMs });
 
   // ── Step 2: Collect results ────────────────────────────────
   let totalTokens = 0;

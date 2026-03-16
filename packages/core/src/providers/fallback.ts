@@ -49,9 +49,13 @@ export interface FallbackResult {
 // ─── Helpers ────────────────────────────────────────────────────
 
 /**
- * Check if an error is a retryable server-side error (5xx or timeout).
+ * Check if an error is retryable (should try the next provider in the chain).
+ *
+ * Retryable: 5xx, timeouts, rate limits (429), and payload-too-large (413).
+ * The 413 case is important for free-tier providers with low TPM limits —
+ * the next provider in the chain may have a higher limit.
  */
-function isRetryableError(error: unknown): boolean {
+export function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
 
@@ -68,11 +72,19 @@ function isRetryableError(error: unknown): boolean {
     const statusMatch = /status[:\s]*(\d{3})/i.exec(message);
     if (statusMatch) {
       const status = parseInt(statusMatch[1] ?? '0', 10);
-      return status >= 500;
+      // 5xx server errors + 413 payload too large (TPM exceeded) + 429 rate limit
+      return status >= 500 || status === 413 || status === 429;
     }
 
-    // Rate limit (429) — also retryable with a different provider
-    if (message.includes('rate limit') || message.includes('429')) {
+    // Rate limit / TPM exceeded — also retryable with a different provider
+    if (
+      message.includes('rate limit') ||
+      message.includes('rate_limit') ||
+      message.includes('429') ||
+      message.includes('413') ||
+      message.includes('request too large') ||
+      message.includes('tokens per minute')
+    ) {
       return true;
     }
   }
