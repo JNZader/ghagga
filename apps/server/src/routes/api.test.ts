@@ -19,6 +19,7 @@ const mockGetRepoByFullName = vi.fn();
 const mockGetReposByInstallationId = vi.fn();
 const mockUpdateRepoSettings = vi.fn();
 const mockGetInstallationSettings = vi.fn();
+const mockGetInstallationSettingsBatch = vi.fn();
 const mockUpsertInstallationSettings = vi.fn();
 const mockGetInstallationById = vi.fn();
 const mockGetSessionById = vi.fn();
@@ -44,6 +45,7 @@ vi.mock('ghagga-db', () => ({
   getReposByInstallationId: (...args: unknown[]) => mockGetReposByInstallationId(...args),
   updateRepoSettings: (...args: unknown[]) => mockUpdateRepoSettings(...args),
   getInstallationSettings: (...args: unknown[]) => mockGetInstallationSettings(...args),
+  getInstallationSettingsBatch: (...args: unknown[]) => mockGetInstallationSettingsBatch(...args),
   upsertInstallationSettings: (...args: unknown[]) => mockUpsertInstallationSettings(...args),
   getInstallationById: (...args: unknown[]) => mockGetInstallationById(...args),
   getSessionById: (...args: unknown[]) => mockGetSessionById(...args),
@@ -1609,13 +1611,17 @@ describe('PUT /api/settings', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe('GET /api/providers/keys', () => {
+  // Endpoint now uses getInstallationSettingsBatch (single query) instead of
+  // N individual getInstallationSettings calls.
   it('returns masked keys grouped by provider from installation settings', async () => {
-    mockGetInstallationSettings.mockResolvedValueOnce({
-      providerChain: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
-        { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
-      ],
-    });
+    mockGetInstallationSettingsBatch.mockResolvedValueOnce([
+      {
+        providerChain: [
+          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
+          { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
+        ],
+      },
+    ]);
 
     const app = createApp();
     const res = await app.request('/api/providers/keys');
@@ -1627,10 +1633,13 @@ describe('GET /api/providers/keys', () => {
     // Keys must be masked, not raw/encrypted
     expect(json.data.anthropic.maskedApiKey).toMatch(/\.\.\./);
     expect(json.data.anthropic.source).toBe('global');
+    // Verify single batch query was called (not N individual queries)
+    expect(mockGetInstallationSettingsBatch).toHaveBeenCalledOnce();
+    expect(mockGetInstallationSettings).not.toHaveBeenCalled();
   });
 
-  it('returns empty object when installation has no saved keys', async () => {
-    mockGetInstallationSettings.mockResolvedValueOnce(null);
+  it('returns empty object when no installations have saved keys', async () => {
+    mockGetInstallationSettingsBatch.mockResolvedValueOnce([]);
 
     const app = createApp();
     const res = await app.request('/api/providers/keys');
@@ -1641,12 +1650,14 @@ describe('GET /api/providers/keys', () => {
   });
 
   it('skips providers without encrypted keys (e.g., github)', async () => {
-    mockGetInstallationSettings.mockResolvedValueOnce({
-      providerChain: [
-        { provider: 'github', model: 'gpt-4o-mini', encryptedApiKey: null },
-        { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
-      ],
-    });
+    mockGetInstallationSettingsBatch.mockResolvedValueOnce([
+      {
+        providerChain: [
+          { provider: 'github', model: 'gpt-4o-mini', encryptedApiKey: null },
+          { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
+        ],
+      },
+    ]);
 
     const app = createApp();
     const res = await app.request('/api/providers/keys');
@@ -1658,20 +1669,20 @@ describe('GET /api/providers/keys', () => {
   });
 
   it('never exposes raw or encrypted key values', async () => {
-    mockGetInstallationSettings.mockResolvedValueOnce({
-      providerChain: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
-      ],
-    });
+    mockGetInstallationSettingsBatch.mockResolvedValueOnce([
+      {
+        providerChain: [
+          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
+        ],
+      },
+    ]);
 
     const app = createApp();
     const res = await app.request('/api/providers/keys');
     const json = await res.json();
 
     const body = JSON.stringify(json);
-    // The raw encrypted value and any "sk-" full key must not appear
     expect(body).not.toContain('enc-ant');
-    // maskedApiKey should be present and follow the masked format
     expect(json.data.anthropic.maskedApiKey).toBeDefined();
   });
 });

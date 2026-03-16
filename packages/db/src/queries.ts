@@ -86,6 +86,19 @@ export async function getInstallationSettings(db: Database, installationId: numb
   return row ?? null;
 }
 
+/**
+ * Fetch installation settings for multiple installation IDs in a single query.
+ * Avoids the N+1 pattern when a user has access to multiple installations.
+ * Returns an empty array if ids is empty.
+ */
+export async function getInstallationSettingsBatch(db: Database, installationIds: number[]) {
+  if (installationIds.length === 0) return [];
+  return db
+    .select()
+    .from(installationSettings)
+    .where(inArray(installationSettings.installationId, installationIds));
+}
+
 export async function upsertInstallationSettings(
   db: Database,
   installationId: number,

@@ -9,8 +9,10 @@ import { toolRegistry } from 'ghagga-core';
 import type { Database, DbProviderChainEntry, RepoSettings } from 'ghagga-db';
 import {
   DEFAULT_REPO_SETTINGS,
+  decrypt,
   encrypt,
   getInstallationSettings,
+  getInstallationSettingsBatch,
   getRepoByFullName,
   updateDelegatedCiPolicy,
   updateRepoSettings,
@@ -19,7 +21,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { validateProviderKey } from '../../lib/provider-models.js';
 import type { AuthUser } from '../../middleware/auth.js';
-import { buildProviderChainView, generateErrorId, logger } from './utils.js';
+import { buildProviderChainView, generateErrorId, logger, maskApiKey } from './utils.js';
 
 // ─── Zod Schemas ────────────────────────────────────────────────
 
@@ -430,25 +432,19 @@ export function createSettingsRouter(db: Database) {
     const user = c.get('user') as AuthUser;
 
     try {
-      // Collect masked keys from all installations the user has access to.
-      // Each installation has one provider chain (installation_settings).
+      // Single batch query — avoids N+1 when user has multiple installations.
+      const rows = await getInstallationSettingsBatch(db, user.installationIds);
+
       const keysByProvider: Record<string, { maskedApiKey: string; source: 'global' }> = {};
 
-      for (const installationId of user.installationIds) {
-        const row = await getInstallationSettings(db, installationId);
-        if (!row) continue;
-
+      for (const row of rows) {
         const chain = (row.providerChain ?? []) as DbProviderChainEntry[];
         for (const entry of chain) {
+          // First occurrence per provider wins (primary installation takes precedence).
           if (entry.encryptedApiKey && !keysByProvider[entry.provider]) {
-            // Only store the first occurrence per provider (primary installation wins)
-            const view = buildProviderChainView([entry])[0];
-            if (view?.maskedApiKey) {
-              keysByProvider[entry.provider] = {
-                maskedApiKey: view.maskedApiKey,
-                source: 'global',
-              };
-            }
+            // Mask directly — avoids the buildProviderChainView([entry])[0] wrapper overhead.
+            const masked = maskApiKey(decrypt(entry.encryptedApiKey));
+            keysByProvider[entry.provider] = { maskedApiKey: masked, source: 'global' };
           }
         }
       }
