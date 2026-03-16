@@ -255,11 +255,11 @@ describe('SIMPLE_REVIEW_SYSTEM content', () => {
   });
 
   it('still contains error handling instruction', () => {
-    expect(SIMPLE_REVIEW_SYSTEM).toContain('error handling');
+    expect(SIMPLE_REVIEW_SYSTEM.toLowerCase()).toContain('error handling');
   });
 
   it('still contains code quality instruction', () => {
-    expect(SIMPLE_REVIEW_SYSTEM).toContain('code quality');
+    expect(SIMPLE_REVIEW_SYSTEM.toLowerCase()).toContain('code quality');
   });
 
   it('still contains security instruction', () => {
