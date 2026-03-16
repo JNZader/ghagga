@@ -1184,6 +1184,13 @@ describe('GET /api/settings', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe('PUT /api/settings', () => {
+  // Bug 2 fix: PUT /api/settings now calls getInstallationSettings to fetch the global
+  // provider chain as a fallback when the repo has no key for a provider.
+  // Default to returning null (no global settings) for all tests unless overridden.
+  beforeEach(() => {
+    mockGetInstallationSettings.mockResolvedValue(null);
+  });
+
   it('updates repo settings with encrypted new API keys', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
@@ -1531,6 +1538,141 @@ describe('PUT /api/settings', () => {
     // Unknown fields are filtered out before reaching the schema,
     // so the request succeeds (no settings fields to validate).
     expect(res.status).toBe(200);
+  });
+
+  // ── Bug 2: fallback to global chain when repo has no key ──────
+
+  it('copies encrypted key from global chain when repo has no key for provider (Bug 2 fix)', async () => {
+    // Repo with no key for 'google' (only has 'anthropic')
+    const repoWithoutGoogleKey = {
+      ...FAKE_REPO,
+      providerChain: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-key-1' },
+      ],
+    };
+    mockGetRepoByFullName.mockResolvedValueOnce(repoWithoutGoogleKey);
+    mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
+
+    // Global installation settings DO have a Google key
+    mockGetInstallationSettings.mockResolvedValueOnce({
+      providerChain: [
+        { provider: 'google', model: 'gemini-2.5-flash', encryptedApiKey: 'enc-global-google' },
+      ],
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [
+          // User pre-filled from global — no apiKey sent (only hasExistingKey was shown)
+          { provider: 'google', model: 'gemini-2.5-flash' },
+        ],
+        useGlobalSettings: false,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockEncrypt).not.toHaveBeenCalled(); // No new key was encrypted
+
+    const [, , updates] = mockUpdateRepoSettings.mock.calls[0];
+    // Key should be copied from global chain, NOT silently set to null
+    expect(updates.providerChain[0].provider).toBe('google');
+    expect(updates.providerChain[0].encryptedApiKey).toBe('enc-global-google');
+  });
+
+  it('still returns null when neither repo nor global chain has a key for the provider', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
+    // Global chain also has no key for 'qwen' (null from beforeEach is already set)
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [{ provider: 'qwen', model: 'qwen-coder-plus' }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const [, , updates] = mockUpdateRepoSettings.mock.calls[0];
+    expect(updates.providerChain[0].encryptedApiKey).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// GET /api/providers/keys
+// ═══════════════════════════════════════════════════════════════════
+
+describe('GET /api/providers/keys', () => {
+  it('returns masked keys grouped by provider from installation settings', async () => {
+    mockGetInstallationSettings.mockResolvedValueOnce({
+      providerChain: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
+        { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
+      ],
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/providers/keys');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveProperty('anthropic');
+    expect(json.data).toHaveProperty('openai');
+    // Keys must be masked, not raw/encrypted
+    expect(json.data.anthropic.maskedApiKey).toMatch(/\.\.\./);
+    expect(json.data.anthropic.source).toBe('global');
+  });
+
+  it('returns empty object when installation has no saved keys', async () => {
+    mockGetInstallationSettings.mockResolvedValueOnce(null);
+
+    const app = createApp();
+    const res = await app.request('/api/providers/keys');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toEqual({});
+  });
+
+  it('skips providers without encrypted keys (e.g., github)', async () => {
+    mockGetInstallationSettings.mockResolvedValueOnce({
+      providerChain: [
+        { provider: 'github', model: 'gpt-4o-mini', encryptedApiKey: null },
+        { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
+      ],
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/providers/keys');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).not.toHaveProperty('github');
+    expect(json.data).toHaveProperty('openai');
+  });
+
+  it('never exposes raw or encrypted key values', async () => {
+    mockGetInstallationSettings.mockResolvedValueOnce({
+      providerChain: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
+      ],
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/providers/keys');
+    const json = await res.json();
+
+    const body = JSON.stringify(json);
+    // The raw encrypted value and any "sk-" full key must not appear
+    expect(body).not.toContain('enc-ant');
+    // maskedApiKey should be present and follow the masked format
+    expect(json.data.anthropic.maskedApiKey).toBeDefined();
   });
 });
 
