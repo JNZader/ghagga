@@ -42,6 +42,7 @@ const CLASSIFICATION_OPTIONS: { value: DelegatedCiClassification; label: string 
 // ─── Component ──────────────────────────────────────────────────
 
 export function DelegatedCiJobEntry({ index, job, onChange, onRemove }: DelegatedCiJobEntryProps) {
+  const fieldId = `ci-job-${index}`;
   return (
     <div className="rounded-lg border border-surface-border bg-surface-bg/50 p-4">
       {/* Header: Index + Enabled toggle + Remove */}
@@ -83,8 +84,14 @@ export function DelegatedCiJobEntry({ index, job, onChange, onRemove }: Delegate
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {/* Job Key */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Job Key</label>
+            <label
+              htmlFor={`${fieldId}-key`}
+              className="mb-1 block text-xs font-medium text-text-secondary"
+            >
+              Job Key
+            </label>
             <input
+              id={`${fieldId}-key`}
               type="text"
               value={job.jobKey}
               onChange={(e) => onChange({ ...job, jobKey: e.target.value })}
@@ -97,10 +104,14 @@ export function DelegatedCiJobEntry({ index, job, onChange, onRemove }: Delegate
 
           {/* Display Name */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label
+              htmlFor={`${fieldId}-name`}
+              className="mb-1 block text-xs font-medium text-text-secondary"
+            >
               Display Name
             </label>
             <input
+              id={`${fieldId}-name`}
               type="text"
               value={job.displayName}
               onChange={(e) => onChange({ ...job, displayName: e.target.value })}
@@ -113,8 +124,14 @@ export function DelegatedCiJobEntry({ index, job, onChange, onRemove }: Delegate
 
           {/* Profile */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Profile</label>
+            <label
+              htmlFor={`${fieldId}-profile`}
+              className="mb-1 block text-xs font-medium text-text-secondary"
+            >
+              Profile
+            </label>
             <select
+              id={`${fieldId}-profile`}
               value={job.profile}
               onChange={(e) => onChange({ ...job, profile: e.target.value as DelegatedCiProfile })}
               className="select-field"
@@ -129,10 +146,14 @@ export function DelegatedCiJobEntry({ index, job, onChange, onRemove }: Delegate
 
           {/* Classification */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label
+              htmlFor={`${fieldId}-class`}
+              className="mb-1 block text-xs font-medium text-text-secondary"
+            >
               Classification
             </label>
             <select
+              id={`${fieldId}-class`}
               value={job.classification}
               onChange={(e) =>
                 onChange({
@@ -152,10 +173,14 @@ export function DelegatedCiJobEntry({ index, job, onChange, onRemove }: Delegate
 
           {/* Max Duration */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label
+              htmlFor={`${fieldId}-duration`}
+              className="mb-1 block text-xs font-medium text-text-secondary"
+            >
               Max Duration (minutes)
             </label>
             <input
+              id={`${fieldId}-duration`}
               type="number"
               value={job.maxDurationMinutes ?? ''}
               onChange={(e) =>

@@ -84,7 +84,7 @@ export function ProviderChainEditor({
         <>
           {chain.map((entry, index) => (
             <ProviderEntry
-              key={`${entry.provider}-${index}`}
+              key={`provider-${entry.provider}`}
               index={index}
               entry={entry}
               totalEntries={chain.length}

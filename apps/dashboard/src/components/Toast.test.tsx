@@ -19,13 +19,18 @@ function ToastTrigger({
   duration?: number;
 }) {
   const { addToast } = useToast();
-  return <button onClick={() => addToast({ message, type, duration })}>Add Toast</button>;
+  return (
+    <button type="button" onClick={() => addToast({ message, type, duration })}>
+      Add Toast
+    </button>
+  );
 }
 
 function MultiTrigger() {
   const { addToast } = useToast();
   return (
     <button
+      type="button"
       onClick={() => {
         addToast({ message: 'First toast', type: 'success' });
         addToast({ message: 'Second toast', type: 'error' });
