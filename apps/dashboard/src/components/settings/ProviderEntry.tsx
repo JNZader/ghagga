@@ -60,7 +60,8 @@ export function ProviderEntry({
 
   const isGitHub = entry.provider === 'github';
   const needsApiKey = !isGitHub;
-  const canValidate = isGitHub || entry.apiKey.trim().length > 0;
+  // Can validate if: GitHub (no key needed), has a new key typed, OR has an existing saved key
+  const canValidate = isGitHub || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
 
   // Saved key for the current provider (from global/installation settings)
   const savedKeyInfo = availableKeys[entry.provider];
@@ -104,7 +105,9 @@ export function ProviderEntry({
     try {
       const result = await validateProvider.mutateAsync({
         provider: entry.provider,
-        apiKey: needsApiKey ? entry.apiKey : undefined,
+        // Send apiKey only if the user typed a new one.
+        // If hasExistingKey and no new key typed, send undefined — server resolves from saved chain.
+        apiKey: needsApiKey && entry.apiKey.trim() ? entry.apiKey : undefined,
       });
 
       if (result.valid) {

@@ -1808,7 +1808,10 @@ describe('POST /api/providers/validate', () => {
     expect(json.message).toContain('Unknown provider');
   });
 
-  it('returns 400 when apiKey missing for non-GitHub provider', async () => {
+  it('returns 400 when apiKey missing and no saved key in installation chain', async () => {
+    // No apiKey in body AND no saved key in installation chain → still 400
+    mockGetInstallationSettingsBatch.mockResolvedValueOnce([]);
+
     const app = createApp();
     const res = await app.request('/api/providers/validate', {
       method: 'POST',
@@ -1820,6 +1823,35 @@ describe('POST /api/providers/validate', () => {
     const json = await res.json();
     expect(json.error).toBe('VALIDATION_ERROR');
     expect(json.message).toBe('Missing apiKey for non-GitHub provider');
+  });
+
+  it('validates using saved key from installation chain when no apiKey provided', async () => {
+    // No apiKey in body but saved key exists in installation chain
+    mockGetInstallationSettingsBatch.mockResolvedValueOnce([
+      {
+        providerChain: [
+          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
+        ],
+      },
+    ]);
+    mockValidateProviderKey.mockResolvedValueOnce({
+      valid: true,
+      models: ['claude-sonnet-4-20250514', 'claude-haiku-3'],
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'anthropic' }), // No apiKey — uses saved key
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.valid).toBe(true);
+    expect(json.models).toContain('claude-sonnet-4-20250514');
+    // Verify decrypt was called to resolve the saved key
+    expect(mockDecrypt).toHaveBeenCalledWith('enc-ant');
   });
 
   it('returns error result when validateProviderKey throws', async () => {
