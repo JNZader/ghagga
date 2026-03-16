@@ -207,6 +207,15 @@ DECISION: [approve|reject|abstain]
 CONFIDENCE: [0.0 to 1.0]
 REASONING: [concise reasoning — be brief and direct]`;
 
+// ─── Compact Calibration (for non-primary specialist calls) ─────
+//
+// When running workflow/consensus with concurrency batching, only the
+// first call in each batch gets the full context (staticContext,
+// memoryContext, stackHints, REVIEW_CALIBRATION). Subsequent calls
+// get this minimal version to save ~750 tokens per call.
+
+export const COMPACT_CALIBRATION = `Focus only on your specialty area. Be concise. Report only actionable findings you are 80%+ confident about. Do not speculate.`;
+
 // ─── Review Calibration ─────────────────────────────────────────
 
 export const REVIEW_CALIBRATION = `## Review Calibration

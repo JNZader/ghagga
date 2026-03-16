@@ -23,6 +23,7 @@ vi.mock('./prompts.js', () => ({
   CONSENSUS_AGAINST_SYSTEM: 'CONSENSUS_AGAINST_SYSTEM',
   CONSENSUS_NEUTRAL_SYSTEM: 'CONSENSUS_NEUTRAL_SYSTEM',
   REVIEW_CALIBRATION: 'REVIEW_CALIBRATION_BLOCK',
+  COMPACT_CALIBRATION: 'COMPACT_CALIBRATION_BLOCK',
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
   buildReviewLevelInstruction: vi.fn((level: string) => `REVIEW_LEVEL:${level}`),
 }));
@@ -115,13 +116,20 @@ describe('runConsensusReview reviewLevel injection', () => {
     }
   });
 
-  it('includes REVIEW_CALIBRATION in all 3 stance prompts', async () => {
+  it('includes full REVIEW_CALIBRATION for the first vote, compact for the rest', async () => {
     await runConsensusReview(makeInput());
 
-    for (let i = 0; i < 3; i++) {
+    // First vote gets full calibration
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const firstCall = mockGenerateText.mock.calls[0]?.[0] as any;
+    expect(firstCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+
+    // Subsequent votes get compact calibration
+    for (let i = 1; i < 3; i++) {
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
       const call = mockGenerateText.mock.calls[i]?.[0] as any;
-      expect(call.system).toContain('REVIEW_CALIBRATION_BLOCK');
+      expect(call.system).toContain('COMPACT_CALIBRATION_BLOCK');
+      expect(call.system).not.toContain('REVIEW_CALIBRATION_BLOCK');
     }
   });
 });

@@ -18,6 +18,7 @@ vi.mock('./prompts.js', () => ({
   WORKFLOW_PERFORMANCE_SYSTEM: 'PERFORMANCE_SYSTEM',
   WORKFLOW_SYNTHESIS_SYSTEM: 'SYNTHESIS_SYSTEM',
   REVIEW_CALIBRATION: 'REVIEW_CALIBRATION_BLOCK',
+  COMPACT_CALIBRATION: 'COMPACT_CALIBRATION_BLOCK',
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
   buildReviewLevelInstruction: vi.fn((level: string) => `REVIEW_LEVEL:${level}`),
 }));
@@ -463,7 +464,7 @@ describe('runWorkflowReview', () => {
 
   // ── Review level & calibration injection ──
 
-  it('includes review-level instruction in specialist system prompts', async () => {
+  it('includes review-level instruction in ALL specialist system prompts', async () => {
     await runWorkflowReview(makeInput({ reviewLevel: 'soft' }));
 
     // All 5 specialist calls should contain the review level instruction
@@ -474,13 +475,20 @@ describe('runWorkflowReview', () => {
     }
   });
 
-  it('includes REVIEW_CALIBRATION in specialist system prompts', async () => {
+  it('includes full REVIEW_CALIBRATION only for the first specialist, compact for the rest', async () => {
     await runWorkflowReview(makeInput());
 
-    for (let i = 0; i < 5; i++) {
+    // First specialist gets full calibration
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const firstCall = mockGenerateText.mock.calls[0]?.[0] as any;
+    expect(firstCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+
+    // Subsequent specialists get compact calibration
+    for (let i = 1; i < 5; i++) {
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
       const call = mockGenerateText.mock.calls[i]?.[0] as any;
-      expect(call.system).toContain('REVIEW_CALIBRATION_BLOCK');
+      expect(call.system).toContain('COMPACT_CALIBRATION_BLOCK');
+      expect(call.system).not.toContain('REVIEW_CALIBRATION_BLOCK');
     }
   });
 
