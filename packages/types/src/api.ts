@@ -6,10 +6,29 @@ export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus';
 
-export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'github' | 'ollama' | 'qwen';
+export type LLMProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'github'
+  | 'ollama'
+  | 'qwen'
+  | 'groq'
+  | 'cerebras'
+  | 'deepseek'
+  | 'openrouter';
 
 /** Providers available in the SaaS dashboard (excludes Ollama) */
-export type SaaSProvider = 'anthropic' | 'openai' | 'google' | 'github' | 'qwen';
+export type SaaSProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'github'
+  | 'qwen'
+  | 'groq'
+  | 'cerebras'
+  | 'deepseek'
+  | 'openrouter';
 
 // ─── User ───────────────────────────────────────────────────────
 

@@ -8,10 +8,29 @@
 // ─── Review Input ───────────────────────────────────────────────
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus';
-export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'github' | 'ollama' | 'qwen';
+export type LLMProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'github'
+  | 'ollama'
+  | 'qwen'
+  | 'groq'
+  | 'cerebras'
+  | 'deepseek'
+  | 'openrouter';
 
 /** Providers available in the SaaS dashboard (excludes Ollama) */
-export type SaaSProvider = 'anthropic' | 'openai' | 'google' | 'github' | 'qwen';
+export type SaaSProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'github'
+  | 'qwen'
+  | 'groq'
+  | 'cerebras'
+  | 'deepseek'
+  | 'openrouter';
 
 export type ReviewLevel = 'soft' | 'normal' | 'strict';
 
@@ -448,4 +467,8 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   github: 'gpt-4o-mini',
   ollama: 'qwen2.5-coder:7b',
   qwen: 'qwen-coder-plus',
+  groq: 'llama-3.3-70b-versatile',
+  cerebras: 'llama-3.3-70b',
+  deepseek: 'deepseek-chat',
+  openrouter: 'deepseek/deepseek-chat',
 };
