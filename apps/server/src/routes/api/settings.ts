@@ -9,8 +9,10 @@ import { toolRegistry } from 'ghagga-core';
 import type { Database, DbProviderChainEntry, RepoSettings } from 'ghagga-db';
 import {
   DEFAULT_REPO_SETTINGS,
+  decrypt,
   encrypt,
   getInstallationSettings,
+  getInstallationSettingsBatch,
   getRepoByFullName,
   updateDelegatedCiPolicy,
   updateRepoSettings,
@@ -19,7 +21,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { validateProviderKey } from '../../lib/provider-models.js';
 import type { AuthUser } from '../../middleware/auth.js';
-import { buildProviderChainView, generateErrorId, logger } from './utils.js';
+import { buildProviderChainView, generateErrorId, logger, maskApiKey } from './utils.js';
 
 // ─── Zod Schemas ────────────────────────────────────────────────
 
@@ -274,6 +276,11 @@ export function createSettingsRouter(db: Database) {
       // Merge API keys: preserve existing encrypted keys when not provided
       const existingChain = (repo.providerChain ?? []) as DbProviderChainEntry[];
 
+      // Bug 2 fix: load global/installation chain as fallback source for keys
+      // When a repo switches from Global→Custom, it may not have its own keys yet.
+      const globalRow = await getInstallationSettings(db, repo.installationId);
+      const globalChain = (globalRow?.providerChain ?? []) as DbProviderChainEntry[];
+
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry) => {
         if (entry.apiKey) {
           // New key provided → encrypt it
@@ -293,12 +300,23 @@ export function createSettingsRouter(db: Database) {
           };
         }
 
-        // No key provided → try to preserve existing key for this provider
+        // No key provided → try repo's own chain first, then fall back to global chain.
+        // This handles the Global→Custom transition: the repo never had its own key,
+        // but the user pre-filled from global and expects it to be inherited/copied.
         const existing = existingChain.find((e) => e.provider === entry.provider);
+        if (existing?.encryptedApiKey) {
+          return {
+            provider: entry.provider as SaaSProvider,
+            model: entry.model,
+            encryptedApiKey: existing.encryptedApiKey,
+          };
+        }
+
+        const fromGlobal = globalChain.find((e) => e.provider === entry.provider);
         return {
           provider: entry.provider as SaaSProvider,
           model: entry.model,
-          encryptedApiKey: existing?.encryptedApiKey ?? null,
+          encryptedApiKey: fromGlobal?.encryptedApiKey ?? null,
         };
       });
 
@@ -400,6 +418,45 @@ export function createSettingsRouter(db: Database) {
         'Failed to update settings',
       );
       return c.json({ error: 'UPDATE_FAILED', message: 'Failed to update settings', errorId }, 500);
+    }
+  });
+
+  // ── GET /api/providers/keys ─────────────────────────────────
+  //
+  // Returns all saved (masked) API keys for the authenticated user,
+  // grouped by provider, across all their installations.
+  // Used by the frontend key-selector dropdown in ProviderEntry.
+  //
+  // Security: only hasApiKey + maskedApiKey are returned — never raw or encrypted values.
+  router.get('/api/providers/keys', async (c) => {
+    const user = c.get('user') as AuthUser;
+
+    try {
+      // Single batch query — avoids N+1 when user has multiple installations.
+      const rows = await getInstallationSettingsBatch(db, user.installationIds);
+
+      const keysByProvider: Record<string, { maskedApiKey: string; source: 'global' }> = {};
+
+      for (const row of rows) {
+        const chain = (row.providerChain ?? []) as DbProviderChainEntry[];
+        for (const entry of chain) {
+          // First occurrence per provider wins (primary installation takes precedence).
+          if (entry.encryptedApiKey && !keysByProvider[entry.provider]) {
+            // Mask directly — avoids the buildProviderChainView([entry])[0] wrapper overhead.
+            const masked = maskApiKey(decrypt(entry.encryptedApiKey));
+            keysByProvider[entry.provider] = { maskedApiKey: masked, source: 'global' };
+          }
+        }
+      }
+
+      return c.json({ data: keysByProvider });
+    } catch (err) {
+      const errorId = generateErrorId();
+      logger.error({ err, errorId, user: user.githubLogin }, 'Failed to fetch available keys');
+      return c.json(
+        { error: 'FETCH_FAILED', message: 'Failed to fetch available keys', errorId },
+        500,
+      );
     }
   });
 

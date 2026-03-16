@@ -194,6 +194,29 @@ export function useValidateProvider() {
   });
 }
 
+// ─── Available Keys (for key selector dropdown) ───────────
+
+/** Masked key info returned by GET /api/providers/keys */
+export interface AvailableKeyInfo {
+  maskedApiKey: string;
+  source: 'global';
+}
+
+/** Map of provider → masked key info for all saved keys */
+export type AvailableKeysMap = Record<string, AvailableKeyInfo>;
+
+/**
+ * Fetches all saved (masked) API keys for the current user, grouped by provider.
+ * Used to populate the key-selector dropdown in ProviderEntry without re-entering keys.
+ */
+export function useAvailableKeys() {
+  return useQuery<AvailableKeysMap>({
+    queryKey: ['providers', 'keys'],
+    queryFn: () => fetchData<AvailableKeysMap>('/api/providers/keys'),
+    staleTime: 60_000, // 1 minute — keys don't change often
+  });
+}
+
 // ─── Installations ────────────────────────────────────────
 
 export function useInstallations() {

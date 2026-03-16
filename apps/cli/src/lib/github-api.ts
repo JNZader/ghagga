@@ -162,19 +162,19 @@ export function parseGitHubRemote(remoteUrl: string): { owner: string; repo: str
   // HTTPS: https://github.com/owner/repo.git
   const httpsMatch = trimmed.match(/^https?:\/\/github\.com\/([^/]+)\/([^/\s]+?)(?:\.git)?$/);
   if (httpsMatch) {
-    return { owner: httpsMatch[1]!, repo: httpsMatch[2]! };
+    return { owner: httpsMatch[1] ?? '', repo: httpsMatch[2] ?? '' };
   }
 
   // SSH: git@github.com:owner/repo.git
   const sshMatch = trimmed.match(/^git@github\.com:([^/]+)\/([^/\s]+?)(?:\.git)?$/);
   if (sshMatch) {
-    return { owner: sshMatch[1]!, repo: sshMatch[2]! };
+    return { owner: sshMatch[1] ?? '', repo: sshMatch[2] ?? '' };
   }
 
   // SSH protocol: ssh://git@github.com/owner/repo.git
   const sshProtoMatch = trimmed.match(/^ssh:\/\/git@github\.com\/([^/]+)\/([^/\s]+?)(?:\.git)?$/);
   if (sshProtoMatch) {
-    return { owner: sshProtoMatch[1]!, repo: sshProtoMatch[2]! };
+    return { owner: sshProtoMatch[1] ?? '', repo: sshProtoMatch[2] ?? '' };
   }
 
   throw new Error(`Not a GitHub remote URL: "${trimmed}"`);
