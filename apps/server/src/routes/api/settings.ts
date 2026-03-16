@@ -497,10 +497,24 @@ export function createSettingsRouter(db: Database) {
       const authHeader = c.req.header('Authorization') ?? '';
       apiKey = authHeader.replace(/^Bearer\s+/i, '');
     } else if (!apiKey) {
-      return c.json(
-        { error: 'VALIDATION_ERROR', message: 'Missing apiKey for non-GitHub provider' },
-        400,
-      );
+      // No key provided — try to resolve from the user's saved installation chain.
+      // This allows re-validation (to fetch available models) without re-entering the key.
+      const rows = await getInstallationSettingsBatch(db, user.installationIds);
+      for (const row of rows) {
+        const chain = (row.providerChain ?? []) as DbProviderChainEntry[];
+        const entry = chain.find((e) => e.provider === provider);
+        if (entry?.encryptedApiKey) {
+          apiKey = decrypt(entry.encryptedApiKey);
+          break;
+        }
+      }
+
+      if (!apiKey) {
+        return c.json(
+          { error: 'VALIDATION_ERROR', message: 'Missing apiKey for non-GitHub provider' },
+          400,
+        );
+      }
     }
 
     try {
