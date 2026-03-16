@@ -1,9 +1,12 @@
+import { useAvailableKeys, type AvailableKeysMap } from '@/lib/api';
 import type { SaaSProvider } from '@/lib/types';
 import { ProviderEntry, type ProviderEntryState } from './ProviderEntry';
 
 interface ProviderChainEditorProps {
   chain: ProviderEntryState[];
   onChange: (chain: ProviderEntryState[]) => void;
+  /** Pre-fetched available keys map (optional; editor fetches its own if not provided) */
+  availableKeys?: AvailableKeysMap;
 }
 
 const DEFAULT_ENTRY: ProviderEntryState = {
@@ -15,7 +18,10 @@ const DEFAULT_ENTRY: ProviderEntryState = {
   validated: false,
 };
 
-export function ProviderChainEditor({ chain, onChange }: ProviderChainEditorProps) {
+export function ProviderChainEditor({ chain, onChange, availableKeys: keysProp }: ProviderChainEditorProps) {
+  // Fetch available keys if not provided as a prop (self-contained usage)
+  const { data: fetchedKeys } = useAvailableKeys();
+  const availableKeys: AvailableKeysMap = keysProp ?? fetchedKeys ?? {};
   const handleEntryChange = (index: number, entry: ProviderEntryState) => {
     const updated = [...chain];
     updated[index] = entry;
@@ -78,6 +84,7 @@ export function ProviderChainEditor({ chain, onChange }: ProviderChainEditorProp
               index={index}
               entry={entry}
               totalEntries={chain.length}
+              availableKeys={availableKeys}
               onChange={(updated) => handleEntryChange(index, updated)}
               onRemove={() => handleRemove(index)}
               onMoveUp={() => handleMoveUp(index)}
