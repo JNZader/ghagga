@@ -34,8 +34,19 @@ describe('DEFAULT_SETTINGS', () => {
 // ─── DEFAULT_MODELS ─────────────────────────────────────────────
 
 describe('DEFAULT_MODELS', () => {
-  it('should have entries for all 6 LLM providers', () => {
-    const providers = ['anthropic', 'openai', 'google', 'github', 'ollama', 'qwen'] as const;
+  it('should have entries for all 10 LLM providers', () => {
+    const providers = [
+      'anthropic',
+      'openai',
+      'google',
+      'github',
+      'ollama',
+      'qwen',
+      'groq',
+      'cerebras',
+      'deepseek',
+      'openrouter',
+    ] as const;
     for (const provider of providers) {
       expect(DEFAULT_MODELS).toHaveProperty(provider);
       expect(typeof DEFAULT_MODELS[provider]).toBe('string');

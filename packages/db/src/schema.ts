@@ -92,7 +92,16 @@ export interface DbDelegatedCiPolicy {
  * Encrypted API keys are stored here (one per provider entry).
  */
 export interface DbProviderChainEntry {
-  provider: 'anthropic' | 'openai' | 'google' | 'github' | 'qwen';
+  provider:
+    | 'anthropic'
+    | 'openai'
+    | 'google'
+    | 'github'
+    | 'qwen'
+    | 'groq'
+    | 'cerebras'
+    | 'deepseek'
+    | 'openrouter';
   model: string;
   encryptedApiKey: string | null; // null for GitHub Models (uses session token)
 }

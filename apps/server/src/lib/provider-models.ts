@@ -37,6 +37,25 @@ export const CURATED_MODELS: Record<SaaSProvider, string[]> = {
   ],
   github: ['gpt-4o-mini', 'gpt-4o', 'o3-mini', 'Phi-4', 'Mistral-Large-2411', 'DeepSeek-R1'],
   qwen: ['qwen-coder-plus', 'qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-coder-turbo', 'qwen-long'],
+  groq: [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'llama-3.1-70b-versatile',
+    'gemma2-9b-it',
+    'mixtral-8x7b-32768',
+    'qwen-qwq-32b',
+  ],
+  cerebras: ['llama-3.3-70b', 'llama-3.1-8b', 'llama-3.1-70b', 'qwen-3-32b'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  openrouter: [
+    'deepseek/deepseek-chat',
+    'deepseek/deepseek-r1:free',
+    'google/gemma-3-27b-it:free',
+    'qwen/qwen3-235b-a22b:free',
+    'anthropic/claude-sonnet-4',
+    'openai/gpt-4o',
+    'google/gemini-2.5-flash',
+  ],
 };
 
 // ─── Validation ─────────────────────────────────────────────────
@@ -70,6 +89,14 @@ export async function validateProviderKey(
         return await validateGoogle(apiKey);
       case 'qwen':
         return await validateQwen(apiKey);
+      case 'groq':
+        return await validateOpenAICompat(apiKey, 'https://api.groq.com/openai/v1', 'groq');
+      case 'cerebras':
+        return await validateOpenAICompat(apiKey, 'https://api.cerebras.ai/v1', 'cerebras');
+      case 'deepseek':
+        return await validateOpenAICompat(apiKey, 'https://api.deepseek.com/v1', 'deepseek');
+      case 'openrouter':
+        return await validateOpenAICompat(apiKey, 'https://openrouter.ai/api/v1', 'openrouter');
       default: {
         const _exhaustive: never = provider;
         return { valid: false, models: [], error: `Unknown provider: ${_exhaustive}` };
@@ -210,6 +237,44 @@ async function validateQwen(apiKey: string): Promise<ValidationResult> {
     .sort();
 
   return { valid: true, models: textModels.length > 0 ? textModels : CURATED_MODELS.qwen };
+}
+
+/**
+ * Generic OpenAI-compatible validation (Groq, Cerebras, DeepSeek, OpenRouter).
+ * Tries GET /models first; falls back to curated list if the endpoint is unavailable.
+ */
+async function validateOpenAICompat(
+  apiKey: string,
+  baseUrl: string,
+  provider: SaaSProvider,
+): Promise<ValidationResult> {
+  const response = await fetch(`${baseUrl}/models`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      return { valid: false, models: [], error: 'Invalid API key' };
+    }
+    // Models endpoint unavailable (some providers don't expose it) — key might still be valid.
+    // Return curated list as fallback.
+    return { valid: true, models: CURATED_MODELS[provider] };
+  }
+
+  const data = (await response.json()) as { data?: Array<{ id: string }> };
+  const allModels = data.data ?? [];
+
+  const excludePatterns = ['embedding', 'tts', 'whisper', 'dall-e', 'moderation', 'audio'];
+  const chatModels = allModels
+    .map((m) => m.id)
+    .filter((id) => !excludePatterns.some((p) => id.toLowerCase().includes(p)))
+    .sort();
+
+  return {
+    valid: true,
+    models: chatModels.length > 0 ? chatModels : CURATED_MODELS[provider],
+  };
 }
 
 /**

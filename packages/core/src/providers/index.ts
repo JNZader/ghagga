@@ -15,6 +15,11 @@
  * Qwen (Alibaba Cloud DashScope) uses the OpenAI-compatible endpoint at
  * https://dashscope-intl.aliyuncs.com/compatible-mode/v1. Requires a
  * DashScope API key (DASHSCOPE_API_KEY).
+ *
+ * Groq uses https://api.groq.com/openai/v1 (free tier: 1K–14.4K RPD).
+ * Cerebras uses https://api.cerebras.ai/v1 (free tier: 14.4K RPD, ~3000 tok/s).
+ * DeepSeek uses https://api.deepseek.com/v1 (near-free, no rate limit).
+ * OpenRouter uses https://openrouter.ai/api/v1 (gateway to 200+ models).
  */
 
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -31,6 +36,18 @@ const OLLAMA_BASE_URL = 'http://localhost:11434/v1';
 
 /** Qwen / DashScope international endpoint (OpenAI-compatible) */
 const QWEN_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+
+/** Groq Cloud inference endpoint (OpenAI-compatible) */
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+
+/** Cerebras inference endpoint (OpenAI-compatible) */
+const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
+
+/** DeepSeek inference endpoint (OpenAI-compatible) */
+const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1';
+
+/** OpenRouter gateway endpoint (OpenAI-compatible) */
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 // ─── Provider Factory ───────────────────────────────────────────
 
@@ -69,6 +86,30 @@ export function createProvider(provider: LLMProvider, apiKey: string) {
         apiKey,
         baseURL: QWEN_BASE_URL,
         name: 'qwen',
+      });
+    case 'groq':
+      return createOpenAI({
+        apiKey,
+        baseURL: GROQ_BASE_URL,
+        name: 'groq',
+      });
+    case 'cerebras':
+      return createOpenAI({
+        apiKey,
+        baseURL: CEREBRAS_BASE_URL,
+        name: 'cerebras',
+      });
+    case 'deepseek':
+      return createOpenAI({
+        apiKey,
+        baseURL: DEEPSEEK_BASE_URL,
+        name: 'deepseek',
+      });
+    case 'openrouter':
+      return createOpenAI({
+        apiKey,
+        baseURL: OPENROUTER_BASE_URL,
+        name: 'openrouter',
       });
     default: {
       // Exhaustive check — TypeScript will error if a provider is missing

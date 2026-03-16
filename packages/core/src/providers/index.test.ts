@@ -102,6 +102,46 @@ describe('createProvider', () => {
     });
   });
 
+  it('groq: calls createOpenAI with Groq baseURL and name', () => {
+    createProvider('groq', 'gsk-key');
+
+    expect(mockCreateOpenAI).toHaveBeenCalledWith({
+      apiKey: 'gsk-key',
+      baseURL: 'https://api.groq.com/openai/v1',
+      name: 'groq',
+    });
+  });
+
+  it('cerebras: calls createOpenAI with Cerebras baseURL and name', () => {
+    createProvider('cerebras', 'csk-key');
+
+    expect(mockCreateOpenAI).toHaveBeenCalledWith({
+      apiKey: 'csk-key',
+      baseURL: 'https://api.cerebras.ai/v1',
+      name: 'cerebras',
+    });
+  });
+
+  it('deepseek: calls createOpenAI with DeepSeek baseURL and name', () => {
+    createProvider('deepseek', 'dsk-key');
+
+    expect(mockCreateOpenAI).toHaveBeenCalledWith({
+      apiKey: 'dsk-key',
+      baseURL: 'https://api.deepseek.com/v1',
+      name: 'deepseek',
+    });
+  });
+
+  it('openrouter: calls createOpenAI with OpenRouter baseURL and name', () => {
+    createProvider('openrouter', 'sk-or-key');
+
+    expect(mockCreateOpenAI).toHaveBeenCalledWith({
+      apiKey: 'sk-or-key',
+      baseURL: 'https://openrouter.ai/api/v1',
+      name: 'openrouter',
+    });
+  });
+
   it('unknown provider: throws "Unknown provider" error', () => {
     expect(() => {
       createProvider('mistral' as LLMProvider, 'key');

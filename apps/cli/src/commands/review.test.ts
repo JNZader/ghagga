@@ -303,12 +303,26 @@ describe('CLI input validation', () => {
     expect(validModes).not.toContain('turbo');
   });
 
-  it('valid providers are: anthropic, openai, google, github', () => {
-    const validProviders = ['anthropic', 'openai', 'google', 'github'];
+  it('valid providers are: anthropic, openai, google, github, qwen, groq, cerebras, deepseek, openrouter', () => {
+    const validProviders = [
+      'anthropic',
+      'openai',
+      'google',
+      'github',
+      'qwen',
+      'groq',
+      'cerebras',
+      'deepseek',
+      'openrouter',
+    ];
     expect(validProviders).toContain('anthropic');
     expect(validProviders).toContain('openai');
     expect(validProviders).toContain('google');
     expect(validProviders).toContain('github');
+    expect(validProviders).toContain('groq');
+    expect(validProviders).toContain('cerebras');
+    expect(validProviders).toContain('deepseek');
+    expect(validProviders).toContain('openrouter');
     expect(validProviders).not.toContain('mistral');
   });
 
