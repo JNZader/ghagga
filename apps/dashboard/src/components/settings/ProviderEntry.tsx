@@ -33,7 +33,7 @@ interface ProviderEntryProps {
 
 // ─── Known Models per Provider (for instant model selection without re-validation) ──
 
-const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
+export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
   groq: [
     'openai/gpt-oss-120b',
     'llama-3.3-70b-versatile',
@@ -353,14 +353,17 @@ export function ProviderEntry({
       {/* Model Dropdown */}
       <div>
         <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
-        {entry.availableModels.length > 0 || entry.validated ? (
+        {entry.availableModels.length > 0 || entry.validated || entry.hasExistingKey ? (
           <select
             value={entry.model}
             onChange={(e) => handleModelChange(e.target.value)}
             className="select-field"
           >
             <option value="">Select a model...</option>
-            {entry.availableModels.map((m) => (
+            {(entry.availableModels.length > 0
+              ? entry.availableModels
+              : KNOWN_MODELS[entry.provider] ?? []
+            ).map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
