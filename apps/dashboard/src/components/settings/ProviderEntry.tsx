@@ -31,6 +31,49 @@ interface ProviderEntryProps {
   onMoveDown: () => void;
 }
 
+// ─── Known Models per Provider (for instant model selection without re-validation) ──
+
+const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
+  groq: [
+    'openai/gpt-oss-120b',
+    'llama-3.3-70b-versatile',
+    'llama-3.1-70b-versatile',
+    'llama-3.1-8b-instant',
+    'gemma2-9b-it',
+    'mixtral-8x7b-32768',
+    'qwen-qwq-32b',
+  ],
+  cerebras: ['llama-3.3-70b', 'llama-3.1-8b', 'llama-3.1-70b', 'qwen-3-32b'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  openrouter: [
+    'deepseek/deepseek-chat',
+    'deepseek/deepseek-r1:free',
+    'google/gemma-3-27b-it:free',
+    'qwen/qwen3-235b-a22b:free',
+    'anthropic/claude-sonnet-4',
+    'openai/gpt-4o',
+    'google/gemini-2.5-flash',
+  ],
+  anthropic: [
+    'claude-sonnet-4-20250514',
+    'claude-opus-4-20250514',
+    'claude-haiku-4-20250414',
+    'claude-3-5-haiku-20241022',
+    'claude-3-5-sonnet-20241022',
+  ],
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o3-mini'],
+  google: [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-3-flash',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+  ],
+  github: ['gpt-4o-mini', 'gpt-4o', 'o3-mini', 'Phi-4', 'Mistral-Large-2411', 'DeepSeek-R1'],
+  qwen: ['qwen-coder-plus', 'qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-coder-turbo', 'qwen-long'],
+};
+
 // ─── Provider Labels ────────────────────────────────────────────
 
 const PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
@@ -229,12 +272,17 @@ export function ProviderEntry({
               onChange={() => {
                 // Selecting "use saved key" signals the server to copy the global key.
                 // We clear apiKey so the PUT handler falls back to the global chain.
+                // Immediately populate known models so the model dropdown is usable
+                // without needing to hit the validate endpoint again.
+                const knownModels = KNOWN_MODELS[entry.provider] ?? [];
                 onChange({
                   ...entry,
                   apiKey: '',
                   hasExistingKey: true,
                   maskedApiKey: savedKeyInfo?.maskedApiKey,
                   validated: true,
+                  availableModels: knownModels,
+                  model: entry.model || knownModels[0] || '',
                 });
               }}
               className="select-field flex-1"
