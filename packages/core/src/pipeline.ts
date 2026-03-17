@@ -464,6 +464,11 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // Update execution time to cover the full pipeline
   result.metadata.executionTimeMs = Date.now() - startTime;
 
+  // Add file stats metadata (for emoji stats bar in comment)
+  result.metadata.totalAdditions = allFiles.reduce((sum, f) => sum + f.additions, 0);
+  result.metadata.totalDeletions = allFiles.reduce((sum, f) => sum + f.deletions, 0);
+  result.metadata.fileList = allFiles.map((f) => f.path);
+
   // Add blast-radius metadata (if applicable)
   if (blastRadiusMetadata) {
     result.metadata.blastRadius = blastRadiusMetadata;

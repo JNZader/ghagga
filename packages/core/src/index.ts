@@ -106,7 +106,17 @@ export { SqliteMemoryStorage, type SqliteMemoryStorageOptions } from './memory/s
 
 // ─── Formatting ─────────────────────────────────────────────────
 
-export { formatReviewComment, SEVERITY_EMOJI, STATUS_EMOJI } from './format.js';
+export type { FileStats, FormatReviewCommentOptions } from './format.js';
+export {
+  buildStatsBar,
+  categorizeFiles,
+  FILE_CATEGORIES,
+  formatFileCategorySummary,
+  formatReviewComment,
+  REVIEW_COMMENT_MARKER,
+  SEVERITY_EMOJI,
+  STATUS_EMOJI,
+} from './format.js';
 
 // ─── Extensible Tool System ─────────────────────────────────────
 
