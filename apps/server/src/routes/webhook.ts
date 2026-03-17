@@ -46,6 +46,7 @@ interface PullRequestEvent {
     number: number;
     head: { sha: string };
     base: { ref: string };
+    user: { login: string };
   };
   repository: {
     id: number;
