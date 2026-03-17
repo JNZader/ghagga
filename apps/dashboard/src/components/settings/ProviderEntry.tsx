@@ -118,7 +118,17 @@ export function ProviderEntry({
   // Effective mode: if the entry already has its own key, always show the input
   const effectiveMode = entry.hasExistingKey ? 'new' : keyMode;
 
-  // Reset validation when provider or apiKey changes
+  // Effective model list: prefer entry's availableModels, fall back to KNOWN_MODELS.
+  // This ensures the dropdown is always populated for entries with saved keys,
+  // even if availableModels was lost during a re-render.
+  const effectiveModels =
+    entry.availableModels.length > 0
+      ? entry.availableModels
+      : entry.hasExistingKey || entry.validated
+        ? (KNOWN_MODELS[entry.provider] ?? [])
+        : [];
+
+  // Reset validation error on mount
   useEffect(() => {
     setValidationError(null);
   }, []);
@@ -353,17 +363,14 @@ export function ProviderEntry({
       {/* Model Dropdown */}
       <div>
         <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
-        {entry.availableModels.length > 0 || entry.validated || entry.hasExistingKey ? (
+        {effectiveModels.length > 0 || entry.model ? (
           <select
             value={entry.model}
             onChange={(e) => handleModelChange(e.target.value)}
             className="select-field"
           >
             <option value="">Select a model...</option>
-            {(entry.availableModels.length > 0
-              ? entry.availableModels
-              : (KNOWN_MODELS[entry.provider] ?? [])
-            ).map((m) => (
+            {effectiveModels.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
