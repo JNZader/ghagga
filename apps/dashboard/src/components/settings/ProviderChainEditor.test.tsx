@@ -103,7 +103,7 @@ describe('ProviderChainEditor', () => {
       <ProviderChainEditor chain={chain} onChange={onChange} availableKeys={availableKeys} />,
     );
 
-    // The key selector should appear because a saved key exists for 'openai'
-    expect(screen.getByRole('combobox', { name: /select a saved api key/i })).toBeInTheDocument();
+    // The key button should appear because a saved key exists for 'openai'
+    expect(screen.getByText(/sk-...abcd.*click to use/i)).toBeInTheDocument();
   });
 });
