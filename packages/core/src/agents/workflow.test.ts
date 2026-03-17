@@ -524,6 +524,138 @@ describe('runWorkflowReview', () => {
     await expect(runWorkflowReview(makeInput({ onProgress: undefined }))).resolves.toBeDefined();
   });
 
+  // ── Multi-provider chain distribution ──
+
+  it('distributes 5 specialists round-robin across a 3-entry chain', async () => {
+    const chain = [
+      { provider: 'anthropic' as const, model: 'claude-sonnet-4-20250514', apiKey: 'key-a' },
+      { provider: 'openai' as const, model: 'gpt-4o', apiKey: 'key-b' },
+      { provider: 'google' as const, model: 'gemini-2.0-flash', apiKey: 'key-c' },
+    ];
+    await runWorkflowReview(makeInput({ providerChain: chain }));
+
+    // Specialist 0 (scope)       → chain[0] = anthropic/claude-sonnet-4-20250514
+    // Specialist 1 (standards)   → chain[1] = openai/gpt-4o
+    // Specialist 2 (errors)      → chain[2] = google/gemini-2.0-flash
+    // Specialist 3 (security)    → chain[0] = anthropic/claude-sonnet-4-20250514 (wraps)
+    // Specialist 4 (performance) → chain[1] = openai/gpt-4o (wraps)
+    expect(mockCreateModel).toHaveBeenNthCalledWith(
+      1,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      'key-a',
+    );
+    expect(mockCreateModel).toHaveBeenNthCalledWith(2, 'openai', 'gpt-4o', 'key-b');
+    expect(mockCreateModel).toHaveBeenNthCalledWith(3, 'google', 'gemini-2.0-flash', 'key-c');
+    expect(mockCreateModel).toHaveBeenNthCalledWith(
+      4,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      'key-a',
+    );
+    expect(mockCreateModel).toHaveBeenNthCalledWith(5, 'openai', 'gpt-4o', 'key-b');
+    // Synthesis (call 6) always uses chain[0] = primary
+    expect(mockCreateModel).toHaveBeenNthCalledWith(
+      6,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      'key-a',
+    );
+  });
+
+  it('synthesis always uses chain[0] (primary) regardless of chain length', async () => {
+    const chain = [
+      { provider: 'openai' as const, model: 'gpt-4o', apiKey: 'key-primary' },
+      { provider: 'google' as const, model: 'gemini-2.0-flash', apiKey: 'key-secondary' },
+    ];
+    await runWorkflowReview(makeInput({ providerChain: chain }));
+
+    // 6th createModel call is synthesis — must be chain[0]
+    expect(mockCreateModel).toHaveBeenNthCalledWith(6, 'openai', 'gpt-4o', 'key-primary');
+  });
+
+  it('falls back to flat provider/model/apiKey when providerChain is undefined', async () => {
+    await runWorkflowReview(
+      makeInput({
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-20250514',
+        apiKey: 'sk-flat',
+        providerChain: undefined,
+      }),
+    );
+
+    // All 6 calls use the flat fields
+    expect(mockCreateModel).toHaveBeenCalledTimes(6);
+    for (let i = 1; i <= 6; i++) {
+      expect(mockCreateModel).toHaveBeenNthCalledWith(
+        i,
+        'anthropic',
+        'claude-sonnet-4-20250514',
+        'sk-flat',
+      );
+    }
+  });
+
+  it('falls back to flat provider/model/apiKey when providerChain is empty', async () => {
+    await runWorkflowReview(
+      makeInput({ provider: 'openai', model: 'gpt-4o', apiKey: 'sk-flat', providerChain: [] }),
+    );
+
+    expect(mockCreateModel).toHaveBeenCalledTimes(6);
+    for (let i = 1; i <= 6; i++) {
+      expect(mockCreateModel).toHaveBeenNthCalledWith(i, 'openai', 'gpt-4o', 'sk-flat');
+    }
+  });
+
+  it('uses single-entry chain for all specialists and synthesis', async () => {
+    const chain = [{ provider: 'google' as const, model: 'gemini-2.0-flash', apiKey: 'key-only' }];
+    await runWorkflowReview(makeInput({ providerChain: chain }));
+
+    expect(mockCreateModel).toHaveBeenCalledTimes(6);
+    for (let i = 1; i <= 6; i++) {
+      expect(mockCreateModel).toHaveBeenNthCalledWith(i, 'google', 'gemini-2.0-flash', 'key-only');
+    }
+  });
+
+  it('includes provider/model in progress message for each specialist when chain is set', async () => {
+    const chain = [
+      { provider: 'anthropic' as const, model: 'claude-sonnet-4-20250514', apiKey: 'ka' },
+      { provider: 'openai' as const, model: 'gpt-4o', apiKey: 'kb' },
+    ];
+    const onProgress = vi.fn();
+    await runWorkflowReview(makeInput({ providerChain: chain, onProgress }));
+
+    const specialistCalls = onProgress.mock.calls.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: mock callback type
+      ([event]: [any]) => event.step.startsWith('specialist-') && event.message.includes('✓'),
+    );
+    // First specialist message should mention chain[0]'s model
+    expect(specialistCalls[0]?.[0].message).toContain('anthropic/claude-sonnet-4-20250514');
+    // Second specialist message should mention chain[1]'s model
+    expect(specialistCalls[1]?.[0].message).toContain('openai/gpt-4o');
+  });
+
+  it('records modelsUsed in metadata with specialist:provider/model format', async () => {
+    const chain = [
+      { provider: 'anthropic' as const, model: 'claude-sonnet-4-20250514', apiKey: 'ka' },
+      { provider: 'openai' as const, model: 'gpt-4o', apiKey: 'kb' },
+    ];
+    const parsed = makeParsedResult();
+    mockParseReviewResponse.mockReturnValue(parsed);
+
+    const result = await runWorkflowReview(makeInput({ providerChain: chain }));
+
+    // modelsUsed is set directly on the returned result's metadata
+    expect(result.metadata.modelsUsed).toBeDefined();
+    expect(result.metadata.modelsUsed).toHaveLength(5);
+    // Specialist 0 (scope-analysis) → chain[0]
+    expect(result.metadata.modelsUsed?.[0]).toBe(
+      'scope-analysis:anthropic/claude-sonnet-4-20250514',
+    );
+    // Specialist 1 (coding-standards) → chain[1]
+    expect(result.metadata.modelsUsed?.[1]).toBe('coding-standards:openai/gpt-4o');
+  });
+
   // ── Review level & calibration injection ──
 
   it('includes review-level instruction in ALL specialist system prompts', async () => {
