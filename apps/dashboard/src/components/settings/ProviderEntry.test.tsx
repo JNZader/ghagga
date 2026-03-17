@@ -148,22 +148,22 @@ describe('ProviderEntry', () => {
     expect(screen.queryByPlaceholderText(/enter api key/i)).not.toBeInTheDocument();
   });
 
-  it('shows "Enter new key instead" toggle when saved key is available', () => {
+  it('shows "Use a different key" toggle when saved key is available', () => {
     const availableKeys: AvailableKeysMap = {
       openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
     };
     renderEntry(createEntry({ provider: 'openai' }), noop, availableKeys);
 
-    expect(screen.getByText(/enter new key instead/i)).toBeInTheDocument();
+    expect(screen.getByText(/use a different key/i)).toBeInTheDocument();
   });
 
-  it('switches to manual input when "Enter new key instead" is clicked', () => {
+  it('switches to manual input when "Use a different key" is clicked', () => {
     const availableKeys: AvailableKeysMap = {
       openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
     };
     renderEntry(createEntry({ provider: 'openai' }), noop, availableKeys);
 
-    fireEvent.click(screen.getByText(/enter new key instead/i));
+    fireEvent.click(screen.getByText(/use a different key/i));
 
     // After switching, the password input should be visible
     expect(screen.getByPlaceholderText(/enter api key/i)).toBeInTheDocument();
