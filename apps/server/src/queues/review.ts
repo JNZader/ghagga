@@ -16,7 +16,12 @@ import type {
   ReviewMode,
   StaticAnalysisResult,
 } from 'ghagga-core';
-import { formatReviewComment, PreloadedGraphLoader, reviewPipeline } from 'ghagga-core';
+import {
+  formatReviewComment,
+  PreloadedGraphLoader,
+  REVIEW_COMMENT_MARKER,
+  reviewPipeline,
+} from 'ghagga-core';
 import type { Database, DbProviderChainEntry } from 'ghagga-db';
 import { createDatabaseFromEnv, decrypt, saveReview } from 'ghagga-db';
 import Redis from 'ioredis';
@@ -24,10 +29,12 @@ import {
   addCommentReaction,
   fetchGraphFromBranch,
   fetchPRDiff,
+  findExistingComment,
   getInstallationToken,
   getPRCommitMessages,
   getPRFileList,
   postComment,
+  updateComment,
 } from '../github/client.js';
 import { discoverRunnerRepo, dispatchWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
@@ -392,13 +399,29 @@ async function processReview(
 
   await job.updateProgress(80);
 
-  // Step 6: Post comment to GitHub PR
+  // Step 6: Post or update comment on GitHub PR (idempotent)
   const freshToken = await getInstallationToken(installationId, appId, privateKey);
-  let commentBody = formatReviewComment(reviewResult);
+  let commentBody = formatReviewComment(reviewResult, {
+    fileStats:
+      reviewResult.metadata.totalAdditions !== undefined
+        ? {
+            additions: reviewResult.metadata.totalAdditions,
+            deletions: reviewResult.metadata.totalDeletions ?? 0,
+          }
+        : undefined,
+    fileList: reviewResult.metadata.fileList,
+  });
   commentBody += `\n<!-- reviewId: ${reviewId} -->`;
-  await postComment(owner, repo, prNumber, commentBody, freshToken);
 
-  log.info('Review comment posted');
+  // Idempotent: find existing GHAGGA comment and update it, or create new
+  const existingCommentId = await findExistingComment(owner, repo, prNumber, freshToken);
+  if (existingCommentId) {
+    await updateComment(owner, repo, existingCommentId, commentBody, freshToken);
+    log.info({ commentId: existingCommentId }, 'Review comment updated (idempotent)');
+  } else {
+    await postComment(owner, repo, prNumber, commentBody, freshToken);
+    log.info('Review comment posted');
+  }
   await job.updateProgress(90);
 
   // Step 7: React with rocket to the trigger comment
