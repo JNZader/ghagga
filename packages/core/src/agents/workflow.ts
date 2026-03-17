@@ -73,6 +73,27 @@ interface SpecialistConfig {
   system: string;
 }
 
+/**
+ * Context distribution map: each specialist gets only the context
+ * relevant to its domain, preventing cross-contamination and
+ * reducing token usage per call.
+ *
+ * - Security:   staticContext (security findings from static analysis are relevant)
+ * - Performance: stackHints  (tech-specific performance patterns)
+ * - Scope:      memoryContext (past observations help understand scope)
+ * - Standards:  stackHints   (tech-specific naming/formatting conventions)
+ * - Errors:     minimal      (focuses purely on the diff)
+ */
+type SpecialistContextKey = 'staticContext' | 'memoryContext' | 'stackHints';
+
+const SPECIALIST_CONTEXT_MAP: Record<WorkflowSpecialist, SpecialistContextKey[]> = {
+  'security-audit': ['staticContext'],
+  'performance-review': ['stackHints'],
+  'scope-analysis': ['memoryContext'],
+  'coding-standards': ['stackHints'],
+  'error-handling': [],
+};
+
 // ─── Specialist Configuration ───────────────────────────────────
 
 const SPECIALISTS: SpecialistConfig[] = [
@@ -103,7 +124,6 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   const delayMs = input.delayMs ?? 0;
 
   const startTime = Date.now();
-  const languageModel = createModel(provider, model, apiKey);
 
   emit({
     step: 'workflow-start',
@@ -114,29 +134,41 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // Build the user prompt (same for all specialists)
   const userPrompt = `Review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
 
+  // Context sources keyed for lookup by the specialist context map
+  const contextSources: Record<SpecialistContextKey, string> = {
+    staticContext,
+    memoryContext: buildMemoryContext(memoryContext),
+    stackHints,
+  };
+
   // ── Step 1: Run specialists with bounded concurrency ───────
   //
-  // Only the first specialist gets the full shared context (staticContext,
-  // memoryContext, stackHints, full calibration). Subsequent specialists
-  // get a compact calibration to save ~750 tokens per call.
-  const specialistTasks = SPECIALISTS.map((specialist, index) => {
+  // Each specialist creates its own model instance and receives only
+  // the context relevant to its domain. Specialists with context get
+  // REVIEW_CALIBRATION; those without extra context get COMPACT_CALIBRATION.
+  const specialistTasks = SPECIALISTS.map((specialist) => {
     return async () => {
-      const isFirstSpecialist = index === 0;
+      // Each specialist gets its own isolated model instance
+      const specialistModel = createModel(provider, model, apiKey);
+
+      // Build context: only include what's relevant for this specialist
+      const contextKeys = SPECIALIST_CONTEXT_MAP[specialist.name] ?? [];
+      const contextParts = contextKeys.map((key) => contextSources[key]).filter(Boolean);
+
+      const hasContext = contextParts.length > 0;
+
       const system = [
         specialist.system,
-        // Full context only for the first specialist; compact for the rest
-        isFirstSpecialist ? staticContext : '',
-        isFirstSpecialist ? buildMemoryContext(memoryContext) : '',
-        isFirstSpecialist ? stackHints : '',
+        ...contextParts,
         buildReviewLevelInstruction(reviewLevel),
-        isFirstSpecialist ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+        hasContext ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
       ]
         .filter(Boolean)
         .join('\n');
 
       const result = await generateTextWithTimeout(
         {
-          model: languageModel,
+          model: specialistModel,
           system,
           prompt: userPrompt,
           temperature: 0.3,
@@ -195,6 +227,8 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   });
 
   // ── Step 3: Synthesis ──────────────────────────────────────
+  const synthesisModel = createModel(provider, model, apiKey);
+
   const synthesisPrompt = [
     'Below are the findings from 5 specialist reviewers. Synthesize them into a final review.\n',
     ...specialistOutputs,
@@ -211,7 +245,7 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
   const synthesisResult = await generateTextWithTimeout(
     {
-      model: languageModel,
+      model: synthesisModel,
       system: synthesisSystem,
       prompt: synthesisPrompt,
       temperature: 0.3,

@@ -113,6 +113,13 @@ describe('runWorkflowReview', () => {
     expect(mockCreateModel).toHaveBeenCalledWith('openai', 'gpt-4o', 'sk-openai-key');
   });
 
+  it('creates one model instance per specialist + one for synthesis (6 total)', async () => {
+    await runWorkflowReview(makeInput());
+
+    // 5 specialists + 1 synthesis = 6 createModel calls
+    expect(mockCreateModel).toHaveBeenCalledTimes(6);
+  });
+
   // ── Specialist calls ──
 
   it('makes exactly 5 specialist calls + 1 synthesis call (6 total)', async () => {
@@ -134,27 +141,82 @@ describe('runWorkflowReview', () => {
     }
   });
 
-  it('includes staticContext and stackHints in specialist system prompts', async () => {
+  // ── Context isolation per specialist ──
+
+  it('gives security specialist staticContext only', async () => {
     const input = makeInput({
       staticContext: 'STATIC_CONTEXT_DATA',
+      memoryContext: 'MEMORY_DATA',
       stackHints: 'STACK_HINTS_DATA',
     });
     await runWorkflowReview(input);
 
-    // Check the first specialist call
+    // Specialists order: scope(0), standards(1), errors(2), security(3), performance(4)
     // biome-ignore lint/suspicious/noExplicitAny: mock cast
-    const call = mockGenerateText.mock.calls[0]?.[0] as any;
-    expect(call.system).toContain('STATIC_CONTEXT_DATA');
-    expect(call.system).toContain('STACK_HINTS_DATA');
+    const securityCall = mockGenerateText.mock.calls[3]?.[0] as any;
+    expect(securityCall.system).toContain('STATIC_CONTEXT_DATA');
+    expect(securityCall.system).not.toContain('STACK_HINTS_DATA');
+    expect(securityCall.system).not.toContain('MEMORY:MEMORY_DATA');
   });
 
-  it('includes memory context in specialist system prompts when provided', async () => {
-    const input = makeInput({ memoryContext: 'past-review-data' });
+  it('gives performance specialist stackHints only', async () => {
+    const input = makeInput({
+      staticContext: 'STATIC_CONTEXT_DATA',
+      memoryContext: 'MEMORY_DATA',
+      stackHints: 'STACK_HINTS_DATA',
+    });
     await runWorkflowReview(input);
 
     // biome-ignore lint/suspicious/noExplicitAny: mock cast
-    const call = mockGenerateText.mock.calls[0]?.[0] as any;
-    expect(call.system).toContain('MEMORY:past-review-data');
+    const perfCall = mockGenerateText.mock.calls[4]?.[0] as any;
+    expect(perfCall.system).toContain('STACK_HINTS_DATA');
+    expect(perfCall.system).not.toContain('STATIC_CONTEXT_DATA');
+    expect(perfCall.system).not.toContain('MEMORY:MEMORY_DATA');
+  });
+
+  it('gives scope specialist memoryContext only', async () => {
+    const input = makeInput({
+      staticContext: 'STATIC_CONTEXT_DATA',
+      memoryContext: 'MEMORY_DATA',
+      stackHints: 'STACK_HINTS_DATA',
+    });
+    await runWorkflowReview(input);
+
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const scopeCall = mockGenerateText.mock.calls[0]?.[0] as any;
+    expect(scopeCall.system).toContain('MEMORY:MEMORY_DATA');
+    expect(scopeCall.system).not.toContain('STATIC_CONTEXT_DATA');
+    expect(scopeCall.system).not.toContain('STACK_HINTS_DATA');
+  });
+
+  it('gives standards specialist stackHints only', async () => {
+    const input = makeInput({
+      staticContext: 'STATIC_CONTEXT_DATA',
+      memoryContext: 'MEMORY_DATA',
+      stackHints: 'STACK_HINTS_DATA',
+    });
+    await runWorkflowReview(input);
+
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const standardsCall = mockGenerateText.mock.calls[1]?.[0] as any;
+    expect(standardsCall.system).toContain('STACK_HINTS_DATA');
+    expect(standardsCall.system).not.toContain('STATIC_CONTEXT_DATA');
+    expect(standardsCall.system).not.toContain('MEMORY:MEMORY_DATA');
+  });
+
+  it('gives error handling specialist no extra context (minimal)', async () => {
+    const input = makeInput({
+      staticContext: 'STATIC_CONTEXT_DATA',
+      memoryContext: 'MEMORY_DATA',
+      stackHints: 'STACK_HINTS_DATA',
+    });
+    await runWorkflowReview(input);
+
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const errorsCall = mockGenerateText.mock.calls[2]?.[0] as any;
+    expect(errorsCall.system).not.toContain('STATIC_CONTEXT_DATA');
+    expect(errorsCall.system).not.toContain('STACK_HINTS_DATA');
+    expect(errorsCall.system).not.toContain('MEMORY:MEMORY_DATA');
   });
 
   // ── Synthesis call ──
@@ -475,16 +537,63 @@ describe('runWorkflowReview', () => {
     }
   });
 
-  it('includes full REVIEW_CALIBRATION only for the first specialist, compact for the rest', async () => {
-    await runWorkflowReview(makeInput());
+  it('includes REVIEW_CALIBRATION for specialists with context, COMPACT for those without', async () => {
+    await runWorkflowReview(
+      makeInput({
+        staticContext: 'STATIC',
+        memoryContext: 'MEMORY',
+        stackHints: 'HINTS',
+      }),
+    );
 
-    // First specialist gets full calibration
+    // Specialists with context (scope=memory, standards=stackHints, security=static, perf=stackHints)
+    // get REVIEW_CALIBRATION. Error handling (no context) gets COMPACT_CALIBRATION.
+    //
+    // Order: scope(0), standards(1), errors(2), security(3), performance(4)
+
+    // scope has memoryContext → REVIEW_CALIBRATION
     // biome-ignore lint/suspicious/noExplicitAny: mock cast
-    const firstCall = mockGenerateText.mock.calls[0]?.[0] as any;
-    expect(firstCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+    const scopeCall = mockGenerateText.mock.calls[0]?.[0] as any;
+    expect(scopeCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+    expect(scopeCall.system).not.toContain('COMPACT_CALIBRATION_BLOCK');
 
-    // Subsequent specialists get compact calibration
-    for (let i = 1; i < 5; i++) {
+    // standards has stackHints → REVIEW_CALIBRATION
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const standardsCall = mockGenerateText.mock.calls[1]?.[0] as any;
+    expect(standardsCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+    expect(standardsCall.system).not.toContain('COMPACT_CALIBRATION_BLOCK');
+
+    // errors has no context → COMPACT_CALIBRATION
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const errorsCall = mockGenerateText.mock.calls[2]?.[0] as any;
+    expect(errorsCall.system).toContain('COMPACT_CALIBRATION_BLOCK');
+    expect(errorsCall.system).not.toContain('REVIEW_CALIBRATION_BLOCK');
+
+    // security has staticContext → REVIEW_CALIBRATION
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const securityCall = mockGenerateText.mock.calls[3]?.[0] as any;
+    expect(securityCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+    expect(securityCall.system).not.toContain('COMPACT_CALIBRATION_BLOCK');
+
+    // performance has stackHints → REVIEW_CALIBRATION
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const perfCall = mockGenerateText.mock.calls[4]?.[0] as any;
+    expect(perfCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+    expect(perfCall.system).not.toContain('COMPACT_CALIBRATION_BLOCK');
+  });
+
+  it('all specialists get COMPACT_CALIBRATION when no context is provided', async () => {
+    // With empty context, even specialists that would receive context get nothing
+    await runWorkflowReview(
+      makeInput({
+        staticContext: '',
+        memoryContext: null,
+        stackHints: '',
+      }),
+    );
+
+    // All 5 specialists should get COMPACT since no context resolves to non-empty
+    for (let i = 0; i < 5; i++) {
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
       const call = mockGenerateText.mock.calls[i]?.[0] as any;
       expect(call.system).toContain('COMPACT_CALIBRATION_BLOCK');

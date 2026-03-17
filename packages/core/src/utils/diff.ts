@@ -7,6 +7,7 @@
  */
 
 import { minimatch } from 'minimatch';
+import { applyPathProtection } from './path-protection.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -106,6 +107,54 @@ export function filterIgnoredFiles(files: DiffFile[], patterns: string[]): DiffF
     return !patterns.some((pattern) => minimatch(file.path, pattern, { dot: true }));
   });
 }
+
+// ─── Three-Tier Filtering ───────────────────────────────────────
+
+/**
+ * Result of applying all three filtering tiers to diff files.
+ */
+export interface FilterDiffResult {
+  /** Files that passed all tiers — ready for LLM review. */
+  filtered: DiffFile[];
+
+  /** File paths blocked by ZERO_ACCESS tier (for logging). */
+  blocked: string[];
+
+  /** File paths redacted by REDACT tier (for logging). */
+  redacted: string[];
+}
+
+/**
+ * Apply all three tiers of file filtering in order:
+ *   1. ZERO_ACCESS — hardcoded security patterns (blocked entirely)
+ *   2. REDACT — sensitive templates (content replaced, path visible)
+ *   3. User ignorePatterns — configurable exclusions
+ *
+ * This is the recommended entry point for the pipeline. It applies
+ * non-overridable security filtering before user-configurable patterns.
+ *
+ * @param files - Array of DiffFile objects from the parsed diff
+ * @param ignorePatterns - User-configurable glob patterns to exclude
+ * @returns Object with filtered files, blocked paths, and redacted paths
+ */
+export function filterDiffFiles(files: DiffFile[], ignorePatterns: string[]): FilterDiffResult {
+  // Tier 1 & 2: Security filtering (non-overridable)
+  const { allowed, redacted, blocked } = applyPathProtection(files);
+
+  // Tier 3: User ignore patterns (applied to allowed files only)
+  const userFiltered = filterIgnoredFiles(allowed, ignorePatterns);
+
+  // Combine user-filtered files with redacted files for final output
+  const filtered = [...userFiltered, ...redacted];
+
+  return {
+    filtered,
+    blocked,
+    redacted: redacted.map((f) => f.path),
+  };
+}
+
+// ─── Truncation ─────────────────────────────────────────────────
 
 /**
  * Truncate a diff string to fit within a token budget.
