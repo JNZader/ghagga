@@ -16,6 +16,7 @@
  */
 
 import { runConsensusReview } from './agents/consensus.js';
+import { runDiagnosticReview } from './agents/diagnostic.js';
 import { buildStackHints } from './agents/prompts.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
@@ -306,6 +307,20 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
                 stance: 'neutral',
               },
             ],
+            staticContext,
+            memoryContext,
+            stackHints,
+            reviewLevel: input.settings.reviewLevel,
+            onProgress: input.onProgress,
+          });
+          break;
+
+        case 'diagnostic':
+          result = await runDiagnosticReview({
+            diff: truncatedDiff,
+            provider: primary.provider as LLMProvider,
+            model: primary.model,
+            apiKey: primary.apiKey,
             staticContext,
             memoryContext,
             stackHints,
