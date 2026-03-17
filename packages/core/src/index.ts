@@ -55,8 +55,15 @@ export { DEFAULT_MODELS, DEFAULT_SETTINGS } from './types.js';
 
 // ─── Utilities (for advanced usage) ─────────────────────────────
 
-export type { DiffFile } from './utils/diff.js';
-export { filterIgnoredFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
+export type { DiffFile, FilterDiffResult } from './utils/diff.js';
+export { filterDiffFiles, filterIgnoredFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
+export type { PathProtectionResult } from './utils/path-protection.js';
+export {
+  applyPathProtection,
+  REDACT_PATTERNS,
+  REDACTED_CONTENT,
+  ZERO_ACCESS_PATTERNS,
+} from './utils/path-protection.js';
 export { detectStacks } from './utils/stack-detect.js';
 export { calculateTokenBudget, getContextWindow } from './utils/token-budget.js';
 

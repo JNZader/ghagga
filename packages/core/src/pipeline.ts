@@ -38,7 +38,7 @@ import type {
   ReviewResult,
   ReviewStatus,
 } from './types.js';
-import { filterIgnoredFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
+import { filterDiffFiles, filterIgnoredFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
 import { detectStacks } from './utils/stack-detect.js';
 import { calculateTokenBudget } from './utils/token-budget.js';
 
@@ -104,10 +104,30 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
 
   // ── Step 2: Parse and filter the diff ──────────────────────
   const allFiles = parseDiffFiles(input.diff);
-  const filteredFiles = filterIgnoredFiles(allFiles, input.settings.ignorePatterns);
+  const {
+    filtered: filteredFiles,
+    blocked,
+    redacted,
+  } = filterDiffFiles(allFiles, input.settings.ignorePatterns);
+
+  if (blocked.length > 0) {
+    emit({
+      step: 'path-protection',
+      message: `Blocked ${blocked.length} sensitive file(s) from review`,
+      detail: blocked.map((p) => `  [BLOCKED] ${p}`).join('\n'),
+    });
+  }
+  if (redacted.length > 0) {
+    emit({
+      step: 'path-protection',
+      message: `Redacted ${redacted.length} file(s) — paths visible, content hidden`,
+      detail: redacted.map((p) => `  [REDACTED] ${p}`).join('\n'),
+    });
+  }
+
   emit({
     step: 'parse-diff',
-    message: `Parsed ${allFiles.length} files from diff, ${filteredFiles.length} after filtering`,
+    message: `Parsed ${allFiles.length} files from diff, ${filteredFiles.length} after filtering (${blocked.length} blocked, ${redacted.length} redacted)`,
     detail: filteredFiles.map((f) => `  ${f.path}`).join('\n'),
   });
 
