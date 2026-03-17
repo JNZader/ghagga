@@ -29,12 +29,14 @@ vi.mock('./prompts.js', () => ({
 }));
 
 import { generateText } from 'ai';
+import { createModel } from '../providers/index.js';
 import type { ConsensusReviewInput } from './consensus.js';
 import { runConsensusReview } from './consensus.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
 const mockGenerateText = vi.mocked(generateText);
+const mockCreateModel = vi.mocked(createModel);
 
 function makeInput(overrides: Partial<ConsensusReviewInput> = {}): ConsensusReviewInput {
   return {
@@ -130,6 +132,87 @@ describe('runConsensusReview reviewLevel injection', () => {
       const call = mockGenerateText.mock.calls[i]?.[0] as any;
       expect(call.system).toContain('COMPACT_CALIBRATION_BLOCK');
       expect(call.system).not.toContain('REVIEW_CALIBRATION_BLOCK');
+    }
+  });
+});
+
+// ─── Multi-provider chain distribution (via pipeline.buildConsensusModels) ───
+
+describe('runConsensusReview — multi-provider distribution via models array', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    mockGenerateText.mockResolvedValue(makeVoteResponse() as any);
+  });
+
+  it('uses distinct providers for each stance when models array has 3 different entries', async () => {
+    const input = makeInput({
+      models: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'ka', stance: 'for' },
+        { provider: 'openai', model: 'gpt-4o', apiKey: 'kb', stance: 'against' },
+        { provider: 'google', model: 'gemini-2.0-flash', apiKey: 'kc', stance: 'neutral' },
+      ],
+    });
+    await runConsensusReview(input);
+
+    expect(mockCreateModel).toHaveBeenCalledTimes(3);
+    expect(mockCreateModel).toHaveBeenNthCalledWith(
+      1,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      'ka',
+    );
+    expect(mockCreateModel).toHaveBeenNthCalledWith(2, 'openai', 'gpt-4o', 'kb');
+    expect(mockCreateModel).toHaveBeenNthCalledWith(3, 'google', 'gemini-2.0-flash', 'kc');
+  });
+
+  it('uses chain[0] for for-vote and chain[1] for against-vote when 2 entries provided', async () => {
+    const input = makeInput({
+      models: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'ka', stance: 'for' },
+        { provider: 'openai', model: 'gpt-4o', apiKey: 'kb', stance: 'against' },
+        // neutral wraps back to index 0 — this is set by buildConsensusModels in pipeline
+        {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-20250514',
+          apiKey: 'ka',
+          stance: 'neutral',
+        },
+      ],
+    });
+    await runConsensusReview(input);
+
+    expect(mockCreateModel).toHaveBeenCalledTimes(3);
+    expect(mockCreateModel).toHaveBeenNthCalledWith(
+      1,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      'ka',
+    );
+    expect(mockCreateModel).toHaveBeenNthCalledWith(2, 'openai', 'gpt-4o', 'kb');
+    // neutral uses ka (same as for-vote) — the pipeline wraps i%2 = 2%2 = 0
+    expect(mockCreateModel).toHaveBeenNthCalledWith(
+      3,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      'ka',
+    );
+  });
+
+  it('all 3 votes use same provider when models array has a single provider repeated', async () => {
+    // Equivalent to no chain configured — all use primary
+    const input = makeInput({
+      models: [
+        { provider: 'openai', model: 'gpt-4o', apiKey: 'k', stance: 'for' },
+        { provider: 'openai', model: 'gpt-4o', apiKey: 'k', stance: 'against' },
+        { provider: 'openai', model: 'gpt-4o', apiKey: 'k', stance: 'neutral' },
+      ],
+    });
+    await runConsensusReview(input);
+
+    expect(mockCreateModel).toHaveBeenCalledTimes(3);
+    for (let i = 1; i <= 3; i++) {
+      expect(mockCreateModel).toHaveBeenNthCalledWith(i, 'openai', 'gpt-4o', 'k');
     }
   });
 });

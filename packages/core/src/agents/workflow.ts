@@ -20,6 +20,7 @@ import { createModel } from '../providers/index.js';
 import type {
   LLMProvider,
   ProgressCallback,
+  ProviderChainEntry,
   ReviewLevel,
   ReviewResult,
   WorkflowSpecialist,
@@ -65,6 +66,15 @@ export interface WorkflowReviewInput {
    * Useful for RPM-limited providers (e.g., Gemini free at 20 RPM).
    */
   delayMs?: number;
+
+  /**
+   * Provider chain for distributing specialists across multiple providers.
+   * Specialist i uses chain[i % chain.length].
+   * When set, takes precedence over the flat provider/model/apiKey fields
+   * for individual specialists. Synthesis always uses chain[0] (primary).
+   * When undefined or empty, all specialists use the flat fields (backward compat).
+   */
+  providerChain?: ProviderChainEntry[];
 }
 
 interface SpecialistConfig {
@@ -146,10 +156,21 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // Each specialist creates its own model instance and receives only
   // the context relevant to its domain. Specialists with context get
   // REVIEW_CALIBRATION; those without extra context get COMPACT_CALIBRATION.
-  const specialistTasks = SPECIALISTS.map((specialist) => {
+  //
+  // When providerChain is set, specialists are distributed round-robin:
+  //   specialist 0 → chain[0], specialist 1 → chain[1], ..., n → chain[n % len]
+  // This spreads TPM load across providers instead of hammering one.
+  const chain = input.providerChain && input.providerChain.length > 0 ? input.providerChain : null;
+
+  const specialistTasks = SPECIALISTS.map((specialist, index) => {
     return async () => {
+      // Resolve which provider/model this specialist uses
+      const entry: ProviderChainEntry = chain
+        ? (chain[index % chain.length] as ProviderChainEntry)
+        : { provider: provider as ProviderChainEntry['provider'], model, apiKey };
+
       // Each specialist gets its own isolated model instance
-      const specialistModel = createModel(provider, model, apiKey);
+      const specialistModel = createModel(entry.provider as LLMProvider, entry.model, entry.apiKey);
 
       // Build context: only include what's relevant for this specialist
       const contextKeys = SPECIALIST_CONTEXT_MAP[specialist.name] ?? [];
@@ -173,7 +194,7 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
           prompt: userPrompt,
           temperature: 0.3,
         },
-        { provider, model },
+        { provider: entry.provider, model: entry.model },
       );
 
       // Timeout: treat as a failed specialist (synthesis will be aware of the gap)
@@ -186,6 +207,8 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
         label: specialist.label,
         text: result.text,
         tokensUsed: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+        providerUsed: entry.provider,
+        modelUsed: entry.model,
       };
     };
   });
@@ -195,6 +218,7 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // ── Step 2: Collect results ────────────────────────────────
   let totalTokens = 0;
   const specialistOutputs: string[] = [];
+  const modelsUsed: string[] = [];
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
@@ -204,9 +228,12 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
       specialistOutputs.push(`### ${result.value.label}\n\n${result.value.text}`);
+      modelsUsed.push(
+        `${result.value.name}:${result.value.providerUsed}/${result.value.modelUsed}`,
+      );
       emit({
         step: `specialist-${spec.name}`,
-        message: `✓ ${spec.label} — ${result.value.tokensUsed} tokens`,
+        message: `✓ ${spec.label} — ${result.value.tokensUsed} tokens (${result.value.providerUsed}/${result.value.modelUsed})`,
         detail: result.value.text,
       });
     } else {
@@ -227,7 +254,16 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   });
 
   // ── Step 3: Synthesis ──────────────────────────────────────
-  const synthesisModel = createModel(provider, model, apiKey);
+  // Synthesis always uses the primary provider (chain[0] or flat fields)
+  // for the highest-quality aggregation step.
+  const primaryEntry: ProviderChainEntry = chain
+    ? (chain[0] as ProviderChainEntry)
+    : { provider: provider as ProviderChainEntry['provider'], model, apiKey };
+  const synthesisModel = createModel(
+    primaryEntry.provider as LLMProvider,
+    primaryEntry.model,
+    primaryEntry.apiKey,
+  );
 
   const synthesisPrompt = [
     'Below are the findings from 5 specialist reviewers. Synthesize them into a final review.\n',
@@ -250,7 +286,7 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
       prompt: synthesisPrompt,
       temperature: 0.3,
     },
-    { provider, model },
+    { provider: primaryEntry.provider, model: primaryEntry.model },
   );
 
   const executionTimeMs = Date.now() - startTime;
@@ -264,13 +300,14 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
     const reviewResult = parseReviewResponse(
       'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: LLM synthesis timed out. Only static analysis results are available.\nFINDINGS:\n',
-      provider,
-      model,
+      primaryEntry.provider as LLMProvider,
+      primaryEntry.model,
       totalTokens,
       executionTimeMs,
       memoryContext,
     );
     reviewResult.metadata.mode = 'workflow';
+    reviewResult.metadata.modelsUsed = modelsUsed;
     return reviewResult;
   }
 
@@ -281,8 +318,8 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // Parse the synthesis output using the same parser as simple mode
   const reviewResult = parseReviewResponse(
     synthesisResult.text,
-    provider,
-    model,
+    primaryEntry.provider as LLMProvider,
+    primaryEntry.model,
     totalTokens,
     executionTimeMs,
     memoryContext,
@@ -290,6 +327,7 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
   // Override mode in metadata
   reviewResult.metadata.mode = 'workflow';
+  reviewResult.metadata.modelsUsed = modelsUsed;
 
   return reviewResult;
 }

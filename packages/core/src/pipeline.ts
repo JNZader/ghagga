@@ -358,6 +358,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             provider: primary.provider as LLMProvider,
             model: primary.model,
             apiKey: primary.apiKey,
+            providerChain: input.providerChain,
             staticContext,
             memoryContext,
             stackHints,
@@ -369,26 +370,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         case 'consensus':
           result = await runConsensusReview({
             diff: truncatedDiff,
-            models: [
-              {
-                provider: primary.provider as LLMProvider,
-                model: primary.model,
-                apiKey: primary.apiKey,
-                stance: 'for',
-              },
-              {
-                provider: primary.provider as LLMProvider,
-                model: primary.model,
-                apiKey: primary.apiKey,
-                stance: 'against',
-              },
-              {
-                provider: primary.provider as LLMProvider,
-                model: primary.model,
-                apiKey: primary.apiKey,
-                stance: 'neutral',
-              },
-            ],
+            models: buildConsensusModels(input.providerChain, primary),
             staticContext,
             memoryContext,
             stackHints,
@@ -529,6 +511,36 @@ function resolvePrimaryProvider(input: ReviewInput): ProviderChainEntry {
     model: input.model,
     apiKey: input.apiKey,
   };
+}
+
+/**
+ * Build the 3-entry ConsensusModelConfig array for the for/against/neutral votes.
+ *
+ * Distribution rules (given a chain of length N):
+ *   N >= 3 : chain[0]→for, chain[1]→against, chain[2]→neutral
+ *   N == 2 : chain[0]→for, chain[1]→against, chain[0]→neutral
+ *   N == 1 : all 3 votes use chain[0]  (same as primary-only)
+ *   N == 0 : all 3 votes use `primary` (backward compat)
+ *
+ * This spreads consensus votes across providers so each vote hits a
+ * different TPM budget instead of all three hammering the same limit.
+ */
+function buildConsensusModels(
+  chain: ProviderChainEntry[] | undefined,
+  primary: ProviderChainEntry,
+): import('./agents/consensus.js').ConsensusModelConfig[] {
+  const stances = ['for', 'against', 'neutral'] as const;
+
+  return stances.map((stance, i) => {
+    const entry =
+      chain && chain.length > 0 ? (chain[i % chain.length] as ProviderChainEntry) : primary;
+    return {
+      provider: entry.provider as import('./types.js').LLMProvider,
+      model: entry.model,
+      apiKey: entry.apiKey,
+      stance,
+    };
+  });
 }
 
 /**
