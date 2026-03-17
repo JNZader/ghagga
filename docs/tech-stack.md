@@ -15,7 +15,7 @@
 | **Charts** | Recharts 3 | Composable React chart components |
 | **CLI** | Commander 14 + @clack/prompts 1.1 | Standard CLI framework with styled TUI prompts |
 | **Testing** | Vitest 4 | Fast, ESM-native, compatible with Jest API |
-| **Static Analysis** | 15-tool plugin registry | Security, vulnerabilities, duplication, code quality — zero tokens |
+| **Static Analysis** | 16-tool plugin registry | Security, vulnerabilities, duplication, code quality — zero tokens |
 | **Encryption** | Node.js `crypto` (AES-256-GCM) | No external dependencies for cryptographic operations |
 
 ## Why These Choices

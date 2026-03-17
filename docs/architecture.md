@@ -14,12 +14,12 @@ graph TB
 
   subgraph Runner["Delegated Runner"]
     RunnerRepo["ghagga-runner<br/>GitHub Actions"]
-    RunnerTools["15 Static Analysis Tools<br/>7GB RAM"]
+    RunnerTools["16 Static Analysis Tools<br/>7GB RAM"]
   end
 
   subgraph Core["@ghagga/core"]
     direction TB
-    SA["Static Analysis<br/>15-tool plugin registry"]
+    SA["Static Analysis<br/>16-tool plugin registry"]
     Agents["AI Agents<br/>Simple · Workflow · Consensus"]
     Memory["Memory<br/>Search · Persist · Privacy"]
   end
@@ -62,7 +62,7 @@ ghagga/
 │   │       ├── pipeline.ts     # Main orchestrator
 │   │       ├── types.ts        # All TypeScript interfaces
 │   │       ├── agents/         # Simple, Workflow, Consensus
-│   │       ├── tools/          # 15-tool plugin registry
+│   │       ├── tools/          # 16-tool plugin registry
 │   │       ├── memory/         # Search, persist, privacy, engram.ts
 │   │       ├── providers/      # Vercel AI SDK multi-provider
 │   │       └── utils/          # Diff parsing, stack detect, tokens
@@ -74,7 +74,7 @@ ghagga/
 │   └── types/          # @ghagga/types — Shared TypeScript interfaces
 ├── apps/
 │   ├── server/         # Hono API (webhook + REST + BullMQ + runner)
-│   │   └── Dockerfile  # Multi-stage with 15 static analysis tools
+│   │   └── Dockerfile  # Multi-stage with 16 static analysis tools
 │   ├── dashboard/      # React SPA (GitHub Pages)
 │   ├── cli/            # CLI tool (Commander.js)
 │   └── action/         # GitHub Action (node20 + Docker)
@@ -98,7 +98,7 @@ sequenceDiagram
     S->>GH: Check {owner}/ghagga-runner exists
     S->>GH: Set GHAGGA_TOKEN secret
     S->>GH: workflow_dispatch (10 inputs)
-    R->>R: Install + run static analysis (15 tools)
+    R->>R: Install + run static analysis (16 tools)
     R->>S: POST /runner/callback (HMAC-signed)
     S->>S: Verify HMAC, merge findings
 ```

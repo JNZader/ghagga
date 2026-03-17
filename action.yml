@@ -1,7 +1,7 @@
 name: 'GHAGGA Code Review'
 description: >-
   AI-powered multi-agent code review for PRs with built-in static analysis.
-  Runs 15+ static analysis tools directly on the GitHub Actions runner (cached).
+  Runs 16 static analysis tools directly on the GitHub Actions runner (cached).
   Free via GitHub Models. 6 providers, 3 review modes.
 
 branding:
@@ -45,14 +45,14 @@ inputs:
   enabled-tools:
     description: >-
       Comma-separated list of tool names to force-enable (overrides auto-detect).
-      Example: "ruff,clippy,bandit". See README for the full list of 15 tools.
+      Example: "ruff,clippy,bandit". See README for the full list of 16 tools.
     required: false
     default: ''
 
   disabled-tools:
     description: >-
       Comma-separated list of tool names to force-disable (overrides always-on and auto-detect).
-      Example: "gitleaks,cpd". See README for the full list of 15 tools.
+      Example: "gitleaks,cpd". See README for the full list of 16 tools.
     required: false
     default: ''
 

@@ -2,7 +2,7 @@
 
 > **AI-Powered Multi-Agent Code Review**
 
-GHAGGA is a code review tool that posts intelligent comments on your Pull Requests. It combines LLM analysis with up to 15 static analysis tools and a project memory system that learns across reviews.
+GHAGGA is a code review tool that posts intelligent comments on your Pull Requests. It combines LLM analysis with up to 16 static analysis tools and a project memory system that learns across reviews.
 
 ## New Here? Start with Your Guide
 
@@ -28,7 +28,7 @@ GHAGGA is a code review tool that posts intelligent comments on your Pull Reques
 | Feature | Description |
 |---------|-------------|
 | **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (same model, three perspectives + algorithmic vote) |
-| **15 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 8 auto-detect tools — zero tokens |
+| **16 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 9 auto-detect tools — zero tokens |
 | **Delegated Runner** | Static analysis runs on user-owned GitHub Actions runners (7GB RAM, free for public repos) |
 | **Delegated CI** | Run lint/tests on PRs without repo workflows — Dashboard configuration, zero maintenance |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews. 3 backends: PostgreSQL + tsvector (Server), SQLite + FTS5 (CLI & Action), Engram (optional cross-tool sharing) |
@@ -53,7 +53,7 @@ graph TB
   end
 
   subgraph Core["@ghagga/core"]
-    SA["Static Analysis<br/>15-tool registry"]
+    SA["Static Analysis<br/>16-tool registry"]
     Agents["AI Agents<br/>Simple · Workflow · Consensus"]
     Memory["Memory<br/>Search · Persist · Privacy"]
   end

@@ -453,7 +453,7 @@ Returns the settings for a specific repository, including its resolved global se
 
 > **Note**: API keys are never returned in plain text. The `maskedApiKey` field shows the first 3 and last 4 characters (e.g., `sk-...xYzW`). The `hasApiKey` boolean indicates whether a key is stored.
 
-> **Deprecated**: `enableSemgrep`, `enableTrivy`, and `enableCpd` are deprecated since v2.5.0. Use `enabledTools`/`disabledTools` instead to control individual tools from the 15-tool plugin registry. The legacy boolean fields still work but will be removed in a future version.
+> **Deprecated**: `enableSemgrep`, `enableTrivy`, and `enableCpd` are deprecated since v2.5.0. Use `enabledTools`/`disabledTools` instead to control individual tools from the 16-tool plugin registry. The legacy boolean fields still work but will be removed in a future version.
 
 ### Update Repository Settings
 

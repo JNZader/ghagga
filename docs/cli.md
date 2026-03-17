@@ -34,7 +34,7 @@ The CLI is best for:
 | **GitHub Models** (`gpt-4o-mini`) | **Free** — default provider, no API key needed |
 | **Ollama** | **Free** — runs locally, 100% offline, no API key |
 | **Other LLM providers** (Anthropic, OpenAI, Google, Qwen) | BYOK — you pay those providers directly at their standard rates |
-| **Static analysis** (up to 15 tools) | Free — runs locally if installed |
+| **Static analysis** (up to 16 tools) | Free — runs locally if installed |
 
 > 💡 **TL;DR**: 100% free with `ghagga login` (GitHub Models) or `--provider ollama` (local). No credit card, no signup beyond GitHub.
 
@@ -131,7 +131,7 @@ flowchart LR
 
 1. The CLI runs `git diff` (staged changes first, then falls back to uncommitted changes; `--staged` forces `git diff --cached` only)
 2. The diff is parsed and the tech stack is auto-detected from file extensions
-3. If static analysis tools are installed locally, they run first (zero LLM tokens) — up to 15 tools via the plugin registry
+3. If static analysis tools are installed locally, they run first (zero LLM tokens) — up to 16 tools via the plugin registry
 4. Relevant observations are retrieved from the local memory database via FTS5 full-text search
 5. The diff + static findings + memory context are sent to the configured LLM provider (default: GitHub Models `gpt-4o-mini`)
 6. The LLM returns a structured review with findings, severity, and suggestions
@@ -299,7 +299,7 @@ The health command inherits `--output json` from global options for CI integrati
 | `--issue <target>` | — | — | Create (`new`) or update (`<number>`) a GitHub issue with review results |
 | `--enable-tool <name>` | — | — | Force-enable a specific tool (can be repeated) |
 | `--disable-tool <name>` | — | — | Force-disable a specific tool (can be repeated) |
-| `--list-tools` | — | — | Show all 15 available tools with status, tier, and languages |
+| `--list-tools` | — | — | Show all 16 available tools with status, tier, and languages |
 | `--no-semgrep` | — | — | **Deprecated** — use `--disable-tool semgrep` |
 | `--no-trivy` | — | — | **Deprecated** — use `--disable-tool trivy` |
 | `--no-cpd` | — | — | **Deprecated** — use `--disable-tool cpd` |
@@ -459,12 +459,12 @@ ghagga review --provider ollama --model codellama:13b
 
 ## Static Analysis
 
-The CLI supports up to **15 static analysis tools** organized in two tiers — zero tokens consumed for known issues. See [Static Analysis](static-analysis.md) for the full tool table.
+The CLI supports up to **16 static analysis tools** organized in two tiers — zero tokens consumed for known issues. See [Static Analysis](static-analysis.md) for the full tool table.
 
 ### Tool Tiers
 
 - **always-on** (7 tools) — Run on every review: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard
-- **auto-detect** (8 tools) — Activate when matching files are in the diff: Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint
+- **auto-detect** (9 tools) — Activate when matching files are in the diff: Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, zizmor
 
 Tools are **optional**. If a tool isn't installed, it's silently skipped. The review continues with whatever tools are available.
 
@@ -731,6 +731,6 @@ pip install semgrep
 - **[GitHub Action Guide](github-action.md)** — Automated PR reviews in CI
 - **[Configuration](configuration.md)** — Environment variables and config file options
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
-- **[Static Analysis](static-analysis.md)** — 15 tools, tier system, per-tool control
+- **[Static Analysis](static-analysis.md)** — 16 tools, tier system, per-tool control
 - **[SaaS Guide](saas-getting-started.md)** — Zero-config GitHub App with Dashboard
 - **[Self-Hosted Guide](self-hosted.md)** — Full deployment with memory and dashboard

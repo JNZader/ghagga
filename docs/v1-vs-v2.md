@@ -33,7 +33,7 @@ GHAGGA v2 is a **complete rewrite** from scratch. The v1 codebase (~11,000 lines
 | Deploy steps | 10+ manual steps | 3 env vars + `docker compose up` |
 | Test suite | 0 tests | Comprehensive test suite |
 | Distribution modes | 1 (webhook only) | 3 (SaaS, Action, CLI) |
-| Static analysis | Semgrep only (via microservice) | 15 tools via plugin registry (direct binary execution) |
+| Static analysis | Semgrep only (via microservice) | 16 tools via plugin registry (direct binary execution) |
 | Memory | Partial (stored but never consumed) | Full pipeline (search → inject → review → extract → persist) |
 | Dead code | ~40% of codebase | 0% |
 | Git hooks | None | Pre-commit + commit-msg hooks via `ghagga hooks install` |

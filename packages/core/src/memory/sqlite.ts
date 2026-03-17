@@ -430,8 +430,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
       'SELECT type, COUNT(*) AS count FROM memory_observations GROUP BY type ORDER BY count DESC',
     );
     const byType: Record<string, number> = {};
-    if (byTypeResult.length > 0) {
-      for (const row of byTypeResult[0]?.values) {
+    if (byTypeResult.length > 0 && byTypeResult[0]?.values) {
+      for (const row of byTypeResult[0].values) {
         byType[row[0] as string] = row[1] as number;
       }
     }
@@ -441,8 +441,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
       'SELECT project, COUNT(*) AS count FROM memory_observations GROUP BY project ORDER BY count DESC',
     );
     const byProject: Record<string, number> = {};
-    if (byProjectResult.length > 0) {
-      for (const row of byProjectResult[0]?.values) {
+    if (byProjectResult.length > 0 && byProjectResult[0]?.values) {
+      for (const row of byProjectResult[0].values) {
         byProject[row[0] as string] = row[1] as number;
       }
     }
