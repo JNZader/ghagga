@@ -303,6 +303,13 @@ export interface ReviewMetadata {
 
   /** List of changed file paths (from the diff, after filtering). */
   fileList?: string[];
+
+  /**
+   * Models used per specialist/vote (workflow and consensus modes).
+   * Format: ["scope-analysis:anthropic/claude-sonnet-4-20250514", ...]
+   * Useful for debugging multi-provider distribution.
+   */
+  modelsUsed?: string[];
 }
 
 // ─── Static Analysis ────────────────────────────────────────────
