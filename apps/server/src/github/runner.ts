@@ -337,8 +337,8 @@ export async function dispatchWorkflow(params: DispatchParams): Promise<string> 
     enableSemgrep,
     enableTrivy,
     enableCpd,
-    enabledTools,
-    disabledTools,
+    enabledTools: _enabledTools,
+    disabledTools: _disabledTools,
     token,
   } = params;
 

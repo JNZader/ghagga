@@ -5,7 +5,7 @@
  * and graceful handling of rejected tasks.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { runWithConcurrency } from './concurrency.js';
 
 // ─── Helpers ────────────────────────────────────────────────────

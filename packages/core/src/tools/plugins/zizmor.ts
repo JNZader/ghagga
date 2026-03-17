@@ -55,9 +55,7 @@ const SARIF_SEVERITY_MAP: Record<string, FindingSeverity> = {
  * Rules that indicate direct code execution risk.
  * Findings from these rules are elevated to 'critical' regardless of SARIF level.
  */
-const CRITICAL_RULES: ReadonlySet<string> = new Set([
-  'template-injection',
-]);
+const CRITICAL_RULES: ReadonlySet<string> = new Set(['template-injection']);
 
 /**
  * Map zizmor SARIF severity level to GHAGGA FindingSeverity.
