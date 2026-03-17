@@ -16,6 +16,9 @@ export type {
   ConsensusVote,
   FindingSeverity,
   FindingSource,
+  // Diagnostic types
+  Hypothesis,
+  HypothesisConfidence,
   ListObservationsOptions,
   LLMProvider,
   MemoryObservation,
@@ -48,6 +51,11 @@ export type {
   // Agent types
   WorkflowSpecialist,
 } from './types.js';
+
+// ─── Diagnostic Agent ───────────────────────────────────────────
+
+export type { DiagnosticReviewInput } from './agents/diagnostic.js';
+export { parseHypotheses, runDiagnosticReview } from './agents/diagnostic.js';
 
 // ─── Constants ──────────────────────────────────────────────────
 
