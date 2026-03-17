@@ -104,9 +104,9 @@ The Runner enables **static analysis** (Semgrep for security, Trivy for vulnerab
 | Component | Without Runner | With Runner |
 |-----------|---------------|-------------|
 | AI review (LLM analysis) | Yes | Yes |
-| Static analysis (15 tools) | No | Yes |
+| Static analysis (16 tools) | No | Yes |
 
-The runner provides access to the full 15-tool plugin registry: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, and Hadolint. Tools are automatically selected based on the detected tech stack in your PR.
+The runner provides access to the full 16-tool plugin registry: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. Tools are automatically selected based on the detected tech stack in your PR.
 
 The runner uses **GitHub Actions free minutes** (unlimited for public repos, 7GB RAM per run). First run takes ~3-5 minutes (tool installation); subsequent runs take ~18 seconds (cached).
 
@@ -151,7 +151,7 @@ sequenceDiagram
     Server->>Server: Parse diff, detect stack
     alt Runner enabled
         Server->>Runner: Dispatch static analysis
-        Runner->>Runner: Static analysis (15 tools)
+        Runner->>Runner: Static analysis (16 tools)
         Runner->>Server: Callback with findings
     end
     Server->>LLM: Diff + findings + memory
@@ -162,7 +162,7 @@ sequenceDiagram
 
 1. GitHub sends a **webhook** to the GHAGGA server when your PR is opened or updated
 2. The server **parses the diff**, detects the tech stack, and checks your token budget
-3. If the runner is enabled, it **dispatches static analysis** to your `ghagga-runner` repo (15 tools via plugin registry)
+3. If the runner is enabled, it **dispatches static analysis** to your `ghagga-runner` repo (16 tools via plugin registry)
 4. The server sends the diff + static findings + project memory to your configured **LLM provider**
 5. The LLM returns a structured review, which is **posted as a PR comment**
 6. Observations from the review are **extracted and stored** in project memory for future reviews

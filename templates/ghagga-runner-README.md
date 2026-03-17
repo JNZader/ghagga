@@ -1,6 +1,6 @@
 # GHAGGA Static Analysis Runner
 
-This repository runs static analysis tools (15+ tools including Semgrep, Trivy, PMD/CPD, Gitleaks, and more) on behalf of the [GHAGGA](https://ghagga.dev) AI Code Review service. It is automatically managed by the GHAGGA GitHub App.
+This repository runs static analysis tools (16 tools including Semgrep, Trivy, PMD/CPD, Gitleaks, zizmor, and more) on behalf of the [GHAGGA](https://ghagga.dev) AI Code Review service. It is automatically managed by the GHAGGA GitHub App.
 
 > **You should not need to modify this repository.** GHAGGA manages the workflow file automatically and will restore it if changes are detected.
 
@@ -68,7 +68,7 @@ Your source code is handled with multiple layers of protection:
 
 ## Tools
 
-The runner supports 15+ static analysis tools across 5 categories. Core tools include:
+The runner supports 16 static analysis tools across 5 categories. Core tools include:
 
 | Tool | Purpose |
 |------|---------|
@@ -79,7 +79,7 @@ The runner supports 15+ static analysis tools across 5 categories. Core tools in
 | [ShellCheck](https://www.shellcheck.net) | Shell script linting |
 | [Lizard](https://github.com/terryyin/lizard) | Cyclomatic complexity |
 
-Additional language-specific tools (Ruff, Bandit, golangci-lint, Biome, Psalm, clippy, Hadolint) activate automatically when matching files are in the diff. See the [Static Analysis docs](https://jnzader.github.io/ghagga/docs/#/static-analysis) for the full list.
+Additional language-specific tools (Ruff, Bandit, golangci-lint, Biome, Psalm, clippy, Hadolint, zizmor) activate automatically when matching files are in the diff. See the [Static Analysis docs](https://jnzader.github.io/ghagga/docs/#/static-analysis) for the full list.
 
 ## Links
 

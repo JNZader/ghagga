@@ -13,7 +13,7 @@
 
 ## Executive Summary
 
-GHAGGA has built a defensible moat in **PR-level AI code review** with a distribution trifecta (SaaS + Action + CLI), 15 static analysis tools, multi-agent review modes, and project memory. RepoCheckAI occupies a fundamentally different niche: **repo-level health assessment** — a one-time or periodic scan rather than a continuous review loop.
+GHAGGA has built a defensible moat in **PR-level AI code review** with a distribution trifecta (SaaS + Action + CLI), 16 static analysis tools, multi-agent review modes, and project memory. RepoCheckAI occupies a fundamentally different niche: **repo-level health assessment** — a one-time or periodic scan rather than a continuous review loop.
 
 **Recommendation: Option B (Selective Feature Absorption)** — Add `ghagga health` as a secondary CLI command while keeping code review as the core identity. Cherry-pick the 4 highest-ROI features from RepoCheckAI (health score, export, issue publishing, improved TUI), reject the rest, and ship it in 3 phases over ~10 weeks.
 
@@ -27,7 +27,7 @@ This is not a pivot. It's a natural expansion of the inspection surface from "wh
 
 | Tool | Primary Surface | Trigger | Price | Distribution | Static Analysis | AI | Memory |
 |------|----------------|---------|-------|-------------|----------------|-----|--------|
-| **GHAGGA** | PR diff | Push/manual | Free | SaaS + Action + CLI | 15 tools | 6 providers, 3 modes | Yes (FTS) |
+| **GHAGGA** | PR diff | Push/manual | Free | SaaS + Action + CLI | 16 tools | 6 providers, 3 modes | Yes (FTS) |
 | **CodeRabbit** | PR diff | Push | $15-24/seat/mo | SaaS | Limited | GPT-4 | Learning |
 | **Sourcery** | PR diff + IDE | Push/IDE | Free-$30/seat/mo | SaaS + IDE | Rules | Proprietary | No |
 | **Greptile** | PR diff + codebase Q&A | Push | $99+/mo | SaaS | None | GPT-4 | Codebase index |
@@ -59,7 +59,7 @@ _*RepoCheckAI requires GitHub Copilot subscription ($10-39/mo)_
                     PR-Level Analysis
 ```
 
-**GHAGGA's current niche**: Free, multi-agent, multi-tool PR review with memory. Unique position as the only tool offering all of: free + 15 static tools + 3 AI modes + project memory + 3 distribution modes.
+**GHAGGA's current niche**: Free, multi-agent, multi-tool PR review with memory. Unique position as the only tool offering all of: free + 16 static tools + 3 AI modes + project memory + 3 distribution modes.
 
 ### 1.3 Positioning Gap
 
@@ -205,7 +205,7 @@ apps/cli/src/ui/health-format.ts — Health-specific TUI formatting
 
 | Dimension | RepoCheckAI | GHAGGA Health |
 |-----------|-------------|---------------|
-| **Static analysis** | None (LLM only) | 15 tools on full repo |
+| **Static analysis** | None (LLM only) | 16 tools on full repo |
 | **Cost** | Requires Copilot ($10-39/mo) | Free (GitHub Models) |
 | **Memory** | Local history file | FTS-indexed project memory |
 | **Multi-provider** | Copilot only | 6 providers |
@@ -732,7 +732,7 @@ Equally important as what to build is what to explicitly reject:
 > "AI-powered code review and repo health — free, multi-agent, with memory"
 
 ### 10.3 One-liner for npm
-> "Review your PRs and audit your repos with 15 static analysis tools, 6 AI providers, and project memory"
+> "Review your PRs and audit your repos with 16 static analysis tools, 6 AI providers, and project memory"
 
 ### 10.4 README Update (Hero Section)
 
@@ -743,7 +743,7 @@ Equally important as what to build is what to explicitly reject:
 
 - `ghagga review` — AI-powered code review on local changes or PRs
 - `ghagga health` — Repository health score (0-100) with prioritized findings
-- 15 static analysis tools, 6 LLM providers, project memory that learns
+- 16 static analysis tools, 6 LLM providers, project memory that learns
 ```
 
 ---
@@ -757,7 +757,7 @@ Equally important as what to build is what to explicitly reject:
 | Users confused about review vs. health | GitHub issue "what does this tool do?" | Add clear section in README, separate docs pages |
 | Health scores are inaccurate | User reports "my repo scored 90 but it's terrible" | Add `--explain` flag showing how each check scored |
 | Feature creep (user requests REPL, PDF, etc.) | GitHub issues requesting scope expansion | Point to this document's "What NOT to Build" section |
-| GitHub Copilot adds repo health | GitHub announcement | Ship faster. GHAGGA's 15-tool advantage takes years to replicate |
+| GitHub Copilot adds repo health | GitHub announcement | Ship faster. GHAGGA's 16-tool advantage takes years to replicate |
 
 ---
 

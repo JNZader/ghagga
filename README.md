@@ -6,7 +6,7 @@
 
 > Inspired by [Gentleman Guardian Angel (GGA)](https://github.com/Gentleman-Programming/gentleman-guardian-angel) and [Engram](https://github.com/Gentleman-Programming/engram), two projects by [Gentleman Programming](https://youtube.com/@GentlemanProgramming).
 
-**Multi-agent code reviewer** that posts intelligent comments on your Pull Requests. Combines LLM analysis with 15+ static analysis tools and project memory that learns across reviews. Self-hosted on Coolify (Hetzner VPS) with BullMQ + Redis for async job processing.
+**Multi-agent code reviewer** that posts intelligent comments on your Pull Requests. Combines LLM analysis with 16 static analysis tools and project memory that learns across reviews. Self-hosted on Coolify (Hetzner VPS) with BullMQ + Redis for async job processing.
 
 **[Website](https://jnzader.github.io/ghagga/)** | **[Documentation](https://jnzader.github.io/ghagga/docs/)** | **[Dashboard](https://jnzader.github.io/ghagga/app/)**
 
@@ -48,7 +48,7 @@ You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plai
 | Feature | Description |
 |---------|-------------|
 | **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (same model, three perspectives with algorithmic voting) |
-| **15+ Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 8 auto-detect tools -- zero tokens |
+| **16 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 9 auto-detect tools -- zero tokens |
 | **Static-Analysis-Only Fallback** | When no LLM API key is configured, GHAGGA runs all applicable static analysis tools and posts results without any LLM call |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews (PostgreSQL + tsvector FTS) |
 | **Multi-Provider** | 6 providers: Anthropic, OpenAI, Google, GitHub Models (free), Ollama (local), Qwen (Alibaba). LLM timeout (60s) with provider fallback chain. **Mode note**: SaaS/server mode needs a PAT with `models:read` for GitHub Models; CLI and GitHub Action mode can use the GitHub token you already control. |
@@ -119,7 +119,7 @@ jobs:
 | `status` | Review result: `PASSED`, `FAILED`, `NEEDS_HUMAN_REVIEW`, `SKIPPED` |
 | `findings-count` | Number of findings detected |
 
-> Static analysis tools (up to 15) run **directly on the GitHub Actions runner** -- no server or Docker image required. First run installs tools (~3-5 min), subsequent runs use `@actions/cache` (~1-2 min).
+> Static analysis tools (up to 16) run **directly on the GitHub Actions runner** -- no server or Docker image required. First run installs tools (~3-5 min), subsequent runs use `@actions/cache` (~1-2 min).
 
 > **FAILED status**: When the review finds critical issues, the Action calls `core.setFailed()` which fails the CI check. Add `continue-on-error: true` to the step for advisory-only (non-blocking) reviews. See the [full GitHub Action Guide](docs/github-action.md) for details.
 
@@ -183,7 +183,7 @@ ghagga hooks install
 | `--issue <target>` | -- | -- | Create (`new`) or update (`<number>`) a GitHub issue with review results |
 | `--enable-tool <name>` | -- | -- | Force-enable a specific tool |
 | `--disable-tool <name>` | -- | -- | Force-disable a specific tool |
-| `--list-tools` | -- | -- | Show all 15 tools with status |
+| `--list-tools` | -- | -- | Show all 16 tools with status |
 | `--no-memory` | -- | -- | Disable review memory |
 | `--staged` | -- | -- | Review only staged files (for pre-commit hook usage) |
 | `--quick` | -- | -- | Static analysis only, skip AI review (~5-10s vs ~30-60s) |
@@ -271,7 +271,7 @@ graph TB
   end
 
   subgraph Core["@ghagga/core"]
-    SA["Static Analysis<br/>15+ tool registry"]
+    SA["Static Analysis<br/>16-tool registry"]
     Agents["AI Agents<br/>Simple / Workflow / Consensus"]
     Memory["Memory<br/>Search / Persist / Privacy"]
   end
@@ -393,10 +393,10 @@ flowchart LR
 
 Layer 0 analysis runs **before** any LLM call. Zero tokens consumed. Known issues are injected into agent prompts so the AI focuses on logic, architecture, and things static analysis can't detect.
 
-GHAGGA supports **15+ static analysis tools** across 5 categories, organized into two tiers:
+GHAGGA supports **16 static analysis tools** across 5 categories, organized into two tiers:
 
 - **7 always-on tools** run on every review: Semgrep (security), Trivy (SCA), CPD (duplication), Gitleaks (secrets), ShellCheck (shell lint), markdownlint (docs lint), Lizard (complexity)
-- **8 auto-detect tools** activate when matching files are in the diff: Ruff (Python), Bandit (Python security), golangci-lint (Go), Biome (JS/TS), PMD (Java), Psalm (PHP), clippy (Rust), Hadolint (Docker)
+- **9 auto-detect tools** activate when matching files are in the diff: Ruff (Python), Bandit (Python security), golangci-lint (Go), Biome (JS/TS), PMD (Java), Psalm (PHP), clippy (Rust), Hadolint (Docker), zizmor (GitHub Actions)
 
 > See [Static Analysis](docs/static-analysis.md) for the full tool table, tier system, and per-tool control.
 
@@ -617,7 +617,7 @@ ghagga/
 |   |       |   |-- workflow.ts    # 5-specialist parallel workflow
 |   |       |   +-- consensus.ts   # Three-perspective voting with algorithmic consensus
 |   |       |-- tools/
-|   |       |   |-- registry.ts    # 15+ tool plugin registry
+|   |       |   |-- registry.ts    # 16-tool plugin registry
 |   |       |   |-- orchestrator.ts # Parallel tool orchestration
 |   |       |   |-- execution.ts   # Tool binary execution
 |   |       |   |-- semgrep.ts     # Semgrep runner + JSON parser
@@ -883,7 +883,7 @@ Comprehensive test suite with Vitest across all packages. All passing. 4 audit r
 | **UI Patterns** | ConfirmDialog (3-tier) + Toast | Tiered destructive action safety, non-blocking notifications |
 | **CLI** | Commander ^14.0.3 + @clack/prompts ^1.1.0 | Standard CLI framework with interactive prompts |
 | **Testing** | Vitest 4 | Fast, ESM-native, compatible with Jest API |
-| **Static Analysis** | 15+ tool plugin registry | Security, SCA, duplication, linting, complexity -- zero tokens |
+| **Static Analysis** | 16-tool plugin registry | Security, SCA, duplication, linting, complexity -- zero tokens |
 | **Encryption** | Node.js `crypto` (AES-256-GCM) | No external dependencies for cryptographic operations |
 | **Deployment** | Coolify on Hetzner VPS | Self-hosted Docker orchestration with auto-deploy |
 
@@ -933,7 +933,7 @@ GHAGGA v2 is a **complete rewrite** from scratch. The v1 codebase (~11,000 lines
 | Deploy steps | 10+ manual steps | `docker compose up -d` on Coolify |
 | Test suite | 0 tests | Comprehensive test suite with Vitest |
 | Distribution modes | 1 (webhook only) | 3 (Self-hosted, Action, CLI) |
-| Static analysis | Semgrep only (via microservice) | 15+ tools via plugin registry (direct binary execution) |
+| Static analysis | Semgrep only (via microservice) | 16 tools via plugin registry (direct binary execution) |
 | Memory | Partial (stored but never consumed) | Full pipeline (search -> inject -> review -> extract -> persist) |
 | Dead code | ~40% of codebase | 0% |
 

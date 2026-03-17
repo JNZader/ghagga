@@ -2,7 +2,7 @@
 
 > Reference document for evaluating new static analysis tools to integrate into GHAGGA's runner. See [current tools](static-analysis.md) and [runner architecture](runner-architecture.md).
 
-## Current Toolset (15 tools — plugin registry)
+## Current Toolset (16 tools — plugin registry)
 
 | Tool | Category | What It Finds | Status |
 |------|----------|---------------|--------|
@@ -21,6 +21,7 @@
 | **Psalm** | PHP analysis | PHP type checking + taint analysis for security | Auto-detect |
 | **clippy** | Rust linting | Rust code quality and idiom checks | Auto-detect |
 | **Hadolint** | Dockerfile linting | Dockerfile best practices and security anti-patterns | Auto-detect |
+| **zizmor** 1.23.1 | GitHub Actions security | Template injection, unpinned actions, excessive permissions, credential leaks | Auto-detect |
 
 ## Integration Requirements
 
@@ -339,7 +340,7 @@ These tools **cannot run in GHAGGA's ephemeral runner model** or have significan
 
 ## Recommended Additions by Priority
 
-Tools that fill genuine gaps beyond the current 15-tool registry:
+Tools that fill genuine gaps beyond the current 16-tool registry:
 
 | Priority | Tool | Gap Filled | Effort | Status |
 |----------|------|-----------|--------|--------|

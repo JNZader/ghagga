@@ -23,7 +23,7 @@ Add AI-powered code reviews to any repository in under 5 minutes. GHAGGA runs di
 | **GitHub Models** (`gpt-4o-mini`) | Uses the workflow's GitHub token by default — no separate API key needed |
 | **Other LLM providers** (Anthropic, OpenAI, Google, Qwen) | BYOK — you pay those providers directly at their standard rates |
 | **Ollama** | Free — runs on a self-hosted runner with Ollama installed |
-| **Static analysis** (up to 15 tools) | Free — runs on the GitHub Actions runner |
+| **Static analysis** (up to 16 tools) | Free — runs on the GitHub Actions runner |
 
 > 💡 **TL;DR**: Public repos can use the default GitHub Models provider with the workflow token you already have. No separate provider key is required.
 
@@ -123,7 +123,7 @@ sequenceDiagram
 ```
 
 1. A **pull request event** triggers the GitHub Actions workflow
-2. The Action **checks out the code** and runs **static analysis** (up to 15 tools — always-on + auto-detected) directly on the runner
+2. The Action **checks out the code** and runs **static analysis** (up to 16 tools — always-on + auto-detected) directly on the runner
 3. The PR **diff is fetched** via the GitHub API
 4. The diff + static findings are sent to the configured **LLM provider** (default: GitHub Models `gpt-4o-mini`)
 5. The LLM returns a structured review, which is **posted as a PR comment**
@@ -297,10 +297,10 @@ jobs:
 
 ## Static Analysis Tools
 
-GHAGGA runs up to **15 static analysis tools** before the LLM review. Zero LLM tokens consumed for known issues — the AI focuses on logic, architecture, and things static analysis can't detect. See [Static Analysis](static-analysis.md) for the full tool table.
+GHAGGA runs up to **16 static analysis tools** before the LLM review. Zero LLM tokens consumed for known issues — the AI focuses on logic, architecture, and things static analysis can't detect. See [Static Analysis](static-analysis.md) for the full tool table.
 
 - **7 always-on tools** run on every review: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard
-- **8 auto-detect tools** activate when matching files are in the diff: Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint
+- **9 auto-detect tools** activate when matching files are in the diff: Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, zizmor
 
 Control tools with the `enabled-tools` and `disabled-tools` inputs:
 
@@ -459,6 +459,6 @@ Also ensure the workflow file is committed to the branch that the PR targets (us
 - **[CLI Guide](cli.md)** — Review local changes from your terminal
 - **[Configuration](configuration.md)** — Environment variables and config file options
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
-- **[Static Analysis](static-analysis.md)** — 15 tools, tier system, per-tool control
+- **[Static Analysis](static-analysis.md)** — 16 tools, tier system, per-tool control
 - **[Self-Hosted Guide](self-hosted.md)** — Full deployment with memory and dashboard
 - **[SaaS Guide](saas-getting-started.md)** — Zero-config GitHub App with Dashboard
