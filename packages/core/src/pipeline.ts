@@ -38,6 +38,7 @@ import type {
   ReviewResult,
   ReviewStatus,
 } from './types.js';
+import { buildProgressiveContext } from './utils/context-levels.js';
 import { filterDiffFiles, filterIgnoredFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
 import { detectStacks } from './utils/stack-detect.js';
 import { calculateTokenBudget } from './utils/token-budget.js';
@@ -151,11 +152,11 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
 
   // ── Step 4: Truncate diff to fit token budget ──────────────
   const primaryModel = resolvePrimaryModel(input);
-  const { diffBudget } = calculateTokenBudget(primaryModel);
+  const { diffBudget, contextBudget } = calculateTokenBudget(primaryModel);
   const { truncated: truncatedDiff } = truncateDiff(filteredDiff, diffBudget);
   emit({
     step: 'token-budget',
-    message: `Token budget: ${diffBudget.toLocaleString()} tokens for diff`,
+    message: `Token budget: ${diffBudget.toLocaleString()} tokens for diff, ${contextBudget.toLocaleString()} tokens for context`,
   });
 
   // ── Step 5: Run static analysis (in parallel with memory) ──
@@ -167,23 +168,40 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       ? 'Using precomputed static analysis from runner...'
       : 'Running static analysis & memory search...',
   });
-  const [staticResult, memoryContext] = await Promise.all([
+  const [staticResult, rawMemoryContext] = await Promise.all([
     input.precomputedStaticAnalysis
       ? Promise.resolve(input.precomputedStaticAnalysis)
       : runStaticAnalysisSafe(fileList, input),
     aiEnabled ? searchMemorySafe(input, fileList) : Promise.resolve(null),
   ]);
 
-  const staticContext = formatStaticAnalysisContext(staticResult);
+  // Build full (L2) context first, then choose fidelity level based on budget
+  const fullStaticContext = formatStaticAnalysisContext(staticResult);
+
+  const progressiveContext = buildProgressiveContext({
+    staticResult,
+    memoryContext: rawMemoryContext,
+    stackHints,
+    contextBudget,
+    fullStaticContext,
+  });
+
+  const staticContext = progressiveContext.staticContext;
+  const memoryContext = progressiveContext.memoryContext;
 
   {
     const toolsSummary = Object.entries(staticResult)
       .map(([name, result]) => `  ${name}: ${result.status} (${result.findings.length} findings)`)
       .join('\n');
+    const levelDetail = `  context levels: static=${progressiveContext.staticLevel}, memory=${progressiveContext.memoryLevel}`;
     emit({
       step: 'static-results',
-      message: 'Static analysis complete',
-      detail: toolsSummary + (memoryContext ? '\n  memory: loaded' : '\n  memory: disabled'),
+      message: `Static analysis complete (context: static=${progressiveContext.staticLevel}, memory=${progressiveContext.memoryLevel})`,
+      detail:
+        toolsSummary +
+        (rawMemoryContext ? '\n  memory: loaded' : '\n  memory: disabled') +
+        '\n' +
+        levelDetail,
     });
   }
 
