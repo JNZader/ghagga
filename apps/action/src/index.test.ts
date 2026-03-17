@@ -27,6 +27,8 @@ vi.mock('@actions/core', () => ({
 }));
 
 const mockCreateComment = vi.fn().mockResolvedValue({});
+const mockUpdateComment = vi.fn().mockResolvedValue({});
+const mockListComments = vi.fn().mockResolvedValue({ data: [] });
 const mockPullsGet = vi.fn();
 
 vi.mock('@actions/github', () => ({
@@ -39,7 +41,11 @@ vi.mock('@actions/github', () => ({
   getOctokit: () => ({
     rest: {
       pulls: { get: mockPullsGet },
-      issues: { createComment: mockCreateComment },
+      issues: {
+        createComment: mockCreateComment,
+        updateComment: mockUpdateComment,
+        listComments: mockListComments,
+      },
     },
   }),
 }));

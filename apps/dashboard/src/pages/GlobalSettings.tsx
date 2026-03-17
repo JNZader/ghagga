@@ -66,6 +66,7 @@ export function GlobalSettings() {
   const [enableTrivy, setEnableTrivy] = useState(true);
   const [enableCpd, setEnableCpd] = useState(false);
   const [enableMemory, setEnableMemory] = useState(true);
+  const [enableBlastRadius, setEnableBlastRadius] = useState(false);
   const [aiReviewEnabled, setAiReviewEnabled] = useState(true);
   const [providerChain, setProviderChain] = useState<ProviderEntryState[]>([]);
   const [reviewMode, setReviewMode] = useState<ReviewMode>('simple');
@@ -82,6 +83,7 @@ export function GlobalSettings() {
       setEnableTrivy(settings.enableTrivy);
       setEnableCpd(settings.enableCpd);
       setEnableMemory(settings.enableMemory);
+      setEnableBlastRadius(settings.enableBlastRadius ?? false);
       setAiReviewEnabled(settings.aiReviewEnabled);
       setReviewMode(settings.reviewMode as ReviewMode);
       setCustomRules(settings.customRules);
@@ -124,6 +126,7 @@ export function GlobalSettings() {
       enableTrivy,
       enableCpd,
       enableMemory,
+      enableBlastRadius,
       customRules,
       ignorePatterns: ignorePatterns
         .split('\n')
@@ -358,6 +361,38 @@ export function GlobalSettings() {
                 <span className="text-sm text-text-primary">Memory (project knowledge)</span>
               </label>
             </div>
+          </Card>
+
+          {/* ── Blast Radius ─────────────────────────────────── */}
+          <Card>
+            <div className="flex items-center justify-between">
+              <CardHeader
+                title="Blast Radius"
+                description="Analyze dependency graph to focus reviews on impacted files"
+              />
+              <label className="flex cursor-pointer items-center gap-3">
+                <span className="text-sm text-text-secondary">
+                  {enableBlastRadius ? 'Enabled' : 'Disabled'}
+                </span>
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={enableBlastRadius}
+                    onChange={(e) => setEnableBlastRadius(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div className="h-6 w-11 rounded-full bg-surface-border peer-checked:bg-primary-600 transition-colors" />
+                  <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+                </div>
+              </label>
+            </div>
+            {enableBlastRadius && (
+              <p className="mt-2 text-xs text-text-secondary">
+                Requires a dependency graph indexed via{' '}
+                <code className="rounded-sm bg-surface-bg px-1">ghagga graph index</code>. When
+                enabled, reviews focus on files within the blast radius of changed files.
+              </p>
+            )}
           </Card>
 
           {/* ── AI Review ────────────────────────────────────── */}

@@ -61,6 +61,7 @@ const mockFormatReviewComment = vi.fn();
 vi.mock('ghagga-core', () => ({
   reviewPipeline: (...args: unknown[]) => mockReviewPipeline(...args),
   formatReviewComment: (...args: unknown[]) => mockFormatReviewComment(...args),
+  REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
 }));
 
 const mockDecrypt = vi.fn((v: string) => `decrypted-${v}`);
@@ -79,6 +80,8 @@ const mockGetPRCommitMessages = vi.fn().mockResolvedValue(['commit 1']);
 const mockGetPRFileList = vi.fn().mockResolvedValue(['file1.ts']);
 const mockPostComment = vi.fn().mockResolvedValue(undefined);
 const mockAddCommentReaction = vi.fn().mockResolvedValue(undefined);
+const mockFindExistingComment = vi.fn().mockResolvedValue(null);
+const mockUpdateComment = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../github/client.js', () => ({
   getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
@@ -87,6 +90,8 @@ vi.mock('../github/client.js', () => ({
   getPRFileList: (...args: unknown[]) => mockGetPRFileList(...args),
   postComment: (...args: unknown[]) => mockPostComment(...args),
   addCommentReaction: (...args: unknown[]) => mockAddCommentReaction(...args),
+  findExistingComment: (...args: unknown[]) => mockFindExistingComment(...args),
+  updateComment: (...args: unknown[]) => mockUpdateComment(...args),
 }));
 
 vi.mock('../github/runner.js', () => ({

@@ -294,6 +294,15 @@ export interface ReviewMetadata {
 
   /** Blast-radius analysis results (present when enableBlastRadius is true). */
   blastRadius?: import('./graph/schema.js').BlastRadiusMetadata;
+
+  /** Total additions across all diff files. */
+  totalAdditions?: number;
+
+  /** Total deletions across all diff files. */
+  totalDeletions?: number;
+
+  /** List of changed file paths (from the diff, after filtering). */
+  fileList?: string[];
 }
 
 // ─── Static Analysis ────────────────────────────────────────────

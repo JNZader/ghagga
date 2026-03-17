@@ -178,6 +178,88 @@ export async function postComment(
 }
 
 /**
+ * Find an existing GHAGGA review comment on a PR.
+ * Returns the comment ID if found, or null if no previous review comment exists.
+ *
+ * Searches for the `<!-- ghagga-review -->` marker in issue comments.
+ */
+export async function findExistingComment(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  token: string,
+): Promise<number | null> {
+  const MARKER = '<!-- ghagga-review -->';
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
+  const MAX_PAGES = 5;
+
+  return githubCircuitBreaker.execute(async () => {
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const url = `${baseUrl}?per_page=100&page=${page}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `GitHub API error listing comments: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const comments = (await response.json()) as Array<{ id: number; body: string }>;
+
+      for (const comment of comments) {
+        if (comment.body.includes(MARKER)) {
+          return comment.id;
+        }
+      }
+
+      if (comments.length < 100) break;
+    }
+
+    return null;
+  });
+}
+
+/**
+ * Update an existing comment on a pull request.
+ */
+export async function updateComment(
+  owner: string,
+  repo: string,
+  commentId: number,
+  body: string,
+  token: string,
+): Promise<void> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/comments/${commentId}`;
+
+  await githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({ body }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `GitHub API error updating comment: ${response.status} ${response.statusText}`,
+      );
+    }
+  });
+}
+
+/**
  * Fetch commit messages for a pull request.
  * Paginates through all pages (max 5 pages / 500 commits).
  */

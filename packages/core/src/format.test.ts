@@ -6,7 +6,15 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatReviewComment, SEVERITY_EMOJI, STATUS_EMOJI } from './format.js';
+import {
+  buildStatsBar,
+  categorizeFiles,
+  formatFileCategorySummary,
+  formatReviewComment,
+  REVIEW_COMMENT_MARKER,
+  SEVERITY_EMOJI,
+  STATUS_EMOJI,
+} from './format.js';
 import type { FindingSeverity, ReviewFinding, ReviewResult } from './types.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -363,5 +371,170 @@ describe('formatReviewComment', () => {
     const output = formatReviewComment(result);
     expect(output).toContain('AI Review');
     expect(output).toContain('No source finding');
+  });
+
+  // ── Enhancement: Idempotent comment marker ──
+
+  it('prepends the idempotent comment marker', () => {
+    const result = makeResult();
+    const output = formatReviewComment(result);
+    expect(output).toMatch(/^<!-- ghagga-review -->/);
+  });
+
+  // ── Enhancement: Emoji stats bar ──
+
+  it('renders emoji stats bar when fileStats provided', () => {
+    const result = makeResult();
+    const output = formatReviewComment(result, {
+      fileStats: { additions: 120, deletions: 15 },
+    });
+    expect(output).toContain('+120 / -15');
+    expect(output).toContain('net +105');
+    expect(output).toContain('🟩');
+    expect(output).toContain('🟥');
+  });
+
+  it('skips emoji stats bar when fileStats not provided', () => {
+    const result = makeResult();
+    const output = formatReviewComment(result);
+    expect(output).not.toContain('🟩');
+    expect(output).not.toContain('🟥');
+  });
+
+  it('skips emoji stats bar when both additions and deletions are 0', () => {
+    const result = makeResult();
+    const output = formatReviewComment(result, {
+      fileStats: { additions: 0, deletions: 0 },
+    });
+    expect(output).not.toContain('🟩');
+    expect(output).not.toContain('🟥');
+  });
+
+  // ── Enhancement: File category summary ──
+
+  it('renders categorized file summary when fileList provided', () => {
+    const result = makeResult();
+    const output = formatReviewComment(result, {
+      fileList: [
+        'src/routes/users.ts',
+        'src/components/UserCard.tsx',
+        'src/utils/helpers.ts',
+        'src/__tests__/auth.test.ts',
+        'tsconfig.json',
+      ],
+    });
+    expect(output).toContain('### Files Changed (5)');
+    expect(output).toContain('🧪 **Tests**');
+    expect(output).toContain('⚙️ **Config**');
+    expect(output).toContain('tsconfig.json');
+  });
+
+  it('skips file category summary when fileList not provided', () => {
+    const result = makeResult();
+    const output = formatReviewComment(result);
+    expect(output).not.toContain('### Files Changed');
+  });
+
+  it('shows +N more when category has more than 3 files', () => {
+    const result = makeResult();
+    const output = formatReviewComment(result, {
+      fileList: [
+        'src/__tests__/a.test.ts',
+        'src/__tests__/b.test.ts',
+        'src/__tests__/c.test.ts',
+        'src/__tests__/d.test.ts',
+        'src/__tests__/e.test.ts',
+      ],
+    });
+    expect(output).toContain('(+2 more)');
+  });
+});
+
+// ─── buildStatsBar ──────────────────────────────────────────────
+
+describe('buildStatsBar', () => {
+  it('returns empty string for zero stats', () => {
+    expect(buildStatsBar({ additions: 0, deletions: 0 })).toBe('');
+  });
+
+  it('renders all green for additions-only', () => {
+    const bar = buildStatsBar({ additions: 100, deletions: 0 });
+    expect(bar).toContain('🟩'.repeat(20));
+    expect(bar).not.toContain('🟥');
+    expect(bar).toContain('+100 / -0');
+    expect(bar).toContain('net +100');
+  });
+
+  it('renders all red for deletions-only', () => {
+    const bar = buildStatsBar({ additions: 0, deletions: 50 });
+    expect(bar).toContain('🟥'.repeat(20));
+    expect(bar).not.toContain('🟩');
+    expect(bar).toContain('+0 / -50');
+    expect(bar).toContain('net -50');
+  });
+
+  it('renders proportional blocks', () => {
+    const bar = buildStatsBar({ additions: 75, deletions: 25 });
+    // 75% of 20 = 15 green, 5 red
+    const greenCount = (bar.match(/🟩/g) ?? []).length;
+    const redCount = (bar.match(/🟥/g) ?? []).length;
+    expect(greenCount).toBe(15);
+    expect(redCount).toBe(5);
+  });
+});
+
+// ─── categorizeFiles ────────────────────────────────────────────
+
+describe('categorizeFiles', () => {
+  it('categorizes files by pattern', () => {
+    const categories = categorizeFiles([
+      'src/routes/users.ts',
+      'src/components/UserCard.tsx',
+      'auth.test.ts',
+      'tsconfig.json',
+    ]);
+
+    const names = categories.map((c) => c.name);
+    expect(names).toContain('Tests');
+    expect(names).toContain('Config');
+    expect(names).toContain('API');
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(categorizeFiles([])).toEqual([]);
+  });
+
+  it('assigns each file to only one category (first match wins)', () => {
+    const categories = categorizeFiles(['src/components/Button.tsx']);
+    // Should match UI (components/) before Core (src/)
+    const uiCat = categories.find((c) => c.name === 'UI');
+    expect(uiCat).toBeDefined();
+    expect(uiCat!.files).toContain('src/components/Button.tsx');
+    // Should NOT also be in Core
+    const coreCat = categories.find((c) => c.name === 'Core');
+    expect(coreCat).toBeUndefined();
+  });
+});
+
+// ─── formatFileCategorySummary ──────────────────────────────────
+
+describe('formatFileCategorySummary', () => {
+  it('returns empty string for empty file list', () => {
+    expect(formatFileCategorySummary([])).toBe('');
+  });
+
+  it('includes file count in header', () => {
+    const summary = formatFileCategorySummary(['src/index.ts', 'test.spec.ts']);
+    expect(summary).toContain('### Files Changed (2)');
+  });
+
+  it('limits display to 3 files per category', () => {
+    const summary = formatFileCategorySummary([
+      'src/a.test.ts',
+      'src/b.test.ts',
+      'src/c.test.ts',
+      'src/d.test.ts',
+    ]);
+    expect(summary).toContain('(+1 more)');
   });
 });
