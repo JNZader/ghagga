@@ -61,22 +61,11 @@ export function ProviderChainEditor({
   };
 
   const handleAdd = () => {
-    // Pick a provider not already in the chain, or default to github
-    const usedProviders = new Set(chain.map((e) => e.provider));
-    const available = (
-      [
-        'github',
-        'groq',
-        'cerebras',
-        'deepseek',
-        'openrouter',
-        'openai',
-        'anthropic',
-        'google',
-        'qwen',
-      ] as SaaSProvider[]
-    ).find((p) => !usedProviders.has(p));
-    onChange([...chain, { ...DEFAULT_ENTRY, provider: available ?? 'github' }]);
+    // Always allow adding a new entry — same provider with different model is valid
+    // (e.g., two Groq entries with different models for multi-provider distribution).
+    // Default to groq as a sensible starting point; user can change provider/model.
+    const defaultProvider: SaaSProvider = 'groq';
+    onChange([...chain, { ...DEFAULT_ENTRY, provider: defaultProvider }]);
   };
 
   return (
@@ -94,7 +83,7 @@ export function ProviderChainEditor({
         <>
           {chain.map((entry, index) => (
             <ProviderEntry
-              key={`provider-${entry.provider}`}
+              key={`provider-${index}`}
               index={index}
               entry={entry}
               totalEntries={chain.length}
