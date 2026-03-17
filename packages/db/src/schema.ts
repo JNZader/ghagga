@@ -39,6 +39,10 @@ export interface RepoSettings {
   enabledTools?: string[];
   /** Force-disable specific tools (overrides always-on and auto-detect). */
   disabledTools?: string[];
+
+  // ── Blast-radius analysis ──
+  /** Enable blast-radius analysis using dependency graph. Default: false. */
+  enableBlastRadius?: boolean;
 }
 
 export const DEFAULT_REPO_SETTINGS: RepoSettings = {

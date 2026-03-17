@@ -37,6 +37,7 @@ const RepoSettingsSchema = z
     ignorePatterns: z.array(z.string()).optional(),
     enabledTools: z.array(z.string()).optional(),
     disabledTools: z.array(z.string()).optional(),
+    enableBlastRadius: z.boolean().optional(),
   })
   .strict();
 
@@ -133,6 +134,7 @@ export function createSettingsRouter(db: Database) {
           ignorePatterns: gSettings.ignorePatterns ?? [],
           enabledTools: gSettings.enabledTools ?? [],
           disabledTools: gSettings.disabledTools ?? [],
+          enableBlastRadius: gSettings.enableBlastRadius ?? false,
         };
       }
 
@@ -152,6 +154,7 @@ export function createSettingsRouter(db: Database) {
           ignorePatterns: settings.ignorePatterns ?? [],
           enabledTools: settings.enabledTools ?? [],
           disabledTools: settings.disabledTools ?? [],
+          enableBlastRadius: settings.enableBlastRadius ?? false,
           registeredTools: getRegisteredToolsList(),
           delegatedCiPolicy: repo.delegatedCiPolicy ?? null,
           globalSettings,
@@ -196,6 +199,7 @@ export function createSettingsRouter(db: Database) {
       'ignorePatterns',
       'enabledTools',
       'disabledTools',
+      'enableBlastRadius',
     ];
     for (const key of SETTINGS_KEYS) {
       if (key in body) {
@@ -362,6 +366,10 @@ export function createSettingsRouter(db: Database) {
         disabledTools: Array.isArray(body.disabledTools)
           ? (body.disabledTools as string[])
           : currentSettings.disabledTools,
+        enableBlastRadius:
+          typeof body.enableBlastRadius === 'boolean'
+            ? body.enableBlastRadius
+            : currentSettings.enableBlastRadius,
       };
 
       // ── Bidirectional translation: old booleans → new arrays ──

@@ -22,6 +22,9 @@ import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
+import { computeBlastRadius } from './graph/blast-radius.js';
+import type { BlastRadiusMetadata } from './graph/schema.js';
+import { isGraphStale } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
@@ -106,7 +109,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
 
   // ── Step 2: Parse and filter the diff ──────────────────────
   const allFiles = parseDiffFiles(input.diff);
-  const {
+  let {
     filtered: filteredFiles,
     blocked,
     redacted,
@@ -139,8 +142,87 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   }
 
   // Reconstruct filtered diff and get file list
-  const filteredDiff = filteredFiles.map((f) => f.content).join('\n');
+  let filteredDiff = filteredFiles.map((f) => f.content).join('\n');
   const fileList = filteredFiles.map((f) => f.path);
+
+  // ── Step 2.5: Blast-radius filter (optional) ──────────────
+  let blastRadiusMetadata: BlastRadiusMetadata | undefined;
+
+  if (input.settings.enableBlastRadius && input.graphLoader) {
+    try {
+      const graph = await input.graphLoader.load();
+      if (graph) {
+        const metadata = await input.graphLoader.loadMetadata();
+        const stale = metadata ? isGraphStale(metadata) : false;
+
+        if (stale) {
+          emit({
+            step: 'blast-radius',
+            message: `Dependency graph is stale (last indexed: ${metadata?.lastIndexedAt})`,
+          });
+        }
+
+        const blastResult = computeBlastRadius(graph, fileList, {
+          maxDepth: input.settings.traversalDepth,
+          maxFiles: input.settings.maxBlastRadiusFiles,
+        });
+
+        if (blastResult.exceededCap) {
+          emit({
+            step: 'blast-radius',
+            message: `Blast radius exceeds ${input.settings.maxBlastRadiusFiles ?? 50} files — using full diff`,
+          });
+          blastRadiusMetadata = {
+            enabled: true,
+            graphAvailable: true,
+            totalFiles: filteredFiles.length,
+            blastRadiusFiles: filteredFiles.length,
+            fallbackReason: `blast radius exceeds ${input.settings.maxBlastRadiusFiles ?? 50} files`,
+            graphStale: stale,
+          };
+        } else {
+          // Filter to blast-radius files
+          filteredFiles = filteredFiles.filter((f) => blastResult.files.has(f.path));
+          filteredDiff = filteredFiles.map((f) => f.content).join('\n');
+          emit({
+            step: 'blast-radius',
+            message: `Blast radius: ${blastResult.files.size} files (from ${fileList.length} in diff)`,
+            detail: [
+              `  changed: ${blastResult.changedFiles.length}`,
+              `  dependents: ${blastResult.dependents.length}`,
+              `  tests: ${blastResult.testFiles.length}`,
+            ].join('\n'),
+          });
+          blastRadiusMetadata = {
+            enabled: true,
+            graphAvailable: true,
+            totalFiles: fileList.length,
+            blastRadiusFiles: blastResult.files.size,
+            graphStale: stale,
+          };
+        }
+      } else {
+        emit({ step: 'blast-radius', message: 'Blast radius: skipped (no graph available)' });
+        blastRadiusMetadata = {
+          enabled: true,
+          graphAvailable: false,
+          totalFiles: filteredFiles.length,
+          blastRadiusFiles: filteredFiles.length,
+          fallbackReason: 'no graph available',
+        };
+      }
+    } catch (error) {
+      console.warn('[ghagga] Blast-radius failed (degrading gracefully):', error);
+      emit({ step: 'blast-radius', message: 'Blast radius: skipped (error loading graph)' });
+      blastRadiusMetadata = {
+        enabled: true,
+        graphAvailable: false,
+        totalFiles: filteredFiles.length,
+        blastRadiusFiles: filteredFiles.length,
+        fallbackReason: `error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
 
   // ── Step 3: Detect tech stacks ─────────────────────────────
   const stacks = detectStacks(fileList);
@@ -381,6 +463,11 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
 
   // Update execution time to cover the full pipeline
   result.metadata.executionTimeMs = Date.now() - startTime;
+
+  // Add blast-radius metadata (if applicable)
+  if (blastRadiusMetadata) {
+    result.metadata.blastRadius = blastRadiusMetadata;
+  }
 
   // ── Step 8: Persist to memory (awaited for SQLite correctness) ──
   if (input.settings.enableMemory && input.memoryStorage && input.context) {
