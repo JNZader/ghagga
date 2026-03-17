@@ -80,6 +80,12 @@ export interface ReviewJobData {
   triggerCommentId?: number;
   /** GitHub username of the PR author, used for @mention notification */
   prAuthor?: string;
+  /**
+   * GitHub username of the person who triggered the review (wrote the trigger comment).
+   * When set, takes precedence over prAuthor for @mention notifications.
+   * Useful when the PR was opened by a bot (e.g., Dependabot) but reviewed by a human.
+   */
+  reviewTriggeredBy?: string;
   /** LLM provider to use (legacy) */
   llmProvider: string;
   /** LLM model to use (legacy) */
@@ -412,7 +418,9 @@ async function processReview(
           }
         : undefined,
     fileList: reviewResult.metadata.fileList,
-    prAuthor: job.data.prAuthor,
+    // Prefer the human who triggered the review over the PR author.
+    // This matters for bot-opened PRs (e.g., Dependabot) where prAuthor is a bot.
+    prAuthor: job.data.reviewTriggeredBy ?? job.data.prAuthor,
   });
   commentBody += `\n<!-- reviewId: ${reviewId} -->`;
 
