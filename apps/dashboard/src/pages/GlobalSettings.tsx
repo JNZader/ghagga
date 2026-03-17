@@ -389,14 +389,13 @@ export function GlobalSettings() {
             {enableBlastRadius && (
               <div className="mt-2 space-y-1 text-xs text-text-secondary">
                 <p>
-                  When enabled, GHAGGA analyzes which files are <em>actually impacted</em> by
-                  the changed code (via import/call graph) and limits the review to those files
-                  only — reducing tokens by up to 6×.
+                  When enabled, GHAGGA analyzes which files are <em>actually impacted</em> by the
+                  changed code (via import/call graph) and limits the review to those files only —
+                  reducing tokens by up to 6×.
                 </p>
                 <p className="text-yellow-400/80">
-                  ⚡ The dependency graph is built automatically on the first review after
-                  enabling. The <strong>second review onwards</strong> will use blast-radius
-                  filtering.
+                  ⚡ The dependency graph is built automatically on the first review after enabling.
+                  The <strong>second review onwards</strong> will use blast-radius filtering.
                 </p>
               </div>
             )}
