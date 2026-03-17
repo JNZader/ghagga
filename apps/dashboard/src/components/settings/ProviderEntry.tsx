@@ -362,7 +362,7 @@ export function ProviderEntry({
             <option value="">Select a model...</option>
             {(entry.availableModels.length > 0
               ? entry.availableModels
-              : KNOWN_MODELS[entry.provider] ?? []
+              : (KNOWN_MODELS[entry.provider] ?? [])
             ).map((m) => (
               <option key={m} value={m}>
                 {m}

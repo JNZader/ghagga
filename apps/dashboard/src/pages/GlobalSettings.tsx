@@ -2,7 +2,6 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { Card, CardHeader } from '@/components/Card';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
 import { KNOWN_MODELS, type ProviderEntryState } from '@/components/settings/ProviderEntry';
-import type { SaaSProvider } from '@/lib/types';
 import { ToolGrid } from '@/components/settings/ToolGrid';
 import {
   ApiError,
@@ -19,6 +18,7 @@ import type {
   ProviderChainView,
   RegisteredTool,
   ReviewMode,
+  SaaSProvider,
 } from '@/lib/types';
 
 export function GlobalSettings() {
@@ -98,7 +98,8 @@ export function GlobalSettings() {
           model: entry.model,
           apiKey: '',
           // Use full known model list so the dropdown is immediately usable
-          availableModels: KNOWN_MODELS[entry.provider as SaaSProvider] ?? (entry.model ? [entry.model] : []),
+          availableModels:
+            KNOWN_MODELS[entry.provider as SaaSProvider] ?? (entry.model ? [entry.model] : []),
           hasExistingKey: entry.hasApiKey,
           maskedApiKey: entry.maskedApiKey,
           validated: entry.hasApiKey || entry.provider === 'github',
