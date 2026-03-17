@@ -1,0 +1,76 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "zizmor",
+          "version": "1.23.1"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "template-injection",
+          "level": "error",
+          "message": {
+            "text": "code injection via template expansion of `github.event.issue.body` in `run:` block"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "/workspace/.github/workflows/ci.yml" },
+                "region": { "startLine": 25 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "unpinned-uses",
+          "level": "warning",
+          "message": {
+            "text": "action `actions/checkout` used with unpinned ref `v4`"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "/workspace/.github/workflows/ci.yml" },
+                "region": { "startLine": 12 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "excessive-permissions",
+          "level": "warning",
+          "message": {
+            "text": "workflow has overly broad `write-all` permissions"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "/workspace/.github/workflows/deploy.yaml" },
+                "region": { "startLine": 3 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "artipacked",
+          "level": "note",
+          "message": {
+            "text": "artifact upload may expose sensitive credentials from checkout"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "/workspace/.github/workflows/deploy.yaml" },
+                "region": { "startLine": 45 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
