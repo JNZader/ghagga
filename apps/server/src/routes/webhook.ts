@@ -473,6 +473,7 @@ async function handleIssueComment(
     headSha,
     baseBranch,
     prAuthor,
+    reviewTriggeredBy: payload.comment.user.login,
     providerChain: effective.providerChain,
     aiReviewEnabled: effective.aiReviewEnabled,
     llmProvider: repo.llmProvider,
