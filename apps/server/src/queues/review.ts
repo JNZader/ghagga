@@ -27,6 +27,7 @@ import { createDatabaseFromEnv, decrypt, saveReview } from 'ghagga-db';
 import Redis from 'ioredis';
 import {
   addCommentReaction,
+  deleteComment,
   fetchGraphFromBranch,
   fetchPRDiff,
   findExistingComment,
@@ -424,15 +425,26 @@ async function processReview(
   });
   commentBody += `\n<!-- reviewId: ${reviewId} -->`;
 
-  // Idempotent: find existing GHAGGA comment and update it, or create new
-  const existingCommentId = await findExistingComment(owner, repo, prNumber, freshToken);
-  if (existingCommentId) {
-    await updateComment(owner, repo, existingCommentId, commentBody, freshToken);
-    log.info({ commentId: existingCommentId }, 'Review comment updated (idempotent)');
-  } else {
-    await postComment(owner, repo, prNumber, commentBody, freshToken);
-    log.info('Review comment posted');
+  // Strategy: delete all existing GHAGGA review comments, then post a fresh one at the bottom.
+  // This ensures the review always appears at the most recent position in the PR thread,
+  // which is better UX than editing in place (GitHub keeps edited comments at their original position).
+  const existing = await findExistingComment(owner, repo, prNumber, freshToken);
+  if (existing) {
+    // Delete ALL previous GHAGGA comments (latest + any stale duplicates)
+    const allIds = [existing.latestId, ...existing.staleIds];
+    for (const commentId of allIds) {
+      try {
+        await deleteComment(owner, repo, commentId, freshToken);
+        log.info({ commentId }, 'Deleted previous GHAGGA review comment');
+      } catch (error) {
+        log.warn({ commentId, error: String(error) }, 'Failed to delete previous comment');
+      }
+    }
   }
+
+  // Always post a fresh comment at the bottom of the PR thread
+  const postedComment = await postComment(owner, repo, prNumber, commentBody, freshToken);
+  log.info({ commentId: postedComment?.id }, 'Review comment posted');
   await job.updateProgress(90);
 
   // Step 7: React with rocket to the trigger comment
