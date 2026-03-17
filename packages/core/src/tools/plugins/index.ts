@@ -8,6 +8,7 @@
  * Phase 3: gitleaks, shellcheck, markdownlint, lizard (always-on)
  * Phase 4: ruff, bandit, golangci-lint (auto-detect)
  * Phase 5: biome, pmd, psalm, clippy, hadolint (auto-detect)
+ * Phase 6: zizmor (auto-detect — CI/CD security)
  */
 
 import { toolRegistry } from '../registry.js';
@@ -30,6 +31,8 @@ import { ruffPlugin } from './ruff.js';
 import { semgrepPlugin } from './semgrep.js';
 import { shellcheckPlugin } from './shellcheck.js';
 import { trivyPlugin } from './trivy.js';
+// Phase 6: auto-detect (CI/CD security)
+import { zizmorPlugin } from './zizmor.js';
 
 /** All built-in plugins. Grows as more phases are implemented. */
 const DEFAULT_PLUGINS = [
@@ -52,6 +55,8 @@ const DEFAULT_PLUGINS = [
   psalmPlugin,
   clippyPlugin,
   hadolintPlugin,
+  // Phase 6: auto-detect (CI/CD security)
+  zizmorPlugin,
 ];
 
 let initialized = false;
@@ -97,3 +102,5 @@ export { ruffPlugin } from './ruff.js';
 export { semgrepPlugin } from './semgrep.js';
 export { shellcheckPlugin } from './shellcheck.js';
 export { trivyPlugin } from './trivy.js';
+// Phase 6
+export { zizmorPlugin } from './zizmor.js';
