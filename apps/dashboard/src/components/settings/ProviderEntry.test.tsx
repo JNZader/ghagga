@@ -137,14 +137,14 @@ describe('ProviderEntry', () => {
 
   // ── Key Selector (Bug 1) ──────────────────────────────────────
 
-  it('shows key selector dropdown when a saved key exists for the provider', () => {
+  it('shows key selector button when a saved key exists for the provider', () => {
     const availableKeys: AvailableKeysMap = {
       anthropic: { maskedApiKey: 'sk-...wxyz', source: 'global' },
     };
     renderEntry(createEntry({ provider: 'anthropic' }), noop, availableKeys);
 
-    // Should render a <select> with the saved key option, not the password input
-    expect(screen.getByRole('combobox', { name: /select a saved api key/i })).toBeInTheDocument();
+    // Should render a button showing the masked key, not the password input
+    expect(screen.getByText(/sk-...wxyz.*click to use/i)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/enter api key/i)).not.toBeInTheDocument();
   });
 
@@ -167,26 +167,26 @@ describe('ProviderEntry', () => {
 
     // After switching, the password input should be visible
     expect(screen.getByPlaceholderText(/enter api key/i)).toBeInTheDocument();
-    expect(
-      screen.queryByRole('combobox', { name: /select a saved api key/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
   });
 
-  it('calls onChange with hasExistingKey=true when a saved key is selected', () => {
+  it('calls onChange with hasExistingKey=true when saved key button is clicked', () => {
     const onChange = vi.fn();
     const availableKeys: AvailableKeysMap = {
       openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
     };
     renderEntry(createEntry({ provider: 'openai' }), onChange, availableKeys);
 
-    const selector = screen.getByRole('combobox', { name: /select a saved api key/i });
-    fireEvent.change(selector, { target: { value: 'openai' } });
+    // Click the "click to use" button
+    fireEvent.click(screen.getByText(/sk-...abcd.*click to use/i));
 
     expect(onChange).toHaveBeenCalledOnce();
     const updated = onChange.mock.calls[0]?.[0] as ProviderEntryState;
     expect(updated.hasExistingKey).toBe(true);
     expect(updated.maskedApiKey).toBe('sk-...abcd');
     expect(updated.apiKey).toBe(''); // key is NOT exposed to the frontend
+    expect(updated.validated).toBe(true);
+    expect(updated.availableModels.length).toBeGreaterThan(0);
   });
 
   it('does NOT show key selector when entry already has its own key (hasExistingKey=true)', () => {
@@ -200,9 +200,7 @@ describe('ProviderEntry', () => {
     );
 
     // Should show the manual input (not the selector) — placeholder uses the maskedApiKey
-    expect(
-      screen.queryByRole('combobox', { name: /select a saved api key/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
     // The password input shows the repo's own masked key as placeholder
     expect(screen.getByPlaceholderText('sk-...repo')).toBeInTheDocument();
   });
@@ -214,9 +212,7 @@ describe('ProviderEntry', () => {
     // openai entry but only anthropic is in availableKeys
     renderEntry(createEntry({ provider: 'openai' }), noop, availableKeys);
 
-    expect(
-      screen.queryByRole('combobox', { name: /select a saved api key/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText(/enter api key/i)).toBeInTheDocument();
   });
 });

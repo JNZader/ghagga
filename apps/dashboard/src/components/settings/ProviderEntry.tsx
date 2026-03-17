@@ -276,14 +276,10 @@ export function ProviderEntry({
         ) : showReuseSelector && effectiveMode === 'reuse' ? (
           /* ── Key Selector: reuse a saved key ── */
           <div className="flex items-center gap-3">
-            <select
-              aria-label="Select a saved API key"
-              value={savedKeyInfo ? entry.provider : ''}
-              onChange={() => {
-                // Selecting "use saved key" signals the server to copy the global key.
-                // We clear apiKey so the PUT handler falls back to the global chain.
-                // Immediately populate known models so the model dropdown is usable
-                // without needing to hit the validate endpoint again.
+            <button
+              type="button"
+              onClick={() => {
+                // One-click to apply the saved key — no dropdown needed when there's only one option.
                 const knownModels = KNOWN_MODELS[entry.provider] ?? [];
                 onChange({
                   ...entry,
@@ -295,17 +291,10 @@ export function ProviderEntry({
                   model: entry.model || knownModels[0] || '',
                 });
               }}
-              className="select-field flex-1"
+              className="input-field flex-1 cursor-pointer text-left text-text-secondary hover:border-primary-600/50 hover:text-text-primary"
             >
-              <option value="" disabled>
-                Select a saved key...
-              </option>
-              {savedKeyInfo && (
-                <option value={entry.provider}>
-                  {savedKeyInfo.maskedApiKey} — reuse existing key
-                </option>
-              )}
-            </select>
+              {savedKeyInfo?.maskedApiKey ?? 'Saved key'} — click to use
+            </button>
             <button
               type="button"
               onClick={handleValidate}
