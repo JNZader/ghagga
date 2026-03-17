@@ -207,6 +207,7 @@ async function processReview(
         enableCpd: settings.enableCpd,
         enabledTools: settings.enabledTools,
         disabledTools: settings.disabledTools,
+        enableBlastRadius: settings.enableBlastRadius,
         token,
       });
 
