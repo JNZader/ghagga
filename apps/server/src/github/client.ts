@@ -84,7 +84,7 @@ export async function fetchPRDetails(
   repo: string,
   prNumber: number,
   token: string,
-): Promise<{ headSha: string; baseBranch: string }> {
+): Promise<{ headSha: string; baseBranch: string; prAuthor: string }> {
   const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`;
 
   const data = await githubCircuitBreaker.execute(async () => {
@@ -106,10 +106,11 @@ export async function fetchPRDetails(
     return (await response.json()) as {
       head: { sha: string };
       base: { ref: string };
+      user: { login: string };
     };
   });
 
-  return { headSha: data.head.sha, baseBranch: data.base.ref };
+  return { headSha: data.head.sha, baseBranch: data.base.ref, prAuthor: data.user.login };
 }
 
 /**

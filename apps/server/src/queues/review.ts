@@ -78,6 +78,8 @@ export interface ReviewJobData {
   aiReviewEnabled?: boolean;
   /** If review was triggered by a comment, the comment ID for reaction feedback */
   triggerCommentId?: number;
+  /** GitHub username of the PR author, used for @mention notification */
+  prAuthor?: string;
   /** LLM provider to use (legacy) */
   llmProvider: string;
   /** LLM model to use (legacy) */
@@ -410,6 +412,7 @@ async function processReview(
           }
         : undefined,
     fileList: reviewResult.metadata.fileList,
+    prAuthor: job.data.prAuthor,
   });
   commentBody += `\n<!-- reviewId: ${reviewId} -->`;
 
