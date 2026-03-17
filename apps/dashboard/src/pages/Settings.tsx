@@ -416,11 +416,18 @@ export function Settings() {
                   </label>
                 </div>
                 {enableBlastRadius && (
-                  <p className="mt-2 text-xs text-text-secondary">
-                    Requires a dependency graph indexed via{' '}
-                    <code className="rounded-sm bg-surface-bg px-1">ghagga graph index</code>. When
-                    enabled, reviews focus on files within the blast radius of changed files.
-                  </p>
+                  <div className="mt-2 space-y-1 text-xs text-text-secondary">
+                    <p>
+                      When enabled, GHAGGA analyzes which files are <em>actually impacted</em> by
+                      the changed code (via import/call graph) and limits the review to those files
+                      only — reducing tokens by up to 6×.
+                    </p>
+                    <p className="text-yellow-400/80">
+                      ⚡ The dependency graph is built automatically on the first review after
+                      enabling. The <strong>second review onwards</strong> will use blast-radius
+                      filtering.
+                    </p>
+                  </div>
                 )}
               </Card>
 

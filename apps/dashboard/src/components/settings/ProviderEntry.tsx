@@ -207,7 +207,7 @@ export function ProviderEntry({
               onClick={() => setKeyMode((m) => (m === 'reuse' ? 'new' : 'reuse'))}
               className="text-xs text-primary-400 underline hover:text-primary-300"
             >
-              {effectiveMode === 'reuse' ? 'Enter new key instead' : 'Use saved key'}
+              {effectiveMode === 'reuse' ? '+ Use a different key' : '↩ Use saved key'}
             </button>
           )}
         </div>
@@ -244,7 +244,7 @@ export function ProviderEntry({
               </option>
               {savedKeyInfo && (
                 <option value={entry.provider}>
-                  {savedKeyInfo.maskedApiKey} (from Global Settings)
+                  {savedKeyInfo.maskedApiKey} — reuse existing key
                 </option>
               )}
             </select>
