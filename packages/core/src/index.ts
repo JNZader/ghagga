@@ -159,6 +159,39 @@ export type {
 } from './enhance/index.js';
 export { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 
+// ─── Dependency Graph & Blast-Radius ────────────────────────────
+
+export type {
+  BlastRadiusMetadata,
+  BlastRadiusOptions,
+  BlastRadiusResult,
+  DependencyGraph,
+  GraphLoader,
+  GraphMetadata,
+  GraphNode,
+  SupportedLanguage,
+} from './graph/index.js';
+
+export {
+  buildReverseIndex,
+  computeBlastRadius,
+  DEFAULT_TRAVERSAL_DEPTH,
+  EXCLUDED_DIRS,
+  GitHubApiGraphLoader,
+  GRAPH_STALE_DAYS,
+  GRAPH_VERSION,
+  isGraphStale,
+  isTestFile,
+  LANGUAGE_EXTENSIONS,
+  MAX_BLAST_RADIUS_FILES,
+  MAX_GRAPH_SIZE_BYTES,
+  NullGraphLoader,
+  PreloadedGraphLoader,
+  TEST_FILE_PATTERNS,
+  validateGraph,
+  validateMetadata,
+} from './graph/index.js';
+
 // ─── Health ─────────────────────────────────────────────────────
 
 export type {

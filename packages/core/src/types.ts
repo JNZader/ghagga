@@ -126,6 +126,13 @@ export interface ReviewInput {
    */
   precomputedStaticAnalysis?: StaticAnalysisResult;
 
+  /**
+   * Graph loader for blast-radius analysis.
+   * Injected by the caller (SaaS: GitHubApiGraphLoader, CLI: SQLiteGraphLoader).
+   * When undefined, blast-radius is skipped (current behavior).
+   */
+  graphLoader?: import('./graph/schema.js').GraphLoader;
+
   /** Enable AI-powered post-analysis enhancement. Default: false. */
   enhance?: boolean;
 }
@@ -142,6 +149,13 @@ export interface ReviewSettings {
   enabledTools?: string[];
   /** Force-disable specific tools (overrides always-on and auto-detect) */
   disabledTools?: string[];
+
+  /** Enable blast-radius analysis using dependency graph. Default: false. */
+  enableBlastRadius?: boolean;
+  /** Max files in blast-radius before falling back to full diff. Default: 50. */
+  maxBlastRadiusFiles?: number;
+  /** Max traversal depth for dependency graph. Default: 3. */
+  traversalDepth?: number;
 }
 
 export interface ReviewContext {
@@ -277,6 +291,9 @@ export interface ReviewMetadata {
 
   /** Static analysis tools that were skipped or failed */
   toolsSkipped: string[];
+
+  /** Blast-radius analysis results (present when enableBlastRadius is true). */
+  blastRadius?: import('./graph/schema.js').BlastRadiusMetadata;
 }
 
 // ─── Static Analysis ────────────────────────────────────────────
