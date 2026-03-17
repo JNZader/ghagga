@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardHeader } from '@/components/Card';
 import { DelegatedCiEditor } from '@/components/settings/DelegatedCiEditor';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
-import type { ProviderEntryState } from '@/components/settings/ProviderEntry';
+import { KNOWN_MODELS, type ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { ToolGrid } from '@/components/settings/ToolGrid';
 import { useRepositories, useSettings, useUpdateSettings } from '@/lib/api';
 import { useSelectedRepo } from '@/lib/repo-context';
@@ -13,6 +13,7 @@ import type {
   ProviderChainView,
   RegisteredTool,
   ReviewMode,
+  SaaSProvider,
 } from '@/lib/types';
 
 export function Settings() {
@@ -79,8 +80,9 @@ export function Settings() {
           provider: entry.provider,
           model: entry.model,
           apiKey: '',
-          // Include the saved model so the <select> can display it
-          availableModels: entry.model ? [entry.model] : [],
+          // Use full known model list so the dropdown is immediately usable
+          availableModels:
+            KNOWN_MODELS[entry.provider as SaaSProvider] ?? (entry.model ? [entry.model] : []),
           hasExistingKey: entry.hasApiKey,
           maskedApiKey: entry.maskedApiKey,
           validated: entry.hasApiKey || entry.provider === 'github',
