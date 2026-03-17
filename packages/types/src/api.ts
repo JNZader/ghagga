@@ -140,6 +140,7 @@ export interface InstallationSettings {
   enableTrivy: boolean;
   enableCpd: boolean;
   enableMemory: boolean;
+  enableBlastRadius?: boolean;
   customRules: string;
   ignorePatterns: string[];
   enabledTools?: string[];
@@ -168,6 +169,7 @@ export interface RepositorySettings {
   enableTrivy: boolean;
   enableCpd: boolean;
   enableMemory: boolean;
+  enableBlastRadius?: boolean;
   customRules: string;
   ignorePatterns: string[];
   enabledTools: string[];

@@ -46,6 +46,9 @@ export function Settings() {
   // ── Delegated CI policy (repo-scoped, not inherited) ──────
   const [delegatedCiPolicy, setDelegatedCiPolicy] = useState<DelegatedCiPolicy | null>(null);
 
+  // ── Blast Radius toggle ──────────────────────────────────────
+  const [enableBlastRadius, setEnableBlastRadius] = useState(false);
+
   // ── Other settings ──────────────────────────────────────────
   const [customRules, setCustomRules] = useState('');
   const [ignorePatterns, setIgnorePatterns] = useState('');
@@ -61,6 +64,7 @@ export function Settings() {
       setEnableTrivy(settings.enableTrivy);
       setEnableCpd(settings.enableCpd);
       setEnableMemory(settings.enableMemory);
+      setEnableBlastRadius(settings.enableBlastRadius ?? false);
       setAiReviewEnabled(settings.aiReviewEnabled);
       setReviewMode(settings.reviewMode);
       setCustomRules(settings.customRules);
@@ -110,6 +114,7 @@ export function Settings() {
         setEnableTrivy(settings.globalSettings.enableTrivy);
         setEnableCpd(settings.globalSettings.enableCpd);
         setEnableMemory(settings.globalSettings.enableMemory);
+        setEnableBlastRadius(settings.globalSettings.enableBlastRadius ?? false);
         setCustomRules(settings.globalSettings.customRules);
         setIgnorePatterns(settings.globalSettings.ignorePatterns.join('\n'));
       }
@@ -145,6 +150,7 @@ export function Settings() {
         enableTrivy,
         enableCpd,
         enableMemory,
+        enableBlastRadius,
         disabledTools,
         customRules,
         ignorePatterns: ignorePatterns
@@ -384,6 +390,38 @@ export function Settings() {
                     </div>
                   </label>
                 </div>
+              </Card>
+
+              {/* ── Blast Radius ─────────────────────────────────── */}
+              <Card>
+                <div className="flex items-center justify-between">
+                  <CardHeader
+                    title="Blast Radius"
+                    description="Analyze dependency graph to focus reviews on impacted files"
+                  />
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <span className="text-sm text-text-secondary">
+                      {enableBlastRadius ? 'Enabled' : 'Disabled'}
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={enableBlastRadius}
+                        onChange={(e) => setEnableBlastRadius(e.target.checked)}
+                        className="peer sr-only"
+                      />
+                      <div className="h-6 w-11 rounded-full bg-surface-border peer-checked:bg-primary-600 transition-colors" />
+                      <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+                    </div>
+                  </label>
+                </div>
+                {enableBlastRadius && (
+                  <p className="mt-2 text-xs text-text-secondary">
+                    Requires a dependency graph indexed via{' '}
+                    <code className="rounded-sm bg-surface-bg px-1">ghagga graph index</code>. When
+                    enabled, reviews focus on files within the blast radius of changed files.
+                  </p>
+                )}
               </Card>
 
               {/* ── AI Review ────────────────────────────────────── */}
