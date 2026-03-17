@@ -1,6 +1,12 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPRCommitMessages, getPRFileList, verifyWebhookSignature } from './client.js';
+import {
+  fetchGraphFromBranch,
+  fetchGraphMetadata,
+  getPRCommitMessages,
+  getPRFileList,
+  verifyWebhookSignature,
+} from './client.js';
 
 /**
  * Helper: compute a valid sha256 HMAC signature in GitHub's format.
@@ -286,5 +292,124 @@ describe('getPRCommitMessages — pagination', () => {
     await expect(getPRCommitMessages('owner', 'repo', 1, 'token')).rejects.toThrow(
       'GitHub API error fetching commits: 500 Internal Server Error',
     );
+  });
+});
+
+// ─── fetchGraphFromBranch ───────────────────────────────────────
+
+describe('fetchGraphFromBranch', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const VALID_GRAPH = {
+    version: 1,
+    rootDir: '.',
+    nodes: {
+      'src/index.ts': {
+        hash: 'abc123',
+        language: 'typescript',
+        imports: [],
+        exports: ['main'],
+        calls: [],
+        isTest: false,
+      },
+    },
+  };
+
+  it('returns graph on 200 with valid JSON', async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(VALID_GRAPH),
+      }),
+    );
+
+    const result = await fetchGraphFromBranch('owner', 'repo', 'token');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).not.toBeNull();
+    expect(result?.version).toBe(1);
+  });
+
+  it('returns null on 404', async () => {
+    mockFetch.mockImplementation(() => Promise.resolve({ ok: false, status: 404 }));
+
+    const result = await fetchGraphFromBranch('owner', 'repo', 'token');
+    expect(result).toBeNull();
+  });
+
+  it('returns null on timeout/network error', async () => {
+    mockFetch.mockImplementation(() => Promise.reject(new Error('network timeout')));
+
+    const result = await fetchGraphFromBranch('owner', 'repo', 'token');
+    expect(result).toBeNull();
+  });
+
+  it('returns null on invalid JSON', async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ invalid: true }),
+      }),
+    );
+
+    const result = await fetchGraphFromBranch('owner', 'repo', 'token');
+    expect(result).toBeNull();
+  });
+});
+
+// ─── fetchGraphMetadata ─────────────────────────────────────────
+
+describe('fetchGraphMetadata', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const VALID_METADATA = {
+    lastIndexedCommit: 'abc123def456',
+    lastIndexedAt: new Date().toISOString(),
+    schemaVersion: 1,
+    fileCount: 1,
+    languages: ['typescript'],
+    indexDurationMs: 500,
+  };
+
+  it('returns metadata on 200 with valid JSON', async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(VALID_METADATA),
+      }),
+    );
+
+    const result = await fetchGraphMetadata('owner', 'repo', 'token');
+    expect(result).not.toBeNull();
+    expect(result?.lastIndexedCommit).toBe('abc123def456');
+  });
+
+  it('returns null on 404', async () => {
+    mockFetch.mockImplementation(() => Promise.resolve({ ok: false, status: 404 }));
+
+    const result = await fetchGraphMetadata('owner', 'repo', 'token');
+    expect(result).toBeNull();
   });
 });

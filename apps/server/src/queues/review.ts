@@ -8,6 +8,7 @@
 import type { Job } from 'bullmq';
 import { Queue, Worker } from 'bullmq';
 import type {
+  GraphLoader,
   LLMProvider,
   ProviderChainEntry,
   ReviewInput,
@@ -15,12 +16,13 @@ import type {
   ReviewMode,
   StaticAnalysisResult,
 } from 'ghagga-core';
-import { formatReviewComment, reviewPipeline } from 'ghagga-core';
+import { formatReviewComment, PreloadedGraphLoader, reviewPipeline } from 'ghagga-core';
 import type { Database, DbProviderChainEntry } from 'ghagga-db';
 import { createDatabaseFromEnv, decrypt, saveReview } from 'ghagga-db';
 import Redis from 'ioredis';
 import {
   addCommentReaction,
+  fetchGraphFromBranch,
   fetchPRDiff,
   getInstallationToken,
   getPRCommitMessages,
@@ -88,6 +90,7 @@ export interface ReviewJobData {
     reviewLevel: string;
     enabledTools?: string[];
     disabledTools?: string[];
+    enableBlastRadius?: boolean;
   };
 }
 
@@ -310,6 +313,25 @@ async function processReview(
 
     const memoryStorage = db ? new PostgresMemoryStorage(db, installationId) : undefined;
 
+    // Fetch dependency graph for blast-radius analysis (if enabled)
+    let graphLoader: GraphLoader | undefined;
+    if (settings.enableBlastRadius) {
+      try {
+        const graph = await fetchGraphFromBranch(owner, repo, token);
+        if (graph) {
+          graphLoader = new PreloadedGraphLoader(graph);
+          log.info('Dependency graph loaded for blast-radius analysis');
+        } else {
+          log.info('Blast-radius enabled but no graph available');
+        }
+      } catch (error) {
+        log.warn(
+          { error: String(error) },
+          'Failed to fetch dependency graph — skipping blast-radius',
+        );
+      }
+    }
+
     const input: ReviewInput = {
       diff,
       mode: reviewMode as ReviewMode,
@@ -319,6 +341,7 @@ async function processReview(
       model: legacyModel,
       apiKey: legacyApiKey,
       precomputedStaticAnalysis,
+      graphLoader,
       settings: {
         enableSemgrep: settings.enableSemgrep,
         enableTrivy: settings.enableTrivy,
@@ -329,6 +352,7 @@ async function processReview(
         reviewLevel: settings.reviewLevel as ReviewLevel,
         enabledTools: settings.enabledTools,
         disabledTools: settings.disabledTools,
+        enableBlastRadius: settings.enableBlastRadius,
       },
       context: {
         repoFullName,

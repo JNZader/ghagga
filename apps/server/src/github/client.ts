@@ -265,6 +265,103 @@ export async function getPRFileList(
   });
 }
 
+// ─── Dependency Graph ───────────────────────────────────────────
+
+/**
+ * Fetch the dependency graph from the ghagga/graph orphan branch.
+ * Returns null if the branch or file doesn't exist.
+ */
+export async function fetchGraphFromBranch(
+  owner: string,
+  repo: string,
+  token: string,
+): Promise<import('ghagga-core').DependencyGraph | null> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/.ghagga/graph.json?ref=ghagga/graph`;
+
+  try {
+    const response = await githubCircuitBreaker.execute(async () => {
+      return fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.raw',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: AbortSignal.timeout(5_000),
+      });
+    });
+
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      console.warn(`[ghagga] Failed to fetch graph: ${response.status}`);
+      return null;
+    }
+
+    const json: unknown = await response.json();
+    // Inline validation — avoids dynamic import issues in test
+    return validateGraphJson(json);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch the dependency graph metadata from the ghagga/graph orphan branch.
+ * Returns null if the branch or file doesn't exist.
+ */
+export async function fetchGraphMetadata(
+  owner: string,
+  repo: string,
+  token: string,
+): Promise<import('ghagga-core').GraphMetadata | null> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/.ghagga/metadata.json?ref=ghagga/graph`;
+
+  try {
+    const response = await githubCircuitBreaker.execute(async () => {
+      return fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.raw',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: AbortSignal.timeout(5_000),
+      });
+    });
+
+    if (response.status === 404) return null;
+    if (!response.ok) return null;
+
+    const json: unknown = await response.json();
+    return validateMetadataJson(json);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Graph Validation (inline to avoid dynamic imports) ─────────
+
+const GRAPH_VERSION = 1;
+
+function validateGraphJson(json: unknown): import('ghagga-core').DependencyGraph | null {
+  if (!json || typeof json !== 'object') return null;
+  const obj = json as Record<string, unknown>;
+  if (typeof obj.version !== 'number' || obj.version !== GRAPH_VERSION) return null;
+  if (typeof obj.rootDir !== 'string') return null;
+  if (!obj.nodes || typeof obj.nodes !== 'object') return null;
+  return json as import('ghagga-core').DependencyGraph;
+}
+
+function validateMetadataJson(json: unknown): import('ghagga-core').GraphMetadata | null {
+  if (!json || typeof json !== 'object') return null;
+  const obj = json as Record<string, unknown>;
+  if (typeof obj.lastIndexedCommit !== 'string') return null;
+  if (typeof obj.lastIndexedAt !== 'string') return null;
+  if (typeof obj.schemaVersion !== 'number') return null;
+  if (typeof obj.fileCount !== 'number') return null;
+  if (!Array.isArray(obj.languages)) return null;
+  if (typeof obj.indexDurationMs !== 'number') return null;
+  return json as import('ghagga-core').GraphMetadata;
+}
+
 // ─── Reactions ──────────────────────────────────────────────────
 
 /**
