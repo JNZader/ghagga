@@ -89,12 +89,12 @@ describe('GitHub client circuit breaker integration', () => {
   it('fetchPRDetails routes through the circuit breaker', async () => {
     const executeSpy = vi.spyOn(githubCircuitBreaker, 'execute');
 
-    stubFetchOk({ head: { sha: 'abc123' }, base: { ref: 'main' } });
+    stubFetchOk({ head: { sha: 'abc123' }, base: { ref: 'main' }, user: { login: 'pr-author' } });
 
     const result = await fetchPRDetails('owner', 'repo', 1, 'token');
 
     expect(executeSpy).toHaveBeenCalledOnce();
-    expect(result).toEqual({ headSha: 'abc123', baseBranch: 'main' });
+    expect(result).toEqual({ headSha: 'abc123', baseBranch: 'main', prAuthor: 'pr-author' });
   });
 
   it('fetchPRDiff routes through the circuit breaker', async () => {

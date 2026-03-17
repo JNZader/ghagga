@@ -206,6 +206,11 @@ export interface FormatReviewCommentOptions {
   fileStats?: FileStats;
   /** List of changed file paths. When provided, renders the categorized file summary. */
   fileList?: string[];
+  /**
+   * GitHub username of the PR author. When provided, a @mention is appended
+   * so GitHub sends a notification to the author when the review is posted.
+   */
+  prAuthor?: string;
 }
 
 // ─── Formatting ─────────────────────────────────────────────────
@@ -315,6 +320,12 @@ export function formatReviewComment(
   }
 
   comment += `---\n*Powered by [GHAGGA](https://github.com/JNZader/ghagga) \u2014 AI Code Review*`;
+
+  // @mention the PR author so GitHub sends them a notification.
+  // Rendered as small text to keep the footer clean.
+  if (options?.prAuthor) {
+    comment += ` — @${options.prAuthor}`;
+  }
 
   return comment;
 }

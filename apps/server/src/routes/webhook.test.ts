@@ -261,6 +261,7 @@ describe('pull_request event handling', () => {
       number: 42,
       head: { sha: 'abc123' },
       base: { ref: 'main' },
+      user: { login: 'pr-author' },
     },
     repository: { id: 12345, full_name: 'owner/repo' },
     installation: { id: 999 },

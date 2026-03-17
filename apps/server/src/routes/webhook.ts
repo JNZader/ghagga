@@ -46,6 +46,7 @@ interface PullRequestEvent {
     number: number;
     head: { sha: string };
     base: { ref: string };
+    user: { login: string };
   };
   repository: {
     id: number;
@@ -258,6 +259,7 @@ async function handlePullRequest(
     repositoryId: repo.id,
     headSha: payload.pull_request.head.sha,
     baseBranch: payload.pull_request.base.ref,
+    prAuthor: payload.pull_request.user.login,
     // Resolved provider chain (from global or repo)
     providerChain: effective.providerChain,
     aiReviewEnabled: effective.aiReviewEnabled,
@@ -427,6 +429,7 @@ async function handleIssueComment(
   let installationToken: string | undefined;
   let headSha: string | undefined;
   let baseBranch: string | undefined;
+  let prAuthor: string | undefined;
 
   if (appId && privateKey) {
     try {
@@ -446,6 +449,7 @@ async function handleIssueComment(
         const prDetails = await fetchPRDetails(owner, repoName, prNumber, installationToken);
         headSha = prDetails.headSha;
         baseBranch = prDetails.baseBranch;
+        prAuthor = prDetails.prAuthor;
       } catch (error) {
         // Non-critical — review will proceed without headSha/baseBranch
         logger.warn(
@@ -468,6 +472,7 @@ async function handleIssueComment(
     triggerCommentId: payload.comment.id,
     headSha,
     baseBranch,
+    prAuthor,
     providerChain: effective.providerChain,
     aiReviewEnabled: effective.aiReviewEnabled,
     llmProvider: repo.llmProvider,

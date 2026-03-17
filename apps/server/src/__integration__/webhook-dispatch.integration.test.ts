@@ -185,6 +185,7 @@ describe('integration: webhook -> review dispatch', () => {
         number: 99,
         head: { sha: 'deadbeef' },
         base: { ref: 'main' },
+        user: { login: 'pr-author' },
       },
       repository: { id: 12345, full_name: 'acme/webapp' },
       installation: { id: 777 },
