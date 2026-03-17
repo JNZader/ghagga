@@ -27,7 +27,8 @@ export type ToolName =
   | 'pmd'
   | 'psalm'
   | 'clippy'
-  | 'hadolint';
+  | 'hadolint'
+  | 'zizmor';
 
 export type ToolCategory =
   | 'security'
