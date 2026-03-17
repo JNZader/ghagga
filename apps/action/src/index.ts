@@ -28,6 +28,7 @@ import {
   DEFAULT_MODELS,
   DEFAULT_SETTINGS,
   formatReviewComment,
+  REVIEW_COMMENT_MARKER,
   reviewPipeline,
   SqliteMemoryStorage,
 } from 'ghagga-core';
@@ -224,17 +225,45 @@ async function run(): Promise<void> {
       precomputedStaticAnalysis: staticAnalysis,
     });
 
-    // Step 7: Post the review comment
-    const comment = formatReviewComment(result);
+    // Step 7: Post or update the review comment (idempotent)
+    const comment = formatReviewComment(result, {
+      fileStats:
+        result.metadata.totalAdditions !== undefined
+          ? {
+              additions: result.metadata.totalAdditions,
+              deletions: result.metadata.totalDeletions ?? 0,
+            }
+          : undefined,
+      fileList: result.metadata.fileList,
+    });
 
-    await octokit.rest.issues.createComment({
+    // Look for an existing GHAGGA comment to update (idempotent)
+    const { data: existingComments } = await octokit.rest.issues.listComments({
       owner: context.repo.owner,
       repo: context.repo.repo,
       issue_number: prNumber,
-      body: comment,
+      per_page: 100,
     });
 
-    core.info(`✅ Review posted to PR #${prNumber}`);
+    const existingComment = existingComments.find((c) => c.body?.includes(REVIEW_COMMENT_MARKER));
+
+    if (existingComment) {
+      await octokit.rest.issues.updateComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        comment_id: existingComment.id,
+        body: comment,
+      });
+      core.info(`✅ Review updated on PR #${prNumber} (comment ${existingComment.id})`);
+    } else {
+      await octokit.rest.issues.createComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: prNumber,
+        body: comment,
+      });
+      core.info(`✅ Review posted to PR #${prNumber}`);
+    }
 
     // Step 7.5: Persist memory to cache
     if (memoryStorage) {
