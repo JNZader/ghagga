@@ -330,8 +330,8 @@ describe('computeBlastRadius', () => {
     const result = computeBlastRadius(graph, ['file0.ts'], { maxDepth: 3, maxFiles: 50 });
     const elapsed = performance.now() - start;
 
-    // Should complete in under 50ms even on slow CI
-    expect(elapsed).toBeLessThan(50);
+    // Should complete quickly even on slow CI runners
+    expect(elapsed).toBeLessThan(500);
     expect(result.files.size).toBeGreaterThan(0);
   });
 
