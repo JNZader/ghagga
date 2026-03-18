@@ -46,7 +46,7 @@ export const CURATED_MODELS: Record<SaaSProvider, string[]> = {
     'mixtral-8x7b-32768',
     'qwen-qwq-32b',
   ],
-  cerebras: ['llama-3.3-70b', 'llama-3.1-8b', 'llama-3.1-70b', 'qwen-3-32b'],
+  cerebras: ['llama3.1-8b', 'gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'],
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   openrouter: [
     'deepseek/deepseek-chat',
