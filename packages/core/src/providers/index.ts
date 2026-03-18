@@ -98,12 +98,14 @@ export function createProvider(provider: LLMProvider, apiKey: string) {
         apiKey,
         baseURL: CEREBRAS_BASE_URL,
         name: 'cerebras',
+        compatibility: 'compatible',
       });
     case 'deepseek':
       return createOpenAI({
         apiKey,
         baseURL: DEEPSEEK_BASE_URL,
         name: 'deepseek',
+        compatibility: 'compatible',
       });
     case 'openrouter':
       return createOpenAI({

@@ -112,23 +112,25 @@ describe('createProvider', () => {
     });
   });
 
-  it('cerebras: calls createOpenAI with Cerebras baseURL and name', () => {
+  it('cerebras: calls createOpenAI with Cerebras baseURL, name, and compatible mode', () => {
     createProvider('cerebras', 'csk-key');
 
     expect(mockCreateOpenAI).toHaveBeenCalledWith({
       apiKey: 'csk-key',
       baseURL: 'https://api.cerebras.ai/v1',
       name: 'cerebras',
+      compatibility: 'compatible',
     });
   });
 
-  it('deepseek: calls createOpenAI with DeepSeek baseURL and name', () => {
+  it('deepseek: calls createOpenAI with DeepSeek baseURL, name, and compatible mode', () => {
     createProvider('deepseek', 'dsk-key');
 
     expect(mockCreateOpenAI).toHaveBeenCalledWith({
       apiKey: 'dsk-key',
       baseURL: 'https://api.deepseek.com/v1',
       name: 'deepseek',
+      compatibility: 'compatible',
     });
   });
 
