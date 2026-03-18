@@ -291,26 +291,49 @@ export function createSettingsRouter(db: Database) {
         }
       }
 
-      // Merge API keys: preserve existing encrypted keys when not provided
+      // Merge API keys: preserve existing encrypted keys when not provided.
+      //
+      // Key resolution order (first non-null wins):
+      // 1. New key provided in this request → encrypt and use
+      // 2. Same provider in the CURRENT repo chain (any entry, not just first match)
+      // 3. Same provider in the GLOBAL/installation chain
+      // 4. Same provider in the VALIDATED session (via /api/providers/validate)
+      //
+      // This handles: new providers, "click to use" reuse, Global→Custom transition,
+      // and multiple entries of the same provider (e.g., 3 Groq entries).
       const existingChain = (repo.providerChain ?? []) as DbProviderChainEntry[];
 
-      // Bug 2 fix: load global/installation chain as fallback source for keys
-      // When a repo switches from Global→Custom, it may not have its own keys yet.
       const globalRow = await getInstallationSettings(db, repo.installationId);
       const globalChain = (globalRow?.providerChain ?? []) as DbProviderChainEntry[];
 
+      // Build a lookup of ALL encrypted keys by provider from both chains
+      const keysByProvider = new Map<string, string>();
+      for (const e of globalChain) {
+        if (e.encryptedApiKey && !keysByProvider.has(e.provider)) {
+          keysByProvider.set(e.provider, e.encryptedApiKey);
+        }
+      }
+      // Repo chain takes precedence over global
+      for (const e of existingChain) {
+        if (e.encryptedApiKey) {
+          keysByProvider.set(e.provider, e.encryptedApiKey);
+        }
+      }
+
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry) => {
         if (entry.apiKey) {
-          // New key provided → encrypt it
+          // New key provided → encrypt it and also update the lookup
+          // so subsequent entries of the same provider can reuse it
+          const encrypted = encrypt(entry.apiKey);
+          keysByProvider.set(entry.provider, encrypted);
           return {
             provider: entry.provider as SaaSProvider,
             model: entry.model,
-            encryptedApiKey: encrypt(entry.apiKey),
+            encryptedApiKey: encrypted,
           };
         }
 
         if (entry.provider === 'github') {
-          // GitHub Models doesn't need an API key
           return {
             provider: 'github' as const,
             model: entry.model,
@@ -318,23 +341,11 @@ export function createSettingsRouter(db: Database) {
           };
         }
 
-        // No key provided → try repo's own chain first, then fall back to global chain.
-        // This handles the Global→Custom transition: the repo never had its own key,
-        // but the user pre-filled from global and expects it to be inherited/copied.
-        const existing = existingChain.find((e) => e.provider === entry.provider);
-        if (existing?.encryptedApiKey) {
-          return {
-            provider: entry.provider as SaaSProvider,
-            model: entry.model,
-            encryptedApiKey: existing.encryptedApiKey,
-          };
-        }
-
-        const fromGlobal = globalChain.find((e) => e.provider === entry.provider);
+        // No key provided → resolve from lookup (repo > global > null)
         return {
           provider: entry.provider as SaaSProvider,
           model: entry.model,
-          encryptedApiKey: fromGlobal?.encryptedApiKey ?? null,
+          encryptedApiKey: keysByProvider.get(entry.provider) ?? null,
         };
       });
 
