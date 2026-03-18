@@ -204,10 +204,25 @@ export function createInstallationsRouter(db: Database) {
         }
       }
 
-      const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry) => {
+      // Debug: log what we received and what we have in the map
+      logger.info(
+        {
+          incomingProviders: incomingChain.map((e) => ({
+            provider: e.provider,
+            model: e.model,
+            hasApiKey: !!e.apiKey,
+            apiKeyLength: e.apiKey?.length ?? 0,
+          })),
+          existingProviders: [...keysByProvider.keys()],
+        },
+        'Chain merge debug',
+      );
+
+      const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry, idx) => {
         if (entry.apiKey) {
           const encrypted = encrypt(entry.apiKey);
           keysByProvider.set(entry.provider, encrypted);
+          logger.info({ idx, provider: entry.provider, action: 'NEW_KEY' }, 'Chain entry: new key');
           return {
             provider: entry.provider as SaaSProvider,
             model: entry.model,
@@ -217,10 +232,15 @@ export function createInstallationsRouter(db: Database) {
         if (entry.provider === 'github') {
           return { provider: 'github' as const, model: entry.model, encryptedApiKey: null };
         }
+        const resolved = keysByProvider.get(entry.provider) ?? null;
+        logger.info(
+          { idx, provider: entry.provider, action: resolved ? 'RESOLVED_FROM_MAP' : 'NULL_KEY' },
+          'Chain entry: resolved',
+        );
         return {
           provider: entry.provider as SaaSProvider,
           model: entry.model,
-          encryptedApiKey: keysByProvider.get(entry.provider) ?? null,
+          encryptedApiKey: resolved,
         };
       });
 
