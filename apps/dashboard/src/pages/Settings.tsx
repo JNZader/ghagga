@@ -5,7 +5,12 @@ import { DelegatedCiEditor } from '@/components/settings/DelegatedCiEditor';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
 import { KNOWN_MODELS, type ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { ToolGrid } from '@/components/settings/ToolGrid';
-import { useRepositories, useSettings, useUpdateSettings } from '@/lib/api';
+import {
+  useCopySettingsToGlobal,
+  useRepositories,
+  useSettings,
+  useUpdateSettings,
+} from '@/lib/api';
 import { useSelectedRepo } from '@/lib/repo-context';
 import type {
   DelegatedCiPolicy,
@@ -21,6 +26,7 @@ export function Settings() {
   const { data: repos } = useRepositories();
   const { data: settings, isLoading } = useSettings(selectedRepo);
   const updateSettings = useUpdateSettings();
+  const copyToGlobal = useCopySettingsToGlobal();
 
   // ── Global vs custom toggle ─────────────────────────────────
   const [useGlobalSettings, setUseGlobalSettings] = useState(true);
@@ -56,6 +62,10 @@ export function Settings() {
 
   // ── Save feedback ───────────────────────────────────────────
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // ── Copy-to-global confirmation ─────────────────────────────
+  const [showCopyConfirm, setShowCopyConfirm] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // ── Sync form state with fetched settings ───────────────────
   useEffect(() => {
@@ -170,6 +180,20 @@ export function Settings() {
   // Find the repo ID for the selected repo (needed for CI job discovery)
   const selectedRepoId = repos?.find((r) => r.fullName === selectedRepo)?.id ?? undefined;
 
+  // ── Copy to Global handler ───────────────────────────────────
+  const handleCopyToGlobal = async () => {
+    if (!selectedRepoId) return;
+    try {
+      await copyToGlobal.mutateAsync({ repoId: selectedRepoId });
+      setCopySuccess(true);
+      setShowCopyConfirm(false);
+      setTimeout(() => setCopySuccess(false), 3000);
+    } catch {
+      // Error state is handled by copyToGlobal.isError
+      setShowCopyConfirm(false);
+    }
+  };
+
   const globalSettings = settings?.globalSettings;
 
   return (
@@ -250,6 +274,62 @@ export function Settings() {
               </div>
             )}
           </Card>
+
+          {/* ── Copy to Global ────────────────────────────── */}
+          {!useGlobalSettings && selectedRepoId && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCopyConfirm(true)}
+                disabled={copyToGlobal.isPending}
+                className="inline-flex items-center gap-2 rounded-lg border border-surface-border bg-surface-bg px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:border-primary-600/50 hover:bg-primary-600/10"
+              >
+                <span aria-hidden="true">📤</span>
+                {copyToGlobal.isPending ? 'Copying...' : 'Copy to Global'}
+              </button>
+              {copySuccess && (
+                <span className="text-sm text-green-400">Settings copied to global!</span>
+              )}
+              {copyToGlobal.isError && (
+                <span className="text-sm text-red-400">Failed to copy settings.</span>
+              )}
+            </div>
+          )}
+
+          {/* ── Copy to Global Confirmation Dialog ─────────── */}
+          {showCopyConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+              <div className="w-full max-w-md rounded-xl border border-surface-border bg-surface-card p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-text-primary">
+                  Copy Settings to Global?
+                </h3>
+                <p className="mt-2 text-sm text-text-secondary">
+                  This will overwrite the Global (installation-level) settings with this repo&apos;s
+                  provider chain, review mode, and tool configuration.
+                </p>
+                <p className="mt-2 text-sm font-medium text-yellow-400">
+                  All repositories using &quot;Global&quot; settings will be affected.
+                </p>
+                <div className="mt-5 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCopyConfirm(false)}
+                    className="rounded-lg border border-surface-border px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-bg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyToGlobal}
+                    disabled={copyToGlobal.isPending}
+                    className="btn-primary"
+                  >
+                    {copyToGlobal.isPending ? 'Copying...' : 'Yes, Copy to Global'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {useGlobalSettings && globalSettings ? (
             /* ── Read-only inherited view ─────────────────────── */

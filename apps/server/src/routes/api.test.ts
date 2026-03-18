@@ -36,6 +36,7 @@ const mockDeleteReviewsByIds = vi.fn();
 const mockDeleteReviewsByRepoId = vi.fn();
 const mockDeleteMemorySession = vi.fn();
 const mockClearEmptyMemorySessions = vi.fn();
+const mockGetRepositoryById = vi.fn();
 
 vi.mock('ghagga-db', () => ({
   getReviewsByDay: (...args: unknown[]) => mockGetReviewsByDay(...args),
@@ -48,6 +49,7 @@ vi.mock('ghagga-db', () => ({
   getInstallationSettingsBatch: (...args: unknown[]) => mockGetInstallationSettingsBatch(...args),
   upsertInstallationSettings: (...args: unknown[]) => mockUpsertInstallationSettings(...args),
   getInstallationById: (...args: unknown[]) => mockGetInstallationById(...args),
+  getRepositoryById: (...args: unknown[]) => mockGetRepositoryById(...args),
   getSessionById: (...args: unknown[]) => mockGetSessionById(...args),
   getSessionsByProject: (...args: unknown[]) => mockGetSessionsByProject(...args),
   getObservationsBySession: (...args: unknown[]) => mockGetObservationsBySession(...args),
@@ -3516,5 +3518,119 @@ describe('PUT /api/settings — tool fields', () => {
     // Should preserve existing disabledTools since we didn't send it
     expect(updates.settings.disabledTools).toEqual(['cpd', 'markdownlint']);
     expect(updates.settings.enableMemory).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// POST /api/settings/copy-to-global
+// ═══════════════════════════════════════════════════════════════════
+
+describe('POST /api/settings/copy-to-global', () => {
+  it('copies repo settings to installation-level global settings', async () => {
+    mockGetRepositoryById.mockResolvedValueOnce(FAKE_REPO);
+    mockUpsertInstallationSettings.mockResolvedValueOnce({});
+
+    const app = createApp();
+    const res = await app.request('/api/settings/copy-to-global', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repoId: 42 }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.message).toBe('Settings copied to global');
+
+    // Verify upsertInstallationSettings was called with the repo's config
+    expect(mockUpsertInstallationSettings).toHaveBeenCalledWith(
+      mockDb,
+      100, // installationId from FAKE_REPO
+      expect.objectContaining({
+        providerChain: FAKE_REPO.providerChain,
+        aiReviewEnabled: FAKE_REPO.aiReviewEnabled,
+        reviewMode: FAKE_REPO.reviewMode,
+        settings: expect.objectContaining({
+          enableSemgrep: true,
+          enableTrivy: true,
+          enableCpd: false,
+          enableMemory: true,
+        }),
+      }),
+    );
+  });
+
+  it('returns 400 when repoId is missing', async () => {
+    const app = createApp();
+    const res = await app.request('/api/settings/copy-to-global', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 400 for invalid JSON body', async () => {
+    const app = createApp();
+    const res = await app.request('/api/settings/copy-to-global', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json',
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 404 when repo does not exist', async () => {
+    mockGetRepositoryById.mockResolvedValueOnce(null);
+
+    const app = createApp();
+    const res = await app.request('/api/settings/copy-to-global', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repoId: 999 }),
+    });
+
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.error).toBe('NOT_FOUND');
+  });
+
+  it('returns 403 when user does not own the installation', async () => {
+    mockGetRepositoryById.mockResolvedValueOnce({
+      ...FAKE_REPO,
+      installationId: 999, // Different installation
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/settings/copy-to-global', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repoId: 42 }),
+    });
+
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.error).toBe('FORBIDDEN');
+  });
+
+  it('returns 500 when upsert fails', async () => {
+    mockGetRepositoryById.mockResolvedValueOnce(FAKE_REPO);
+    mockUpsertInstallationSettings.mockRejectedValueOnce(new Error('DB error'));
+
+    const app = createApp();
+    const res = await app.request('/api/settings/copy-to-global', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repoId: 42 }),
+    });
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('COPY_FAILED');
   });
 });

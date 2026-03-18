@@ -34,15 +34,7 @@ interface ProviderEntryProps {
 // ─── Known Models per Provider (for instant model selection without re-validation) ──
 
 export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
-  groq: [
-    'openai/gpt-oss-120b',
-    'llama-3.3-70b-versatile',
-    'llama-3.1-70b-versatile',
-    'llama-3.1-8b-instant',
-    'gemma2-9b-it',
-    'mixtral-8x7b-32768',
-    'qwen-qwq-32b',
-  ],
+  groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen-qwq-32b'],
   cerebras: ['llama3.1-8b', 'gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'],
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   openrouter: [

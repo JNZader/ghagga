@@ -16,11 +16,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockUseRepositories = vi.fn();
 const mockUseSettings = vi.fn();
 const mockUseUpdateSettings = vi.fn();
+const mockUseCopySettingsToGlobal = vi.fn();
 
 vi.mock('@/lib/api', () => ({
   useRepositories: () => mockUseRepositories(),
   useSettings: () => mockUseSettings(),
   useUpdateSettings: () => mockUseUpdateSettings(),
+  useCopySettingsToGlobal: () => mockUseCopySettingsToGlobal(),
   useDiscoverCi: () => ({
     data: undefined,
     isLoading: false,
@@ -215,6 +217,11 @@ beforeEach(() => {
   mockUseSettings.mockReturnValue({ data: undefined, isLoading: false });
   mockUseUpdateSettings.mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue({ message: 'ok' }),
+    isPending: false,
+    isError: false,
+  });
+  mockUseCopySettingsToGlobal.mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue({ data: { message: 'Settings copied to global' } }),
     isPending: false,
     isError: false,
   });
