@@ -245,10 +245,13 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
       const failedEntry: ProviderChainEntry = chain
         ? (chain[i % chain.length] as ProviderChainEntry)
         : { provider: provider as ProviderChainEntry['provider'], model, apiKey };
-      const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      const errorMsg =
+        result.reason instanceof Error ? result.reason.message : String(result.reason);
       // Truncate error to keep log lines manageable
       const shortError = errorMsg.length > 100 ? `${errorMsg.slice(0, 100)}...` : errorMsg;
-      modelsUsed.push(`${spec.name}:${failedEntry.provider}/${failedEntry.model}[FAILED:${shortError}]`);
+      modelsUsed.push(
+        `${spec.name}:${failedEntry.provider}/${failedEntry.model}[FAILED:${shortError}]`,
+      );
       emit({
         step: `specialist-${spec.name}`,
         message: `✗ ${spec.label} — FAILED (${failedEntry.provider}/${failedEntry.model}): ${String(result.reason)}`,
