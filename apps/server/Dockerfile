@@ -42,23 +42,19 @@ RUN pnpm prune --prod
 # ── Stage 2: Production Runtime ────────────────────────────────
 FROM node:20-slim AS runner
 
-# Minimal system deps + GitHub CLI (for gh copilot)
+# Minimal system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
     curl \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # Install CLI tools for cli-bridge provider (uses subscriptions, not API tokens)
 # Gemini CLI: free tier 1M tokens/day — set GEMINI_API_KEY env var
-# GitHub Copilot: via gh extension — set GH_TOKEN env var with Copilot Pro subscription
-RUN npm install -g @google/gemini-cli 2>/dev/null || true
-RUN gh extension install github/gh-copilot 2>/dev/null || true
+# Copilot CLI: @github/copilot — set COPILOT_GITHUB_TOKEN env var
+RUN npm install -g @google/gemini-cli @github/copilot 2>/dev/null || true
 
 WORKDIR /app
 
