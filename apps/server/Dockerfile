@@ -50,6 +50,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
+# Install CLI tools for cli-bridge provider (uses subscriptions, not API tokens)
+# Gemini CLI: free tier 1M tokens/day — set GEMINI_API_KEY env var
+# Copilot CLI: requires COPILOT_GITHUB_TOKEN env var with Copilot Pro subscription
+RUN npm install -g @google/gemini-cli 2>/dev/null || true
+
 WORKDIR /app
 
 # Copy built application + production node_modules
