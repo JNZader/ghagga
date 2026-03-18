@@ -27,6 +27,7 @@ import type {
 } from '../types.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { generateTextWithTimeout } from '../utils/llm-timeout.js';
+import { calculateRateSchedule } from '../utils/token-budget.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
@@ -130,14 +131,20 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   const { diff, provider, model, apiKey, staticContext, memoryContext, stackHints, reviewLevel } =
     input;
   const emit = input.onProgress ?? (() => {});
-  const concurrency = input.concurrency ?? 2;
-  const delayMs = input.delayMs ?? 0;
+
+  // Auto-calculate concurrency and delay based on the primary model's TPM.
+  // Free-tier models (Groq 8K TPM) → serialize with 60s delays (~5min total).
+  // High-capacity models → full parallel (~10s total).
+  const primaryModel = input.providerChain?.[0]?.model ?? model;
+  const rateSchedule = calculateRateSchedule(primaryModel);
+  const concurrency = input.concurrency ?? rateSchedule.concurrency;
+  const delayMs = input.delayMs ?? rateSchedule.delayMs;
 
   const startTime = Date.now();
 
   emit({
     step: 'workflow-start',
-    message: `Launching ${SPECIALISTS.length} specialist reviewers (concurrency: ${concurrency})`,
+    message: `Launching ${SPECIALISTS.length} specialist reviewers (concurrency: ${concurrency}, delay: ${Math.round(delayMs / 1000)}s)`,
     detail: SPECIALISTS.map((s) => `  → ${s.label}`).join('\n'),
   });
 

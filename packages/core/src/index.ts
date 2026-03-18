@@ -89,7 +89,11 @@ export {
   ZERO_ACCESS_PATTERNS,
 } from './utils/path-protection.js';
 export { detectStacks } from './utils/stack-detect.js';
-export { calculateTokenBudget, getContextWindow } from './utils/token-budget.js';
+export {
+  calculateRateSchedule,
+  calculateTokenBudget,
+  getContextWindow,
+} from './utils/token-budget.js';
 
 // ─── Providers (for direct model access) ────────────────────────
 

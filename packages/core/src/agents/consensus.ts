@@ -24,6 +24,7 @@ import type {
 } from '../types.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { generateTextWithTimeout } from '../utils/llm-timeout.js';
+import { calculateRateSchedule } from '../utils/token-budget.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
@@ -203,8 +204,12 @@ export function calculateConsensus(votes: ConsensusVote[]): {
 export async function runConsensusReview(input: ConsensusReviewInput): Promise<ReviewResult> {
   const { diff, models, staticContext, memoryContext, stackHints, reviewLevel } = input;
   const emit = input.onProgress ?? (() => {});
-  const concurrency = input.concurrency ?? 1;
-  const delayMs = input.delayMs ?? 0;
+
+  // Auto-calculate scheduling from primary model's TPM
+  const primaryModel = models[0]?.model ?? 'gpt-4o-mini';
+  const rateSchedule = calculateRateSchedule(primaryModel);
+  const concurrency = input.concurrency ?? rateSchedule.concurrency;
+  const delayMs = input.delayMs ?? rateSchedule.delayMs;
 
   const startTime = Date.now();
 
@@ -213,7 +218,7 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
 
   emit({
     step: 'consensus-start',
-    message: `Launching ${models.length} model votes (concurrency: ${concurrency})`,
+    message: `Launching ${models.length} model votes (concurrency: ${concurrency}, delay: ${Math.round(delayMs / 1000)}s)`,
     detail: models.map((m) => `  → ${m.provider}/${m.model} (stance: ${m.stance})`).join('\n'),
   });
 
