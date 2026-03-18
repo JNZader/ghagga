@@ -1,11 +1,11 @@
 {
-  "indexedAt": "2026-03-18T22:07:55.717Z",
-  "commitSha": "f72db07eb144ee4c65e83b62c953f9912ac2df69",
+  "indexedAt": "2026-03-18T22:20:45.603Z",
+  "commitSha": "5ace9673f355ce2a9fe5273fe039fc9c6eec76cd",
   "nodeCount": 365,
   "languageCounts": {
     "typescript": 362,
     "javascript": 3
   },
-  "indexingTimeMs": 71,
+  "indexingTimeMs": 246,
   "errors": 0
 }
