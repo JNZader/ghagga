@@ -279,6 +279,10 @@ export function createInstallationsRouter(db: Database) {
         disabledTools: Array.isArray(body.disabledTools)
           ? (body.disabledTools as string[])
           : currentSettings.disabledTools,
+        enableBlastRadius:
+          typeof body.enableBlastRadius === 'boolean'
+            ? body.enableBlastRadius
+            : currentSettings.enableBlastRadius,
       };
 
       await upsertInstallationSettings(db, installationId, {
