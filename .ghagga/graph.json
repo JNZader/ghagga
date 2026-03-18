@@ -3637,7 +3637,7 @@
       "isTest": true
     },
     "apps/dashboard/src/pages/GlobalSettings.tsx": {
-      "hash": "d3225d2d17f86303b1c68429bad1b5bc27d1dacdec387dcf6a7bf2e70b70f8c7",
+      "hash": "d93a64b1637d378fd34af5cec1a2f06d4c434e3d3b6edd315df7f884c76d7535",
       "language": "typescript",
       "imports": [
         "react",
@@ -3756,7 +3756,7 @@
       "isTest": true
     },
     "apps/dashboard/src/pages/Settings.tsx": {
-      "hash": "4e0db1e3c049d212bafa8610df4836e13388a4424023f6f9f3e46ec63460761f",
+      "hash": "f76cdd837085a014a36551e32341bdc8f64da43de8ca40d34f8e286bbdc80f97",
       "language": "typescript",
       "imports": [
         "react",
