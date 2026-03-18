@@ -189,12 +189,14 @@ export async function findExistingComment(
   repo: string,
   prNumber: number,
   token: string,
-): Promise<number | null> {
+): Promise<{ latestId: number; staleIds: number[] } | null> {
   const MARKER = '<!-- ghagga-review -->';
   const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
   const MAX_PAGES = 5;
 
   return githubCircuitBreaker.execute(async () => {
+    const allMatchIds: number[] = [];
+
     for (let page = 1; page <= MAX_PAGES; page++) {
       const url = `${baseUrl}?per_page=100&page=${page}`;
       const response = await fetch(url, {
@@ -216,14 +218,44 @@ export async function findExistingComment(
 
       for (const comment of comments) {
         if (comment.body.includes(MARKER)) {
-          return comment.id;
+          allMatchIds.push(comment.id);
         }
       }
 
       if (comments.length < 100) break;
     }
 
-    return null;
+    if (allMatchIds.length === 0) return null;
+
+    // Latest = last in chronological order (GitHub returns oldest first)
+    const latestId = allMatchIds[allMatchIds.length - 1]!;
+    const staleIds = allMatchIds.slice(0, -1); // all except the last
+
+    return { latestId, staleIds };
+  });
+}
+
+/**
+ * Delete a comment from a pull request.
+ */
+export async function deleteComment(
+  owner: string,
+  repo: string,
+  commentId: number,
+  token: string,
+): Promise<void> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/comments/${commentId}`;
+
+  await githubCircuitBreaker.execute(async () => {
+    await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
   });
 }
 

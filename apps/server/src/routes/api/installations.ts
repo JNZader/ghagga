@@ -96,6 +96,7 @@ export function createInstallationsRouter(db: Database) {
             ignorePatterns: settings.ignorePatterns ?? [],
             enabledTools: settings.enabledTools ?? [],
             disabledTools: settings.disabledTools ?? [],
+            enableBlastRadius: settings.enableBlastRadius ?? false,
             registeredTools: getRegisteredToolsList(),
           },
         });
@@ -117,6 +118,7 @@ export function createInstallationsRouter(db: Database) {
           ignorePatterns: DEFAULT_REPO_SETTINGS.ignorePatterns,
           enabledTools: [],
           disabledTools: [],
+          enableBlastRadius: false,
           registeredTools: getRegisteredToolsList(),
         },
       });
