@@ -1,0 +1,5566 @@
+{
+  "version": 1,
+  "rootDir": ".",
+  "nodes": {
+    "packages/types/src/api.ts": {
+      "hash": "3ccb525272c83c4c8a61ce6e29ec2412e7f6f2291d0020ae2f268836dcd027e7",
+      "language": "typescript",
+      "imports": [
+        "./delegated-ci.js"
+      ],
+      "exports": [
+        "ReviewStatus",
+        "ReviewMode",
+        "LLMProvider",
+        "SaaSProvider",
+        "User",
+        "Review",
+        "Finding",
+        "ReviewsResponse",
+        "Stats",
+        "DayStats",
+        "Repository",
+        "ProviderChainView",
+        "ProviderChainUpdate",
+        "ValidationResponse",
+        "Installation",
+        "InstallationSettings",
+        "RegisteredTool",
+        "RepositorySettings",
+        "MemorySession",
+        "Observation",
+        "RunnerStatus",
+        "RunnerCreateResult",
+        "RunnerConfigureResult",
+        "RunnerError",
+        "DelegatedCiPolicyView",
+        "DelegatedCiRunView",
+        "DelegatedCiRunsResponse"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/types/src/delegated-ci.ts": {
+      "hash": "01a7b8d97bcfd098b9212f3e22bba5cc4d0d86e354c511eaf0ac3c1b9de5759c",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "DelegatedCiClassification",
+        "DelegatedCiRunState",
+        "DelegatedCiProfile",
+        "DelegatedCiJobPolicy",
+        "DelegatedCiPolicy",
+        "DiscoveredCiSource",
+        "DiscoveredCiRuntime",
+        "RecommendationConfidence",
+        "JobRecommendation",
+        "DiscoveredCiJob"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/types/src/index.ts": {
+      "hash": "948ffd0a2e25ca4c4d6297ffa185895064efd5d8263a68280175d859aaa3680a",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/drizzle.config.ts": {
+      "hash": "4ec21df6da0a4b3fd804f5d57478a81c2d3cae2f4447cc31a2a9e3a25efecf69",
+      "language": "typescript",
+      "imports": [
+        "drizzle-kit"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/vitest.config.ts": {
+      "hash": "47e809ce07995ea68195b5f069d789c9757fca3e27a9276dde5fce1fefc5e627",
+      "language": "typescript",
+      "imports": [
+        "vitest/config"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/src/client.test.ts": {
+      "hash": "97207eaef1bb35aa8b6a8964455b409269647b60b8f6b247353e582b8e099d61",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./client.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/db/src/client.ts": {
+      "hash": "b528e703da79817f7cab20a49c546ea6cf6b10fd761c46347fbabdcc64be95d2",
+      "language": "typescript",
+      "imports": [
+        "drizzle-orm/node-postgres",
+        "pg",
+        "./schema.js"
+      ],
+      "exports": [
+        "Database",
+        "createDatabase",
+        "createDatabaseFromEnv"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/src/crypto.test.ts": {
+      "hash": "b843315191926e425a30d628d05ae31387c26143b9645aab6742f2027f17e339",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "vitest",
+        "./crypto.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/db/src/crypto.ts": {
+      "hash": "99307daaa4d5b15ada28eca5ea416231305c1d075b8cea54ae3ed0cfc54ebf24",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "crypto"
+      ],
+      "exports": [
+        "encrypt",
+        "decrypt"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/src/index.ts": {
+      "hash": "cee4a832825d33aa13e7fe415117b2573c4c38a6ebdec9936f02157ac9521945",
+      "language": "typescript",
+      "imports": [
+        "drizzle-orm",
+        "./client.js",
+        "./crypto.js"
+      ],
+      "exports": [
+        "eq",
+        "sql",
+        "createDatabase",
+        "createDatabaseFromEnv",
+        "type Database",
+        "decrypt",
+        "encrypt"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/src/migrate.ts": {
+      "hash": "c7c2058c8e82bd6041edc3a4d69ab50d0ec7f48456073fa1f2ac059dcd0eda5a",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "node:url",
+        "drizzle-orm/node-postgres",
+        "drizzle-orm/node-postgres/migrator",
+        "pg"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/src/queries.test.ts": {
+      "hash": "7b0b6443b9e5fd060da42e7b56be3565dd54557c551fa6fe8354e612b6e0a15d",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./client.js",
+        "./schema.js",
+        "./queries.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/db/src/queries.ts": {
+      "hash": "c5b0946c25d40e61965768384400f9ffeedfad62b2b27d98e4f1e8c9a22c259c",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "drizzle-orm",
+        "./client.js",
+        "./schema.js"
+      ],
+      "exports": [
+        "EffectiveSettings"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/db/src/schema.test.ts": {
+      "hash": "100b9717fca63cd30d6f60df5922066a2b827ed077c8b4fe76df50a5269600cb",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./schema.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/db/src/schema.ts": {
+      "hash": "1b56a64b508d81c2429264645d335f5328e3b6652f149cf5393916bb4d0db2cb",
+      "language": "typescript",
+      "imports": [
+        "drizzle-orm/pg-core"
+      ],
+      "exports": [
+        "installations",
+        "RepoSettings",
+        "DEFAULT_REPO_SETTINGS",
+        "DbDelegatedCiClassification",
+        "DbDelegatedCiProfile",
+        "DbDelegatedCiJobPolicy",
+        "DbDelegatedCiPolicy",
+        "DbProviderChainEntry",
+        "installationSettings",
+        "repositories",
+        "reviews",
+        "memorySessions",
+        "memoryObservations",
+        "githubUserMappings",
+        "delegatedCiRuns"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/stryker.config.mjs": {
+      "hash": "6f41628a6edb00f21889c1f427d6b8012b0a1fbef64de04709e0932a8e66e89b",
+      "language": "javascript",
+      "imports": [
+        "@stryker-mutator/api/core"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/vitest.config.ts": {
+      "hash": "c46e5c17c4960ab13c05bca8b04c1f5a72c977569203a01c869e9a0cf5b6fe2c",
+      "language": "typescript",
+      "imports": [
+        "vitest/config"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/format.test.ts": {
+      "hash": "c27aa86c4f9c92f9acc42c1ea5f03b69abe6ca503b6a43b2e42a7142e13520b4",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./format.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/format.ts": {
+      "hash": "c34f6356d2afc92fabfe38e968c5089d31a384329989b4a173dec1b29f2ee929",
+      "language": "typescript",
+      "imports": [
+        "./tools/plugins/index.js",
+        "./tools/registry.js",
+        "./tools/runner.js",
+        "./types.js"
+      ],
+      "exports": [
+        "FileStats",
+        "FILE_CATEGORIES",
+        "STATUS_EMOJI",
+        "SEVERITY_EMOJI",
+        "REVIEW_COMMENT_MARKER",
+        "buildStatsBar",
+        "categorizeFiles",
+        "formatFileCategorySummary",
+        "FormatReviewCommentOptions",
+        "formatReviewComment"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/index.ts": {
+      "hash": "c900e268d7966b1aedd68d10164957e651bab43cc702ebeb74ffea673f529328",
+      "language": "typescript",
+      "imports": [
+        "./pipeline.js",
+        "./agents/diagnostic.js",
+        "./types.js",
+        "./utils/context-levels.js",
+        "./utils/diff.js",
+        "./utils/path-protection.js",
+        "./utils/stack-detect.js",
+        "./utils/token-budget.js",
+        "./providers/cli-bridge.js",
+        "./providers/fallback.js",
+        "./providers/index.js",
+        "./memory/context.js",
+        "./memory/engram.js",
+        "./memory/privacy.js",
+        "./memory/sqlite.js",
+        "./format.js",
+        "./tools/index.js",
+        "./sarif/index.js",
+        "./enhance/index.js",
+        "./graph/index.js",
+        "./health/index.js"
+      ],
+      "exports": [
+        "reviewPipeline",
+        "parseHypotheses",
+        "runDiagnosticReview",
+        "DEFAULT_MODELS",
+        "DEFAULT_SETTINGS",
+        "buildProgressiveContext",
+        "chooseContextLevel",
+        "collectAllFindings",
+        "collectToolNames",
+        "estimateTokens",
+        "formatMemoryContextL0",
+        "formatMemoryContextL1",
+        "formatStaticContextL0",
+        "formatStaticContextL1",
+        "filterDiffFiles",
+        "filterIgnoredFiles",
+        "parseDiffFiles",
+        "truncateDiff",
+        "applyPathProtection",
+        "REDACT_PATTERNS",
+        "REDACTED_CONTENT",
+        "ZERO_ACCESS_PATTERNS",
+        "detectStacks",
+        "calculateRateSchedule",
+        "calculateTokenBudget",
+        "getContextWindow",
+        "generateViaCLI",
+        "getAvailableCLIs",
+        "generateWithFallback",
+        "createModel",
+        "createProvider",
+        "formatMemoryContext",
+        "EngramMemoryStorage",
+        "stripPrivateData",
+        "SqliteMemoryStorage",
+        "type SqliteMemoryStorageOptions",
+        "buildStatsBar",
+        "categorizeFiles",
+        "FILE_CATEGORIES",
+        "formatFileCategorySummary",
+        "formatReviewComment",
+        "REVIEW_COMMENT_MARKER",
+        "SEVERITY_EMOJI",
+        "STATUS_EMOJI",
+        "allocateTimeBudget",
+        "createNodeExecutionContext",
+        "getEffectiveBudget",
+        "initializeDefaultTools",
+        "isToolRegistryEnabled",
+        "resetInitialization",
+        "resolveActivatedTools",
+        "runTools",
+        "ToolRegistry",
+        "toolRegistry",
+        "buildSarif",
+        "enhanceFindings",
+        "mergeEnhanceResult",
+        "buildGraph",
+        "buildGraphIncremental",
+        "buildReverseIndex",
+        "computeBlastRadius",
+        "DEFAULT_TRAVERSAL_DEPTH",
+        "detectLanguage",
+        "EXCLUDED_DIRS",
+        "GitHubApiGraphLoader",
+        "GRAPH_STALE_DAYS",
+        "GRAPH_VERSION",
+        "getExtractor",
+        "isGraphStale",
+        "isTestFile",
+        "LANGUAGE_EXTENSIONS",
+        "MAX_BLAST_RADIUS_FILES",
+        "MAX_GRAPH_SIZE_BYTES",
+        "NullGraphLoader",
+        "PreloadedGraphLoader",
+        "resolveImportPath",
+        "TEST_FILE_PATTERNS",
+        "validateGraph",
+        "validateMetadata",
+        "computeHealthScore",
+        "computeTrend",
+        "formatTopIssues",
+        "generateRecommendations",
+        "getScoreColor",
+        "loadHistory",
+        "SEVERITY_WEIGHTS",
+        "saveHistory"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/pipeline-precomputed.test.ts": {
+      "hash": "23b0a90f538a433b9e18d110972ae64cd82b3fa548e2de1da083b7c5ecee0b12",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./agents/simple.js",
+        "./pipeline.js",
+        "./tools/runner.js",
+        "./types.js",
+        "./memory/search.js"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/pipeline.test.ts": {
+      "hash": "dd4ce417fe436860edd7d13d9c662030f2a157d53f20111d6c4abce8d242d4a8",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./agents/consensus.js",
+        "./agents/simple.js",
+        "./agents/workflow.js",
+        "./memory/persist.js",
+        "./memory/search.js",
+        "./pipeline.js",
+        "./tools/runner.js",
+        "./types.js"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/pipeline.ts": {
+      "hash": "2db60ca9da2004d54a0c82351f44cc25f5e40a064f55b29e8336878fde65f305",
+      "language": "typescript",
+      "imports": [
+        "./agents/consensus.js",
+        "./agents/diagnostic.js",
+        "./agents/prompts.js",
+        "./agents/simple.js",
+        "./agents/workflow.js",
+        "./enhance/index.js",
+        "./enhance/prompt.js",
+        "./graph/blast-radius.js",
+        "./graph/schema.js",
+        "./memory/persist.js",
+        "./memory/search.js",
+        "./providers/cli-bridge.js",
+        "./tools/plugins/index.js",
+        "./tools/registry.js",
+        "./tools/runner.js",
+        "./types.js",
+        "./utils/context-levels.js",
+        "./utils/diff.js",
+        "./utils/stack-detect.js",
+        "./utils/token-budget.js",
+        "./enhance/types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/security.test.ts": {
+      "hash": "a20c3881a557eff77626865750ddf040a102a2e39b093c70707cfef29f9c3995",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "./memory/privacy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/types.test.ts": {
+      "hash": "6f43aae386e65b857cad720ff97b5e887d7264896eca3b1c11d46d7b440ee781",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/types.ts": {
+      "hash": "65c20ede655c104afe9dd868a678ca949c4fbefd23648b71166b97000be61dbd",
+      "language": "typescript",
+      "imports": [
+        "./graph/schema.js",
+        "./enhance/types.js"
+      ],
+      "exports": [
+        "ReviewMode",
+        "LLMProvider",
+        "SaaSProvider",
+        "ReviewLevel",
+        "ProviderChainEntry",
+        "ProgressCallback",
+        "ProgressEvent",
+        "ReviewInput",
+        "ReviewSettings",
+        "ReviewContext",
+        "HypothesisConfidence",
+        "Hypothesis",
+        "ReviewStatus",
+        "FindingSeverity",
+        "FindingSource",
+        "ReviewResult",
+        "ReviewFinding",
+        "ReviewMetadata",
+        "ToolStatus",
+        "ToolResult",
+        "StaticAnalysisResult",
+        "WorkflowSpecialist",
+        "ConsensusStance",
+        "ConsensusVote",
+        "ObservationType",
+        "MemoryObservation",
+        "MemoryStorage",
+        "MemoryObservationRow",
+        "MemoryObservationDetail",
+        "MemoryStats",
+        "ListObservationsOptions",
+        "DEFAULT_SETTINGS",
+        "DEFAULT_MODELS"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/utils/concurrency.test.ts": {
+      "hash": "955206e8406932ea71d59e1db885b228ad61ddfb7e0113a5a8c1550a68b3307f",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./concurrency.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/utils/concurrency.ts": {
+      "hash": "bce5612db6a50f202a317a8633beaf5157f58408e12067329ff5e970227350c0",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "ConcurrencyOptions"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/utils/context-levels.test.ts": {
+      "hash": "2c534b00f997541b03fc4827670a6007dcdba204e02dc452253c12712c72e08d",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./context-levels.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/utils/context-levels.ts": {
+      "hash": "011174d38c4b3138c40d9f111dffb7bfaaae5010b528d58a06611ed63e051c21",
+      "language": "typescript",
+      "imports": [
+        "../types.js"
+      ],
+      "exports": [
+        "ContextLevel",
+        "estimateTokens",
+        "chooseContextLevel",
+        "collectAllFindings",
+        "collectToolNames",
+        "formatStaticContextL0",
+        "formatStaticContextL1",
+        "formatMemoryContextL0",
+        "formatMemoryContextL1",
+        "ProgressiveContextInput",
+        "ProgressiveContextOutput",
+        "buildProgressiveContext"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/utils/diff.test.ts": {
+      "hash": "f6da29a7d91693c0521c2e80fda214d0c61f8388e502a3d9f5be81b3b2aab3cf",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./diff.js",
+        "./foo",
+        "./bar"
+      ],
+      "exports": [
+        "main"
+      ],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/utils/diff.ts": {
+      "hash": "5ac50e7e82b1000fb617deb55fb284c436e04bdb457fbbbb482ce696b287b1ee",
+      "language": "typescript",
+      "imports": [
+        "minimatch",
+        "./path-protection.js"
+      ],
+      "exports": [
+        "DiffFile",
+        "parseDiffFiles",
+        "filterIgnoredFiles",
+        "FilterDiffResult",
+        "filterDiffFiles",
+        "truncateDiff"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/utils/llm-timeout.test.ts": {
+      "hash": "7d556e5d8ea306e46fc7f6e9d10d3496b934b9db8887da740ad9254a4539eb21",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "ai",
+        "./llm-timeout.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/utils/llm-timeout.ts": {
+      "hash": "a388fd74fffdce86a04edb770e3b3fd5379f2304d5ba62b310ba053b5404cbcf",
+      "language": "typescript",
+      "imports": [
+        "ai"
+      ],
+      "exports": [
+        "LLM_TIMEOUT_MS"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/utils/path-protection.test.ts": {
+      "hash": "a2e6b179885ce899b580f86141490265612ddedb227e7a258c114088b63be4d5",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./diff.js",
+        "./path-protection.js"
+      ],
+      "exports": [
+        "main",
+        "x"
+      ],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/utils/path-protection.ts": {
+      "hash": "f765f888ebd585976c1ccb662268a9cc763b910154feb6529299ef0e2b1a5f33",
+      "language": "typescript",
+      "imports": [
+        "minimatch",
+        "./diff.js"
+      ],
+      "exports": [
+        "REDACTED_CONTENT",
+        "ZERO_ACCESS_PATTERNS",
+        "REDACT_PATTERNS",
+        "PathProtectionResult",
+        "applyPathProtection"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/utils/stack-detect.test.ts": {
+      "hash": "c974a5f8126e52d9e020c6171a1416d00f1aa84c37f621dd0a5e07ee470d6042",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./stack-detect.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/utils/stack-detect.ts": {
+      "hash": "39cd12d9f2b655c3cca9f17a72d3e185fc93bbdaa59d8ee8899b698a1e6be663",
+      "language": "typescript",
+      "imports": [
+        "node:path"
+      ],
+      "exports": [
+        "detectStacks"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/utils/token-budget.test.ts": {
+      "hash": "6d277967c08b7a556eb1dac0ff5a95aa8353ce6cf8e18e662a46a845f763c041",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./token-budget.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/utils/token-budget.ts": {
+      "hash": "dae19455b74a172519ce138c92ea5514208c37d20889792c2bc6ae5cdbdd080a",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "getContextWindow",
+        "calculateTokenBudget",
+        "calculateRateSchedule"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/budget.test.ts": {
+      "hash": "46e87493ff5f43e19ee20a3c582fc525432e96107f4c31fa5b3ed95506c71a87",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./budget.js",
+        "./resolve.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/budget.ts": {
+      "hash": "75ddb94d13135e8a85592a67579ef1d26b8244632f65dfd461aaa70b62ce0d26",
+      "language": "typescript",
+      "imports": [
+        "./resolve.js",
+        "./types.js"
+      ],
+      "exports": [
+        "allocateTimeBudget",
+        "getEffectiveBudget"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/cpd.test.ts": {
+      "hash": "3a7867269a8d785c113f6a2c4903c472d9bf4e5ddf1fd2879e225cb55b35cfd1",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "node:child_process",
+        "./cpd.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/cpd.ts": {
+      "hash": "688fd1f93674a714722c64a8b3421862c007bc77e8acef956afe5a5b71ec7d48",
+      "language": "typescript",
+      "imports": [
+        "node:child_process",
+        "node:util",
+        "../types.js"
+      ],
+      "exports": [
+        "parseCpdXml"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/execution.test.ts": {
+      "hash": "92390557c2c8b0565761e2565df9da7552351a50cb4e29dafd5fed91ecb4aa6c",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./execution.js",
+        "node:child_process"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/execution.ts": {
+      "hash": "7e581debec07ad03246e90f49c2c7ab4cf9e8b6ef40fed38493bd7f12e28af35",
+      "language": "typescript",
+      "imports": [
+        "node:child_process",
+        "./types.js"
+      ],
+      "exports": [
+        "createNodeExecutionContext"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/index.ts": {
+      "hash": "c9e11d0aa0305825a706f2acb99294d65bfb2be07693b3adb67a7e0e28244161",
+      "language": "typescript",
+      "imports": [
+        "./registry.js",
+        "./resolve.js",
+        "./budget.js",
+        "./orchestrator.js",
+        "./execution.js",
+        "./plugins/index.js",
+        "./runner.js"
+      ],
+      "exports": [
+        "ToolRegistry",
+        "toolRegistry",
+        "resolveActivatedTools",
+        "allocateTimeBudget",
+        "getEffectiveBudget",
+        "runTools",
+        "createNodeExecutionContext",
+        "initializeDefaultTools",
+        "resetInitialization",
+        "isToolRegistryEnabled"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/orchestrator.test.ts": {
+      "hash": "3776e18844e94d5b6b99769ad791dda00b40c52da3e1b9f9f4de53b417374019",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./orchestrator.js",
+        "./resolve.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/orchestrator.ts": {
+      "hash": "5ea95adf36d6ca2d11f6647f9d2d6f43567dacfcf70b9832a6a396328f4e0f5c",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./budget.js",
+        "./resolve.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/parsers.test.ts": {
+      "hash": "3a01557bc15e67f81c004573514ea85968703593752b38da4ebc10f10230c798",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./cpd.js",
+        "./semgrep.js",
+        "./trivy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/registry.test.ts": {
+      "hash": "3723393ef27b84c11b39a46db9d8fe6873e9ab17d5a92edf167a0d79102856eb",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./registry.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/registry.ts": {
+      "hash": "79feb54e7c26bb0646891b5756f08bbca09cd2638350f04bc2aaaf4f4b47dc28",
+      "language": "typescript",
+      "imports": [
+        "./types.js"
+      ],
+      "exports": [
+        "ToolRegistry",
+        "toolRegistry"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/resolve.test.ts": {
+      "hash": "ab68697ac6fd39c5728debec6a4533a602107fa3335d5c4807968725424e560e",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./registry.js",
+        "./resolve.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/resolve.ts": {
+      "hash": "ceea5fb927cec8a5a7158ccb7ec463f4b04f8cf4c261acac8dbbfa1d30e60fe1",
+      "language": "typescript",
+      "imports": [
+        "./registry.js",
+        "./types.js"
+      ],
+      "exports": [
+        "ToolActivationInput",
+        "ActivatedTool",
+        "resolveActivatedTools"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/runner.test.ts": {
+      "hash": "040206ebed3ab6bb066b8e5c3299cba55fb607178a079ee590e6e2de3061f4de",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./runner.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/runner.ts": {
+      "hash": "4ec1bf22e476a018a97a5b85c9617b83f96ed6c2c3596b7b2e3bbd1490dbecf5",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./execution.js",
+        "./orchestrator.js",
+        "./plugins/index.js",
+        "./registry.js",
+        "./resolve.js"
+      ],
+      "exports": [
+        "isToolRegistryEnabled",
+        "formatStaticAnalysisContext"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/semgrep.test.ts": {
+      "hash": "b777307cd44a530b9f78aad820f0b6d1a0a22b834151c1821d66238cacf71f60",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "node:child_process",
+        "node:fs/promises",
+        "./semgrep.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/semgrep.ts": {
+      "hash": "6534de6a441a90659df8663bf32ae4e97c07189a159109f55a9295fea62f7a48",
+      "language": "typescript",
+      "imports": [
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url",
+        "node:util",
+        "../types.js"
+      ],
+      "exports": [
+        "mapSeverity"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/trivy.test.ts": {
+      "hash": "9cad64f475ba115a084bd6ca165469931f2b796215725dfd0e437960a1a65013",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "node:child_process",
+        "./trivy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/trivy.ts": {
+      "hash": "a212aac3e8f3e5d40af333ff8efdb9accde23e3d5f1f4147b8fd178f1ebe41bf",
+      "language": "typescript",
+      "imports": [
+        "node:child_process",
+        "node:util",
+        "../types.js"
+      ],
+      "exports": [
+        "mapSeverity"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/types.ts": {
+      "hash": "109a3b93754d51afba0ffd6b3269c8256a086ed8ca9a9c2527aa23a61d6c35cd",
+      "language": "typescript",
+      "imports": [
+        "../types.js"
+      ],
+      "exports": [
+        "ToolName",
+        "ToolCategory",
+        "ToolTier",
+        "RawToolOutput",
+        "ExecOptions",
+        "ExecutionContext",
+        "ToolDefinition",
+        "TimeBudget"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/bandit.ts": {
+      "hash": "e35a951deb6a7a01a5ddfb31e47856ca492048feb54b39c2c4b81bd907452178",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapBanditSeverity",
+        "parseBanditOutput",
+        "banditPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/biome.ts": {
+      "hash": "f1647b4315a455716ca354c9f9ac2c139b2a9db3ee455cda0d9166269f5bb531",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapBiomeSeverity",
+        "parseBiomeOutput",
+        "biomePlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/clippy.ts": {
+      "hash": "0222d3940e0a78c41e86e3706cd74489d1bf5ab5620ac51fda403d6465971faf",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapClippySeverity",
+        "parseClippyOutput",
+        "clippyPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/cpd.ts": {
+      "hash": "af67b4308aa5412ebce784499eb9d2835e0fb453df7585b0d6d51e05ca8ff152",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "parseCpdOutput",
+        "cpdPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/gitleaks.ts": {
+      "hash": "ca7c22e9b06a5a0926054285f42b4489546526f88168a6b3ffe606ff69581500",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "parseGitleaksOutput",
+        "gitleaksPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/golangci-lint.ts": {
+      "hash": "f448a325f32569fa992722d82a83c19b8357191c54dbb562a2629f9e9951f001",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapGolangciLintFinding",
+        "parseGolangciLintOutput",
+        "golangciLintPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/hadolint.ts": {
+      "hash": "56822d02d3a6dd4763810bcd247a7ca5794e9da3c64fe8dba5e423cff3be84a0",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapHadolintSeverity",
+        "parseHadolintOutput",
+        "hadolintPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/index.ts": {
+      "hash": "73a711a7dce578bc16b89797e2275a3bc77cde841004800518178a3551beb634",
+      "language": "typescript",
+      "imports": [
+        "../registry.js",
+        "./bandit.js",
+        "./biome.js",
+        "./clippy.js",
+        "./cpd.js",
+        "./gitleaks.js",
+        "./golangci-lint.js",
+        "./hadolint.js",
+        "./lizard.js",
+        "./markdownlint.js",
+        "./pmd.js",
+        "./psalm.js",
+        "./ruff.js",
+        "./semgrep.js",
+        "./shellcheck.js",
+        "./trivy.js",
+        "./zizmor.js"
+      ],
+      "exports": [
+        "initializeDefaultTools",
+        "resetInitialization",
+        "banditPlugin",
+        "biomePlugin",
+        "clippyPlugin",
+        "cpdPlugin",
+        "gitleaksPlugin",
+        "golangciLintPlugin",
+        "hadolintPlugin",
+        "lizardPlugin",
+        "markdownlintPlugin",
+        "pmdPlugin",
+        "psalmPlugin",
+        "ruffPlugin",
+        "semgrepPlugin",
+        "shellcheckPlugin",
+        "trivyPlugin",
+        "zizmorPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/lizard.ts": {
+      "hash": "109daa487ea384b0e82918cdfb199147fe1ccdd4ad814ed314e8db1165f5cdba",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapComplexitySeverity",
+        "parseLizardOutput",
+        "lizardPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/markdownlint.ts": {
+      "hash": "3a000908f77b3f269de00ec834e150b670f31e4c9458abcc550229763437f40f",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "parseMarkdownlintOutput",
+        "markdownlintPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/pmd.ts": {
+      "hash": "9e5a16bf54403784e26118d0ca7c8345e957aa5b99c45dac8395ce99dd797b81",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapPmdPriority",
+        "parsePmdOutput",
+        "pmdPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/psalm.ts": {
+      "hash": "ac913b4c4e6a3aa59bbad2d4d4e20b7b54c16972925e9e7f0a8ed8aabdf167a8",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapPsalmSeverity",
+        "parsePsalmOutput",
+        "psalmPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/ruff.ts": {
+      "hash": "18ea22aa4cf14f287f446ab88ae924f819aadc2b21e8e207e76f814fb81ac3f0",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapRuffSeverity",
+        "parseRuffOutput",
+        "ruffPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/semgrep.ts": {
+      "hash": "9b93a782c686a4921b01cf6e69bfec247557ada5295f378d9fd30230b96bedf6",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapSemgrepSeverity",
+        "parseSemgrepOutput",
+        "semgrepPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/shellcheck.ts": {
+      "hash": "8c4501e585636aedb558d0878468824b7c85c1fd62cef5067cb8c85878ff2245",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapShellCheckSeverity",
+        "parseShellCheckOutput",
+        "shellcheckPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/trivy.ts": {
+      "hash": "2762831a14b247d1b4d2fbfde8334e9e0b05113fc784d83a3be84e309a3d2f92",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapTrivySeverity",
+        "parseTrivyOutput",
+        "trivyPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/zizmor.ts": {
+      "hash": "623c2581fd0b203b8b8b8c541dd1e43c1f03d57f025d0a9cd1d3556775ada046",
+      "language": "typescript",
+      "imports": [
+        "../../types.js",
+        "../types.js"
+      ],
+      "exports": [
+        "mapZizmorSeverity",
+        "parseZizmorOutput",
+        "zizmorPlugin"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/tools/plugins/__tests__/bandit.test.ts": {
+      "hash": "aec853999f0ecd300a72c0fe5070dcf66464f630fbf147a4608c3fa3e583897b",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../bandit.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/biome.test.ts": {
+      "hash": "49a72f07820a131e5ac2235161df7f7d307a6948f11ebe5d0a19236e9e16497e",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../biome.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/clippy.test.ts": {
+      "hash": "5a0d6732775008371c7c97b484abbf89cbd26dcd7ca32f7849be36497640b8d4",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../clippy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/cpd.test.ts": {
+      "hash": "867a19999ba77478d5491091e936f352f19e372395cbfbbdc66ba59619ebf13b",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../cpd.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/feature-flag.test.ts": {
+      "hash": "75310319c598760ec706c4487ec0a23ba88cc4cce7f98b0b390833b0f7654707",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../../runner.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/gitleaks.test.ts": {
+      "hash": "328dba6ef211921886fbb236fac9ef4a94b8405ec7c40b5e829d508c24479fe7",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../gitleaks.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/golangci-lint.test.ts": {
+      "hash": "c9fb8f145cd11b1f5fd08acd3a558da3f77f5642262676a30b05b1cea5f51f5b",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../golangci-lint.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/hadolint.test.ts": {
+      "hash": "21fbf8cad56993fb3cabd6b43587cea02d77b501f324b996419a90b32db64717",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../hadolint.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/lizard.test.ts": {
+      "hash": "3e5b4458e4760e932f3d580a4166a3ef17c66e62ea118b23af6d94a732ecc400",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../lizard.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/markdownlint.test.ts": {
+      "hash": "685c26471f7ab5746b40262af09c87f490202368373a61d112bba88dc98057f4",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../markdownlint.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/pmd.test.ts": {
+      "hash": "e71b23e39b44fd6f793ab3defd419fb96ea6905c0b447a4145798498ed2e1800",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../pmd.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/psalm.test.ts": {
+      "hash": "a8a212c90a77bc0288a68d1ab34671deba6ebe8f0874796915627238607953ff",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../psalm.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/registry.test.ts": {
+      "hash": "3537018270b5b92ec80b192d325c33c243e38bdaba3fccb824c8299d335a6f65",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../../registry.js",
+        "../cpd.js",
+        "../index.js",
+        "../semgrep.js",
+        "../trivy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/ruff.test.ts": {
+      "hash": "40157b51ee0c3427f264dfd903967f1839ccb4a644a295f84360ac9db94635ea",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../ruff.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/semgrep.test.ts": {
+      "hash": "7dfaa02f4250096c319249f0677bae28ea1360d9d558beb82298960a087b0308",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../semgrep.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/shellcheck.test.ts": {
+      "hash": "4a09ba55d7fd58e7f3fa07db4b4554eaebf4e772e892e2833fcbe14ee65707f3",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../shellcheck.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/trivy.test.ts": {
+      "hash": "e9c4189bb7b5af9a72fe9bd1a3d3c1ba17f8fbba0b46c2c2fbde536e7d8bbca9",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../trivy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/tools/plugins/__tests__/zizmor.test.ts": {
+      "hash": "36027b959e7a864c2411b1ef5d5ebaf613e4a1e82242be7a3a6f68eb29f33388",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "vitest",
+        "../../types.js",
+        "../zizmor.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/sarif/builder.test.ts": {
+      "hash": "fe6befbb071cdf0abbf61ba915ad92ecd81608a0c5a4f858328b695b675a9f95",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./builder.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/sarif/builder.ts": {
+      "hash": "1f6f67e25ac6323add09e315daeaf06062dbcfedd7af17bced69ae94dab423c4",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./types.js"
+      ],
+      "exports": [
+        "buildSarif"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/sarif/index.ts": {
+      "hash": "2503dbb40f2c1fb74f4f38e2035127346b43a54fb28b730f5bad62b2800b720e",
+      "language": "typescript",
+      "imports": [
+        "./builder.js"
+      ],
+      "exports": [
+        "buildSarif"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/sarif/types.ts": {
+      "hash": "6fccd614cc42c369a372a20d1166d065116290293492aa78855dd830e16f8f65",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "SarifDocument",
+        "SarifRun",
+        "SarifDriver",
+        "SarifRule",
+        "SarifLevel",
+        "SarifResult",
+        "SarifLocation"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/providers/cli-bridge.test.ts": {
+      "hash": "69af06231c49f74bb4823a44f95dc8b00532057ed08b58def61b50c09ad80609",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "node:child_process",
+        "./cli-bridge.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/providers/cli-bridge.ts": {
+      "hash": "dbdda4b242981605c1481d41aab1820dea2b2a28a2a58fce12f665b8ead81724",
+      "language": "typescript",
+      "imports": [
+        "node:child_process"
+      ],
+      "exports": [
+        "getAvailableCLIs",
+        "generateViaCLI",
+        "_getAdapters"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/providers/fallback.test.ts": {
+      "hash": "3f80cc6de2f4ac549693d86260f0893d1da57df5ab0053f14361b559951de140",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./fallback.js",
+        "ai"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/providers/fallback.ts": {
+      "hash": "7ca8d151e3a5ade5dd4ee7d23659c938079bcaed78ada6235c45d578920225bf",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "../utils/llm-timeout.js",
+        "./index.js"
+      ],
+      "exports": [
+        "FallbackProvider",
+        "FallbackOptions",
+        "FallbackResult",
+        "isRetryableError"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/providers/index.test.ts": {
+      "hash": "e3606f4ee1a28142f59e4e115905cee87ba91468dd6e48f45ccc06a1b5f240ce",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./index.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/providers/index.ts": {
+      "hash": "9a1214cfa69d4445eb9c111b95d56922fe4ddbc58ac69e709706565f08127f70",
+      "language": "typescript",
+      "imports": [
+        "@ai-sdk/anthropic",
+        "@ai-sdk/google",
+        "@ai-sdk/openai",
+        "@ai-sdk/openai-compatible",
+        "ai",
+        "../types.js"
+      ],
+      "exports": [
+        "createProvider",
+        "createModel"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/context.test.ts": {
+      "hash": "2bfec5fdee23b6dc285de86c0d9241e6cb97902ded2d4ffc569c84b44856cf03",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./context.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/context.ts": {
+      "hash": "359956b4c9f7f2bebc4c59f6df61bd5f7248bda6007430c7d88931bdcf04f51c",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "ObservationForContext",
+        "formatMemoryContext"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/engram-client.test.ts": {
+      "hash": "01cdfe6d092dba73302ef8ddf99099e6ad181006dcfc95194438d424b074aa26",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./engram-client.js",
+        "./engram-types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/engram-client.ts": {
+      "hash": "cfb9820baaf7e8405077e3ebd3120b1aadf03ebfae2baf4aca57c9b7d6e2e2e1",
+      "language": "typescript",
+      "imports": [
+        "./engram-types.js"
+      ],
+      "exports": [
+        "EngramClient"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/engram-mapping.test.ts": {
+      "hash": "424f5147138d20acb6e3a87e2924bfdbccfe9b6206acce7723f5992008a695fd",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./engram-mapping.js",
+        "./engram-types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/engram-mapping.ts": {
+      "hash": "c9e586a37a54c712559f6ebe4c1abad529522907eee3c134ed8a7bc50b30c6a2",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./engram-types.js"
+      ],
+      "exports": [
+        "EngramSavePayload",
+        "toEngramContent",
+        "fromEngramContent",
+        "toMemoryObservationRow",
+        "toMemoryObservationDetail",
+        "toEngramSaveData"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/engram-types.ts": {
+      "hash": "70f8ebc46337a83739117cfa3719aa9246e390a8ff77a5d78ddb415a30814802",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "EngramConfig",
+        "ENGRAM_DEFAULTS",
+        "EngramObservation",
+        "EngramSession",
+        "EngramStats",
+        "EngramSearchResult"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/engram.test.ts": {
+      "hash": "71f9d55bbbfbf8e6a84b97da852125265e319b4d5428cd8a633dfaecfd99ae09",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./engram-types.js",
+        "./engram.js",
+        "./engram-client.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/engram.ts": {
+      "hash": "d36206f33f208c93edc947b68b88fbd11646fd82e6b3017060f64d04e3998602",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./engram-client.js",
+        "./engram-mapping.js",
+        "./engram-types.js"
+      ],
+      "exports": [
+        "EngramMemoryStorage"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/persist.test.ts": {
+      "hash": "7c0ddcaabe6505d63f50b539b91e66ba66c4494b1217a39e6afd3d9ae1064c42",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./persist.js",
+        "./privacy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/persist.ts": {
+      "hash": "f1fd308d4b3385d4e302f1306290dfb8f498073fb7abd09a06912fb91cbc1f09",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./privacy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/privacy.test.ts": {
+      "hash": "55523e18ef0faf315e273f2bafff32cb2621dd0ca06aa5c61f95b6ee2198551a",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./privacy.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/privacy.ts": {
+      "hash": "6a4b13cafea6cd64edc3103c38948e891e1c7be9dd028f19eabb40b359572c73",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "stripPrivateData"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/search.test.ts": {
+      "hash": "7a7c03f68ac8767af5e5f68481f281435985a750fa61f86f8a251fef3da71c34",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./context.js",
+        "./search.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/search.ts": {
+      "hash": "81912b19539a9e2bb7fe26ff5a96c2d80df2a7080d1916ea89c43ad29f63d78c",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./context.js"
+      ],
+      "exports": [
+        "MAX_SEARCH_TERMS",
+        "DEFAULT_IGNORED_SEGMENTS",
+        "buildSearchQuery"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/memory/sqlite.test.ts": {
+      "hash": "098caf6bb0494f8d2863c5723971a1a397d5881e7045a984d53c6347466fa0b1",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:os",
+        "node:path",
+        "vitest",
+        "./sqlite.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/memory/sqlite.ts": {
+      "hash": "1703b644ee265235c0f8e24e4dd88e2e60e56af83b344ec7eb61e557e118f715",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "fts5-sql-bundle",
+        "../types.js"
+      ],
+      "exports": [
+        "SqliteMemoryStorageOptions",
+        "SqliteMemoryStorage"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/health/index.ts": {
+      "hash": "4a5f0516e0e76fc9ca9aba331a63c87a5bd5c89475980ef9f908f5ce86a250aa",
+      "language": "typescript",
+      "imports": [
+        "./recommendations.js",
+        "./score.js",
+        "./trends.js"
+      ],
+      "exports": [
+        "generateRecommendations",
+        "type HealthRecommendation",
+        "computeHealthScore",
+        "formatTopIssues",
+        "getScoreColor",
+        "type HealthScore",
+        "SEVERITY_WEIGHTS",
+        "computeTrend",
+        "type HealthHistoryEntry",
+        "type HealthTrend",
+        "loadHistory",
+        "saveHistory"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/health/recommendations.ts": {
+      "hash": "5e43ad0429b585a3f4d30262c245ded788d05318cc3337d2ea9963a98be897e0",
+      "language": "typescript",
+      "imports": [
+        "../types.js"
+      ],
+      "exports": [
+        "HealthRecommendation",
+        "generateRecommendations"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/health/score.ts": {
+      "hash": "758103eeb62a3c3d23e1b8f8e907712df0f15637632edde7c58c79b3a925a8a8",
+      "language": "typescript",
+      "imports": [
+        "../types.js"
+      ],
+      "exports": [
+        "SEVERITY_WEIGHTS",
+        "HealthScore",
+        "computeHealthScore",
+        "getScoreColor",
+        "formatTopIssues"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/health/trends.ts": {
+      "hash": "fb36c479fa26364a34d567b60e1ebc2dcf1b2303e06b4df71434c1a6a31c57bc",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [
+        "HealthHistoryEntry",
+        "HealthTrend",
+        "loadHistory",
+        "saveHistory",
+        "computeTrend"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/health/__tests__/recommendations.test.ts": {
+      "hash": "e2dffef67819f7669ca4f33fc4c25158375159de20fa8732f0e9acc16989f6b4",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../../types.js",
+        "../recommendations.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/health/__tests__/score.test.ts": {
+      "hash": "f9f0b45f4e2dc0f0ae95c0067e1c5172a0ea5b67202c3e5afce501aec4c15fe7",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../../types.js",
+        "../score.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/health/__tests__/trends.test.ts": {
+      "hash": "5663fb203389939e814373f8db4a5886aec059edf53441fe363fc2d2abaa38e6",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:os",
+        "node:path",
+        "vitest",
+        "../trends.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/graph/blast-radius.test.ts": {
+      "hash": "586e02b308ccf3ae38ba9570906703262944dd544c9b2bc4f3a7fef513b76d48",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./blast-radius.js",
+        "./schema.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/graph/blast-radius.ts": {
+      "hash": "2d39e692b554556dba97b893e8cddb603f516845f756b3063edbda10e8207c8e",
+      "language": "typescript",
+      "imports": [
+        "./schema.js"
+      ],
+      "exports": [
+        "BlastRadiusOptions",
+        "BlastRadiusResult",
+        "buildReverseIndex",
+        "computeBlastRadius"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/builder.test.ts": {
+      "hash": "d75374132913ca0ef28d9712b436238415b00d348987a5b7877bdf1664db5d2f",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./builder.js",
+        "./schema.js",
+        "./b",
+        "./a",
+        "./handler",
+        "fmt"
+      ],
+      "exports": [
+        "x",
+        "a",
+        "b",
+        "helper",
+        "CONSTANT",
+        "Service",
+        "handler",
+        "c",
+        "d",
+        "default"
+      ],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/graph/builder.ts": {
+      "hash": "acff5b1770298ff273bbca88709b35c6a4d6a7fe12a23c1b95d8cf13c7b9f754",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "node:path",
+        "./extractors/index.js",
+        "./schema.js"
+      ],
+      "exports": [
+        "detectLanguage",
+        "isExcludedPath",
+        "resolveImportPath",
+        "buildGraph",
+        "buildGraphIncremental"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/index.ts": {
+      "hash": "b7a10f505c26f05367e2fdfdabc22e1a7266ccfe50cf42f68df7cdaf6879a8c0",
+      "language": "typescript",
+      "imports": [
+        "./schema.js",
+        "./blast-radius.js",
+        "./loader.js",
+        "./extractors/index.js",
+        "./builder.js"
+      ],
+      "exports": [
+        "DEFAULT_TRAVERSAL_DEPTH",
+        "EXCLUDED_DIRS",
+        "GRAPH_STALE_DAYS",
+        "GRAPH_VERSION",
+        "isGraphStale",
+        "isTestFile",
+        "LANGUAGE_EXTENSIONS",
+        "MAX_BLAST_RADIUS_FILES",
+        "MAX_GRAPH_SIZE_BYTES",
+        "TEST_FILE_PATTERNS",
+        "validateGraph",
+        "validateMetadata",
+        "buildReverseIndex",
+        "computeBlastRadius",
+        "GitHubApiGraphLoader",
+        "NullGraphLoader",
+        "PreloadedGraphLoader",
+        "getExtractor",
+        "buildGraph",
+        "buildGraphIncremental",
+        "detectLanguage",
+        "resolveImportPath"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/loader.test.ts": {
+      "hash": "17eef6047fcc9ba0ed71cabdac891d65bdc73416792a7e264e9964af863e2b6e",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./loader.js",
+        "./schema.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/graph/loader.ts": {
+      "hash": "c93e91bbb22073156b73eabeccd049acee7b98338b4d7a722de0cccccb3fca2e",
+      "language": "typescript",
+      "imports": [
+        "./schema.js"
+      ],
+      "exports": [
+        "GitHubApiGraphLoader",
+        "NullGraphLoader",
+        "PreloadedGraphLoader"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/schema.test.ts": {
+      "hash": "c3f75da715914d7610881d1c13640066351b3333d96b3bd990d4b332ff8edd3d",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./schema.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/graph/schema.ts": {
+      "hash": "f5d5b9e2c897c96e4d3690dbd61667e56705dae120e85db02308ad7db1f8c50f",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "SupportedLanguage",
+        "DependencyGraph",
+        "GraphNode",
+        "GraphMetadata",
+        "BlastRadiusMetadata",
+        "GraphLoader",
+        "GRAPH_VERSION",
+        "MAX_GRAPH_SIZE_BYTES",
+        "MAX_BLAST_RADIUS_FILES",
+        "DEFAULT_TRAVERSAL_DEPTH",
+        "GRAPH_STALE_DAYS",
+        "TEST_FILE_PATTERNS",
+        "EXCLUDED_DIRS",
+        "LANGUAGE_EXTENSIONS",
+        "isTestFile",
+        "validateGraph",
+        "validateMetadata",
+        "isGraphStale"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/extractors.test.ts": {
+      "hash": "1891331802cd050000ea46d9e8b43273dc54d50f0272e0dbb7f99b5208ebdc2e",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./go.js",
+        "./index.js",
+        "./java.js",
+        "./javascript.js",
+        "./python.js",
+        "./rust.js",
+        "./typescript.js",
+        "./utils",
+        "react",
+        "node:path",
+        "./polyfill",
+        "./schema",
+        "./module",
+        "./a",
+        "./b",
+        "./c",
+        "fs",
+        "fmt",
+        "express",
+        "path",
+        "./blast-radius"
+      ],
+      "exports": [
+        "computeBlastRadius",
+        "GitHubApiGraphLoader",
+        "GRAPH_VERSION",
+        "SupportedLanguage",
+        "DependencyGraph",
+        "createServer",
+        "buildReverseIndex",
+        "default"
+      ],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/graph/extractors/go.ts": {
+      "hash": "c3e413cf48ae1ab1c74efeb52f377d2122da3ef2489f23f824215c3ce3a54a59",
+      "language": "typescript",
+      "imports": [
+        "./types.js",
+        "pkg"
+      ],
+      "exports": [
+        "goExtractor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/index.ts": {
+      "hash": "75da97d1ce6bab2314a12a58801d811a9e92781fcd8e279df74820dc5f734b2b",
+      "language": "typescript",
+      "imports": [
+        "../schema.js",
+        "./go.js",
+        "./java.js",
+        "./javascript.js",
+        "./python.js",
+        "./rust.js",
+        "./types.js",
+        "./typescript.js"
+      ],
+      "exports": [
+        "getExtractor",
+        "goExtractor",
+        "javaExtractor",
+        "javascriptExtractor",
+        "pythonExtractor",
+        "rustExtractor",
+        "typescriptExtractor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/java.ts": {
+      "hash": "f54862ca02e1523fefc9659dbcd17f7373a86836b2993cf76ddc73fdabcbd924",
+      "language": "typescript",
+      "imports": [
+        "./types.js"
+      ],
+      "exports": [
+        "javaExtractor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/javascript.ts": {
+      "hash": "0fb41d3d12ce3d567cd870005dbca71d8fbb71fe2b8f4c63abadc6ece2ac5eac",
+      "language": "typescript",
+      "imports": [
+        "./types.js",
+        "module"
+      ],
+      "exports": [
+        "x",
+        "javascriptExtractor",
+        "for",
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/python.ts": {
+      "hash": "701eafcc88d55f8f0ff58ef40eb1f7a5da05da705393cea824ec9771c0d1875f",
+      "language": "typescript",
+      "imports": [
+        "./types.js"
+      ],
+      "exports": [
+        "pythonExtractor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/rust.ts": {
+      "hash": "2aca04d835b3572c789f6286c5161de621dd1fa920da6c34afd704d9bd74ae48",
+      "language": "typescript",
+      "imports": [
+        "./types.js"
+      ],
+      "exports": [
+        "rustExtractor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/types.ts": {
+      "hash": "8fab95faf7461515f8b6186408fa49ff26dc93b7afaaae55d82c15558ff266a4",
+      "language": "typescript",
+      "imports": [
+        "../schema.js"
+      ],
+      "exports": [
+        "ImportInfo",
+        "ExportInfo",
+        "Extractor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/graph/extractors/typescript.ts": {
+      "hash": "aa006f24fa3cf1abd0833debb9e13a783c8509aef11034b5bda99ea44a07df88",
+      "language": "typescript",
+      "imports": [
+        "./types.js",
+        "module"
+      ],
+      "exports": [
+        "x",
+        "typescriptExtractor",
+        "for",
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/enhance/enhance.test.ts": {
+      "hash": "42f46bfd756479867977a816a0f643c695a763ec01577fccdac99ca6cb752977",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "ai",
+        "../types.js",
+        "./enhance.js",
+        "./prompt.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/enhance/enhance.ts": {
+      "hash": "54c13e63299f6d7dacb262a0ab06e5a7321e98239e296b89776c162cf60a3278",
+      "language": "typescript",
+      "imports": [
+        "../providers/index.js",
+        "../types.js",
+        "../utils/llm-timeout.js",
+        "./prompt.js",
+        "./types.js"
+      ],
+      "exports": [
+        "EnhancedReviewFinding",
+        "mergeEnhanceResult"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/enhance/index.ts": {
+      "hash": "65f2bee52b0c73b546075998b9ad6c556ab4e6b674ffa4cab9c0a936de2faad0",
+      "language": "typescript",
+      "imports": [
+        "./enhance.js",
+        "./prompt.js"
+      ],
+      "exports": [
+        "enhanceFindings",
+        "mergeEnhanceResult",
+        "serializeFindings",
+        "truncateByTokenBudget"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/enhance/prompt.ts": {
+      "hash": "5da1ff5e3df04592ff102f1afc97fe7446b7efb5a6cb2c41229ee30b6c340c6e",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "./types.js"
+      ],
+      "exports": [
+        "ENHANCE_SYSTEM_PROMPT",
+        "buildEnhancePrompt",
+        "serializeFindings",
+        "truncateByTokenBudget"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/enhance/types.ts": {
+      "hash": "0012da2fa17243384ba4af662c0d5c05cf24e49e39460e0b433e5fc0f27d33e2",
+      "language": "typescript",
+      "imports": [
+        "../types.js"
+      ],
+      "exports": [
+        "EnhanceInput",
+        "EnhanceFindingSummary",
+        "EnhanceResult",
+        "FindingGroup",
+        "FilteredFinding",
+        "EnhanceMetadata"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/agents/consensus-review.test.ts": {
+      "hash": "87f35f1e8b1b476a77d058ac81e80ab260dd6b239fb36b45e354d0cb20366505",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "ai",
+        "../providers/index.js",
+        "./consensus.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/agents/consensus.test.ts": {
+      "hash": "5ac0b68a95e19e6d3be020081ac1b43e315ee08242bf7f58a0dcc59bb6b86b3f",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../types.js",
+        "./consensus.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/agents/consensus.ts": {
+      "hash": "a1349881a61928aaa465960df4d660d176a5b776453bff5d9098a9f3651f7280",
+      "language": "typescript",
+      "imports": [
+        "../providers/index.js",
+        "../types.js",
+        "../utils/concurrency.js",
+        "../utils/llm-timeout.js",
+        "../utils/token-budget.js",
+        "./prompts.js"
+      ],
+      "exports": [
+        "ConsensusModelConfig",
+        "ConsensusReviewInput",
+        "parseVote",
+        "calculateConsensus"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/agents/diagnostic.test.ts": {
+      "hash": "3492d708b6ae1c470b0139557159a75267e8767f25334f81cea686c90c0f722b",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./diagnostic.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/agents/diagnostic.ts": {
+      "hash": "8d03a2c8599d7552fde663b6381e5542b0703fb5da3b42461c955edcb36fe9bf",
+      "language": "typescript",
+      "imports": [
+        "../providers/index.js",
+        "../types.js",
+        "../utils/llm-timeout.js",
+        "./prompts.js",
+        "./simple.js"
+      ],
+      "exports": [
+        "DiagnosticReviewInput",
+        "parseHypotheses"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/agents/prompts.test.ts": {
+      "hash": "2455839d0cb7ad8b07de6fe62b1c6a12970f3dda9ed588de63bedbd412c388ff",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./prompts.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/agents/prompts.ts": {
+      "hash": "91407d0f8844f1107eac5fc61ac453ff329405d1e88a60a7439aa455cb181992",
+      "language": "typescript",
+      "imports": [
+        "../types.js"
+      ],
+      "exports": [
+        "SIMPLE_REVIEW_SYSTEM",
+        "WORKFLOW_SCOPE_SYSTEM",
+        "WORKFLOW_STANDARDS_SYSTEM",
+        "WORKFLOW_ERRORS_SYSTEM",
+        "WORKFLOW_SECURITY_SYSTEM",
+        "WORKFLOW_PERFORMANCE_SYSTEM",
+        "WORKFLOW_SYNTHESIS_SYSTEM",
+        "CONSENSUS_FOR_SYSTEM",
+        "CONSENSUS_AGAINST_SYSTEM",
+        "CONSENSUS_NEUTRAL_SYSTEM",
+        "DIAGNOSTIC_SYSTEM",
+        "COMPACT_CALIBRATION",
+        "REVIEW_CALIBRATION",
+        "buildReviewLevelInstruction",
+        "buildStaticAnalysisContext",
+        "buildMemoryContext",
+        "buildStackHints"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/agents/simple.test.ts": {
+      "hash": "bc317aa4f8b38b569d60862ab70c8216c529ba5420a7ea2c3395d03e1c6791bd",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./simple.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/agents/simple.ts": {
+      "hash": "412e9913d053fb7070a7e91720b0a55a031b0a38e3c48dc90a685c6d67d327e2",
+      "language": "typescript",
+      "imports": [
+        "../providers/index.js",
+        "../types.js",
+        "../utils/llm-timeout.js",
+        "./prompts.js"
+      ],
+      "exports": [
+        "SimpleReviewInput"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/agents/workflow.test.ts": {
+      "hash": "f8cbfb0b9e5b9e7e58f68cd4b97a2d5dd5a430626a8b52df2cf3d057a4aa2f02",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "ai",
+        "../providers/index.js",
+        "../types.js",
+        "./simple.js",
+        "./workflow.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/agents/workflow.ts": {
+      "hash": "2a8d1baa6dccb1d964a1b5741edf715434ca72f9380833d0bec38d82538607f1",
+      "language": "typescript",
+      "imports": [
+        "../providers/index.js",
+        "../types.js",
+        "../utils/concurrency.js",
+        "../utils/llm-timeout.js",
+        "../utils/token-budget.js",
+        "./prompts.js",
+        "./simple.js"
+      ],
+      "exports": [
+        "WorkflowReviewInput"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "packages/core/src/__integration__/pipeline.integration.test.ts": {
+      "hash": "560705a43c5681e83627d668cbf2cd5ed2e9e048e29abf6e07641e535e81db90",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../agents/simple.js",
+        "../memory/persist.js",
+        "../memory/search.js",
+        "../pipeline.js",
+        "../tools/runner.js",
+        "../types.js",
+        "../utils/crypto.js",
+        "../services/auth.js"
+      ],
+      "exports": [
+        "AuthService",
+        "default"
+      ],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/stryker.config.mjs": {
+      "hash": "5c500723e8987711e3ad7c27cd66d58fa304e540ebc9aa508b13d56ced26afde",
+      "language": "javascript",
+      "imports": [
+        "@stryker-mutator/api/core"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/vitest.config.ts": {
+      "hash": "830df095e6cec3f7c9ad419aa9d3fb36451c455743b7c14f5e59299a3ff59de2",
+      "language": "typescript",
+      "imports": [
+        "vitest/config"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/index.test.ts": {
+      "hash": "1a01f82b2a6fdd2569ede1c413952db0377f3ba01f771b8cceade89154df275a",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "vitest",
+        "./lib/circuit-breaker.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/index.ts": {
+      "hash": "8d222739671c525ab83a1fd90237a92f44d96610392736afcf6e9b317307e0bf",
+      "language": "typescript",
+      "imports": [
+        "dotenv/config",
+        "node:crypto",
+        "@hono/node-server",
+        "ghagga-core",
+        "ghagga-db",
+        "hono",
+        "hono/body-limit",
+        "hono/cors",
+        "hono/secure-headers",
+        "hono-rate-limiter",
+        "./lib/circuit-breaker.js",
+        "./lib/get-client-ip.js",
+        "./lib/logger.js",
+        "./lib/validate-env.js",
+        "./middleware/auth.js",
+        "./routes/api/index.js",
+        "./routes/oauth.js",
+        "./routes/runner-callback.js",
+        "./routes/webhook.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/workers/review.ts": {
+      "hash": "14fecf29d579bd23da8ee32c672c150e4fbe7573e01d5b8b16d4bd6d788a1d1d",
+      "language": "typescript",
+      "imports": [
+        "../lib/logger.js",
+        "../queues/delegated-ci.js",
+        "../queues/review.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api.test.ts": {
+      "hash": "579d3d162f3587fe267e09c08f4d015b94ef7c0be8feb183b53b3ce69f202edd",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "vitest",
+        "../github/runner.js",
+        "./api.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/routes/api.ts": {
+      "hash": "7f9a504bee55873afcff6d3f3e93e6601886fe28dd8c3aa83672461a665a9ab0",
+      "language": "typescript",
+      "imports": [
+        "./api/index.js"
+      ],
+      "exports": [
+        "buildProviderChainView",
+        "createApiRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/oauth.test.ts": {
+      "hash": "e27a82429507a86d7e598960280ad7e71bbbad840260022adeed920cc60be124",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "vitest",
+        "./oauth.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/routes/oauth.ts": {
+      "hash": "59d54a8438995dbc41b00e1028d929899ec6604164f2b1870c9cb577b3b24fbf",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "hono",
+        "../lib/logger.js"
+      ],
+      "exports": [
+        "generateState",
+        "validateState",
+        "createOAuthRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/runner-callback.test.ts": {
+      "hash": "c9df19c8c14de76424cb3c017e7a2af02afc21d8d1744dbd48ac03205fd2794d",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "vitest",
+        "./runner-callback.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/routes/runner-callback.ts": {
+      "hash": "8cee8e93f4fe7d7d6e6c75f67d2400463f3e0ce49d34dce21e6a1a99479eb325",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "hono",
+        "../github/runner.js",
+        "../lib/logger.js",
+        "ghagga-db"
+      ],
+      "exports": [
+        "createRunnerCallbackRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/webhook.test.ts": {
+      "hash": "964546b7b143f2b21a0e993d2e400a145e592164671e77e88cb8986f5147044a",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "vitest",
+        "./webhook.js",
+        "../github/client.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/routes/webhook.ts": {
+      "hash": "309ddc8a29e54851a156841372c8d7b5c519e5576584436c1dbae4633034bd45",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "ghagga-db",
+        "hono",
+        "../delegated-ci/policy.js",
+        "../delegated-ci/profiles.js",
+        "../github/client.js",
+        "../lib/logger.js",
+        "../queues/delegated-ci.js",
+        "../queues/review.js"
+      ],
+      "exports": [
+        "createWebhookRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/delegated-ci.ts": {
+      "hash": "082b1eb8cb3499a19e46a5005c20e624d634b79e6c11c3a19d876a380fd11098",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createDelegatedCiRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/discover-ci.ts": {
+      "hash": "4797e0ad6b70ec981af8219a2c91ba7b6895f3d9207fb3e43df69f3eb0b378d2",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono",
+        "../../delegated-ci/analyze-jobs.js",
+        "../../github/client.js",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createDiscoverCiRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/index.ts": {
+      "hash": "fa1b2110b00fbf7ce3ad4d960e864d1dcc0d564384109766ba157edc68d1ac68",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono",
+        "./delegated-ci.js",
+        "./discover-ci.js",
+        "./installations.js",
+        "./memory.js",
+        "./repositories.js",
+        "./reviews.js",
+        "./runner.js",
+        "./settings.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createApiRouter",
+        "buildProviderChainView"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/installations.ts": {
+      "hash": "94a0ed170f250f314bc004552c9af7de9330d56ca25886e562fc7e23bd2ff752",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "ghagga-db",
+        "hono",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createInstallationsRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/memory.ts": {
+      "hash": "4bb8e3ad6dddd60fe6bb93f93bebd2b625c43e27272cd079a1bd11f3a705ce7f",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono",
+        "zod",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createMemoryRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/repositories.ts": {
+      "hash": "1a5cc1a5b8dabf36fa92354a7ede24a68e7cd37e185f33f98e98a4c839497ce9",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createRepositoriesRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/reviews.ts": {
+      "hash": "a920ab16ca49caf61f9b7f004f38598f62e636ddb195c638912b1d1abb5c522e",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono",
+        "zod",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createReviewsRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/runner.ts": {
+      "hash": "58ff40167a7a7a1a46a628d4795697e7c4e220a5e7490cd5fd215bae2b972c4d",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono",
+        "../../github/runner.js",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createRunnerRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/settings.ts": {
+      "hash": "cbc1893369e63cf25e595ccf7e8e09c7ffe79f749177df56e05bb6d134ebbf71",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "ghagga-db",
+        "hono",
+        "zod",
+        "../../lib/provider-models.js",
+        "../../middleware/auth.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "createSettingsRouter"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/routes/api/utils.ts": {
+      "hash": "1da8d3b65208bcfe0fd99bef9159071dbdc1c4b048e019aac2c0f8388cedd5fc",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "ghagga-db",
+        "../../lib/logger.js"
+      ],
+      "exports": [
+        "logger",
+        "generateErrorId",
+        "maskApiKey",
+        "buildProviderChainView"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/queues/delegated-ci.ts": {
+      "hash": "2a3257d105575bbc1eea072c582f4bb2a1a842b7dc3cae64bb64fb9f5df6b9fa",
+      "language": "typescript",
+      "imports": [
+        "bullmq",
+        "ghagga-db",
+        "ioredis",
+        "../github/client.js",
+        "../github/runner.js",
+        "../lib/logger.js"
+      ],
+      "exports": [
+        "DelegatedCiJobData",
+        "delegatedCiQueue",
+        "createDelegatedCiWorker",
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/queues/review.test.ts": {
+      "hash": "285d82bb4bda06a9752f9212565c28caa2cfc387244d5e10751ff72840f54a7e",
+      "language": "typescript",
+      "imports": [
+        "bullmq",
+        "vitest",
+        "./review.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/queues/review.ts": {
+      "hash": "2f9538d2e31d12cf8a1f7d3c7dfec998301ebdde4aeeee55c3f9c2cb00590d76",
+      "language": "typescript",
+      "imports": [
+        "bullmq",
+        "ghagga-core",
+        "ghagga-db",
+        "ioredis",
+        "../github/client.js",
+        "../github/runner.js",
+        "../lib/logger.js",
+        "../memory/postgres.js"
+      ],
+      "exports": [
+        "ReviewJobData",
+        "reviewQueue",
+        "createReviewWorker",
+        "setupQueueEvents",
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/middleware/auth.test.ts": {
+      "hash": "fd15333bee8c04f435ad704c38dcb8179c3c1522a36a44ee74288c7697010dcd",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "vitest",
+        "./auth.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/middleware/auth.ts": {
+      "hash": "4adf162b2ae33093cf3f87f6dacc8c0b11e18453ab1b5618b17fda404c132f56",
+      "language": "typescript",
+      "imports": [
+        "ghagga-db",
+        "hono/factory",
+        "../lib/logger.js"
+      ],
+      "exports": [
+        "AuthUser",
+        "tokenCache",
+        "cleanupExpiredTokens",
+        "cleanupInterval",
+        "authMiddleware"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/middleware/body-limit.test.ts": {
+      "hash": "63cf9c198e400e743d7f05541be0212fbffc92d5f763e300fb5cdaf043f05921",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "hono/body-limit",
+        "vitest"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/middleware/cors.test.ts": {
+      "hash": "ac7a9fc85a183a4e8a8475af9ff9a11520cf09cacb0e0caed70118c6d96ecc9f",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "hono/cors",
+        "vitest"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/middleware/rate-limit.test.ts": {
+      "hash": "103bacda741330d715c8aba9ef37fb0c7b95cc5b3e15a67c4f911cd1ed8a28f0",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "hono-rate-limiter",
+        "vitest",
+        "../lib/get-client-ip.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/middleware/secure-headers.test.ts": {
+      "hash": "7bd4acff2d67521e773d7ce40c43d59bff1f4de406a6c07dda3b63f8554ee0ca",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "hono/secure-headers",
+        "vitest"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/memory/postgres.test.ts": {
+      "hash": "ad1770a7401b04782a6a5e8d5c3f5ca111eec92075c381c988680d8d7a023f8f",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./postgres.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/memory/postgres.ts": {
+      "hash": "812b1056027bcbd9607673bae12bf6df97dbbbdffccb81410d85a21f6d552513",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "ghagga-db"
+      ],
+      "exports": [
+        "PostgresMemoryStorage"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/lib/circuit-breaker.test.ts": {
+      "hash": "9569c3da2150177089ac428d9b83016c1a36f45ba65dc0280d6ba942868851a2",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./circuit-breaker.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/lib/circuit-breaker.ts": {
+      "hash": "fbe5b595d27d1ead7d351ccc567d6990e7d08667dc585166ba48cafb6844127e",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "SimpleCircuitBreaker",
+        "githubCircuitBreaker"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/lib/get-client-ip.ts": {
+      "hash": "c43ae1b96a7fe2bab0d4458c79f41cc5fd332efc64306c378f78a36f611c0d10",
+      "language": "typescript",
+      "imports": [
+        "hono"
+      ],
+      "exports": [
+        "getClientIp"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/lib/logger.test.ts": {
+      "hash": "a8d6af7906158159d11b8e958998b1a84560d25e5b18328137c054749c7e370b",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./logger.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/lib/logger.ts": {
+      "hash": "6b228da4623c4892e46120fe209e8303b97a1d51cfc00468abb20084f5bfc53f",
+      "language": "typescript",
+      "imports": [
+        "@/lib/logger.js",
+        "pino"
+      ],
+      "exports": [
+        "logger",
+        "createChildLogger"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/lib/provider-models.test.ts": {
+      "hash": "bc10e1cd9c7f284366b81b5682389780b07ac8c2f3f7b17444bc71f7227f3383",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./provider-models.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/lib/provider-models.ts": {
+      "hash": "fe346e337e80ff7002ac595c007d76f5deb4e86100f266d032da55185eea5405",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "./logger.js"
+      ],
+      "exports": [
+        "CURATED_MODELS",
+        "ValidationResult"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/lib/redis.ts": {
+      "hash": "7717bda8a2b8fcf899e2d9930ef127d7ad4d0e69e3c8ebff9711d1bbb3a3b1ca",
+      "language": "typescript",
+      "imports": [
+        "ioredis"
+      ],
+      "exports": [
+        "redis",
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/lib/validate-env.test.ts": {
+      "hash": "a5bce975f7122a0f227166f60b9d9884ed2eec9f8cd829829a4c7f9bd9ca1992",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./validate-env.js",
+        "./logger.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/lib/validate-env.ts": {
+      "hash": "9388a46c3dedc3c9bcd697acfb4ec373ebb1baee536d7dcafe4714bd0d884ee8",
+      "language": "typescript",
+      "imports": [
+        "./logger.js"
+      ],
+      "exports": [
+        "REQUIRED_ENV_VARS",
+        "getMissingEnvVars",
+        "validateEnvironment"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/github/client-circuit-breaker.test.ts": {
+      "hash": "63f0b34dcdbaee830e41d2289b41d8cde1d388f0be7b01f7b9285baaf08df5ee",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../lib/circuit-breaker.js",
+        "./client.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/github/client.test.ts": {
+      "hash": "9d7934a8d8be678eb9a3bb6349349510297d91e6f72d546051d9806754c28891",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "vitest",
+        "./client.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/github/client.ts": {
+      "hash": "f8d03c2a36f03093ed6d12df69768327b2a7fcd2132130288f7e4439a108ebf2",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "../lib/circuit-breaker.js",
+        "ghagga-core"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/github/runner.test.ts": {
+      "hash": "b9a82daf39a514746ce05f2b2faf7095aa9aa7d310fb9957b121cc9012316597",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "vitest",
+        "./runner.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/github/runner.ts": {
+      "hash": "b692fbc56631893f7125d888d6fb17f7ba0a192699eee0d92a0bca988a8c33ca",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "node:module",
+        "../lib/circuit-breaker.js",
+        "../lib/logger.js",
+        "libsodium-wrappers"
+      ],
+      "exports": [
+        "RunnerErrorCode",
+        "RunnerCreationError",
+        "RunnerCreationResult",
+        "CreateRunnerRepoOptions",
+        "TEMPLATE_OWNER",
+        "TEMPLATE_REPO",
+        "WorkflowDispatchInputs",
+        "DispatchParams",
+        "DiscoveredRunner",
+        "getCallbackTtlMs",
+        "deriveCallbackSecret",
+        "verifyCallbackSignature",
+        "ExecutionKind",
+        "RunnerWorkflowDescriptor",
+        "DelegatedCiDispatchParams",
+        "buildDelegatedCiDescriptor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/delegated-ci/analyze-jobs.ts": {
+      "hash": "0a4bb02595b0e0cfdad36dd2d6dc1a5c9fb5226cbe463890982a163ddd1c208c",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "JobRecommendation",
+        "analyzeJob",
+        "analyzeDiscoveredJobs"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/delegated-ci/policy.test.ts": {
+      "hash": "9d98d96c7c6e75218adf1a82be7d079389a789178ed76cacd57f2ecefcd6c5ef",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./policy.js",
+        "./profiles.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/delegated-ci/policy.ts": {
+      "hash": "82cbe07c0064b9f30aab9b7346ac6df6532321d7e696faa3011a1184ea1943f2",
+      "language": "typescript",
+      "imports": [
+        "./profiles.js"
+      ],
+      "exports": [
+        "DelegatedCiClassification",
+        "DelegatedCiProfile",
+        "DelegatedCiJobPolicy",
+        "DelegatedCiPolicy",
+        "RejectionReasonCode",
+        "JobEvaluationResult",
+        "evaluateJob",
+        "evaluateAllJobs",
+        "normalizePolicy"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/delegated-ci/profiles.ts": {
+      "hash": "0ee6494bac3750050cd23dcfb3a32ea1ade51122162939df463f3cf128d57b89",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "ExecutionProfile",
+        "EXECUTION_PROFILES",
+        "isSupportedProfile",
+        "getProfile"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/server/src/__integration__/api-auth.integration.test.ts": {
+      "hash": "d9bb4fe311d1d132acefe93d53344bb23b84ac8c26e5f118510c250dd0826b63",
+      "language": "typescript",
+      "imports": [
+        "hono",
+        "vitest",
+        "../middleware/auth.js",
+        "../routes/api.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/server/src/__integration__/webhook-dispatch.integration.test.ts": {
+      "hash": "53ef5ee3acf00b6a61e509e961556c8e0a36f09a7e9bfbb0a8b13f4d9700aff1",
+      "language": "typescript",
+      "imports": [
+        "node:crypto",
+        "vitest",
+        "../routes/webhook.js",
+        "../github/client.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/postcss.config.js": {
+      "hash": "4cae941be9bc3bee9a6905e47ea7a51aee216d587d34a8cc4ae48f78fd6d8159",
+      "language": "javascript",
+      "imports": [],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/vite.config.ts": {
+      "hash": "7343ae97db614c78b23c472bcd5007666e9843cd2261036e0e595290f5a9c33a",
+      "language": "typescript",
+      "imports": [
+        "node:path",
+        "@vitejs/plugin-react",
+        "vite"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/vitest.config.ts": {
+      "hash": "34aefc287508ce892f591284ab348e76bd2651cb89b0058190185ada8e9db259",
+      "language": "typescript",
+      "imports": [
+        "node:path",
+        "@vitejs/plugin-react",
+        "vitest/config"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/App.tsx": {
+      "hash": "d0fe914a1be9e450b74b4f2b42eeec26af852555aa2121a7d8107154541f494c",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-router-dom",
+        "@/components/ErrorBoundary",
+        "@/components/Layout",
+        "@/components/Toast",
+        "@/lib/auth",
+        "@/lib/repo-context",
+        "@/pages/Login",
+        "@/pages/AuthCallback",
+        "@/pages/Dashboard",
+        "@/pages/Reviews",
+        "@/pages/Settings",
+        "@/pages/GlobalSettings",
+        "@/pages/Memory"
+      ],
+      "exports": [
+        "App"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/main.tsx": {
+      "hash": "ed92228cd08bebd1e6e589dcc8e581eca1a5d06a959cc6a38435691f790f7322",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "react",
+        "react-dom/client",
+        "./App",
+        "./index.css"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/vite-env.d.ts": {
+      "hash": "94dfb4eb57ffddd61c80ce4c2386cfdcbe2eeb77d05a5726321813a5a6126263",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/test/setup.ts": {
+      "hash": "e696e3641a7e5ccf290230e22fd4e174a0e7705877c3bfafc22000c2092dea02",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/test/test-utils.tsx": {
+      "hash": "f1f217347a073e0da8bb4dbc14e4ce5b7fe0c5f4c86203f61cd1dbe604576031",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "createTestQueryClient",
+        "createWrapper"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/pages/AuthCallback.tsx": {
+      "hash": "413abe600e89e744184e2b86890821ef1ab00075e7a4bf904e4ce99d5e4d962f",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-router-dom",
+        "@/lib/auth",
+        "@/lib/oauth"
+      ],
+      "exports": [
+        "AuthCallback"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/pages/Dashboard.test.tsx": {
+      "hash": "da8d3143ec8c197a00412753b23c02ca2712ca569d16536ce62e53e1cfdfe8a8",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest",
+        "./Dashboard"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/pages/Dashboard.tsx": {
+      "hash": "bce207502def36a2726e2a63bf4de2064a10bdc10aa0b76e149c8f1c6ccd0a2c",
+      "language": "typescript",
+      "imports": [
+        "recharts",
+        "@/components/Card",
+        "@/components/DelegatedCiRuns",
+        "@/lib/api",
+        "@/lib/repo-context",
+        "@/lib/types"
+      ],
+      "exports": [
+        "Dashboard"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/pages/GlobalSettings.test.tsx": {
+      "hash": "dba826ef248d313db888a1650f8e959c4d9a161d5490a24bdb7f75665c49a162",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react-router-dom",
+        "vitest",
+        "./GlobalSettings",
+        "@/lib/api"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/pages/GlobalSettings.tsx": {
+      "hash": "e849f179350ab404380ab38a236843020ed5b85982f02c16cd9217517391ee9e",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "@/components/Card",
+        "@/components/settings/ProviderChainEditor",
+        "@/components/settings/ProviderEntry",
+        "@/components/settings/ToolGrid",
+        "@/lib/api",
+        "@/lib/auth",
+        "@/lib/types"
+      ],
+      "exports": [
+        "GlobalSettings"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/pages/Login.tsx": {
+      "hash": "25f8a8df75c891f703c007d8d34f56e52c98be476f70697d5bb1d2247de0dd25",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-router-dom",
+        "@/lib/auth",
+        "@/lib/oauth"
+      ],
+      "exports": [
+        "Login"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/pages/Memory.test.tsx": {
+      "hash": "71c0d50b31e3c41dcab7ee1fdd006ab45d944c2ece1ad5c312760d764e35a2ca",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest",
+        "@/components/Toast",
+        "./Memory"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/pages/Memory.tsx": {
+      "hash": "6057e3b8d584f26846c863397ee4c522bdf1e32304d38ef9d817f1a93690e534",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-virtual",
+        "react",
+        "@/components/Card",
+        "@/components/ConfirmDialog",
+        "@/components/ObservationDetailModal",
+        "@/components/SeverityBadge",
+        "@/components/Toast",
+        "@/lib/api",
+        "@/lib/cn",
+        "@/lib/repo-context",
+        "@/lib/types",
+        "@/lib/utils"
+      ],
+      "exports": [
+        "Memory"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/pages/Reviews.test.tsx": {
+      "hash": "00bbede8a081b07f69346f26be8a87cfc11b75c5688be491f27c94fc24d96994",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest",
+        "@/components/Toast",
+        "./Reviews"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/pages/Reviews.tsx": {
+      "hash": "03cf32d1dac9f808acb79636eea81db5ace3e2c256ec323fcfce8f80c71dd54e",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "@/components/Card",
+        "@/components/ConfirmDialog",
+        "@/components/SeverityBadge",
+        "@/components/StatusBadge",
+        "@/components/Toast",
+        "@/lib/api",
+        "@/lib/repo-context",
+        "@/lib/types"
+      ],
+      "exports": [
+        "Reviews"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/pages/Settings.test.tsx": {
+      "hash": "1231e7054ed609e2a302b3f1d6d6c140df2ea6485f8b3c76ad03d9fb4c00d2e4",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react-router-dom",
+        "vitest",
+        "./Settings"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/pages/Settings.tsx": {
+      "hash": "8b470fd826457923b85e3548cd14dd8d47a38098537433636bd40627bafcd104",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-router-dom",
+        "@/components/Card",
+        "@/components/settings/DelegatedCiEditor",
+        "@/components/settings/ProviderChainEditor",
+        "@/components/settings/ProviderEntry",
+        "@/components/settings/ToolGrid",
+        "@/lib/api",
+        "@/lib/repo-context",
+        "@/lib/types"
+      ],
+      "exports": [
+        "Settings"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/lib/api.test.ts": {
+      "hash": "2a9e7c7ec52e7fa8fa833e95b44d414b0719637c456dadaabad1bdbe3bf88945",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest",
+        "../test/test-utils",
+        "./api"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/lib/api.ts": {
+      "hash": "0b4387372ade2d825c2f56218cf63f405196472c21570e9da13be634afb4359a",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "./types"
+      ],
+      "exports": [
+        "useReviews",
+        "useDeleteRepoReviews",
+        "useStats",
+        "useRepositories",
+        "useSettings",
+        "useUpdateSettings",
+        "useCopySettingsToGlobal",
+        "useValidateProvider",
+        "AvailableKeyInfo",
+        "AvailableKeysMap",
+        "useAvailableKeys",
+        "useInstallations",
+        "useInstallationSettings",
+        "useUpdateInstallationSettings",
+        "useMemorySessions",
+        "useObservations",
+        "useDeleteObservation",
+        "useClearRepoMemory",
+        "usePurgeAllMemory",
+        "useDeleteSession",
+        "useCleanupEmptySessions",
+        "useDeleteReview",
+        "useBatchDeleteReviews",
+        "useBatchDeleteObservations",
+        "useRunnerStatus",
+        "useCreateRunner",
+        "useConfigureRunnerSecret",
+        "useDelegatedCiRuns",
+        "useDiscoverCi",
+        "useDelegatedCiRun"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/lib/auth.test.tsx": {
+      "hash": "5c168b6b2b3f07c7f19144d49ce4c7848860075afefc0470c3ac2ba045223fbf",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "react",
+        "react-router-dom",
+        "vitest",
+        "./auth"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/lib/auth.tsx": {
+      "hash": "c67c9a0e5c74464de8d21475a070c51420bf89a3f8629fb04743d631767a76aa",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-router-dom",
+        "./oauth",
+        "./types"
+      ],
+      "exports": [
+        "REDIRECT_KEY",
+        "AuthProvider",
+        "useAuth",
+        "ProtectedRoute"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/lib/cn.test.ts": {
+      "hash": "ee2b0115dba911f19e94dd589e5ea7450625e41ce671109dfaefa29f9c0ddf01",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./cn"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/lib/cn.ts": {
+      "hash": "74e8fe9d0d680c442ed6adb13e7d119d6c210c19ae6c114313b2a72552be0883",
+      "language": "typescript",
+      "imports": [
+        "clsx",
+        "tailwind-merge"
+      ],
+      "exports": [
+        "cn"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/lib/oauth.test.ts": {
+      "hash": "f23c60aa49ebeb9a013e8ec945f0249b075804dba3dc6e57de91299a8b7ac528",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./oauth"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/lib/oauth.ts": {
+      "hash": "357eaec9c782443e4354c1c8b955f9f62e899b09a56af70b615effc26999fa24",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "GITHUB_CLIENT_ID",
+        "API_URL",
+        "GitHubUser"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/lib/repo-context.test.tsx": {
+      "hash": "5286251d5627e0cdd7d7ccc64b91f967d388fa85c6b6bfb4045765e2818f4932",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "react",
+        "vitest",
+        "./repo-context"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/lib/repo-context.tsx": {
+      "hash": "a2d1198ac1697b5aceb06d71aec521bb20f6b7c2b0c710f4bfbdb56cab2d535e",
+      "language": "typescript",
+      "imports": [
+        "react"
+      ],
+      "exports": [
+        "RepoProvider",
+        "useSelectedRepo"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/lib/types.ts": {
+      "hash": "216ce145540ed45319dac83874e77396330c0a37523b3f7171a0192a6ec89c27",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/lib/utils.test.ts": {
+      "hash": "7dc9d34c451d12d273dd19f5c403bf3df9c8b8f812aa2feed0f1f01f4c077cbd",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./utils"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/lib/utils.ts": {
+      "hash": "2b875bc977cab21ae4872197e7216baa0d4353972bbbaffea2138c50b9e5ecc3",
+      "language": "typescript",
+      "imports": [
+        "./types"
+      ],
+      "exports": [
+        "isValidSeverity",
+        "severityWeight",
+        "formatRelativeTime"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/hooks/useFocusTrap.test.tsx": {
+      "hash": "c9ef239cb7d716b4e6736614defdc7dae26a52f0697ad58842c5d3308b1acee7",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "@testing-library/user-event",
+        "vitest",
+        "@/components/ConfirmDialog",
+        "@/components/ObservationDetailModal",
+        "@/lib/types"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/hooks/useFocusTrap.ts": {
+      "hash": "475171c092b6479239cb76365ed66a5d1b0ff8f349875ee18777805ba4eaa83d",
+      "language": "typescript",
+      "imports": [
+        "react"
+      ],
+      "exports": [
+        "useFocusTrap"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/Card.test.tsx": {
+      "hash": "dd54fc0bcc57e1974889e61bc3840fb0437f50113b0191675fac15d692c9bcd9",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "./Card"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/Card.tsx": {
+      "hash": "4fe75f635b2e260cedae254f8567462d8b33ec1de6623382ae622263c652cc2b",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "@/lib/cn"
+      ],
+      "exports": [
+        "Card",
+        "CardHeader"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/ConfirmDialog.test.tsx": {
+      "hash": "66f4c643e8b8d4af89c7a6d005b8e2d15da3ccd624a5529d70c0fbba7d44463f",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "./ConfirmDialog"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/ConfirmDialog.tsx": {
+      "hash": "4c9af4ca5f40dc7a2734b975375eceb2ae620932e995388d37345871a1c4d1fb",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-dom",
+        "@/hooks/useFocusTrap",
+        "@/lib/cn"
+      ],
+      "exports": [
+        "ConfirmDialogProps",
+        "ConfirmDialog"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/DelegatedCiRuns.tsx": {
+      "hash": "0ab3ca4f69be4a1098465080ce7acf1289855e95108f0b4993a9c81d4c5868ed",
+      "language": "typescript",
+      "imports": [
+        "@/lib/api",
+        "@/lib/repo-context",
+        "@/lib/types",
+        "./Card"
+      ],
+      "exports": [
+        "DelegatedCiRuns"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/ErrorBoundary.test.tsx": {
+      "hash": "3c85029d9866c3e6e60c3673b002402757f981c12377cca66d2c6cece71ffb98",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "@testing-library/user-event",
+        "vitest",
+        "./ErrorBoundary"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/ErrorBoundary.tsx": {
+      "hash": "5ec8f5e6eb7127801530c2ea42ffaaa5c13239ceaef52aa31ce70a83eda9fe63",
+      "language": "typescript",
+      "imports": [
+        "react"
+      ],
+      "exports": [
+        "ErrorBoundary"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/Layout.test.tsx": {
+      "hash": "a1403b181f1ed2dff3e49a65d2b1ef0acef6c80e6118cba03dfc8fa208ff9883",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "react-router-dom",
+        "vitest",
+        "./Layout"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/Layout.tsx": {
+      "hash": "9b08f2420b4827f04297bb0ad59de2c0f2c0bda9d488e1d972b0bb510ff40476",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-router-dom",
+        "@/lib/auth",
+        "@/lib/cn"
+      ],
+      "exports": [
+        "Layout"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/ObservationDetailModal.test.tsx": {
+      "hash": "b807669f66c0d436b0ae5d6bf482a10081d1485351aa16cdb93447a515c43932",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "@/lib/types",
+        "./ObservationDetailModal"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/ObservationDetailModal.tsx": {
+      "hash": "b362278f8099b0ee55b097c9a216f18d0fe768177ea56c968c1bdbe3172aee84",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-dom",
+        "@/hooks/useFocusTrap",
+        "@/lib/cn",
+        "@/lib/types",
+        "@/lib/utils",
+        "./SeverityBadge"
+      ],
+      "exports": [
+        "ObservationDetailModalProps",
+        "ObservationDetailModal"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/QueryErrorHandler.test.tsx": {
+      "hash": "c660369092532720f7bbd43b4ffce20cb66b48f7a3554e43644954eac063dfc5",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/SeverityBadge.test.tsx": {
+      "hash": "1282857022b868e02a65b1bd473c8737aa3b861f8530d410c22cf46a694cf8f1",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "@/lib/types",
+        "./SeverityBadge"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/SeverityBadge.tsx": {
+      "hash": "4a015299f0e58473b3e21c466eaf9a2cb1a64a073012e34a1ada7aa3798fd266",
+      "language": "typescript",
+      "imports": [
+        "@/lib/cn",
+        "@/lib/types"
+      ],
+      "exports": [
+        "SeverityBadge"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/StatusBadge.test.tsx": {
+      "hash": "6f784e162506f5db6350e8e5010075123cab78bbf431cae17e367113a2f7e93f",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "@/lib/types",
+        "./StatusBadge"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/StatusBadge.tsx": {
+      "hash": "17a514224a3b3eddbdd7d52ea8a14d383ef64c4e7c8cb1e2a854359c646c8b2e",
+      "language": "typescript",
+      "imports": [
+        "@/lib/cn",
+        "@/lib/types"
+      ],
+      "exports": [
+        "StatusBadge"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/Toast.test.tsx": {
+      "hash": "266c94924140f415448a45338cd7c0d56e5d09ebb3e25e607e6bdfc2b9f5f7dd",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "./Toast"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/Toast.tsx": {
+      "hash": "14770e34d0eac8c8ec4547db0bb6d40200e793e6ad73404d0c6b2475333ffda2",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "react-dom",
+        "@/lib/cn"
+      ],
+      "exports": [
+        "Toast",
+        "useToast",
+        "ToastProvider"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/settings/DelegatedCiEditor.test.tsx": {
+      "hash": "bf1acafd6983d9b03307304440b47450fc1f54228680f97943126e0ef0bffe85",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest",
+        "@/lib/types",
+        "./DelegatedCiEditor"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/settings/DelegatedCiEditor.tsx": {
+      "hash": "a792c699a7b00c10c3c1796f5ac21b1e458795374a30b3457def9a8f216a9f65",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "@/components/Card",
+        "@/lib/api",
+        "@/lib/types",
+        "./DelegatedCiJobEntry"
+      ],
+      "exports": [
+        "DelegatedCiEditor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/settings/DelegatedCiJobEntry.test.tsx": {
+      "hash": "16ee065008a3ba6ae4d4ab424bb364f12634ad7a8f1b69f956cccad77798cd68",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "@/lib/types",
+        "./DelegatedCiJobEntry"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/settings/DelegatedCiJobEntry.tsx": {
+      "hash": "5ab689941cc48f4cacbbe1e50c57566e08a1cf28d2baa9f51aee7504d5f50d95",
+      "language": "typescript",
+      "imports": [
+        "@/lib/types"
+      ],
+      "exports": [
+        "DelegatedCiJobEntry"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/settings/ProviderChainEditor.test.tsx": {
+      "hash": "c0380e81464b54f08f142d63c5b776b1e3ba2bddf08e691e928734496837bb94",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest",
+        "@/lib/api",
+        "@/test/test-utils",
+        "./ProviderChainEditor",
+        "./ProviderEntry"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/settings/ProviderChainEditor.tsx": {
+      "hash": "a8ad2f7376eab4ec003882f35ec2db7046696a6f766969349951d78dfbce80dc",
+      "language": "typescript",
+      "imports": [
+        "@/lib/api",
+        "@/lib/types",
+        "./ProviderEntry"
+      ],
+      "exports": [
+        "ProviderChainEditor"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/settings/ProviderEntry.test.tsx": {
+      "hash": "134d0e8825d304fcd7ec0506152d49d426b0b465a55804c9703c3f3ad8408d3b",
+      "language": "typescript",
+      "imports": [
+        "@tanstack/react-query",
+        "@testing-library/react",
+        "vitest",
+        "@/lib/api",
+        "@/test/test-utils",
+        "./ProviderEntry"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
+      "hash": "9760bfb5833c3a53e63e69b620e26e6ea248ba02c3906f4fca22b8a3ffa21e8a",
+      "language": "typescript",
+      "imports": [
+        "react",
+        "@/lib/api",
+        "@/lib/types"
+      ],
+      "exports": [
+        "ProviderEntryState",
+        "KNOWN_MODELS",
+        "ProviderEntry"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/components/settings/ToolGrid.test.tsx": {
+      "hash": "f40672a6275396a5b202d878d5dfbd91befc1d35353bc345dea54fc379d8ff2b",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "./ToolGrid"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/components/settings/ToolGrid.tsx": {
+      "hash": "e39339e03d705b310baf53a16ce3cbf8ba52e7ddb14eadcc052f1c199b1a3698",
+      "language": "typescript",
+      "imports": [
+        "@/lib/types"
+      ],
+      "exports": [
+        "ToolGrid"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/dashboard/src/__tests__/AuthCallback.test.tsx": {
+      "hash": "a670dda58369a7df13362adbc5eb75f552cc04d5d8ad6965e307f6cad6088f53",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "react-router-dom",
+        "vitest",
+        "../lib/auth",
+        "../pages/AuthCallback"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/__tests__/Login.test.tsx": {
+      "hash": "3e74e66b50dbecdc7b3fc5278d1afbd2eb8c0e1ecf130403a309d8c51d75ccbd",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "react-router-dom",
+        "vitest",
+        "../pages/Login"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/dashboard/src/__tests__/a11y.test.tsx": {
+      "hash": "a78d65056ba32971857087e14ed4f8b08132674d8c625648cc279c718ecfbb90",
+      "language": "typescript",
+      "imports": [
+        "@testing-library/react",
+        "vitest",
+        "vitest-axe",
+        "@/components/Card",
+        "@/components/ConfirmDialog",
+        "@/components/ObservationDetailModal",
+        "@/components/SeverityBadge",
+        "@/lib/types",
+        "vitest-axe/matchers"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/vitest.config.ts": {
+      "hash": "c46e5c17c4960ab13c05bca8b04c1f5a72c977569203a01c869e9a0cf5b6fe2c",
+      "language": "typescript",
+      "imports": [
+        "vitest/config"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/index.ts": {
+      "hash": "00a743683a53c82b793c5723b66f39640ac680cea65b6f5be50aceb961c5bc5e",
+      "language": "typescript",
+      "imports": [
+        "dotenv/config",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "commander",
+        "ghagga-core",
+        "./commands/health.js",
+        "./commands/hooks/index.js",
+        "./commands/login.js",
+        "./commands/logout.js",
+        "./commands/memory/index.js",
+        "./commands/review.js",
+        "./commands/status.js",
+        "./lib/config.js",
+        "./ui/tui.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/ui/chalk.ts": {
+      "hash": "bf29562da86bffe4060e299d7007536d5003e589235f5efa8aa3e5d905ea7a6b",
+      "language": "typescript",
+      "imports": [
+        "chalk",
+        "ghagga-core"
+      ],
+      "exports": [
+        "SEVERITY_COLOR_FNS",
+        "colorSeverity"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/ui/format.ts": {
+      "hash": "3be7184b4671521f1ee8f4ca362d6248b7a8eb561e3d2f098dc0486830790d1d",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "./theme.js"
+      ],
+      "exports": [
+        "formatTable",
+        "formatSize",
+        "formatId",
+        "truncate",
+        "formatKeyValue",
+        "formatToolDivider",
+        "formatMarkdownResult",
+        "formatBoxSummary",
+        "formatSeverityLine",
+        "formatHealthScore"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/ui/sarif.ts": {
+      "hash": "285a441846e78b0a6591516fb60d26ebe34a12750e9c05e4600bc3a59f22b02d",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core"
+      ],
+      "exports": [
+        "buildSarif"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/ui/theme.ts": {
+      "hash": "c569b1e55d736fb0d3a597de0dbcbca79b624de170fd4b2270e140fc71c12122",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core"
+      ],
+      "exports": [
+        "BRAND",
+        "STATUS_EMOJI",
+        "SEVERITY_EMOJI",
+        "STEP_ICON",
+        "SOURCE_LABELS",
+        "resolveStepIcon",
+        "BOX_CHARS",
+        "DIVIDER_CHAR",
+        "SCORE_THRESHOLDS"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/ui/tui.ts": {
+      "hash": "c989f55aea0e53be1b2615bbe6d15dcba48032fa139fbefa6baba77f76000899",
+      "language": "typescript",
+      "imports": [
+        "@clack/prompts",
+        "ghagga-core",
+        "./chalk.js",
+        "./theme.js"
+      ],
+      "exports": [
+        "TuiMode",
+        "TuiInitOptions",
+        "TuiSpinner",
+        "init",
+        "isPlain",
+        "intro",
+        "outro",
+        "log",
+        "spinner",
+        "setActiveSpinner",
+        "severity",
+        "box",
+        "divider",
+        "progress"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/ui/__tests__/format.test.ts": {
+      "hash": "14004e0bf2d47ef95e31e60007755f9ee110a9a5e4d64908e7f0f89dac7390c3",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "vitest",
+        "../format.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/ui/__tests__/theme.test.ts": {
+      "hash": "c8d5ef7a4169eea8a044db365f401c5193090fb3308f1d80da81c089e6fbc773",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../theme.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/ui/__tests__/tui-extensions.test.ts": {
+      "hash": "6e8b85a4c48f4c85dcb6c86bd82691c8074e3bbf79fbd97e7b321c9017a570e2",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../tui.js",
+        "../chalk.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/ui/__tests__/tui.test.ts": {
+      "hash": "7d8ee968655e3713cf95de16d234d7d4d96ef185b7364852f0c4329f56fbef4f",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../tui.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/lib/config.test.ts": {
+      "hash": "5848334acdea6a69e8ff4934d10d1c11ac084b7f4f7b922039e2b19da726e486",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "node:fs",
+        "node:os",
+        "./config.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/lib/config.ts": {
+      "hash": "05a6059ab1efb4870f45c1f839ea38a4332cc7d2c4ab437b1dd9e2c2bc7145f6",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "GhaggaCliConfig",
+        "getConfigDir",
+        "loadConfig",
+        "saveConfig",
+        "clearConfig",
+        "isLoggedIn",
+        "getStoredToken",
+        "getConfigFilePath"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/lib/git-hooks.test.ts": {
+      "hash": "b2451b71e791bdb66640225eecf0ccfa3971c6b75da40bcef34ad96169caa595",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./hooks-types.js",
+        "./git-hooks.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/lib/git-hooks.ts": {
+      "hash": "04f75e15e401a7a936dd74dd6dd74eb123b3cc9a9262925114ab1fce98907db4",
+      "language": "typescript",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:path",
+        "./hooks-types.js"
+      ],
+      "exports": [
+        "getHooksDir",
+        "isGitRepo",
+        "getHookStatus",
+        "installHook",
+        "uninstallHook"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/lib/git.test.ts": {
+      "hash": "b8511d14cb79099cbca40657c72af4feb73b94d1cfe5cadc1aab42c60970d34b",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "node:child_process",
+        "./git.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/lib/git.ts": {
+      "hash": "a5985c20c308ca6bd850f8270d5464fb0f0cd759168c0e63f0eaa46ced46850f",
+      "language": "typescript",
+      "imports": [
+        "node:child_process"
+      ],
+      "exports": [
+        "resolveProjectId",
+        "getStagedDiff",
+        "getStagedFiles",
+        "normalizeRemoteUrl"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/lib/github-api.test.ts": {
+      "hash": "b3f3e627e43b495a7e5bac06f1de70d2701f4bd0cc0be852ce3ff639d3ad11cb",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "vitest",
+        "./github-api.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/lib/github-api.ts": {
+      "hash": "ceae8ef79c5df7943da73ee6b01e8f30bee36a19e49b51190d823427a7f52f09",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core"
+      ],
+      "exports": [
+        "CreateIssueResult",
+        "CreateCommentResult",
+        "GitHubApiError",
+        "parseGitHubRemote",
+        "formatIssueBody"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/lib/hook-templates.test.ts": {
+      "hash": "75824a7d9cdf265ebc4cc59b1fa2dfdab042d733feab67e21032545651b4c168",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./hook-templates.js",
+        "./hooks-types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/lib/hook-templates.ts": {
+      "hash": "7e6e004eaae20a0a7e15e699e8dbe8b9e96a4893348da7a0462420a590419651",
+      "language": "typescript",
+      "imports": [
+        "./hooks-types.js"
+      ],
+      "exports": [
+        "generatePreCommitHook",
+        "generateCommitMsgHook"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/lib/hooks-types.ts": {
+      "hash": "4bf22e549237f6e1c084a0013c7e2c91906248a4f965681ddbf2f5a115229088",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "HOOK_MARKER",
+        "HookType",
+        "HookStatus",
+        "HookInstallOptions",
+        "HookOperationResult"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/lib/oauth.test.ts": {
+      "hash": "408aa566de2e47ae1119b6e886fba30c79b96bf107cc294271e1cdfef7e3e754",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./oauth.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/lib/oauth.ts": {
+      "hash": "740bdbfe8a34e85a002b76d272be6ddfde208865dadc9b6846ccdaea2fe7119b",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "GITHUB_CLIENT_ID",
+        "DeviceCodeResponse",
+        "AccessTokenResponse",
+        "DeviceFlowError",
+        "GitHubUser"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/health.ts": {
+      "hash": "897da0b7106f5a0792782d92366f9803f7c6eac033fb2cf1e4c720ef5a487e3c",
+      "language": "typescript",
+      "imports": [
+        "node:path",
+        "ghagga-core",
+        "../lib/config.js",
+        "../lib/git.js",
+        "../ui/format.js",
+        "../ui/tui.js"
+      ],
+      "exports": [
+        "HealthOptions"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/login.test.ts": {
+      "hash": "0dea074162c076ed1f0432e1817797e919e395111d1c12558703f93f0e44e028",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../lib/config.js",
+        "../lib/oauth.js",
+        "../ui/tui.js",
+        "./login.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/login.ts": {
+      "hash": "3a8509fe59e3a38f894a24e7d754399c5271bb08c240fa91e3d8181363882be8",
+      "language": "typescript",
+      "imports": [
+        "../lib/config.js",
+        "../lib/oauth.js",
+        "../ui/tui.js",
+        "node:child_process",
+        "node:os"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/logout.test.ts": {
+      "hash": "876d63ead4430d25aa16045d2d2244cc9cdd4e2f65bbeca72f365e781b4ca345",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../lib/config.js",
+        "../ui/tui.js",
+        "./logout.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/logout.ts": {
+      "hash": "0de42f17c958b226313de1dea903c9e4e84376b8dde4d3dde957ecffe0e0bac6",
+      "language": "typescript",
+      "imports": [
+        "../lib/config.js",
+        "../ui/tui.js"
+      ],
+      "exports": [
+        "logoutCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/review-commit-msg.test.ts": {
+      "hash": "6e5b0639cdfc0eb4968c0292952dde615d7c8d0e204bfa13552a47a8431ef6c9",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./review-commit-msg.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/review-commit-msg.ts": {
+      "hash": "b37d30243a5ea314dc7af7636b0597ccdf5cf36fba1f76fa5736e2e23b91e3a0",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core"
+      ],
+      "exports": [
+        "CommitMsgReviewOptions"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/review-output.test.ts": {
+      "hash": "b8f8863b55ad7a9ce3e55aa9e6cd70166a9188dbabdb86ab510005dc7b06c426",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "vitest",
+        "node:child_process",
+        "node:fs",
+        "./review.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/review.test.ts": {
+      "hash": "308a77671a5d891732de0e43b2ab6e95827a1a965826eb5e28351c4c1d541d73",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "vitest",
+        "node:child_process",
+        "node:fs",
+        "./review.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/review.ts": {
+      "hash": "b17ba350dc77428a33cd976a7a81c669036587bec2ef67433138ebfbcdaeec95",
+      "language": "typescript",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:path",
+        "ghagga-core",
+        "../lib/config.js",
+        "../lib/git.js",
+        "../lib/github-api.js",
+        "../ui/format.js",
+        "../ui/theme.js",
+        "../ui/tui.js",
+        "./review-commit-msg.js"
+      ],
+      "exports": [
+        "ReviewOptions"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/status.test.ts": {
+      "hash": "17d3cbfa1987972e406ea765397f8913e4e824490f6d5e85fbea22adb6b646a7",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../lib/config.js",
+        "../lib/oauth.js",
+        "../ui/tui.js",
+        "./status.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/status.ts": {
+      "hash": "65aeb6148e5005d74dc4f53fd6e5ac3a5aa4f1ff0337e6684f37a9e0fbdd0374",
+      "language": "typescript",
+      "imports": [
+        "../lib/config.js",
+        "../lib/oauth.js",
+        "../ui/tui.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/clear.test.ts": {
+      "hash": "1c0d152843d4c8202acf4dd9bc91391ea58224dbb142fed848240ba8c82ddfcc",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "ghagga-core",
+        "vitest",
+        "node:fs",
+        "./clear.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/memory/clear.ts": {
+      "hash": "eb3d260595bb7a095918a4b547bdd27b8236bbbcb8d9dda82e8fb786ae0b92bf",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../ui/tui.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "registerClearCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/delete.test.ts": {
+      "hash": "26fd5279828ede4bb04f56c5d1dbccdabe67066f0194e1b25d66cd69880d97a8",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "ghagga-core",
+        "vitest",
+        "node:fs",
+        "./delete.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/memory/delete.ts": {
+      "hash": "601f7aa7b050ec40127d62e8283c9874e11b13066d0f714d629a1dad472101af",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../ui/tui.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "registerDeleteCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/index.ts": {
+      "hash": "3867ae2fb9c6db0b25aeb80b14a9a40e76f824d130684a0e4b0c4670f6391869",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "./clear.js",
+        "./delete.js",
+        "./list.js",
+        "./search.js",
+        "./show.js",
+        "./stats.js"
+      ],
+      "exports": [
+        "memoryCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/list.test.ts": {
+      "hash": "ba98331212bedc3f48e5dcd9e023b542afb5906df2e6c980026373d389433a62",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "ghagga-core",
+        "vitest",
+        "node:fs",
+        "./list.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/memory/list.ts": {
+      "hash": "b46efbac19f192f956cb3aba4151d1f47cdee512b8b62c1f19e9059a3ae43a63",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../ui/tui.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "registerListCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/search.test.ts": {
+      "hash": "70e03a9e23f4525655d989d9360f39fa295e05e2ada705413739f8fb8ad3b4cd",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "ghagga-core",
+        "vitest",
+        "node:fs",
+        "./search.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/memory/search.ts": {
+      "hash": "9e6f63a61c45189dd17f43943cc47b368be90c0643dc3b9e105fcc685a5ca801",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../lib/git.js",
+        "../../ui/tui.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "registerSearchCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/show.test.ts": {
+      "hash": "fa135b382e21491475aaf102bf745ee7f14d1b840b800eac46f3fe69b24b5f41",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "ghagga-core",
+        "vitest",
+        "node:fs",
+        "./show.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/memory/show.ts": {
+      "hash": "b10621e0205d7d8bf1b0e9a512b3b99ad8a1dda49a07b02e72ae2aacb5e27723",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../ui/tui.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "registerShowCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/stats.test.ts": {
+      "hash": "2f8000aa4be00a46213c17ff38f5fbb430a659bd27e6053b5f06cca823b6d798",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "ghagga-core",
+        "vitest",
+        "node:fs",
+        "./stats.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/memory/stats.ts": {
+      "hash": "6b52c4d23e63ab660f579dbee2bb6a4de7973778e6a7c6158fd7969da509bd79",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "commander",
+        "../../ui/tui.js",
+        "./utils.js"
+      ],
+      "exports": [
+        "registerStatsCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/memory/utils.test.ts": {
+      "hash": "c63d576369372b57620cccd23d9d84cd38e71ac33d191fb1379871fda9d99c85",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./utils.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/memory/utils.ts": {
+      "hash": "2b9f3eb4005717a2a5fcc2c4218defdb97ddac029005c9cc6b9b52532cf03861",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "node:readline/promises",
+        "ghagga-core",
+        "../../lib/config.js",
+        "../../ui/format.js",
+        "../../ui/tui.js"
+      ],
+      "exports": [
+        "formatTable",
+        "formatSize",
+        "formatId",
+        "truncate"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/hooks/index.ts": {
+      "hash": "ec35a7a423f7851c285b189fc321dd55b77da589a5897e70156d898f9441e797",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "./install.js",
+        "./status.js",
+        "./uninstall.js"
+      ],
+      "exports": [
+        "hooksCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/hooks/install.test.ts": {
+      "hash": "72304e925cdcdd368e40d2f1694d1af9665b24a2766f4fc0b7845353ca21011b",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "vitest",
+        "../../ui/tui.js",
+        "./install.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/hooks/install.ts": {
+      "hash": "23f84287b03adf21fb21a4089c8a2470f478295f3772e3eed16117e14afa56a1",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../lib/git-hooks.js",
+        "../../lib/hook-templates.js",
+        "../../lib/hooks-types.js",
+        "../../ui/tui.js"
+      ],
+      "exports": [
+        "registerInstallCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/hooks/status.test.ts": {
+      "hash": "848e5cf9965c6c59be8315c51026c4a745796d442fd6982913dd0d8b695f6b3f",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "vitest",
+        "../../ui/tui.js",
+        "./status.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/hooks/status.ts": {
+      "hash": "9e967616ac90507ed72bb9923f68c80e5e5a64fec7956ea169fe2b6578a5511f",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../lib/git-hooks.js",
+        "../../lib/hooks-types.js",
+        "../../ui/tui.js"
+      ],
+      "exports": [
+        "registerStatusCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/hooks/uninstall.test.ts": {
+      "hash": "681d971ab959c18ef3583a7b47f7ad636554213350fa6e28d65fdb81d236ccb0",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "vitest",
+        "../../ui/tui.js",
+        "./uninstall.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/cli/src/commands/hooks/uninstall.ts": {
+      "hash": "a090f6b4803e7ceda04f1ebd2088f81f867262f1d5b405f4613591b4c0eed031",
+      "language": "typescript",
+      "imports": [
+        "commander",
+        "../../lib/git-hooks.js",
+        "../../lib/hooks-types.js",
+        "../../ui/tui.js"
+      ],
+      "exports": [
+        "registerUninstallCommand"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/cli/src/commands/__tests__/review-tui.test.ts": {
+      "hash": "5980d964a581102f85ec5a634a60819e1191a50cd236438942a63dfcdfb08290",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "vitest",
+        "../../ui/format.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/vitest.config.ts": {
+      "hash": "c46e5c17c4960ab13c05bca8b04c1f5a72c977569203a01c869e9a0cf5b6fe2c",
+      "language": "typescript",
+      "imports": [
+        "vitest/config"
+      ],
+      "exports": [
+        "default"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/index.test.ts": {
+      "hash": "4762107c83f57c074c0a08911abe510acb53e0e108ca179a35b81965de9541a5",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core",
+        "vitest",
+        "./index.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/index.ts": {
+      "hash": "72d1e9bf4f440b4195f3841385546e098e505d1ffc026e3567541413bbd77bb5",
+      "language": "typescript",
+      "imports": [
+        "@actions/cache",
+        "@actions/core",
+        "@actions/github",
+        "ghagga-core",
+        "./tools/index.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/cache.ts": {
+      "hash": "b200be105776aec3aad7557d395974f13d205297f7007f54398b1790d1a4859f",
+      "language": "typescript",
+      "imports": [
+        "@actions/cache",
+        "@actions/core",
+        "ghagga-core",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/cpd.ts": {
+      "hash": "188e64ee6aa1540caf43afcd6a48a4f381aea5e5577b2f406f5e94876dd7ec81",
+      "language": "typescript",
+      "imports": [
+        "@actions/core",
+        "./cache.js",
+        "./exec.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/exec.ts": {
+      "hash": "440444f8c50f27b7ce01a30aed8c3c918d49a062300a00ffccab670a2d484500",
+      "language": "typescript",
+      "imports": [
+        "@actions/exec",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/execution.ts": {
+      "hash": "dbf84bff049b2a11cd7210b7c8009f13e657203dab4d683c606d89c239aaf497",
+      "language": "typescript",
+      "imports": [
+        "@actions/cache",
+        "@actions/core",
+        "@actions/exec",
+        "ghagga-core"
+      ],
+      "exports": [
+        "createActionsExecutionContext"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/index.ts": {
+      "hash": "1f74f8f94411ab81015b6e58fe6b6feb93769b742cee333e995ec0def868583b",
+      "language": "typescript",
+      "imports": [
+        "./orchestrator.js",
+        "./types.js"
+      ],
+      "exports": [
+        "runLocalAnalysis",
+        "TOOL_TIMEOUT_MS",
+        "TOOL_VERSIONS"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/orchestrator.ts": {
+      "hash": "70ca408147b5038f909ff69a44e865d813e1ced47657a60d2e6639a612dcc5e0",
+      "language": "typescript",
+      "imports": [
+        "@actions/core",
+        "ghagga-core",
+        "./execution.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/semgrep.ts": {
+      "hash": "e31c58567b3b24d53ec97e3ce033de4959dfcf9a08a25b05db22006ea48f5564",
+      "language": "typescript",
+      "imports": [
+        "@actions/core",
+        "./cache.js",
+        "./exec.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/trivy.ts": {
+      "hash": "f3d84d33e09948eb7e8e8b39a651a63713232618e87c765c559e74684ca37ebc",
+      "language": "typescript",
+      "imports": [
+        "@actions/core",
+        "./cache.js",
+        "./exec.js",
+        "./types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/types.ts": {
+      "hash": "6aab1a349e397ead4962a6891aefd9425ef5400463010745fd8bd763c9c81c67",
+      "language": "typescript",
+      "imports": [
+        "ghagga-core"
+      ],
+      "exports": [
+        "TOOL_VERSIONS",
+        "TOOL_TIMEOUT_MS",
+        "ToolRunConfig",
+        "ExecResult"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "apps/action/src/tools/__tests__/cache.test.ts": {
+      "hash": "fe865f12f2fe7458637a72afa2b31d0973083c523154dff05cb4030631509f2b",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "@actions/cache",
+        "@actions/core",
+        "../cache.js",
+        "../types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/tools/__tests__/cpd.test.ts": {
+      "hash": "5e612f18b7212492b9dc30a867ce7e797b65f6b110c284cc932e7273a9a1dd43",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "@actions/cache",
+        "@actions/core",
+        "@actions/exec",
+        "../cpd.js",
+        "../types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/tools/__tests__/exec.test.ts": {
+      "hash": "73bbe4c52153249a6fd20fd7ec44ec100c69a2791bb5cd73ebb94a96703c9908",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "@actions/exec",
+        "../exec.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/tools/__tests__/orchestrator-registry.integration.test.ts": {
+      "hash": "5415db8e9409a34c74dc0123c6d56885cb26299d13794de1b3be9e8e62ea3b21",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "@actions/core",
+        "ghagga-core",
+        "../execution.js",
+        "../orchestrator.js",
+        "../semgrep.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/tools/__tests__/semgrep.test.ts": {
+      "hash": "e2c9ab3128ac14f1e488b28f480af50b187eab9d4cf099c5546e2df6a2f48145",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "@actions/cache",
+        "@actions/core",
+        "@actions/exec",
+        "../semgrep.js",
+        "../types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/tools/__tests__/trivy.test.ts": {
+      "hash": "0ac9009645374a0df207c7b0f910cc5d05e94ba7498e44292c30ff28d337e5a9",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "@actions/cache",
+        "@actions/core",
+        "@actions/exec",
+        "../trivy.js",
+        "../types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/tools/__tests__/fixtures/parsing.integration.test.ts": {
+      "hash": "c23b90a73f19989f8ab655faf26feb9ed25622ee68ebe96995cc19644958c2ea",
+      "language": "typescript",
+      "imports": [
+        "node:fs",
+        "node:path",
+        "node:url",
+        "vitest"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "apps/action/src/__tests__/tools-types.test.ts": {
+      "hash": "04b52bbebd869b2b04ac3684a073135111de2de68233904c6e551799d5ee0484",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "../tools/types.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    }
+  }
+}
