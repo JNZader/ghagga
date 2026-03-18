@@ -77,8 +77,7 @@ export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
 
 // ─── Provider Labels ────────────────────────────────────────────
 
-const PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
-  { value: 'github', label: 'GitHub Models (Free)' },
+const API_PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
   { value: 'groq', label: 'Groq (Free)' },
   { value: 'cerebras', label: 'Cerebras (Free)' },
   { value: 'deepseek', label: 'DeepSeek' },
@@ -87,7 +86,14 @@ const PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'google', label: 'Google' },
   { value: 'qwen', label: 'Qwen (Alibaba Cloud)' },
-  { value: 'cli-bridge', label: 'CLI Bridge (Local)' },
+];
+
+const CLI_OPTIONS: { value: string; label: string }[] = [
+  { value: 'auto', label: 'Auto-detect (best available)' },
+  { value: 'claude', label: 'Claude Code (claude -p)' },
+  { value: 'gemini', label: 'Gemini CLI (gemini -p)' },
+  { value: 'copilot', label: 'Copilot CLI (copilot -p)' },
+  { value: 'codex', label: 'Codex CLI (codex exec)' },
 ];
 
 // ─── Component ──────────────────────────────────────────────────
@@ -239,24 +245,89 @@ export function ProviderEntry({
         </div>
       </div>
 
-      {/* Provider Dropdown */}
+      {/* Provider Mode: API vs CLI Bridge */}
       <div className="mb-3">
         <label className="mb-1 block text-xs font-medium text-text-secondary">Provider</label>
-        <select
-          value={entry.provider}
-          onChange={(e) => handleProviderChange(e.target.value as SaaSProvider)}
-          className="select-field"
-        >
-          {PROVIDER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div className="mb-2 flex items-center gap-4 text-sm">
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              name={`mode-${index}`}
+              checked={entry.provider !== 'cli-bridge'}
+              onChange={() => {
+                if (entry.provider === 'cli-bridge') {
+                  handleProviderChange('groq' as SaaSProvider);
+                }
+              }}
+              className="accent-primary-500"
+            />
+            <span className="text-text-secondary">API Provider</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              name={`mode-${index}`}
+              checked={entry.provider === 'cli-bridge'}
+              onChange={() => {
+                onChange({
+                  ...entry,
+                  provider: 'cli-bridge' as SaaSProvider,
+                  model: 'auto',
+                  apiKey: '',
+                  validated: true,
+                  hasExistingKey: false,
+                  availableModels: KNOWN_MODELS['cli-bridge'] ?? [],
+                });
+              }}
+              className="accent-primary-500"
+            />
+            <span className="text-text-secondary">CLI Bridge</span>
+            <span className="text-[10px] text-yellow-400/70">(uses server CLIs — $0)</span>
+          </label>
+        </div>
+
+        {entry.provider === 'cli-bridge' ? (
+          /* CLI selector */
+          <select
+            value={entry.model}
+            onChange={(e) => onChange({ ...entry, model: e.target.value })}
+            className="select-field"
+          >
+            {CLI_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          /* API provider dropdown */
+          <select
+            value={entry.provider}
+            onChange={(e) => handleProviderChange(e.target.value as SaaSProvider)}
+            className="select-field"
+          >
+            {API_PROVIDER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {/* API Key Input + Validate Button */}
-      <div className="mb-3">
+      {/* API Key Input + Validate Button (hidden for CLI Bridge) */}
+      {isCLIBridge ? (
+        <div className="mb-3 rounded-md border border-yellow-500/20 bg-yellow-500/5 p-3 text-xs text-yellow-300/80">
+          <p className="font-medium">No API key needed</p>
+          <p className="mt-1">
+            Uses CLI tools installed on the server. Set{' '}
+            <code className="rounded bg-surface-bg px-1">GEMINI_API_KEY</code> and/or{' '}
+            <code className="rounded bg-surface-bg px-1">COPILOT_GITHUB_TOKEN</code> as environment
+            variables in Coolify.
+          </p>
+        </div>
+      ) : null}
+      <div className={`mb-3 ${isCLIBridge ? 'hidden' : ''}`}>
         <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-medium text-text-secondary">API Key</label>
           {/* Toggle between reusing a saved key and entering a new one */}
@@ -356,7 +427,8 @@ export function ProviderEntry({
       </div>
 
       {/* Model Selector — combo input with datalist for type-ahead + free text */}
-      <div>
+      {/* Hidden for CLI Bridge — model is selected in the CLI dropdown above */}
+      <div className={isCLIBridge ? 'hidden' : ''}>
         <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
         {effectiveModels.length > 0 || entry.model ? (
           <div>
