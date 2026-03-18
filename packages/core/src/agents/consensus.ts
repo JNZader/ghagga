@@ -332,6 +332,7 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
       executionTimeMs,
       toolsRun: [],
       toolsSkipped: [],
+      modelsUsed: models.map((m) => `${m.stance}:${m.provider}/${m.model}`),
     },
   };
 }
