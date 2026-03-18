@@ -95,10 +95,18 @@ const adapters: CLIAdapter[] = [
   {
     name: 'copilot',
     command: 'copilot',
-    available: detectCLI('copilot'),
+    available: detectCLI('copilot') || detectCLI('gh'),
     generate(prompt, _systemPrompt) {
-      // Copilot reads from stdin pipe
-      return execSync('copilot -p -', {
+      // Try standalone copilot first, fall back to gh copilot
+      const hasCopilotCli = detectCLI('copilot');
+      if (hasCopilotCli) {
+        return execSync('copilot -p -', {
+          ...CLI_EXEC_OPTIONS,
+          input: prompt,
+        }).trim();
+      }
+      // gh copilot suggest — scriptable with piped input
+      return execSync('gh copilot suggest -t shell -', {
         ...CLI_EXEC_OPTIONS,
         input: prompt,
       }).trim();
