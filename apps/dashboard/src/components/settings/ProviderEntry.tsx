@@ -129,9 +129,7 @@ export function ProviderEntry({
         ? (KNOWN_MODELS[entry.provider] ?? [])
         : [];
   const effectiveModels =
-    entry.model && !baseModels.includes(entry.model)
-      ? [entry.model, ...baseModels]
-      : baseModels;
+    entry.model && !baseModels.includes(entry.model) ? [entry.model, ...baseModels] : baseModels;
 
   // Reset validation error on mount
   useEffect(() => {
