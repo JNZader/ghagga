@@ -148,3 +148,56 @@ export function calculateTokenBudget(model: string): {
     contextBudget: Math.floor(total * CONTEXT_BUDGET_RATIO),
   };
 }
+
+// ─── Rate-Aware Scheduling ─────────────────────────────────────
+
+/**
+ * Threshold below which a model is considered "TPM-constrained".
+ * Models with context windows below this are free-tier providers
+ * where we need to serialize requests to avoid rate limiting.
+ */
+const TPM_CONSTRAINED_THRESHOLD = 16_000;
+
+/**
+ * Estimate tokens per specialist call (system prompt + diff + response).
+ * Used to calculate how many specialists can run per TPM window.
+ */
+const ESTIMATED_TOKENS_PER_SPECIALIST = 7_000;
+
+/**
+ * Calculate concurrency and delay for workflow/consensus specialists
+ * based on the model's effective token budget (TPM for free tiers).
+ *
+ * For free-tier models with low TPM:
+ *   - concurrency=1, delay=60s → one specialist per minute
+ *
+ * For mid-range models:
+ *   - concurrency=2, delay=30s → two at a time with gaps
+ *
+ * For high-capacity models:
+ *   - concurrency=5, delay=0 → full parallel, no delays
+ *
+ * @param model - Model identifier
+ * @returns { concurrency, delayMs } for runWithConcurrency
+ */
+export function calculateRateSchedule(model: string): {
+  concurrency: number;
+  delayMs: number;
+} {
+  const contextWindow = getContextWindow(model);
+
+  // High-capacity models (paid tiers, large context) → full parallel
+  if (contextWindow >= TPM_CONSTRAINED_THRESHOLD * 4) {
+    return { concurrency: 5, delayMs: 0 };
+  }
+
+  // Mid-range models (e.g., Cerebras 60K TPM) → some parallelism
+  if (contextWindow >= TPM_CONSTRAINED_THRESHOLD) {
+    const parallelCalls = Math.max(1, Math.floor(contextWindow / ESTIMATED_TOKENS_PER_SPECIALIST));
+    return { concurrency: Math.min(parallelCalls, 5), delayMs: 5_000 };
+  }
+
+  // TPM-constrained models (Groq free tier, 4K-12K) → serialize with 60s delay
+  // Groq resets TPM every 60 seconds, so we wait between each call
+  return { concurrency: 1, delayMs: 60_000 };
+}
