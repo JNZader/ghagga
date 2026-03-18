@@ -53,10 +53,9 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'qwen-qwq-32b': 8_000,
 
   // Cerebras — very fast inference, generous limits
-  'llama-3.3-70b': 128_000,
-  'llama-3.1-8b': 128_000,
-  'llama-3.1-70b': 128_000,
-  'qwen-3-32b': 32_768,
+  'llama3.1-8b': 128_000,
+  'qwen-3-235b-a22b-instruct-2507': 128_000,
+  'zai-glm-4.7': 128_000,
 
   // DeepSeek
   'deepseek-chat': 64_000,
