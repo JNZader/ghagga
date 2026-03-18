@@ -278,6 +278,7 @@ async function handlePullRequest(
       reviewLevel: effective.settings.reviewLevel,
       enabledTools: effective.settings.enabledTools,
       disabledTools: effective.settings.disabledTools,
+      enableBlastRadius: effective.settings.enableBlastRadius,
     },
   });
 
@@ -490,6 +491,7 @@ async function handleIssueComment(
       reviewLevel: effective.settings.reviewLevel,
       enabledTools: effective.settings.enabledTools,
       disabledTools: effective.settings.disabledTools,
+      enableBlastRadius: effective.settings.enableBlastRadius,
     },
   });
 
