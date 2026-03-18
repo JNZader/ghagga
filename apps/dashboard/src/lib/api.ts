@@ -182,6 +182,23 @@ export function useUpdateSettings() {
   });
 }
 
+export function useCopySettingsToGlobal() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ repoId }: { repoId: number }) =>
+      fetchApi<{ data: { message: string } }>('/api/settings/copy-to-global', {
+        method: 'POST',
+        body: JSON.stringify({ repoId }),
+      }),
+    onSuccess: () => {
+      // Invalidate both installation-level and repo-level caches
+      void queryClient.invalidateQueries({ queryKey: ['installation-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+  });
+}
+
 // ─── Provider Validation ──────────────────────────────────
 
 export function useValidateProvider() {

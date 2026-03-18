@@ -1,7 +1,9 @@
 /**
  * Repo settings API routes: GET /api/settings, PUT /api/settings
  *
- * Also includes POST /api/providers/validate (provider key validation).
+ * Also includes:
+ *   POST /api/providers/validate (provider key validation)
+ *   POST /api/settings/copy-to-global (copy repo config to installation-level)
  */
 
 import type { SaaSProvider } from 'ghagga-core';
@@ -14,8 +16,10 @@ import {
   getInstallationSettings,
   getInstallationSettingsBatch,
   getRepoByFullName,
+  getRepositoryById,
   updateDelegatedCiPolicy,
   updateRepoSettings,
+  upsertInstallationSettings,
 } from 'ghagga-db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -473,6 +477,76 @@ export function createSettingsRouter(db: Database) {
       logger.error({ err, errorId, user: user.githubLogin }, 'Failed to fetch available keys');
       return c.json(
         { error: 'FETCH_FAILED', message: 'Failed to fetch available keys', errorId },
+        500,
+      );
+    }
+  });
+
+  // ── POST /api/settings/copy-to-global ──────────────────────
+  //
+  // Copies a repo's provider chain, review mode, and tool toggles
+  // to the installation-level (global) settings so all repos
+  // using "Global" inherit them.
+  router.post('/api/settings/copy-to-global', async (c) => {
+    const user = c.get('user') as AuthUser;
+
+    let body: { repoId?: number };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'VALIDATION_ERROR', message: 'Invalid JSON body' }, 400);
+    }
+
+    const repoId = body.repoId;
+    if (typeof repoId !== 'number') {
+      return c.json({ error: 'VALIDATION_ERROR', message: 'Missing or invalid repoId' }, 400);
+    }
+
+    try {
+      const repo = await getRepositoryById(db, repoId);
+      if (!repo) {
+        return c.json({ error: 'NOT_FOUND', message: 'Repository not found' }, 404);
+      }
+
+      if (!user.installationIds.includes(repo.installationId)) {
+        return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
+      }
+
+      const repoSettings = (repo.settings ?? DEFAULT_REPO_SETTINGS) as RepoSettings;
+      const repoChain = (repo.providerChain ?? []) as DbProviderChainEntry[];
+
+      // Upsert into installation_settings, copying the repo's config
+      await upsertInstallationSettings(db, repo.installationId, {
+        providerChain: repoChain,
+        aiReviewEnabled: repo.aiReviewEnabled,
+        reviewMode: repo.reviewMode,
+        settings: {
+          enableSemgrep: repoSettings.enableSemgrep,
+          enableTrivy: repoSettings.enableTrivy,
+          enableCpd: repoSettings.enableCpd,
+          enableMemory: repoSettings.enableMemory,
+          enableBlastRadius: repoSettings.enableBlastRadius,
+          customRules: repoSettings.customRules,
+          ignorePatterns: repoSettings.ignorePatterns,
+          reviewLevel: repoSettings.reviewLevel,
+          enabledTools: repoSettings.enabledTools,
+          disabledTools: repoSettings.disabledTools,
+        },
+      });
+
+      logger.info(
+        { repoId, repo: repo.fullName, user: user.githubLogin },
+        'Copied repo settings to global',
+      );
+      return c.json({ data: { message: 'Settings copied to global' } });
+    } catch (err) {
+      const errorId = generateErrorId();
+      logger.error(
+        { err, errorId, repoId, user: user.githubLogin },
+        'Failed to copy settings to global',
+      );
+      return c.json(
+        { error: 'COPY_FAILED', message: 'Failed to copy settings to global', errorId },
         500,
       );
     }
