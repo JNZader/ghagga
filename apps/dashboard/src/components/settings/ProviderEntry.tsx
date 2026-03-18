@@ -38,13 +38,21 @@ export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
   cerebras: ['llama3.1-8b', 'gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'],
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   openrouter: [
-    'deepseek/deepseek-chat',
-    'deepseek/deepseek-r1:free',
+    // ── Free models (no credits needed) ──
+    'openai/gpt-oss-120b:free',
+    'nvidia/nemotron-3-super-120b-a12b:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
     'google/gemma-3-27b-it:free',
-    'qwen/qwen3-235b-a22b:free',
+    'mistralai/mistral-small-3.1-24b-instruct:free',
+    'qwen/qwen3-coder:free',
+    'stepfun/step-3.5-flash:free',
+    'minimax/minimax-m2.5:free',
+    // ── Paid models (requires credits) ──
     'anthropic/claude-sonnet-4',
     'openai/gpt-4o',
     'google/gemini-2.5-flash',
+    'deepseek/deepseek-chat',
   ],
   anthropic: [
     'claude-sonnet-4-20250514',
@@ -113,12 +121,15 @@ export function ProviderEntry({
   // Effective model list: prefer entry's availableModels, fall back to KNOWN_MODELS.
   // This ensures the dropdown is always populated for entries with saved keys,
   // even if availableModels was lost during a re-render.
-  const effectiveModels =
+  // If the currently selected model isn't in the list, prepend it so it stays visible.
+  const baseModels =
     entry.availableModels.length > 0
       ? entry.availableModels
       : entry.hasExistingKey || entry.validated
         ? (KNOWN_MODELS[entry.provider] ?? [])
         : [];
+  const effectiveModels =
+    entry.model && !baseModels.includes(entry.model) ? [entry.model, ...baseModels] : baseModels;
 
   // Reset validation error on mount
   useEffect(() => {
@@ -341,24 +352,26 @@ export function ProviderEntry({
         )}
       </div>
 
-      {/* Model Dropdown */}
+      {/* Model Selector — combo input with datalist for type-ahead + free text */}
       <div>
         <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
         {effectiveModels.length > 0 || entry.model ? (
-          <select
-            value={entry.model}
-            onChange={(e) => handleModelChange(e.target.value)}
-            className="select-field"
-          >
-            <option value="">Select a model...</option>
-            {effectiveModels.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+          <div>
+            <input
+              type="text"
+              list={`models-${entry.provider}-${effectiveModels.length}`}
+              value={entry.model}
+              onChange={(e) => handleModelChange(e.target.value)}
+              placeholder="Type or select a model..."
+              className="input-field w-full"
+            />
+            <datalist id={`models-${entry.provider}-${effectiveModels.length}`}>
+              {effectiveModels.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </div>
         ) : entry.model ? (
-          // Pre-selected model from saved settings (not yet validated this session)
           <div className="flex items-center gap-2">
             <span className="flex-1 rounded-md border border-surface-border bg-surface-bg px-3 py-2 text-sm text-text-primary">
               {entry.model}
