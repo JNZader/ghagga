@@ -15,6 +15,9 @@
  */
 
 import { execSync } from 'node:child_process';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -97,11 +100,18 @@ const adapters: CLIAdapter[] = [
     command: 'copilot',
     available: detectCLI('copilot'),
     generate(prompt, _systemPrompt) {
-      // @github/copilot npm package — auth via COPILOT_GITHUB_TOKEN env var
-      return execSync('copilot -p -', {
-        ...CLI_EXEC_OPTIONS,
-        input: prompt,
-      }).trim();
+      // copilot -p takes prompt as argument — too large for ARG_MAX with big diffs.
+      // Write to temp file and tell copilot to read it.
+      const tmpFile = join(tmpdir(), `ghagga-prompt-${Date.now()}.txt`);
+      try {
+        writeFileSync(tmpFile, prompt, 'utf8');
+        return execSync(
+          `copilot -p "Read and analyze the file at ${tmpFile} and provide a code review"`,
+          { ...CLI_EXEC_OPTIONS },
+        ).trim();
+      } finally {
+        try { unlinkSync(tmpFile); } catch { /* ignore */ }
+      }
     },
   },
 ];
