@@ -95,7 +95,7 @@ export function Settings() {
             KNOWN_MODELS[entry.provider as SaaSProvider] ?? (entry.model ? [entry.model] : []),
           hasExistingKey: entry.hasApiKey,
           maskedApiKey: entry.maskedApiKey,
-          validated: entry.hasApiKey || entry.provider === 'github',
+          validated: entry.hasApiKey || entry.provider === 'github' || entry.provider === 'cli-bridge',
         })),
       );
     }
@@ -116,7 +116,7 @@ export function Settings() {
           availableModels: entry.model ? [entry.model] : [],
           hasExistingKey: entry.hasApiKey,
           maskedApiKey: entry.maskedApiKey,
-          validated: entry.hasApiKey || entry.provider === 'github',
+          validated: entry.hasApiKey || entry.provider === 'github' || entry.provider === 'cli-bridge',
         })),
       );
       if (settings.globalSettings) {

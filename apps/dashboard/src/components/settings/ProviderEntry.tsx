@@ -108,7 +108,8 @@ export function ProviderEntry({
   const [keyMode, setKeyMode] = useState<'reuse' | 'new'>('reuse');
 
   const isGitHub = entry.provider === 'github';
-  const needsApiKey = !isGitHub;
+  const isCLIBridge = entry.provider === 'cli-bridge';
+  const needsApiKey = !isGitHub && !isCLIBridge;
   // Can validate if: GitHub (no key needed), has a new key typed, OR has an existing saved key
   const canValidate = isGitHub || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
 
