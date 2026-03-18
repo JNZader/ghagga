@@ -162,7 +162,12 @@ export function generateViaCLI(
       const text = adapter.generate(prompt, systemPrompt);
       return { text, provider: 'cli-bridge', cli: adapter.name };
     } catch (error) {
-      console.error(`[cli-bridge] ${adapter.name} failed: ${(error as Error).message}`);
+      // Truncate error message — stderr from CLI failures can contain the entire prompt
+      // (including huge diffs like package-lock.json), making logs unreadable.
+      const fullMessage = (error as Error).message ?? String(error);
+      const truncated =
+        fullMessage.length > 500 ? `${fullMessage.slice(0, 500)}... [truncated]` : fullMessage;
+      console.error(`[cli-bridge] ${adapter.name} failed: ${truncated}`);
     }
   }
 

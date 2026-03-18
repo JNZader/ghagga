@@ -501,6 +501,7 @@ export function createReviewWorker(concurrency = 3): Worker<ReviewJobData, unkno
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     connection: redisConnection as any,
     concurrency,
+    lockDuration: 300_000, // 5 minutes — CLI bridge reviews can take 100-110s
   });
 }
 
