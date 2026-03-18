@@ -332,6 +332,7 @@ async function processReview(
 
     // Fetch dependency graph for blast-radius analysis (if enabled)
     let graphLoader: GraphLoader | undefined;
+    log.info({ enableBlastRadius: settings.enableBlastRadius ?? false }, 'Blast-radius check');
     if (settings.enableBlastRadius) {
       try {
         const graph = await fetchGraphFromBranch(owner, repo, token);
