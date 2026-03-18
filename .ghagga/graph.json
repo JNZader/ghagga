@@ -1651,7 +1651,7 @@
       "isTest": true
     },
     "packages/core/src/providers/cli-bridge.ts": {
-      "hash": "5fa5a99d22df2613c7231d6bda329254f09f313cc893ab8846927861f50bce8f",
+      "hash": "d5f0308ec85e995b354e2df122ad943e3d53817f40d6e6f53db3a863a7895a5a",
       "language": "typescript",
       "imports": [
         "node:child_process",
@@ -2597,7 +2597,7 @@
       "isTest": true
     },
     "packages/core/src/agents/simple.ts": {
-      "hash": "412e9913d053fb7070a7e91720b0a55a031b0a38e3c48dc90a685c6d67d327e2",
+      "hash": "3f638c3ed45289ff70b72d9ce0d73e367a4a5470da6927879d8bd48a7f147aaa",
       "language": "typescript",
       "imports": [
         "../providers/index.js",
@@ -3026,7 +3026,7 @@
       "isTest": false
     },
     "apps/server/src/queues/delegated-ci.ts": {
-      "hash": "2a3257d105575bbc1eea072c582f4bb2a1a842b7dc3cae64bb64fb9f5df6b9fa",
+      "hash": "4a1367928a3e952ad61d8a2a81a9ad5c72f78ea65e63636384697367c059c6e2",
       "language": "typescript",
       "imports": [
         "bullmq",
@@ -3058,7 +3058,7 @@
       "isTest": true
     },
     "apps/server/src/queues/review.ts": {
-      "hash": "2f9538d2e31d12cf8a1f7d3c7dfec998301ebdde4aeeee55c3f9c2cb00590d76",
+      "hash": "b40efec958e1e8bf28b02b30557e668be9ef88942be855693a8d146b4df90ab2",
       "language": "typescript",
       "imports": [
         "bullmq",
