@@ -176,6 +176,7 @@ export function createInstallationsRouter(db: Database) {
         'cerebras',
         'deepseek',
         'openrouter',
+        'cli-bridge',
       ];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {

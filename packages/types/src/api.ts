@@ -16,7 +16,8 @@ export type LLMProvider =
   | 'groq'
   | 'cerebras'
   | 'deepseek'
-  | 'openrouter';
+  | 'openrouter'
+  | 'cli-bridge';
 
 /** Providers available in the SaaS dashboard (excludes Ollama) */
 export type SaaSProvider =
@@ -28,7 +29,8 @@ export type SaaSProvider =
   | 'groq'
   | 'cerebras'
   | 'deepseek'
-  | 'openrouter';
+  | 'openrouter'
+  | 'cli-bridge';
 
 // ─── User ───────────────────────────────────────────────────────
 

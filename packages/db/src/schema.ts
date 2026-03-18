@@ -105,7 +105,8 @@ export interface DbProviderChainEntry {
     | 'groq'
     | 'cerebras'
     | 'deepseek'
-    | 'openrouter';
+    | 'openrouter'
+    | 'cli-bridge';
   model: string;
   encryptedApiKey: string | null; // null for GitHub Models (uses session token)
 }

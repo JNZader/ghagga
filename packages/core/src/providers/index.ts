@@ -124,6 +124,13 @@ export function createProvider(provider: LLMProvider, apiKey: string) {
         typeof createOpenAI
       >;
     }
+    case 'cli-bridge':
+      // CLI Bridge does not use the AI SDK — it calls CLIs via child_process.
+      // Return a dummy provider that throws if accidentally called via createModel().
+      // The pipeline intercepts cli-bridge before reaching createModel().
+      throw new Error(
+        'cli-bridge provider cannot be used with createModel(). Use generateViaCLI() from providers/cli-bridge.js instead.',
+      );
     default: {
       // Exhaustive check — TypeScript will error if a provider is missing
       const _exhaustive: never = provider;
