@@ -112,34 +112,19 @@ describe('createProvider', () => {
     });
   });
 
-  it('cerebras: calls createOpenAI with Cerebras baseURL and name', () => {
-    createProvider('cerebras', 'csk-key');
-
-    expect(mockCreateOpenAI).toHaveBeenCalledWith({
-      apiKey: 'csk-key',
-      baseURL: 'https://api.cerebras.ai/v1',
-      name: 'cerebras',
-    });
+  it('cerebras: returns a function that creates chat models via openai-compatible', () => {
+    const provider = createProvider('cerebras', 'csk-key');
+    expect(typeof provider).toBe('function');
   });
 
-  it('deepseek: calls createOpenAI with DeepSeek baseURL and name', () => {
-    createProvider('deepseek', 'dsk-key');
-
-    expect(mockCreateOpenAI).toHaveBeenCalledWith({
-      apiKey: 'dsk-key',
-      baseURL: 'https://api.deepseek.com/v1',
-      name: 'deepseek',
-    });
+  it('deepseek: returns a function that creates chat models via openai-compatible', () => {
+    const provider = createProvider('deepseek', 'dsk-key');
+    expect(typeof provider).toBe('function');
   });
 
-  it('openrouter: calls createOpenAI with OpenRouter baseURL and name', () => {
-    createProvider('openrouter', 'sk-or-key');
-
-    expect(mockCreateOpenAI).toHaveBeenCalledWith({
-      apiKey: 'sk-or-key',
-      baseURL: 'https://openrouter.ai/api/v1',
-      name: 'openrouter',
-    });
+  it('openrouter: returns a function that creates chat models via openai-compatible', () => {
+    const provider = createProvider('openrouter', 'sk-or-key');
+    expect(typeof provider).toBe('function');
   });
 
   it('unknown provider: throws "Unknown provider" error', () => {

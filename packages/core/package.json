@@ -54,16 +54,16 @@
     "@ai-sdk/anthropic": "^3.0.0",
     "@ai-sdk/google": "^3.0.0",
     "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/openai-compatible": "^2.0.35",
     "ai": "^6.0.0",
-    "minimatch": "^10.2.0",
     "fts5-sql-bundle": "^1.0.2",
+    "minimatch": "^10.2.0",
     "zod": "^4.3.0"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.0",
     "@stryker-mutator/vitest-runner": "^9.6.0",
     "@types/node": "^25.3.5",
-
     "typescript": "^5.9.0",
     "vitest": "^4.0.0"
   }

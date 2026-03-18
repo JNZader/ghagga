@@ -25,6 +25,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
 import type { LLMProvider } from '../types.js';
 
@@ -93,24 +94,36 @@ export function createProvider(provider: LLMProvider, apiKey: string) {
         baseURL: GROQ_BASE_URL,
         name: 'groq',
       });
-    case 'cerebras':
-      return createOpenAI({
-        apiKey,
-        baseURL: CEREBRAS_BASE_URL,
+    case 'cerebras': {
+      const provider = createOpenAICompatible({
         name: 'cerebras',
-      });
-    case 'deepseek':
-      return createOpenAI({
+        baseURL: CEREBRAS_BASE_URL,
         apiKey,
-        baseURL: DEEPSEEK_BASE_URL,
+      });
+      return ((modelId: string) => provider.chatModel(modelId)) as unknown as ReturnType<
+        typeof createOpenAI
+      >;
+    }
+    case 'deepseek': {
+      const provider = createOpenAICompatible({
         name: 'deepseek',
-      });
-    case 'openrouter':
-      return createOpenAI({
+        baseURL: DEEPSEEK_BASE_URL,
         apiKey,
-        baseURL: OPENROUTER_BASE_URL,
-        name: 'openrouter',
       });
+      return ((modelId: string) => provider.chatModel(modelId)) as unknown as ReturnType<
+        typeof createOpenAI
+      >;
+    }
+    case 'openrouter': {
+      const provider = createOpenAICompatible({
+        name: 'openrouter',
+        baseURL: OPENROUTER_BASE_URL,
+        apiKey,
+      });
+      return ((modelId: string) => provider.chatModel(modelId)) as unknown as ReturnType<
+        typeof createOpenAI
+      >;
+    }
     default: {
       // Exhaustive check — TypeScript will error if a provider is missing
       const _exhaustive: never = provider;
