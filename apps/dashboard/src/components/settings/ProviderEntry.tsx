@@ -72,6 +72,7 @@ export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
   ],
   github: ['gpt-4o-mini', 'gpt-4o', 'o3-mini', 'Phi-4', 'Mistral-Large-2411', 'DeepSeek-R1'],
   qwen: ['qwen-coder-plus', 'qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-coder-turbo', 'qwen-long'],
+  'cli-bridge': ['auto', 'claude', 'gemini', 'codex', 'copilot'],
 };
 
 // ─── Provider Labels ────────────────────────────────────────────
@@ -86,6 +87,7 @@ const PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'google', label: 'Google' },
   { value: 'qwen', label: 'Qwen (Alibaba Cloud)' },
+  { value: 'cli-bridge', label: 'CLI Bridge (Local)' },
 ];
 
 // ─── Component ──────────────────────────────────────────────────

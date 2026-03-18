@@ -97,6 +97,7 @@ export {
 
 // ─── Providers (for direct model access) ────────────────────────
 
+export { generateViaCLI, getAvailableCLIs } from './providers/cli-bridge.js';
 export type { FallbackOptions, FallbackProvider, FallbackResult } from './providers/fallback.js';
 export { generateWithFallback } from './providers/fallback.js';
 export { createModel, createProvider } from './providers/index.js';

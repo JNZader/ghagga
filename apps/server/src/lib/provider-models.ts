@@ -49,6 +49,7 @@ export const CURATED_MODELS: Record<SaaSProvider, string[]> = {
     'openai/gpt-4o',
     'google/gemini-2.5-flash',
   ],
+  'cli-bridge': ['auto', 'claude', 'gemini', 'codex', 'copilot'],
 };
 
 // ─── Validation ─────────────────────────────────────────────────
@@ -90,6 +91,9 @@ export async function validateProviderKey(
         return await validateOpenAICompat(apiKey, 'https://api.deepseek.com/v1', 'deepseek');
       case 'openrouter':
         return await validateOpenAICompat(apiKey, 'https://openrouter.ai/api/v1', 'openrouter');
+      case 'cli-bridge':
+        // CLI Bridge doesn't need API key validation — it uses local CLIs
+        return { valid: true, models: CURATED_MODELS['cli-bridge'] };
       default: {
         const _exhaustive: never = provider;
         return { valid: false, models: [], error: `Unknown provider: ${_exhaustive}` };

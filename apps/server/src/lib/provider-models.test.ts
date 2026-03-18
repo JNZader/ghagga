@@ -48,9 +48,10 @@ describe('CURATED_MODELS', () => {
         'cerebras',
         'deepseek',
         'openrouter',
+        'cli-bridge',
       ]),
     );
-    expect(Object.keys(CURATED_MODELS)).toHaveLength(9);
+    expect(Object.keys(CURATED_MODELS)).toHaveLength(10);
   });
 
   it('each provider has at least one model', () => {

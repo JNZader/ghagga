@@ -278,6 +278,7 @@ export function createSettingsRouter(db: Database) {
         'cerebras',
         'deepseek',
         'openrouter',
+        'cli-bridge',
       ];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {
@@ -599,9 +600,18 @@ export function createSettingsRouter(db: Database) {
       'cerebras',
       'deepseek',
       'openrouter',
+      'cli-bridge',
     ];
     if (!validProviders.includes(provider)) {
       return c.json({ error: 'VALIDATION_ERROR', message: `Unknown provider: ${provider}` }, 400);
+    }
+
+    // CLI Bridge doesn't need API key validation — it uses local CLIs
+    if (provider === 'cli-bridge') {
+      return c.json({
+        valid: true,
+        models: ['auto', 'claude', 'gemini', 'codex', 'copilot'],
+      });
     }
 
     // For GitHub Models, use the user's session token

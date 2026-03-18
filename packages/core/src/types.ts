@@ -18,7 +18,8 @@ export type LLMProvider =
   | 'groq'
   | 'cerebras'
   | 'deepseek'
-  | 'openrouter';
+  | 'openrouter'
+  | 'cli-bridge';
 
 /** Providers available in the SaaS dashboard (excludes Ollama) */
 export type SaaSProvider =
@@ -30,7 +31,8 @@ export type SaaSProvider =
   | 'groq'
   | 'cerebras'
   | 'deepseek'
-  | 'openrouter';
+  | 'openrouter'
+  | 'cli-bridge';
 
 export type ReviewLevel = 'soft' | 'normal' | 'strict';
 
@@ -535,4 +537,5 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   cerebras: 'llama-3.3-70b',
   deepseek: 'deepseek-chat',
   openrouter: 'deepseek/deepseek-chat',
+  'cli-bridge': 'auto',
 };

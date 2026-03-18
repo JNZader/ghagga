@@ -17,8 +17,14 @@
 
 import { runConsensusReview } from './agents/consensus.js';
 import { runDiagnosticReview } from './agents/diagnostic.js';
-import { buildStackHints } from './agents/prompts.js';
-import { runSimpleReview } from './agents/simple.js';
+import {
+  buildMemoryContext,
+  buildReviewLevelInstruction,
+  buildStackHints,
+  REVIEW_CALIBRATION,
+  SIMPLE_REVIEW_SYSTEM,
+} from './agents/prompts.js';
+import { parseReviewResponse, runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
@@ -27,6 +33,7 @@ import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
+import { generateViaCLI } from './providers/cli-bridge.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import {
@@ -65,6 +72,11 @@ function validateInput(input: ReviewInput): void {
 
   // Provider chain mode: validate the chain has entries
   if (input.providerChain && input.providerChain.length > 0) {
+    return;
+  }
+
+  // CLI Bridge mode: no API key required (uses CLI auth)
+  if (input.provider === 'cli-bridge') {
     return;
   }
 
@@ -324,10 +336,46 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // ── Step 6: Execute agent mode (or skip if AI disabled) ────
   let result: ReviewResult;
 
+  // Check if CLI bridge should be used (intercept before normal provider flow)
+  const isCliBridge =
+    input.provider === 'cli-bridge' ||
+    input.providerChain?.[0]?.provider === ('cli-bridge' as ProviderChainEntry['provider']);
+
   if (!aiEnabled) {
     // Static-only mode: no LLM calls
     emit({ step: 'agent-start', message: 'AI review disabled — returning static analysis only' });
     result = createStaticOnlyResult(staticResult, input.mode, startTime);
+  } else if (isCliBridge) {
+    // CLI Bridge mode: call LLM CLIs directly instead of AI SDK
+    const preferredCLI = input.model && input.model !== 'auto' ? input.model : undefined;
+    emit({
+      step: 'agent-start',
+      message: `Running CLI bridge review (preferred: ${preferredCLI ?? 'auto'})...`,
+    });
+
+    try {
+      result = await runCLIBridgeReview({
+        diff: truncatedDiff,
+        staticContext,
+        memoryContext,
+        stackHints,
+        reviewLevel: input.settings.reviewLevel,
+        preferredCLI,
+        onProgress: input.onProgress,
+      });
+    } catch (error) {
+      console.warn(
+        '[ghagga] CLI bridge review failed, returning static analysis only:',
+        error instanceof Error ? error.message : String(error),
+      );
+      emit({
+        step: 'agent-failed',
+        message: 'CLI bridge review failed — returning static analysis only',
+      });
+      result = createStaticOnlyResult(staticResult, input.mode, startTime);
+      result.status = 'NEEDS_HUMAN_REVIEW';
+      result.summary = `CLI bridge review failed (${error instanceof Error ? error.message : 'unknown error'}). Static analysis results are shown below.`;
+    }
   } else {
     // Resolve the primary provider for agent calls
     const primary = resolvePrimaryProvider(input);
@@ -702,4 +750,69 @@ function createStaticOnlyResult(
       toolsSkipped: [],
     },
   };
+}
+
+// ─── CLI Bridge Review ──────────────────────────────────────────
+
+interface CLIBridgeReviewInput {
+  diff: string;
+  staticContext: string;
+  memoryContext: string | null;
+  stackHints: string;
+  reviewLevel: import('./types.js').ReviewLevel;
+  preferredCLI?: string;
+  onProgress?: import('./types.js').ProgressCallback;
+}
+
+/**
+ * Run a review using CLI bridge (calls LLM CLIs directly).
+ *
+ * Builds the same prompt as simple mode, calls generateViaCLI(),
+ * and parses the response with the same parser.
+ * Simple mode only — workflow/consensus would need multiple sequential calls.
+ */
+async function runCLIBridgeReview(input: CLIBridgeReviewInput): Promise<ReviewResult> {
+  const { diff, staticContext, memoryContext, stackHints, reviewLevel, preferredCLI } = input;
+  const emit = input.onProgress ?? (() => {});
+
+  const startTime = Date.now();
+
+  // Build the same system prompt as simple mode
+  const system = [
+    SIMPLE_REVIEW_SYSTEM,
+    staticContext,
+    buildMemoryContext(memoryContext),
+    stackHints,
+    buildReviewLevelInstruction(reviewLevel),
+    REVIEW_CALIBRATION,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  // Build the user prompt with the diff
+  const prompt = `Please review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
+
+  emit({
+    step: 'cli-bridge-call',
+    message: `Calling CLI bridge (preferred: ${preferredCLI ?? 'auto'})...`,
+  });
+
+  // generateViaCLI is synchronous (execSync) but we wrap in async for pipeline compat
+  const cliResult = generateViaCLI(prompt, system, preferredCLI);
+
+  const executionTimeMs = Date.now() - startTime;
+
+  emit({
+    step: 'cli-bridge-done',
+    message: `CLI bridge review complete via ${cliResult.cli} — ${(executionTimeMs / 1000).toFixed(1)}s`,
+  });
+
+  return parseReviewResponse(
+    cliResult.text,
+    'cli-bridge',
+    cliResult.cli,
+    0, // No token count available from CLI
+    executionTimeMs,
+    memoryContext,
+  );
 }
