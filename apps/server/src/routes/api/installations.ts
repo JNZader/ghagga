@@ -189,28 +189,38 @@ export function createInstallationsRouter(db: Database) {
         }
       }
 
-      // Merge API keys with existing
+      // Merge API keys: build a Map of all known keys by provider,
+      // then resolve each entry from the map. When a new key is provided,
+      // update the map so subsequent entries of the same provider reuse it.
       const existingRow = await getInstallationSettings(db, installationId);
       const existingChain = existingRow
         ? ((existingRow.providerChain ?? []) as DbProviderChainEntry[])
         : [];
 
+      const keysByProvider = new Map<string, string>();
+      for (const e of existingChain) {
+        if (e.encryptedApiKey) {
+          keysByProvider.set(e.provider, e.encryptedApiKey);
+        }
+      }
+
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry) => {
         if (entry.apiKey) {
+          const encrypted = encrypt(entry.apiKey);
+          keysByProvider.set(entry.provider, encrypted);
           return {
             provider: entry.provider as SaaSProvider,
             model: entry.model,
-            encryptedApiKey: encrypt(entry.apiKey),
+            encryptedApiKey: encrypted,
           };
         }
         if (entry.provider === 'github') {
           return { provider: 'github' as const, model: entry.model, encryptedApiKey: null };
         }
-        const existing = existingChain.find((e) => e.provider === entry.provider);
         return {
           provider: entry.provider as SaaSProvider,
           model: entry.model,
-          encryptedApiKey: existing?.encryptedApiKey ?? null,
+          encryptedApiKey: keysByProvider.get(entry.provider) ?? null,
         };
       });
 
