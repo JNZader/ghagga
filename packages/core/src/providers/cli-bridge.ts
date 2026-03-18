@@ -57,10 +57,12 @@ const adapters: CLIAdapter[] = [
     command: 'claude',
     available: detectCLI('claude'),
     generate(prompt, systemPrompt) {
-      const args = ['-p', prompt, '--output-format', 'text', '--max-turns', '1'];
-      if (systemPrompt) args.splice(2, 0, '--system-prompt', systemPrompt);
-      return execSync(`claude ${args.map((a) => JSON.stringify(a)).join(' ')}`, {
+      // Pass prompt via stdin to avoid E2BIG on large diffs
+      const args = ['--output-format', 'text', '--max-turns', '1'];
+      if (systemPrompt) args.push('--system-prompt', systemPrompt);
+      return execSync(`claude -p - ${args.map((a) => JSON.stringify(a)).join(' ')}`, {
         ...CLI_EXEC_OPTIONS,
+        input: prompt,
       }).trim();
     },
   },
@@ -69,9 +71,11 @@ const adapters: CLIAdapter[] = [
     command: 'gemini',
     available: detectCLI('gemini'),
     generate(prompt, systemPrompt) {
+      // Gemini auto-detects non-TTY stdin and reads from it
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
-      return execSync(`gemini -p ${JSON.stringify(fullPrompt)} --output-format text`, {
+      return execSync('gemini -p - --output-format text', {
         ...CLI_EXEC_OPTIONS,
+        input: fullPrompt,
       }).trim();
     },
   },
@@ -80,9 +84,11 @@ const adapters: CLIAdapter[] = [
     command: 'codex',
     available: detectCLI('codex'),
     generate(prompt, systemPrompt) {
+      // Codex reads from stdin with `codex exec -`
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
-      return execSync(`codex exec ${JSON.stringify(fullPrompt)}`, {
+      return execSync('codex exec -', {
         ...CLI_EXEC_OPTIONS,
+        input: fullPrompt,
       }).trim();
     },
   },
@@ -91,8 +97,10 @@ const adapters: CLIAdapter[] = [
     command: 'copilot',
     available: detectCLI('copilot'),
     generate(prompt, _systemPrompt) {
-      return execSync(`copilot -p ${JSON.stringify(prompt)}`, {
+      // Copilot reads from stdin pipe
+      return execSync('copilot -p -', {
         ...CLI_EXEC_OPTIONS,
+        input: prompt,
       }).trim();
     },
   },
