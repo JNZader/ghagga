@@ -25,7 +25,17 @@ export function ProviderChainEditor({
 }: ProviderChainEditorProps) {
   // Fetch available keys if not provided as a prop (self-contained usage)
   const { data: fetchedKeys } = useAvailableKeys();
-  const availableKeys: AvailableKeysMap = keysProp ?? fetchedKeys ?? {};
+  const serverKeys: AvailableKeysMap = keysProp ?? fetchedKeys ?? {};
+
+  // Merge with keys from existing chain entries — this allows a second entry
+  // for the same provider to "reuse" the key from the first entry, even if
+  // the key only exists in the repo chain (not in global/installation settings).
+  const availableKeys: AvailableKeysMap = { ...serverKeys };
+  for (const entry of chain) {
+    if (entry.hasExistingKey && entry.maskedApiKey && !availableKeys[entry.provider]) {
+      availableKeys[entry.provider] = { maskedApiKey: entry.maskedApiKey, source: 'global' };
+    }
+  }
   const handleEntryChange = (index: number, entry: ProviderEntryState) => {
     const updated = [...chain];
     updated[index] = entry;
