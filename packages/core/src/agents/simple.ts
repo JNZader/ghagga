@@ -63,9 +63,17 @@ function parseReviewResponse(
   const status: ReviewStatus =
     (statusMatch?.[1]?.toUpperCase() as ReviewStatus) ?? 'NEEDS_HUMAN_REVIEW';
 
-  // Extract SUMMARY
+  // Extract SUMMARY — fall back to raw text if structured format is not found
   const summaryMatch = /SUMMARY:\s*(.+?)(?:\n(?:FINDINGS:|$))/is.exec(text);
-  const summary = summaryMatch?.[1]?.trim() ?? 'Review completed but summary could not be parsed.';
+  let summary: string;
+  if (summaryMatch?.[1]?.trim()) {
+    summary = summaryMatch[1].trim();
+  } else {
+    // CLI providers (e.g., copilot) may return raw text without SUMMARY: markers.
+    // Use the raw text (minus any FINDINGS block) as the summary instead of a generic error.
+    const withoutFindings = text.replace(/FINDINGS:[\s\S]*$/i, '').trim();
+    summary = withoutFindings || 'Review completed but summary could not be parsed.';
+  }
 
   // Extract FINDINGS
   const findings = parseFindingsBlock(text);

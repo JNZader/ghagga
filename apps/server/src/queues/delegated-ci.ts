@@ -156,6 +156,7 @@ export function createDelegatedCiWorker(concurrency = 2): Worker<DelegatedCiJobD
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     connection: redisConnection as any,
     concurrency,
+    lockDuration: 300_000, // 5 minutes — match review worker lock duration
   });
 }
 
