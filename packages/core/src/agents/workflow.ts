@@ -241,11 +241,14 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
       specialistOutputs.push(
         `### [FAILED] Specialist\n\nThis specialist could not complete: ${String(result.reason)}`,
       );
-      // Track failed specialists too so logs show which models were attempted
+      // Track failed specialists with error reason for debugging
       const failedEntry: ProviderChainEntry = chain
         ? (chain[i % chain.length] as ProviderChainEntry)
         : { provider: provider as ProviderChainEntry['provider'], model, apiKey };
-      modelsUsed.push(`${spec.name}:${failedEntry.provider}/${failedEntry.model}[FAILED]`);
+      const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      // Truncate error to keep log lines manageable
+      const shortError = errorMsg.length > 100 ? `${errorMsg.slice(0, 100)}...` : errorMsg;
+      modelsUsed.push(`${spec.name}:${failedEntry.provider}/${failedEntry.model}[FAILED:${shortError}]`);
       emit({
         step: `specialist-${spec.name}`,
         message: `✗ ${spec.label} — FAILED (${failedEntry.provider}/${failedEntry.model}): ${String(result.reason)}`,
