@@ -15,9 +15,9 @@
  */
 
 import { execSync } from 'node:child_process';
-import { writeFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -110,7 +110,11 @@ const adapters: CLIAdapter[] = [
           { ...CLI_EXEC_OPTIONS },
         ).trim();
       } finally {
-        try { unlinkSync(tmpFile); } catch { /* ignore */ }
+        try {
+          unlinkSync(tmpFile);
+        } catch {
+          /* ignore */
+        }
       }
     },
   },
