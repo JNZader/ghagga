@@ -3,7 +3,7 @@
   "rootDir": ".",
   "nodes": {
     "packages/types/src/api.ts": {
-      "hash": "daf67fccf6681358beabd1c342a834667f50b0cc5ff4e6720685a1ed57c95b05",
+      "hash": "2d45eef469208302ff56511aef8a17a4557f19d434b88c1c54a50e083ffb2b14",
       "language": "typescript",
       "imports": [
         "./delegated-ci.js"
@@ -219,7 +219,7 @@
       "isTest": true
     },
     "packages/db/src/schema.ts": {
-      "hash": "f961188a51a31ccc065413a37e635f606d6c08904b79093974137b1f72e0a08a",
+      "hash": "dbbed593de2d8383ca911b70ae0faa741c3359fabe7dc927a65ccd2f3709671f",
       "language": "typescript",
       "imports": [
         "drizzle-orm/pg-core"
@@ -465,7 +465,7 @@
       "isTest": true
     },
     "packages/core/src/pipeline.ts": {
-      "hash": "726732c8e57c2409da6e27dd69bba579e416337ffd091086847ab3a44c3704f6",
+      "hash": "62e36e0903e4bf5aeb4b7d9715449ee42ee17f403927869de732c8be9593bcd5",
       "language": "typescript",
       "imports": [
         "./agents/consensus.js",
@@ -520,7 +520,7 @@
       "isTest": true
     },
     "packages/core/src/types.ts": {
-      "hash": "d364a725ee7003d9d08f1a460f20dc18f7dfa982d83f7ec40f287ee5862c8cba",
+      "hash": "0198029547155b0cd87e15630cd1adf59b8c17a58444fcaa13c1f8b5eeb1d891",
       "language": "typescript",
       "imports": [
         "./graph/schema.js",
@@ -1712,7 +1712,7 @@
       "isTest": false
     },
     "packages/core/src/providers/gateway.ts": {
-      "hash": "2c2ce020215bce6f331ce166e0c8596383e099281187ef0af1a4dd5091bebab6",
+      "hash": "f5cc090f4c2cbee4bcfd966e5892ebee0e62e7b31c479b644ad6435f4ecbb124",
       "language": "typescript",
       "imports": [],
       "exports": [
@@ -2938,7 +2938,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/installations.ts": {
-      "hash": "1537678d0957875e73fc50a630ef2e1ffe0a6d4dd48adf42657e5cd1b3bad62e",
+      "hash": "7a3b938b250113c34b69d886b68d2abfdba5abee1ef3537affc0710f0ceffc06",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3017,7 +3017,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/settings.ts": {
-      "hash": "24a1e385094f5ad2de7a662598a69f96b610e3d5debbee8d8514335555d2d625",
+      "hash": "f6fc4fd96a0e251debf08019fb19d9235a8e6e73335c5ad36563bd1145c44cda",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3035,7 +3035,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/utils.ts": {
-      "hash": "571b323c306c0576c45bce1ea6287bb3212256257dc1b4e65f8646677cd42f12",
+      "hash": "cc2832c6d57ffc79bb9e9170fb32d2143731dfc9a82370d4e87df02917d05061",
       "language": "typescript",
       "imports": [
         "node:crypto",
@@ -3084,7 +3084,7 @@
       "isTest": true
     },
     "apps/server/src/queues/review.ts": {
-      "hash": "b40efec958e1e8bf28b02b30557e668be9ef88942be855693a8d146b4df90ab2",
+      "hash": "038d035590980a7bc8ff4951548050031eba65e55a9ade7005524fedf3bcc099",
       "language": "typescript",
       "imports": [
         "bullmq",
@@ -3280,7 +3280,7 @@
       "isTest": true
     },
     "apps/server/src/lib/provider-models.ts": {
-      "hash": "3e46aafa3347a74f61ca3d77d0bcbdb5f4f8a8f6e4b19d2e466887918455529e",
+      "hash": "8342f406c58a38d706482c49998a71c2d9d589cbf544edd661302d4039fb796f",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3666,7 +3666,7 @@
       "isTest": true
     },
     "apps/dashboard/src/pages/GlobalSettings.tsx": {
-      "hash": "f80f6f5cdd3321995b8335284e92d9299c83d37a4b51644c1cacaaf689dcac7e",
+      "hash": "dee897023be9d47540462e69999eeeb53e5108ccdfb7dc4ebdec0cadbec7956f",
       "language": "typescript",
       "imports": [
         "react",
@@ -3785,7 +3785,7 @@
       "isTest": true
     },
     "apps/dashboard/src/pages/Settings.tsx": {
-      "hash": "4d50f024c0e8034b3b383715a3f9aeb79ddd856f0ec9e6a6b716b5c5893c892e",
+      "hash": "d312f1da822742bf93a97462cd3cca82c8f2c8ace843fb558e19c7ec8e5c83d3",
       "language": "typescript",
       "imports": [
         "react",
@@ -4374,7 +4374,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "90f1837a4a93db46b00857617aa1b0a603caa4efb818c2740c10fbdb24e838ab",
+      "hash": "233a7ad9bd2a52f19af375b653fb9f45649983402b1dfed2aa62c0e388f7fdfe",
       "language": "typescript",
       "imports": [
         "react",
