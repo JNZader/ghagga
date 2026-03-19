@@ -224,7 +224,20 @@ export function formatReviewComment(
 
   let comment = `${REVIEW_COMMENT_MARKER}\n## \ud83e\udd16 GHAGGA Code Review\n\n`;
   comment += `**Status:** ${status}\n`;
-  comment += `**Mode:** ${result.metadata.mode} | **Model:** ${result.metadata.model} | **Time:** ${timeSeconds}s\n`;
+  const modelsUsed = result.metadata.modelsUsed;
+  if (modelsUsed && modelsUsed.length > 1) {
+    // Multi-model: show primary model + details per specialist/stance
+    comment += `**Mode:** ${result.metadata.mode} | **Model:** ${result.metadata.model} | **Time:** ${timeSeconds}s\n`;
+    comment += `<details><summary>\ud83e\udde0 Models used (${modelsUsed.length})</summary>\n\n`;
+    comment += '| Role | Model |\n|------|-------|\n';
+    for (const entry of modelsUsed) {
+      const [role, model] = entry.includes(':') ? entry.split(':', 2) : ['—', entry];
+      comment += `| ${role} | \`${model}\` |\n`;
+    }
+    comment += '\n</details>\n';
+  } else {
+    comment += `**Mode:** ${result.metadata.mode} | **Model:** ${result.metadata.model} | **Time:** ${timeSeconds}s\n`;
+  }
 
   // Emoji stats bar (Enhancement 1)
   if (options?.fileStats) {
