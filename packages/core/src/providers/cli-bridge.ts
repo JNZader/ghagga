@@ -413,7 +413,7 @@ const adapters: CLIAdapter[] = [
         const stderr = err.stderr ? String(err.stderr).slice(0, 500) : 'no stderr';
         const stdout = err.stdout ? String(err.stdout).slice(0, 200) : 'no stdout';
         throw new Error(
-          `OpenCode exited with status ${err.status ?? 'unknown'}. stderr: ${sanitizeErrorMessage(stderr)}. stdout: ${stdout}`,
+          `OpenCode exited with status ${err.status ?? 'unknown'}. stderr: ${sanitizeErrorMessage(stderr)}. stdout: ${sanitizeErrorMessage(stdout)}`,
         );
       }
 
