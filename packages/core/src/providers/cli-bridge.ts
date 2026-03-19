@@ -333,7 +333,7 @@ export function validateCliModel(cliModel: string): void {
   }
 
   const prefix = cliModel.split('/')[0]!;
-  if (!OPENCODE_ENV_BY_PREFIX[prefix]) {
+  if (!(prefix in OPENCODE_ENV_BY_PREFIX)) {
     const supported = Object.keys(OPENCODE_ENV_BY_PREFIX).join(', ');
     throw new CLIConfigurationError(
       `Unsupported OpenCode provider prefix: '${prefix}'. Supported prefixes: ${supported}.`,
