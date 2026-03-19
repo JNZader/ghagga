@@ -572,6 +572,7 @@ export function ProviderEntry({
               <option value="opencode/big-pickle">Big Pickle (OpenCode free)</option>
               <option value="opencode/minimax-m2.5-free">MiniMax M2.5 Free (OpenCode free)</option>
               <option value="opencode/mimo-v2-pro-free">MIMO v2 Pro Free (OpenCode free)</option>
+              <option value="opencode/mimo-v2-omni-free">MIMO v2 Omni Free (OpenCode free)</option>
               <option value="opencode/nemotron-3-super-free">
                 Nemotron 3 Super Free (OpenCode free)
               </option>
