@@ -513,7 +513,7 @@
       "isTest": true
     },
     "packages/core/src/types.test.ts": {
-      "hash": "6f43aae386e65b857cad720ff97b5e887d7264896eca3b1c11d46d7b440ee781",
+      "hash": "6ec622b200ee1756b1d04b4ac365f26026bf4c234beae75597c2bfc2ea9e0d3c",
       "language": "typescript",
       "imports": [
         "vitest",
@@ -524,7 +524,7 @@
       "isTest": true
     },
     "packages/core/src/types.ts": {
-      "hash": "0198029547155b0cd87e15630cd1adf59b8c17a58444fcaa13c1f8b5eeb1d891",
+      "hash": "1b7dacc54434e40047f4c60c343a772ed29e6846948ffb825f7bc23a7e7c4e43",
       "language": "typescript",
       "imports": [
         "./graph/schema.js",
