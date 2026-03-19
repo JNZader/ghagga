@@ -6,7 +6,7 @@
  */
 
 import type { SaaSProvider } from 'ghagga-core';
-import { toolRegistry } from 'ghagga-core';
+import { OPENCODE_ENV_BY_PREFIX, toolRegistry } from 'ghagga-core';
 import type { Database, DbProviderChainEntry, RepoSettings } from 'ghagga-db';
 import {
   DEFAULT_REPO_SETTINGS,
@@ -164,6 +164,7 @@ export function createInstallationsRouter(db: Database) {
         provider: string;
         model: string;
         apiKey?: string;
+        cliModel?: string;
       }>;
 
       const VALID_SAAS_PROVIDERS = [
@@ -187,6 +188,50 @@ export function createInstallationsRouter(db: Database) {
             },
             400,
           );
+        }
+      }
+
+      // Validate cliModel for cli-bridge entries
+      for (const entry of incomingChain) {
+        if (entry.provider !== 'cli-bridge') continue;
+
+        if (entry.model === 'opencode') {
+          // cliModel is REQUIRED for opencode
+          if (!entry.cliModel?.trim()) {
+            return c.json(
+              {
+                error: 'VALIDATION_ERROR',
+                message:
+                  "cliModel is required when CLI tool is 'opencode'. Expected format: 'provider/model' (e.g., 'anthropic/claude-sonnet-4-5').",
+              },
+              400,
+            );
+          }
+          // Validate provider/model format
+          if (!/^[^/]+\/.+$/.test(entry.cliModel)) {
+            return c.json(
+              {
+                error: 'VALIDATION_ERROR',
+                message: `Invalid cliModel format: '${entry.cliModel}'. Expected 'provider/model' (e.g., 'anthropic/claude-sonnet-4-5').`,
+              },
+              400,
+            );
+          }
+          // Validate provider prefix is supported
+          const prefix = entry.cliModel.split('/')[0]!;
+          if (!OPENCODE_ENV_BY_PREFIX[prefix]) {
+            const supported = Object.keys(OPENCODE_ENV_BY_PREFIX).join(', ');
+            return c.json(
+              {
+                error: 'VALIDATION_ERROR',
+                message: `Unsupported OpenCode provider prefix: '${prefix}'. Supported: ${supported}.`,
+              },
+              400,
+            );
+          }
+        } else {
+          // For non-opencode tools (auto, gemini, copilot), strip cliModel
+          entry.cliModel = undefined;
         }
       }
 
@@ -220,15 +265,20 @@ export function createInstallationsRouter(db: Database) {
       );
 
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry, idx) => {
+        // Resolve cliModel: only meaningful for cli-bridge entries
+        const cliModel = entry.provider === 'cli-bridge' ? entry.cliModel : undefined;
+
         if (entry.apiKey) {
           const encrypted = encrypt(entry.apiKey);
           keysByProvider.set(entry.provider, encrypted);
           logger.info({ idx, provider: entry.provider, action: 'NEW_KEY' }, 'Chain entry: new key');
-          return {
+          const result: DbProviderChainEntry = {
             provider: entry.provider as SaaSProvider,
             model: entry.model,
             encryptedApiKey: encrypted,
           };
+          if (cliModel) result.cliModel = cliModel;
+          return result;
         }
         if (entry.provider === 'github') {
           return { provider: 'github' as const, model: entry.model, encryptedApiKey: null };
@@ -238,11 +288,13 @@ export function createInstallationsRouter(db: Database) {
           { idx, provider: entry.provider, action: resolved ? 'RESOLVED_FROM_MAP' : 'NULL_KEY' },
           'Chain entry: resolved',
         );
-        return {
+        const result: DbProviderChainEntry = {
           provider: entry.provider as SaaSProvider,
           model: entry.model,
           encryptedApiKey: resolved,
         };
+        if (cliModel) result.cliModel = cliModel;
+        return result;
       });
 
       // Build settings JSONB

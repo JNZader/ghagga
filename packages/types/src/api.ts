@@ -106,6 +106,8 @@ export interface ProviderChainView {
   model: string;
   hasApiKey: boolean;
   maskedApiKey?: string;
+  /** OpenCode model in `provider/model` format. Only present for cli-bridge entries. */
+  cliModel?: string;
 }
 
 /** Chain entry for updates (sent to PUT /api/settings) */
@@ -113,6 +115,8 @@ export interface ProviderChainUpdate {
   provider: SaaSProvider;
   model: string;
   apiKey?: string; // only sent when new/changed
+  /** OpenCode model in `provider/model` format. Only meaningful when provider === 'cli-bridge'. */
+  cliModel?: string;
 }
 
 /** Provider validation response from POST /api/providers/validate */

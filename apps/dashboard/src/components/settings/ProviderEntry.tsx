@@ -17,6 +17,8 @@ export interface ProviderEntryState {
   maskedApiKey?: string;
   /** Validation status */
   validated: boolean;
+  /** OpenCode model in `provider/model` format. Only for cli-bridge + opencode. */
+  cliModel?: string;
 }
 
 interface ProviderEntryProps {
@@ -72,7 +74,7 @@ export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
   ],
   github: ['gpt-4o-mini', 'gpt-4o', 'o3-mini', 'Phi-4', 'Mistral-Large-2411', 'DeepSeek-R1'],
   qwen: ['qwen-coder-plus', 'qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-coder-turbo', 'qwen-long'],
-  'cli-bridge': ['auto', 'claude', 'gemini', 'codex', 'copilot'],
+  'cli-bridge': ['auto', 'opencode', 'copilot', 'gemini'],
 };
 
 // ─── Provider Labels ────────────────────────────────────────────
@@ -90,11 +92,71 @@ const API_PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
 
 const CLI_OPTIONS: { value: string; label: string }[] = [
   { value: 'auto', label: 'Auto-detect (best available)' },
-  { value: 'claude', label: 'Claude Code (claude -p)' },
-  { value: 'gemini', label: 'Gemini CLI (gemini -p)' },
-  { value: 'copilot', label: 'Copilot CLI (copilot -p)' },
-  { value: 'codex', label: 'Codex CLI (codex exec)' },
+  { value: 'opencode', label: 'OpenCode (recommended)' },
+  { value: 'copilot', label: 'Copilot CLI' },
+  { value: 'gemini', label: 'Gemini CLI' },
 ];
+
+/** Curated OpenCode model suggestions for the datalist */
+const OPENCODE_MODEL_SUGGESTIONS = [
+  'anthropic/claude-sonnet-4-5',
+  'anthropic/claude-opus-4-6',
+  'anthropic/claude-haiku-4-5',
+  'openai/gpt-5-codex',
+  'github-copilot/claude-sonnet-4.5',
+  'github-copilot/gpt-5',
+];
+
+/** Derive a human-readable credential label from the CLI tool and cliModel prefix */
+function getCliCredentialLabel(cliTool: string, cliModel?: string): string {
+  if (cliTool === 'gemini') return 'Gemini API Key';
+  if (cliTool === 'copilot') return 'GitHub Token (Fine-Grained PAT)';
+  if (cliTool === 'auto') return 'API Key (optional)';
+
+  // opencode — derive from cliModel prefix
+  if (cliTool === 'opencode' && cliModel) {
+    const prefix = cliModel.split('/')[0];
+    switch (prefix) {
+      case 'anthropic':
+        return 'Anthropic API Key';
+      case 'openai':
+        return 'OpenAI API Key';
+      case 'google':
+        return 'Gemini API Key';
+      case 'github-copilot':
+        return 'GitHub Token';
+      case 'groq':
+        return 'Groq API Key';
+      case 'openrouter':
+        return 'OpenRouter API Key';
+      default:
+        return 'Provider API Key';
+    }
+  }
+
+  return 'Provider API Key';
+}
+
+/** Get contextual help text for the CLI credential input */
+function getCliCredentialHelp(cliTool: string): string {
+  switch (cliTool) {
+    case 'opencode':
+      return 'OpenCode uses the API key for the selected provider. The key is encrypted and only decrypted during review execution.';
+    case 'gemini':
+      return 'Provide a Gemini API key, or leave empty to use the server\u2019s GEMINI_API_KEY.';
+    case 'copilot':
+      return 'Provide a GitHub Fine-Grained PAT with Copilot permissions, or leave empty to use the server\u2019s token.';
+    case 'auto':
+      return 'Credentials are optional. The server will use its own keys if no credential is provided.';
+    default:
+      return '';
+  }
+}
+
+/** Check if cliModel matches the expected provider/model format */
+function isValidCliModelFormat(cliModel: string): boolean {
+  return /^[^/]+\/.+$/.test(cliModel);
+}
 
 // ─── Component ──────────────────────────────────────────────────
 
@@ -115,9 +177,15 @@ export function ProviderEntry({
 
   const isGitHub = entry.provider === 'github';
   const isCLIBridge = entry.provider === 'cli-bridge';
-  const needsApiKey = !isGitHub && !isCLIBridge;
+  // CLI bridge entries CAN have API keys now (opencode, gemini, copilot all accept credentials)
+  const needsApiKey = !isGitHub;
   // Can validate if: GitHub (no key needed), has a new key typed, OR has an existing saved key
   const canValidate = isGitHub || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
+  // For opencode: cliModel is required — disable save/validate if missing
+  const isOpencode = isCLIBridge && entry.model === 'opencode';
+  const cliModelMissing = isOpencode && !entry.cliModel?.trim();
+  const cliModelInvalid =
+    isOpencode && entry.cliModel?.trim() && !isValidCliModelFormat(entry.cliModel.trim());
 
   // Saved key for the current provider (from global/installation settings)
   const savedKeyInfo = availableKeys[entry.provider];
@@ -156,6 +224,7 @@ export function ProviderEntry({
       validated: false,
       hasExistingKey: false,
       maskedApiKey: undefined,
+      cliModel: undefined,
     });
   };
 
@@ -163,8 +232,9 @@ export function ProviderEntry({
     onChange({
       ...entry,
       apiKey,
-      validated: false,
-      availableModels: [],
+      // CLI bridge doesn't use validation flow for its credential, so keep validated state
+      validated: isCLIBridge ? entry.validated : false,
+      availableModels: isCLIBridge ? entry.availableModels : [],
     });
     setValidationError(null);
   };
@@ -276,7 +346,9 @@ export function ProviderEntry({
                   apiKey: '',
                   validated: true,
                   hasExistingKey: false,
+                  maskedApiKey: undefined,
                   availableModels: KNOWN_MODELS['cli-bridge'] ?? [],
+                  cliModel: undefined,
                 });
               }}
               className="accent-primary-500"
@@ -287,10 +359,22 @@ export function ProviderEntry({
         </div>
 
         {entry.provider === 'cli-bridge' ? (
-          /* CLI selector */
+          /* CLI tool selector */
           <select
             value={entry.model}
-            onChange={(e) => onChange({ ...entry, model: e.target.value })}
+            onChange={(e) => {
+              const newTool = e.target.value;
+              // On tool change: reset cliModel and clear entered API key (credentials are tool-specific)
+              onChange({
+                ...entry,
+                model: newTool,
+                cliModel: undefined,
+                apiKey: '',
+                hasExistingKey: false,
+                maskedApiKey: undefined,
+                validated: newTool !== 'opencode', // opencode needs cliModel before it's "valid"
+              });
+            }}
             className="select-field"
           >
             {CLI_OPTIONS.map((opt) => (
@@ -315,23 +399,62 @@ export function ProviderEntry({
         )}
       </div>
 
-      {/* API Key Input + Validate Button (hidden for CLI Bridge) */}
-      {isCLIBridge ? (
-        <div className="mb-3 rounded-md border border-yellow-500/20 bg-yellow-500/5 p-3 text-xs text-yellow-300/80">
-          <p className="font-medium">No API key needed</p>
-          <p className="mt-1">
-            Uses CLI tools installed on the server. Set{' '}
-            <code className="rounded bg-surface-bg px-1">GEMINI_API_KEY</code> and/or{' '}
-            <code className="rounded bg-surface-bg px-1">COPILOT_GITHUB_TOKEN</code> as environment
-            variables in Coolify.
-          </p>
+      {/* CLI Bridge: OpenCode model input (only when opencode is selected) */}
+      {isCLIBridge && entry.model === 'opencode' && (
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-text-secondary">
+            OpenCode Model (provider/model)
+            <span className="ml-1 text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            list={`cli-model-suggestions-${index}`}
+            value={entry.cliModel ?? ''}
+            onChange={(e) => {
+              const newCliModel = e.target.value;
+              onChange({
+                ...entry,
+                cliModel: newCliModel,
+                validated: false, // Model changed — prior validation is stale
+              });
+            }}
+            placeholder="e.g., anthropic/claude-sonnet-4-5"
+            className="input-field w-full"
+          />
+          <datalist id={`cli-model-suggestions-${index}`}>
+            {OPENCODE_MODEL_SUGGESTIONS.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+          {cliModelMissing && (
+            <p className="mt-1 text-xs text-yellow-400">
+              Model is required when using OpenCode. Select or type a provider/model.
+            </p>
+          )}
+          {cliModelInvalid && (
+            <p className="mt-1 text-xs text-yellow-400">
+              Expected format: <code className="rounded bg-surface-bg px-1">provider/model</code>{' '}
+              (e.g., anthropic/claude-sonnet-4-5)
+            </p>
+          )}
         </div>
-      ) : null}
-      <div className={`mb-3 ${isCLIBridge ? 'hidden' : ''}`}>
+      )}
+
+      {/* CLI Bridge: contextual help text */}
+      {isCLIBridge && (
+        <div className="mb-3 rounded-md border border-surface-border/50 bg-surface-bg/30 p-3 text-xs text-text-secondary">
+          <p>{getCliCredentialHelp(entry.model)}</p>
+        </div>
+      )}
+
+      {/* API Key / Credential Input + Validate Button */}
+      <div className={`mb-3 ${isGitHub ? '' : ''}`}>
         <div className="mb-1 flex items-center justify-between">
-          <label className="text-xs font-medium text-text-secondary">API Key</label>
+          <label className="text-xs font-medium text-text-secondary">
+            {isCLIBridge ? getCliCredentialLabel(entry.model, entry.cliModel) : 'API Key'}
+          </label>
           {/* Toggle between reusing a saved key and entering a new one */}
-          {showReuseSelector && (
+          {showReuseSelector && !isCLIBridge && (
             <button
               type="button"
               onClick={() => setKeyMode((m) => (m === 'reuse' ? 'new' : 'reuse'))}
@@ -395,28 +518,32 @@ export function ProviderEntry({
               placeholder={
                 entry.hasExistingKey
                   ? entry.maskedApiKey || 'Key saved (enter new to replace)'
-                  : 'Enter API key...'
+                  : isCLIBridge
+                    ? `Enter ${getCliCredentialLabel(entry.model, entry.cliModel).toLowerCase()}...`
+                    : 'Enter API key...'
               }
               className="input-field flex-1"
             />
-            <button
-              type="button"
-              onClick={handleValidate}
-              disabled={!canValidate || validateProvider.isPending}
-              className="btn-secondary whitespace-nowrap text-sm"
-            >
-              {validateProvider.isPending
-                ? 'Checking...'
-                : entry.validated
-                  ? 'Valid ✓'
-                  : 'Validate'}
-            </button>
+            {!isCLIBridge && (
+              <button
+                type="button"
+                onClick={handleValidate}
+                disabled={!canValidate || validateProvider.isPending}
+                className="btn-secondary whitespace-nowrap text-sm"
+              >
+                {validateProvider.isPending
+                  ? 'Checking...'
+                  : entry.validated
+                    ? 'Valid \u2713'
+                    : 'Validate'}
+              </button>
+            )}
           </div>
         )}
 
         {/* Validation status */}
         {validationError && <p className="mt-1 text-xs text-red-400">{validationError}</p>}
-        {entry.validated && !validationError && (
+        {!isCLIBridge && entry.validated && !validationError && (
           <p className="mt-1 text-xs text-green-400">API key validated successfully</p>
         )}
         {entry.hasExistingKey && !entry.apiKey && !entry.validated && (

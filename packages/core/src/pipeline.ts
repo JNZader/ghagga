@@ -33,7 +33,11 @@ import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
-import { generateViaCLI } from './providers/cli-bridge.js';
+import {
+  generateViaCLI,
+  resolveCredentialEnvVar,
+  sanitizeErrorMessage,
+} from './providers/cli-bridge.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import {
@@ -347,10 +351,26 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     result = createStaticOnlyResult(staticResult, input.mode, startTime);
   } else if (isCliBridge) {
     // CLI Bridge mode: call LLM CLIs directly instead of AI SDK
-    const preferredCLI = input.model && input.model !== 'auto' ? input.model : undefined;
+    // Resolve CLI bridge entry from provider chain or flat input fields
+    const cliBridgeEntry = input.providerChain?.[0];
+    const preferredCLI =
+      (cliBridgeEntry?.model ?? input.model) !== 'auto'
+        ? (cliBridgeEntry?.model ?? input.model)
+        : undefined;
+
+    const cliModel = cliBridgeEntry?.cliModel;
+
+    // Build credentials from the decrypted API key (server decrypts before passing to pipeline)
+    const decryptedKey = cliBridgeEntry?.apiKey || input.apiKey;
+    const credentialEnvName = resolveCredentialEnvVar(preferredCLI, cliModel);
+    const credentials: Record<string, string> = {};
+    if (preferredCLI && credentialEnvName && decryptedKey) {
+      credentials[credentialEnvName] = decryptedKey;
+    }
+
     emit({
       step: 'agent-start',
-      message: `Running CLI bridge review (preferred: ${preferredCLI ?? 'auto'})...`,
+      message: `Running CLI bridge review (preferred: ${preferredCLI ?? 'auto'}${cliModel ? `, model: ${cliModel}` : ''})...`,
     });
 
     try {
@@ -361,20 +381,21 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         stackHints,
         reviewLevel: input.settings.reviewLevel,
         preferredCLI,
+        cliModel,
+        credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
         onProgress: input.onProgress,
       });
     } catch (error) {
-      console.warn(
-        '[ghagga] CLI bridge review failed, returning static analysis only:',
-        error instanceof Error ? error.message : String(error),
-      );
+      const rawMsg = error instanceof Error ? error.message : String(error);
+      const safeMsg = sanitizeErrorMessage(rawMsg);
+      console.warn('[ghagga] CLI bridge review failed, returning static analysis only:', safeMsg);
       emit({
         step: 'agent-failed',
         message: 'CLI bridge review failed — returning static analysis only',
       });
       result = createStaticOnlyResult(staticResult, input.mode, startTime);
       result.status = 'NEEDS_HUMAN_REVIEW';
-      result.summary = `CLI bridge review failed (${error instanceof Error ? error.message : 'unknown error'}). Static analysis results are shown below.`;
+      result.summary = `CLI bridge review failed (${safeMsg || 'unknown error'}). Static analysis results are shown below.`;
     }
   } else {
     // Resolve the primary provider for agent calls
@@ -761,6 +782,10 @@ interface CLIBridgeReviewInput {
   stackHints: string;
   reviewLevel: import('./types.js').ReviewLevel;
   preferredCLI?: string;
+  /** OpenCode model in `provider/model` format. */
+  cliModel?: string;
+  /** Injected credentials mapped by env var name (e.g., { ANTHROPIC_API_KEY: 'sk-...' }). */
+  credentials?: Record<string, string>;
   onProgress?: import('./types.js').ProgressCallback;
 }
 
@@ -772,7 +797,16 @@ interface CLIBridgeReviewInput {
  * Simple mode only — workflow/consensus would need multiple sequential calls.
  */
 async function runCLIBridgeReview(input: CLIBridgeReviewInput): Promise<ReviewResult> {
-  const { diff, staticContext, memoryContext, stackHints, reviewLevel, preferredCLI } = input;
+  const {
+    diff,
+    staticContext,
+    memoryContext,
+    stackHints,
+    reviewLevel,
+    preferredCLI,
+    cliModel,
+    credentials,
+  } = input;
   const emit = input.onProgress ?? (() => {});
 
   const startTime = Date.now();
@@ -798,7 +832,7 @@ async function runCLIBridgeReview(input: CLIBridgeReviewInput): Promise<ReviewRe
   });
 
   // generateViaCLI is synchronous (execSync) but we wrap in async for pipeline compat
-  const cliResult = generateViaCLI(prompt, system, preferredCLI);
+  const cliResult = generateViaCLI(prompt, system, { preferredCLI, cliModel, credentials });
 
   const executionTimeMs = Date.now() - startTime;
 

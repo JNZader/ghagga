@@ -109,6 +109,8 @@ export interface DbProviderChainEntry {
     | 'cli-bridge';
   model: string;
   encryptedApiKey: string | null; // null for GitHub Models (uses session token)
+  /** OpenCode model in `provider/model` format. Only meaningful when provider === 'cli-bridge'. */
+  cliModel?: string;
 }
 
 // ─── Installation Settings ──────────────────────────────────────

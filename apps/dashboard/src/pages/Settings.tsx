@@ -97,6 +97,7 @@ export function Settings() {
           maskedApiKey: entry.maskedApiKey,
           validated:
             entry.hasApiKey || entry.provider === 'github' || entry.provider === 'cli-bridge',
+          cliModel: entry.cliModel,
         })),
       );
     }
@@ -119,6 +120,7 @@ export function Settings() {
           maskedApiKey: entry.maskedApiKey,
           validated:
             entry.hasApiKey || entry.provider === 'github' || entry.provider === 'cli-bridge',
+          cliModel: entry.cliModel,
         })),
       );
       if (settings.globalSettings) {
@@ -152,6 +154,7 @@ export function Settings() {
         provider: entry.provider,
         model: entry.model,
         ...(entry.apiKey.trim() ? { apiKey: entry.apiKey.trim() } : {}),
+        ...(entry.provider === 'cli-bridge' && entry.cliModel ? { cliModel: entry.cliModel } : {}),
       }));
 
       await updateSettings.mutateAsync({
