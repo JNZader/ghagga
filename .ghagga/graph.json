@@ -1654,7 +1654,7 @@
       "isTest": true
     },
     "packages/core/src/providers/cli-bridge.ts": {
-      "hash": "b887d51aff6b398bdcb824d1fae4e7c1e3da9f20db586f1240ff3798f0a55baa",
+      "hash": "48368bef8e26265cae94e381ae4059f74fb2ab5ad75516531fddc85dcab60a0f",
       "language": "typescript",
       "imports": [
         "node:child_process",
@@ -2924,7 +2924,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/installations.ts": {
-      "hash": "7b0dc22044efe60641c5b40787960dea1569b54c60488e145e3813ad735ae562",
+      "hash": "63f62ef4a5ba6d8119bbda83c047d861ed8e520018a7384e1c495462ab8695c1",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3003,7 +3003,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/settings.ts": {
-      "hash": "a4f39c990f217d8217012ece8e6e4382e6d0fef11d29c818e5a1af0eb33e6ce7",
+      "hash": "d5b806bc4c08473bb489ad7ad879d9c8a85015896010e546bf47c0d4de5b2547",
       "language": "typescript",
       "imports": [
         "ghagga-core",
