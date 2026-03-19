@@ -97,15 +97,27 @@ const CLI_OPTIONS: { value: string; label: string }[] = [
   { value: 'gemini', label: 'Gemini CLI' },
 ];
 
-/** Curated OpenCode model suggestions for the datalist */
-const OPENCODE_MODEL_SUGGESTIONS = [
+/** Free OpenCode models — no API key needed */
+const OPENCODE_FREE_MODELS = [
+  'opencode/gpt-5-nano',
+  'opencode/big-pickle',
+  'opencode/mimo-v2-pro-free',
+  'opencode/minimax-m2.5-free',
+  'opencode/nemotron-3-super-free',
+  'opencode/mimo-v2-omni-free',
+];
+
+/** Curated OpenCode model suggestions (require API key for the provider) */
+const OPENCODE_PAID_MODELS = [
   'anthropic/claude-sonnet-4-5',
   'anthropic/claude-opus-4-6',
   'anthropic/claude-haiku-4-5',
   'openai/gpt-5-codex',
-  'github-copilot/claude-sonnet-4.5',
-  'github-copilot/gpt-5',
+  'groq/openai/gpt-oss-120b',
+  'openrouter/deepseek/deepseek-chat',
 ];
+
+const OPENCODE_MODEL_SUGGESTIONS = [...OPENCODE_FREE_MODELS, ...OPENCODE_PAID_MODELS];
 
 /** Derive a human-readable credential label from the CLI tool and cliModel prefix */
 function getCliCredentialLabel(cliTool: string, cliModel?: string): string {
@@ -117,6 +129,8 @@ function getCliCredentialLabel(cliTool: string, cliModel?: string): string {
   if (cliTool === 'opencode' && cliModel) {
     const prefix = cliModel.split('/')[0];
     switch (prefix) {
+      case 'opencode':
+        return ''; // Free models — no API key needed
       case 'anthropic':
         return 'Anthropic API Key';
       case 'openai':
@@ -141,7 +155,7 @@ function getCliCredentialLabel(cliTool: string, cliModel?: string): string {
 function getCliCredentialHelp(cliTool: string): string {
   switch (cliTool) {
     case 'opencode':
-      return 'OpenCode uses the API key for the selected provider. The key is encrypted and only decrypted during review execution.';
+      return 'Models prefixed with opencode/ are free and need no API key. For other providers (anthropic/, openai/, etc.), provide the corresponding API key.';
     case 'gemini':
       return 'Provide a Gemini API key, or leave empty to use the server\u2019s GEMINI_API_KEY.';
     case 'copilot':
@@ -186,6 +200,8 @@ export function ProviderEntry({
   const cliModelMissing = isOpencode && !entry.cliModel?.trim();
   const cliModelInvalid =
     isOpencode && entry.cliModel?.trim() && !isValidCliModelFormat(entry.cliModel.trim());
+  // Free opencode/* models don't need API keys
+  const isFreeModel = isOpencode && entry.cliModel?.startsWith('opencode/');
 
   // Saved key for the current provider (from global/installation settings)
   const savedKeyInfo = availableKeys[entry.provider];
@@ -447,8 +463,15 @@ export function ProviderEntry({
         </div>
       )}
 
+      {/* Free model banner — no API key needed */}
+      {isFreeModel && (
+        <div className="mb-3 rounded-md border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-400">
+          <p>✨ Free model — no API key required. Just save and start reviewing!</p>
+        </div>
+      )}
+
       {/* API Key / Credential Input + Validate Button */}
-      <div className={`mb-3 ${isGitHub ? '' : ''}`}>
+      <div className={`mb-3 ${isGitHub || isFreeModel ? 'hidden' : ''}`}>
         <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-medium text-text-secondary">
             {isCLIBridge ? getCliCredentialLabel(entry.model, entry.cliModel) : 'API Key'}
