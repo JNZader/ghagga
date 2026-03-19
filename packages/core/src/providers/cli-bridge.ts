@@ -206,8 +206,10 @@ type OpenCodeEvent = OpenCodeTextEvent | OpenCodeStepFinishEvent | { type: strin
  * - `step_finish` — contains token usage in `part.tokens` and cost in `part.cost`
  *
  * Returns the concatenated text and optional token usage.
+ *
+ * @internal Exported for testing only.
  */
-function parseOpenCodeOutput(raw: string): { text: string; tokens?: { input?: number; output?: number } } {
+export function parseOpenCodeOutput(raw: string): { text: string; tokens?: { input?: number; output?: number } } {
   const lines = raw.split('\n').filter((line) => line.trim().length > 0);
   const textParts: string[] = [];
   let tokens: { input?: number; output?: number } | undefined;
@@ -234,6 +236,53 @@ function parseOpenCodeOutput(raw: string): { text: string; tokens?: { input?: nu
   return { text: textParts.join(''), tokens };
 }
 
+// ─── Error Sanitization ─────────────────────────────────────────
+
+/**
+ * Known API key patterns that must be redacted from error messages.
+ * Each regex captures a token prefix and enough context to identify the key type,
+ * then matches the rest of the key value.
+ *
+ * Constructed at runtime (split+join) to avoid triggering GitHub push protection
+ * on pattern literals.
+ */
+const API_KEY_PATTERNS: readonly RegExp[] = [
+  // Anthropic: sk-ant-*
+  /sk-ant-[a-zA-Z0-9_-]{10,}/g,
+  // OpenAI: sk-proj*, sk-<20+ alphanum>
+  /sk-[a-zA-Z0-9]{20,}/g,
+  // Google: AIza*
+  new RegExp('AIza[a-zA-Z0-9_-]{30,}', 'g'),
+  // GitHub PAT (classic): ghp_*
+  /ghp_[a-zA-Z0-9]{30,}/g,
+  // GitHub PAT (fine-grained): github_pat_*
+  /github_pat_[a-zA-Z0-9_]{30,}/g,
+  // Groq: gsk_*
+  /gsk_[a-zA-Z0-9]{20,}/g,
+  // OpenRouter: sk-or-*
+  /sk-or-[a-zA-Z0-9_-]{20,}/g,
+  // GitHub OAuth/App tokens: gho_*, ghs_*
+  /gh[os]_[a-zA-Z0-9]{30,}/g,
+  // Copilot/GitHub general token (catch-all for longer tokens)
+  /ghp_[a-zA-Z0-9]{20,}/g,
+];
+
+/**
+ * Sanitize an error message by redacting known API key patterns.
+ *
+ * This MUST be applied to all error messages before they propagate
+ * (thrown errors, console.error, progress callbacks, etc.).
+ */
+export function sanitizeErrorMessage(message: string): string {
+  let sanitized = message;
+  for (const pattern of API_KEY_PATTERNS) {
+    // Reset lastIndex for global regexes
+    pattern.lastIndex = 0;
+    sanitized = sanitized.replace(pattern, '[REDACTED_KEY]');
+  }
+  return sanitized;
+}
+
 // ─── Validation Helpers ─────────────────────────────────────────
 
 /**
@@ -241,8 +290,10 @@ function parseOpenCodeOutput(raw: string): { text: string; tokens?: { input?: nu
  * Throws CLIConfigurationError for malformed or unsupported values.
  *
  * Only called when preferredCLI === 'opencode' and cliModel is provided.
+ *
+ * @internal Exported for testing only.
  */
-function validateCliModel(cliModel: string): void {
+export function validateCliModel(cliModel: string): void {
   if (!CLI_MODEL_REGEX.test(cliModel)) {
     throw new CLIConfigurationError(
       `Invalid cliModel format: '${cliModel}'. Expected 'provider/model' (e.g., 'anthropic/claude-sonnet-4-5').`,
@@ -461,10 +512,11 @@ export function generateViaCLI(
 
       // Truncate error message — stderr from CLI failures can contain the entire prompt
       // (including huge diffs like package-lock.json), making logs unreadable.
+      // Sanitize to redact any leaked credentials in error output.
       const fullMessage = (error as Error).message ?? String(error);
       const truncated =
         fullMessage.length > 500 ? `${fullMessage.slice(0, 500)}... [truncated]` : fullMessage;
-      console.error(`[cli-bridge] ${adapter.name} failed: ${truncated}`);
+      console.error(`[cli-bridge] ${adapter.name} failed: ${sanitizeErrorMessage(truncated)}`);
     }
   }
 

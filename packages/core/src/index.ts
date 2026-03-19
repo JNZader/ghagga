@@ -102,6 +102,7 @@ export {
   generateViaCLI,
   getAvailableCLIs,
   OPENCODE_ENV_BY_PREFIX,
+  sanitizeErrorMessage,
 } from './providers/cli-bridge.js';
 export type { CLIBridgeOptions, CLIToolName } from './providers/cli-bridge.js';
 export type { FallbackOptions, FallbackProvider, FallbackResult } from './providers/fallback.js';
