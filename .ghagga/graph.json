@@ -3,7 +3,7 @@
   "rootDir": ".",
   "nodes": {
     "packages/types/src/api.ts": {
-      "hash": "48660c3145aa3d4fe19afd70970a7f84d703bcefba11b3912fe02ac4be664505",
+      "hash": "daf67fccf6681358beabd1c342a834667f50b0cc5ff4e6720685a1ed57c95b05",
       "language": "typescript",
       "imports": [
         "./delegated-ci.js"
@@ -219,7 +219,7 @@
       "isTest": true
     },
     "packages/db/src/schema.ts": {
-      "hash": "cb15e9254764fa293438b25f0860a88ddac27d13127589663a934b1aad5ce265",
+      "hash": "f961188a51a31ccc065413a37e635f606d6c08904b79093974137b1f72e0a08a",
       "language": "typescript",
       "imports": [
         "drizzle-orm/pg-core"
@@ -305,7 +305,7 @@
       "isTest": false
     },
     "packages/core/src/index.ts": {
-      "hash": "c951af42f01b588f6758f3688341ba8a4ea00aa73687f8cb6472d2d2b85f3de3",
+      "hash": "598daa35c2743c0063d684144c5725b48b032382e1034b3ef18af1a9ccd588a0",
       "language": "typescript",
       "imports": [
         "./pipeline.js",
@@ -317,6 +317,7 @@
         "./utils/stack-detect.js",
         "./utils/token-budget.js",
         "./providers/cli-bridge.js",
+        "./providers/gateway.js",
         "./providers/fallback.js",
         "./providers/index.js",
         "./memory/context.js",
@@ -362,6 +363,7 @@
         "getAvailableCLIs",
         "OPENCODE_ENV_BY_PREFIX",
         "sanitizeErrorMessage",
+        "generateViaGateway",
         "generateWithFallback",
         "createModel",
         "createProvider",
@@ -463,7 +465,7 @@
       "isTest": true
     },
     "packages/core/src/pipeline.ts": {
-      "hash": "1a6ea51185f127ec249113294f818e95c705cafb251520c3bd2b850f82fcaa28",
+      "hash": "726732c8e57c2409da6e27dd69bba579e416337ffd091086847ab3a44c3704f6",
       "language": "typescript",
       "imports": [
         "./agents/consensus.js",
@@ -478,6 +480,7 @@
         "./memory/persist.js",
         "./memory/search.js",
         "./providers/cli-bridge.js",
+        "./providers/gateway.js",
         "./tools/plugins/index.js",
         "./tools/registry.js",
         "./tools/runner.js",
@@ -517,7 +520,7 @@
       "isTest": true
     },
     "packages/core/src/types.ts": {
-      "hash": "b49c13c94dcb5063e2525869d3baa2fdfae279dd6130ec43787ce6d9a0174490",
+      "hash": "d364a725ee7003d9d08f1a460f20dc18f7dfa982d83f7ec40f287ee5862c8cba",
       "language": "typescript",
       "imports": [
         "./graph/schema.js",
@@ -1654,7 +1657,7 @@
       "isTest": true
     },
     "packages/core/src/providers/cli-bridge.ts": {
-      "hash": "22462e739cf4aecf96aa9721b4195f12f0108e1e2f5c27d4c916cff6330bbb11",
+      "hash": "48368bef8e26265cae94e381ae4059f74fb2ab5ad75516531fddc85dcab60a0f",
       "language": "typescript",
       "imports": [
         "node:child_process",
@@ -1708,6 +1711,17 @@
       "calls": [],
       "isTest": false
     },
+    "packages/core/src/providers/gateway.ts": {
+      "hash": "2c2ce020215bce6f331ce166e0c8596383e099281187ef0af1a4dd5091bebab6",
+      "language": "typescript",
+      "imports": [],
+      "exports": [
+        "GatewayOptions",
+        "GatewayResponse"
+      ],
+      "calls": [],
+      "isTest": false
+    },
     "packages/core/src/providers/index.test.ts": {
       "hash": "e3606f4ee1a28142f59e4e115905cee87ba91468dd6e48f45ccc06a1b5f240ce",
       "language": "typescript",
@@ -1721,7 +1735,7 @@
       "isTest": true
     },
     "packages/core/src/providers/index.ts": {
-      "hash": "9a1214cfa69d4445eb9c111b95d56922fe4ddbc58ac69e709706565f08127f70",
+      "hash": "b9582a080215114935d498639fd0fe5ceebf225ecb066ecbb3f7c6e2a33d1551",
       "language": "typescript",
       "imports": [
         "@ai-sdk/anthropic",
@@ -2924,7 +2938,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/installations.ts": {
-      "hash": "63f62ef4a5ba6d8119bbda83c047d861ed8e520018a7384e1c495462ab8695c1",
+      "hash": "1537678d0957875e73fc50a630ef2e1ffe0a6d4dd48adf42657e5cd1b3bad62e",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3003,7 +3017,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/settings.ts": {
-      "hash": "d5b806bc4c08473bb489ad7ad879d9c8a85015896010e546bf47c0d4de5b2547",
+      "hash": "24a1e385094f5ad2de7a662598a69f96b610e3d5debbee8d8514335555d2d625",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3266,7 +3280,7 @@
       "isTest": true
     },
     "apps/server/src/lib/provider-models.ts": {
-      "hash": "0a58bab5531e0669224f3aa6884c69eff7c3eb480cab2e5e29fde9ab95350405",
+      "hash": "3e46aafa3347a74f61ca3d77d0bcbdb5f4f8a8f6e4b19d2e466887918455529e",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -4360,7 +4374,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "607524767b634a31308822300c27b94c6da11f31e657e9431468a40d040bdf93",
+      "hash": "90f1837a4a93db46b00857617aa1b0a603caa4efb818c2740c10fbdb24e838ab",
       "language": "typescript",
       "imports": [
         "react",
