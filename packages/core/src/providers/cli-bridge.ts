@@ -393,22 +393,31 @@ const adapters: CLIAdapter[] = [
       };
 
       let raw: string;
-      if (fullPrompt.length > STDIN_THRESHOLD) {
-        // Large prompt: pipe via stdin (OpenCode auto-detects piped stdin)
-        raw = execSync(`opencode ${cmdArgs}`, {
+      const cmd =
+        fullPrompt.length > STDIN_THRESHOLD
+          ? `opencode ${cmdArgs}`
+          : `opencode ${cmdArgs} ${JSON.stringify(fullPrompt)}`;
+
+      try {
+        raw = execSync(cmd, {
           ...execOptions,
-          input: fullPrompt,
+          ...(fullPrompt.length > STDIN_THRESHOLD ? { input: fullPrompt } : {}),
         });
-      } else {
-        // Inline prompt as trailing argument
-        raw = execSync(`opencode ${cmdArgs} ${JSON.stringify(fullPrompt)}`, {
-          ...execOptions,
-        });
+      } catch (execError: unknown) {
+        // execSync throws on non-zero exit — capture stderr for diagnostics
+        const err = execError as { stderr?: Buffer | string; stdout?: Buffer | string; status?: number };
+        const stderr = err.stderr ? String(err.stderr).slice(0, 500) : 'no stderr';
+        const stdout = err.stdout ? String(err.stdout).slice(0, 200) : 'no stdout';
+        throw new Error(
+          `OpenCode exited with status ${err.status ?? 'unknown'}. stderr: ${sanitizeErrorMessage(stderr)}. stdout: ${stdout}`,
+        );
       }
 
       const parsed = parseOpenCodeOutput(raw);
       if (!parsed.text) {
-        throw new Error('OpenCode returned no text content in JSON output');
+        // Log raw output for debugging empty responses
+        const preview = raw.slice(0, 500) || '(empty)';
+        throw new Error(`OpenCode returned no text content in JSON output. Raw preview: ${preview}`);
       }
       return parsed.text.trim();
     },
