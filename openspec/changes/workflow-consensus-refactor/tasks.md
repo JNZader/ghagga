@@ -1,6 +1,6 @@
 # Tasks: Workflow & Consensus Mode Support for CLI Bridge and Gateway
 
-**Status**: ready
+**Status**: done
 **Date**: 2026-03-19
 **Estimated effort**: ~2 hours (one session)
 
@@ -111,19 +111,19 @@
 ## Phase 4: Testing & Verification
 
 ### Task 7: Unit tests for `generate-fn.ts`
-- [ ] Test `createAISDKGenerateFn`: mock `generateTextWithTimeout`, verify it's called with correct params
-- [ ] Test `createCLIBridgeGenerateFn`: mock `generateViaCLI`, verify prompt/system are passed correctly
-- [ ] Test `createGatewayGenerateFn`: mock `generateViaGateway`, verify options are forwarded
-- [ ] Test timeout handling: AI SDK factory converts `null` to thrown Error
+- [x] Test `createAISDKGenerateFn`: mock `generateTextWithTimeout`, verify it's called with correct params
+- [x] Test `createCLIBridgeGenerateFn`: mock `generateViaCLI`, verify prompt/system are passed correctly
+- [x] Test `createGatewayGenerateFn`: mock `generateViaGateway`, verify options are forwarded
+- [x] Test timeout handling: AI SDK factory converts `null` to thrown Error
 
-**Files**: `packages/core/src/__tests__/providers/generate-fn.test.ts` (NEW)
+**Files**: `packages/core/src/providers/generate-fn.test.ts` (NEW)
 **Commit**: `test(core): add unit tests for GenerateTextFn factories`
 
 ### Task 8: Integration smoke test
-- [ ] Run `pnpm test` to verify all existing tests pass
-- [ ] Run `pnpm biome check --write` across modified files
-- [ ] Run `pnpm build` to verify TypeScript compilation
-- [ ] Manual verification: confirm types compile with `tsc --noEmit`
+- [x] Run `pnpm test` to verify all existing tests pass (1739/1739 passed)
+- [x] Run `pnpm biome check --write` across modified files (no issues)
+- [x] Run `pnpm build` to verify TypeScript compilation (`tsc --noEmit` clean)
+- [x] Manual verification: confirm types compile with `tsc --noEmit` (ghagga-core + @ghagga/server)
 
 **Files**: N/A (verification only)
 **Commit**: N/A (no code changes)
@@ -133,9 +133,9 @@
 ## Phase 5: Cleanup
 
 ### Task 9: Remove dead code and debug logging
-- [ ] Remove the `console.log('[ghagga] Gateway debug:' ...)` from pipeline.ts (line 419-429)
-- [ ] Clean up any unused imports from pipeline.ts after removing `runCLIBridgeReview`/`runGatewayReview`
-- [ ] Verify no unused imports in agents after removing `createModel` direct usage
+- [x] Remove the `console.log('[ghagga] Gateway debug:' ...)` from pipeline.ts — already removed in Task 6
+- [x] Clean up any unused imports from pipeline.ts after removing `runCLIBridgeReview`/`runGatewayReview` — verified clean
+- [x] Verify no unused imports in agents after removing `createModel` direct usage — verified clean
 
 **Files**: `packages/core/src/pipeline.ts`
 **Commit**: `chore(core): remove debug logging and dead code`
