@@ -219,7 +219,7 @@ export function createInstallationsRouter(db: Database) {
           }
           // Validate provider prefix is supported
           const prefix = entry.cliModel.split('/')[0]!;
-          if (!OPENCODE_ENV_BY_PREFIX[prefix]) {
+          if (!(prefix in OPENCODE_ENV_BY_PREFIX)) {
             const supported = Object.keys(OPENCODE_ENV_BY_PREFIX).join(', ');
             return c.json(
               {
