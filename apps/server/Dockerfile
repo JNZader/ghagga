@@ -60,7 +60,9 @@ ARG CLI_TOOLS_VERSION=2
 RUN echo "CLI tools version: ${CLI_TOOLS_VERSION}" && \
     curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/local/bin bash 2>/dev/null || true && \
     npm install -g @google/gemini-cli @github/copilot 2>/dev/null || true && \
-    which opencode && opencode --version || echo "WARNING: opencode not installed"
+    (which opencode && opencode --version || echo "WARNING: opencode not installed") && \
+    (which gemini || echo "WARNING: gemini-cli not installed") && \
+    (which copilot || echo "WARNING: copilot not installed")
 
 WORKDIR /app
 
