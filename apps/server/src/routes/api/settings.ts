@@ -267,6 +267,7 @@ export function createSettingsRouter(db: Database) {
         model: string;
         apiKey?: string;
         cliModel?: string;
+        gatewayUrl?: string;
       }>;
 
       const VALID_SAAS_PROVIDERS = [
@@ -280,6 +281,7 @@ export function createSettingsRouter(db: Database) {
         'deepseek',
         'openrouter',
         'cli-bridge',
+        'gateway',
       ];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {
@@ -290,6 +292,15 @@ export function createSettingsRouter(db: Database) {
             },
             400,
           );
+        }
+      }
+
+      // Strip cliModel for gateway entries (not applicable) and gatewayUrl for non-gateway
+      for (const entry of incomingChain) {
+        if (entry.provider === 'gateway') {
+          entry.cliModel = undefined;
+        } else {
+          entry.gatewayUrl = undefined;
         }
       }
 
@@ -369,6 +380,8 @@ export function createSettingsRouter(db: Database) {
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry) => {
         // Resolve cliModel: only meaningful for cli-bridge entries
         const cliModel = entry.provider === 'cli-bridge' ? entry.cliModel : undefined;
+        // Resolve gatewayUrl: only meaningful for gateway entries
+        const gatewayUrl = entry.provider === 'gateway' ? entry.gatewayUrl : undefined;
 
         if (entry.apiKey) {
           // New key provided → encrypt it and also update the lookup
@@ -381,11 +394,16 @@ export function createSettingsRouter(db: Database) {
             encryptedApiKey: encrypted,
           };
           if (cliModel) result.cliModel = cliModel;
+          if (gatewayUrl) result.gatewayUrl = gatewayUrl;
           return result;
         }
 
         if (entry.provider === 'github') {
-          return { provider: 'github' as const, model: entry.model, encryptedApiKey: null };
+          return {
+            provider: entry.provider as SaaSProvider,
+            model: entry.model,
+            encryptedApiKey: null,
+          };
         }
 
         // No key provided → resolve from lookup (repo > global > null)
@@ -395,6 +413,7 @@ export function createSettingsRouter(db: Database) {
           encryptedApiKey: keysByProvider.get(entry.provider) ?? null,
         };
         if (cliModel) result.cliModel = cliModel;
+        if (gatewayUrl) result.gatewayUrl = gatewayUrl;
         return result;
       });
 
@@ -649,9 +668,40 @@ export function createSettingsRouter(db: Database) {
       'deepseek',
       'openrouter',
       'cli-bridge',
+      'gateway',
     ];
     if (!validProviders.includes(provider)) {
       return c.json({ error: 'VALIDATION_ERROR', message: `Unknown provider: ${provider}` }, 400);
+    }
+
+    // Gateway: validate by checking the provided URL's /health endpoint (if URL is given)
+    if (provider === 'gateway') {
+      const gatewayUrl = (body as Record<string, unknown>).gatewayUrl as string | undefined;
+      if (gatewayUrl) {
+        try {
+          const healthUrl = `${gatewayUrl.replace(/\/+$/, '')}/health`;
+          const healthResp = await fetch(healthUrl, {
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (healthResp.ok) {
+            return c.json({ valid: true, models: ['auto'] });
+          }
+          return c.json({
+            valid: false,
+            models: [],
+            error: `Gateway health check failed (HTTP ${healthResp.status})`,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(
+            { err: msg, gatewayUrl, user: user.githubLogin },
+            'Gateway health check failed',
+          );
+          return c.json({ valid: false, models: [], error: `Cannot reach gateway: ${msg}` });
+        }
+      }
+      // No URL provided yet — still valid (URL will be set in the dashboard)
+      return c.json({ valid: true, models: ['auto'] });
     }
 
     // CLI Bridge doesn't need API key validation — it uses local CLIs.

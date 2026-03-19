@@ -106,11 +106,15 @@ export interface DbProviderChainEntry {
     | 'cerebras'
     | 'deepseek'
     | 'openrouter'
-    | 'cli-bridge';
+    | 'cli-bridge'
+    | 'gateway';
   model: string;
   encryptedApiKey: string | null; // null for GitHub Models (uses session token)
   /** OpenCode model in `provider/model` format. Only meaningful when provider === 'cli-bridge'. */
   cliModel?: string;
+
+  /** Gateway base URL. Only meaningful when provider === 'gateway'. */
+  gatewayUrl?: string;
 }
 
 // ─── Installation Settings ──────────────────────────────────────

@@ -40,6 +40,7 @@ export function buildProviderChainView(chain: DbProviderChainEntry[]) {
       hasApiKey: boolean;
       maskedApiKey?: string;
       cliModel?: string;
+      gatewayUrl?: string;
     } = {
       provider: entry.provider,
       model: entry.model,
@@ -49,6 +50,10 @@ export function buildProviderChainView(chain: DbProviderChainEntry[]) {
     // Only include cliModel when present (don't add undefined to every entry)
     if (entry.cliModel) {
       view.cliModel = entry.cliModel;
+    }
+    // Only include gatewayUrl when present (gateway provider entries)
+    if (entry.gatewayUrl) {
+      view.gatewayUrl = entry.gatewayUrl;
     }
     return view;
   });

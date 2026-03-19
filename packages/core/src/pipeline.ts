@@ -38,6 +38,7 @@ import {
   resolveCredentialEnvVar,
   sanitizeErrorMessage,
 } from './providers/cli-bridge.js';
+import { generateViaGateway } from './providers/gateway.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import {
@@ -81,6 +82,11 @@ function validateInput(input: ReviewInput): void {
 
   // CLI Bridge mode: no API key required (uses CLI auth)
   if (input.provider === 'cli-bridge') {
+    return;
+  }
+
+  // Gateway mode: uses dashboard-configured token (stored as apiKey in chain entry)
+  if (input.provider === 'gateway') {
     return;
   }
 
@@ -345,6 +351,11 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     input.provider === 'cli-bridge' ||
     input.providerChain?.[0]?.provider === ('cli-bridge' as ProviderChainEntry['provider']);
 
+  // Check if LLM Gateway should be used (intercept before normal provider flow)
+  const isGateway =
+    input.provider === 'gateway' ||
+    input.providerChain?.[0]?.provider === ('gateway' as ProviderChainEntry['provider']);
+
   if (!aiEnabled) {
     // Static-only mode: no LLM calls
     emit({ step: 'agent-start', message: 'AI review disabled — returning static analysis only' });
@@ -396,6 +407,42 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       result = createStaticOnlyResult(staticResult, input.mode, startTime);
       result.status = 'NEEDS_HUMAN_REVIEW';
       result.summary = `CLI bridge review failed (${safeMsg || 'unknown error'}). Static analysis results are shown below.`;
+    }
+  } else if (isGateway) {
+    // LLM Gateway mode: delegate to centralized gateway service
+    // Credentials come from the dashboard-configured provider chain entry (same pattern as CLI bridge)
+    const gatewayEntry = input.providerChain?.[0];
+    const gatewayModel = gatewayEntry?.model ?? input.model ?? 'auto';
+    const gatewayUrl = gatewayEntry?.gatewayUrl ?? '';
+    const gatewayToken = gatewayEntry?.apiKey || input.apiKey || '';
+
+    emit({
+      step: 'agent-start',
+      message: `Running LLM Gateway review (model: ${gatewayModel})...`,
+    });
+
+    try {
+      result = await runGatewayReview({
+        diff: truncatedDiff,
+        staticContext,
+        memoryContext,
+        stackHints,
+        reviewLevel: input.settings.reviewLevel,
+        model: gatewayModel,
+        gatewayUrl,
+        gatewayToken,
+        onProgress: input.onProgress,
+      });
+    } catch (error) {
+      const rawMsg = error instanceof Error ? error.message : String(error);
+      console.warn('[ghagga] Gateway review failed, returning static analysis only:', rawMsg);
+      emit({
+        step: 'agent-failed',
+        message: 'Gateway review failed — returning static analysis only',
+      });
+      result = createStaticOnlyResult(staticResult, input.mode, startTime);
+      result.status = 'NEEDS_HUMAN_REVIEW';
+      result.summary = `Gateway review failed (${rawMsg || 'unknown error'}). Static analysis results are shown below.`;
     }
   } else {
     // Resolve the primary provider for agent calls
@@ -846,6 +893,88 @@ async function runCLIBridgeReview(input: CLIBridgeReviewInput): Promise<ReviewRe
     'cli-bridge',
     cliResult.cli,
     0, // No token count available from CLI
+    executionTimeMs,
+    memoryContext,
+  );
+}
+
+// ─── LLM Gateway Review ────────────────────────────────────────
+
+interface GatewayReviewInput {
+  diff: string;
+  staticContext: string;
+  memoryContext: string | null;
+  stackHints: string;
+  reviewLevel: import('./types.js').ReviewLevel;
+  model?: string;
+  /** Gateway base URL (from dashboard-configured provider chain entry). */
+  gatewayUrl: string;
+  /** Gateway bearer token (decrypted from provider chain entry's apiKey). */
+  gatewayToken: string;
+  onProgress?: import('./types.js').ProgressCallback;
+}
+
+/**
+ * Run a review using the LLM Gateway.
+ *
+ * Builds the same prompt as simple/CLI bridge mode, calls generateViaGateway(),
+ * and parses the response with the same parser.
+ * Simple mode only — workflow/consensus would need multiple sequential calls.
+ */
+async function runGatewayReview(input: GatewayReviewInput): Promise<ReviewResult> {
+  const {
+    diff,
+    staticContext,
+    memoryContext,
+    stackHints,
+    reviewLevel,
+    model,
+    gatewayUrl,
+    gatewayToken,
+  } = input;
+  const emit = input.onProgress ?? (() => {});
+
+  const startTime = Date.now();
+
+  // Build the same system prompt as simple mode
+  const system = [
+    SIMPLE_REVIEW_SYSTEM,
+    staticContext,
+    buildMemoryContext(memoryContext),
+    stackHints,
+    buildReviewLevelInstruction(reviewLevel),
+    REVIEW_CALIBRATION,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  // Build the user prompt with the diff
+  const prompt = `Please review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
+
+  emit({
+    step: 'gateway-call',
+    message: `Calling LLM Gateway (model: ${model ?? 'auto'})...`,
+  });
+
+  const gatewayResult = await generateViaGateway(prompt, system, {
+    gatewayUrl,
+    gatewayToken,
+    model: model !== 'auto' ? model : undefined,
+    project: 'ghagga',
+  });
+
+  const executionTimeMs = Date.now() - startTime;
+
+  emit({
+    step: 'gateway-done',
+    message: `Gateway review complete via ${gatewayResult.provider}/${gatewayResult.model} — ${(executionTimeMs / 1000).toFixed(1)}s`,
+  });
+
+  return parseReviewResponse(
+    gatewayResult.text,
+    'gateway',
+    gatewayResult.model,
+    gatewayResult.tokensUsed ?? 0,
     executionTimeMs,
     memoryContext,
   );

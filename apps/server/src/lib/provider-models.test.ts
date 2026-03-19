@@ -36,7 +36,7 @@ beforeEach(() => {
 // ─── CURATED_MODELS ─────────────────────────────────────────────
 
 describe('CURATED_MODELS', () => {
-  it('has all 9 SaaS providers', () => {
+  it('has all SaaS providers including gateway', () => {
     expect(Object.keys(CURATED_MODELS)).toEqual(
       expect.arrayContaining([
         'anthropic',
@@ -49,9 +49,10 @@ describe('CURATED_MODELS', () => {
         'deepseek',
         'openrouter',
         'cli-bridge',
+        'gateway',
       ]),
     );
-    expect(Object.keys(CURATED_MODELS)).toHaveLength(10);
+    expect(Object.keys(CURATED_MODELS)).toHaveLength(11);
   });
 
   it('each provider has at least one model', () => {

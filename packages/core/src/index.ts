@@ -107,6 +107,8 @@ export {
 } from './providers/cli-bridge.js';
 export type { FallbackOptions, FallbackProvider, FallbackResult } from './providers/fallback.js';
 export { generateWithFallback } from './providers/fallback.js';
+export type { GatewayOptions, GatewayResponse } from './providers/gateway.js';
+export { generateViaGateway } from './providers/gateway.js';
 export { createModel, createProvider } from './providers/index.js';
 
 // ─── Memory (for custom memory integrations) ────────────────────
