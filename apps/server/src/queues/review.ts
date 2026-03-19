@@ -272,11 +272,16 @@ async function processReview(
           }
           return true;
         })
-        .map((entry) => ({
-          provider: entry.provider,
-          model: entry.model,
-          apiKey: entry.encryptedApiKey ? decrypt(entry.encryptedApiKey) : '',
-        }));
+        .map((entry) => {
+          const mapped: ProviderChainEntry = {
+            provider: entry.provider,
+            model: entry.model,
+            apiKey: entry.encryptedApiKey ? decrypt(entry.encryptedApiKey) : '',
+          };
+          if (entry.cliModel) mapped.cliModel = entry.cliModel;
+          if (entry.gatewayUrl) mapped.gatewayUrl = entry.gatewayUrl;
+          return mapped;
+        });
 
       if (providerChain.length === 0) {
         providerChain = undefined;

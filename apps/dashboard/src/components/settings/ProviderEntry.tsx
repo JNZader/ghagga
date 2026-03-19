@@ -19,6 +19,8 @@ export interface ProviderEntryState {
   validated: boolean;
   /** OpenCode model in `provider/model` format. Only for cli-bridge + opencode. */
   cliModel?: string;
+  /** Gateway base URL. Only for gateway provider. */
+  gatewayUrl?: string;
 }
 
 interface ProviderEntryProps {
@@ -75,6 +77,7 @@ export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
   github: ['gpt-4o-mini', 'gpt-4o', 'o3-mini', 'Phi-4', 'Mistral-Large-2411', 'DeepSeek-R1'],
   qwen: ['qwen-coder-plus', 'qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-coder-turbo', 'qwen-long'],
   'cli-bridge': ['auto', 'opencode', 'copilot', 'gemini'],
+  gateway: ['auto'],
 };
 
 // ─── Provider Labels ────────────────────────────────────────────
@@ -191,7 +194,9 @@ export function ProviderEntry({
 
   const isGitHub = entry.provider === 'github';
   const isCLIBridge = entry.provider === 'cli-bridge';
+  const isGateway = entry.provider === 'gateway';
   // CLI bridge entries CAN have API keys now (opencode, gemini, copilot all accept credentials)
+  // Gateway uses apiKey for the bearer token (configured in dashboard, not env vars)
   const needsApiKey = !isGitHub;
   // Can validate if: GitHub (no key needed), has a new key typed, OR has an existing saved key
   const canValidate = isGitHub || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
@@ -241,6 +246,7 @@ export function ProviderEntry({
       hasExistingKey: false,
       maskedApiKey: undefined,
       cliModel: undefined,
+      gatewayUrl: undefined,
     });
   };
 
@@ -334,14 +340,14 @@ export function ProviderEntry({
       {/* Provider Mode: API vs CLI Bridge */}
       <div className="mb-3">
         <label className="mb-1 block text-xs font-medium text-text-secondary">Provider</label>
-        <div className="mb-2 flex items-center gap-4 text-sm">
+        <div className="mb-2 flex flex-wrap items-center gap-4 text-sm">
           <label className="flex cursor-pointer items-center gap-1.5">
             <input
               type="radio"
               name={`mode-${index}`}
-              checked={entry.provider !== 'cli-bridge'}
+              checked={entry.provider !== 'cli-bridge' && entry.provider !== 'gateway'}
               onChange={() => {
-                if (entry.provider === 'cli-bridge') {
+                if (entry.provider === 'cli-bridge' || entry.provider === 'gateway') {
                   handleProviderChange('groq' as SaaSProvider);
                 }
               }}
@@ -372,9 +378,38 @@ export function ProviderEntry({
             <span className="text-text-secondary">CLI Bridge</span>
             <span className="text-[10px] text-yellow-400/70">(uses server CLIs — $0)</span>
           </label>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              name={`mode-${index}`}
+              checked={entry.provider === 'gateway'}
+              onChange={() => {
+                onChange({
+                  ...entry,
+                  provider: 'gateway' as SaaSProvider,
+                  model: 'auto',
+                  apiKey: '',
+                  validated: false,
+                  hasExistingKey: false,
+                  maskedApiKey: undefined,
+                  availableModels: KNOWN_MODELS['gateway'] ?? [],
+                  cliModel: undefined,
+                  gatewayUrl: '',
+                });
+              }}
+              className="accent-primary-500"
+            />
+            <span className="text-text-secondary">LLM Gateway</span>
+            <span className="text-[10px] text-blue-400/70">(centralized — your own gateway)</span>
+          </label>
         </div>
 
-        {entry.provider === 'cli-bridge' ? (
+        {entry.provider === 'gateway' ? (
+          /* Gateway: model is always 'auto' — show info instead of selector */
+          <div className="rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm text-blue-300">
+            Model: <code className="font-mono">auto</code> — the gateway handles model selection
+          </div>
+        ) : entry.provider === 'cli-bridge' ? (
           /* CLI tool selector */
           <select
             value={entry.model}
@@ -456,6 +491,32 @@ export function ProviderEntry({
         </div>
       )}
 
+      {/* LLM Gateway: URL input */}
+      {isGateway && (
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-text-secondary">
+            Gateway URL
+            <span className="ml-1 text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            value={entry.gatewayUrl ?? ''}
+            onChange={(e) => {
+              onChange({
+                ...entry,
+                gatewayUrl: e.target.value,
+                validated: false,
+              });
+            }}
+            placeholder="https://llm-gateway.example.com"
+            className="input-field w-full"
+          />
+          <p className="mt-1 text-xs text-text-secondary">
+            Enter the URL and token of your LLM Gateway instance. The token goes in the API Key field below.
+          </p>
+        </div>
+      )}
+
       {/* CLI Bridge: contextual help text */}
       {isCLIBridge && (
         <div className="mb-3 rounded-md border border-surface-border/50 bg-surface-bg/30 p-3 text-xs text-text-secondary">
@@ -474,7 +535,7 @@ export function ProviderEntry({
       <div className={`mb-3 ${isGitHub || isFreeModel ? 'hidden' : ''}`}>
         <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-medium text-text-secondary">
-            {isCLIBridge ? getCliCredentialLabel(entry.model, entry.cliModel) : 'API Key'}
+            {isGateway ? 'Gateway Token' : isCLIBridge ? getCliCredentialLabel(entry.model, entry.cliModel) : 'API Key'}
           </label>
           {/* Toggle between reusing a saved key and entering a new one */}
           {showReuseSelector && !isCLIBridge && (
@@ -541,13 +602,15 @@ export function ProviderEntry({
               placeholder={
                 entry.hasExistingKey
                   ? entry.maskedApiKey || 'Key saved (enter new to replace)'
-                  : isCLIBridge
-                    ? `Enter ${getCliCredentialLabel(entry.model, entry.cliModel).toLowerCase()}...`
-                    : 'Enter API key...'
+                  : isGateway
+                    ? 'Enter gateway bearer token...'
+                    : isCLIBridge
+                      ? `Enter ${getCliCredentialLabel(entry.model, entry.cliModel).toLowerCase()}...`
+                      : 'Enter API key...'
               }
               className="input-field flex-1"
             />
-            {!isCLIBridge && (
+            {!isCLIBridge && !isGateway && (
               <button
                 type="button"
                 onClick={handleValidate}
@@ -566,7 +629,7 @@ export function ProviderEntry({
 
         {/* Validation status */}
         {validationError && <p className="mt-1 text-xs text-red-400">{validationError}</p>}
-        {!isCLIBridge && entry.validated && !validationError && (
+        {!isCLIBridge && !isGateway && entry.validated && !validationError && (
           <p className="mt-1 text-xs text-green-400">API key validated successfully</p>
         )}
         {entry.hasExistingKey && !entry.apiKey && !entry.validated && (
@@ -577,8 +640,8 @@ export function ProviderEntry({
       </div>
 
       {/* Model Selector — combo input with datalist for type-ahead + free text */}
-      {/* Hidden for CLI Bridge — model is selected in the CLI dropdown above */}
-      <div className={isCLIBridge ? 'hidden' : ''}>
+      {/* Hidden for CLI Bridge (model is selected in the CLI dropdown above) and Gateway (always 'auto') */}
+      <div className={isCLIBridge || isGateway ? 'hidden' : ''}>
         <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
         {effectiveModels.length > 0 || entry.model ? (
           <div>

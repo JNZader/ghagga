@@ -165,6 +165,7 @@ export function createInstallationsRouter(db: Database) {
         model: string;
         apiKey?: string;
         cliModel?: string;
+        gatewayUrl?: string;
       }>;
 
       const VALID_SAAS_PROVIDERS = [
@@ -178,6 +179,7 @@ export function createInstallationsRouter(db: Database) {
         'deepseek',
         'openrouter',
         'cli-bridge',
+        'gateway',
       ];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {
@@ -188,6 +190,15 @@ export function createInstallationsRouter(db: Database) {
             },
             400,
           );
+        }
+      }
+
+      // Strip cliModel for gateway entries (not applicable) and gatewayUrl for non-gateway
+      for (const entry of incomingChain) {
+        if (entry.provider === 'gateway') {
+          entry.cliModel = undefined;
+        } else {
+          entry.gatewayUrl = undefined;
         }
       }
 
@@ -267,6 +278,8 @@ export function createInstallationsRouter(db: Database) {
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry, idx) => {
         // Resolve cliModel: only meaningful for cli-bridge entries
         const cliModel = entry.provider === 'cli-bridge' ? entry.cliModel : undefined;
+        // Resolve gatewayUrl: only meaningful for gateway entries
+        const gatewayUrl = entry.provider === 'gateway' ? entry.gatewayUrl : undefined;
 
         if (entry.apiKey) {
           const encrypted = encrypt(entry.apiKey);
@@ -278,10 +291,11 @@ export function createInstallationsRouter(db: Database) {
             encryptedApiKey: encrypted,
           };
           if (cliModel) result.cliModel = cliModel;
+          if (gatewayUrl) result.gatewayUrl = gatewayUrl;
           return result;
         }
         if (entry.provider === 'github') {
-          return { provider: 'github' as const, model: entry.model, encryptedApiKey: null };
+          return { provider: entry.provider as SaaSProvider, model: entry.model, encryptedApiKey: null };
         }
         const resolved = keysByProvider.get(entry.provider) ?? null;
         logger.info(
@@ -294,6 +308,7 @@ export function createInstallationsRouter(db: Database) {
           encryptedApiKey: resolved,
         };
         if (cliModel) result.cliModel = cliModel;
+        if (gatewayUrl) result.gatewayUrl = gatewayUrl;
         return result;
       });
 

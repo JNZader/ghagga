@@ -19,7 +19,8 @@ export type LLMProvider =
   | 'cerebras'
   | 'deepseek'
   | 'openrouter'
-  | 'cli-bridge';
+  | 'cli-bridge'
+  | 'gateway';
 
 /** Providers available in the SaaS dashboard (excludes Ollama) */
 export type SaaSProvider =
@@ -32,7 +33,8 @@ export type SaaSProvider =
   | 'cerebras'
   | 'deepseek'
   | 'openrouter'
-  | 'cli-bridge';
+  | 'cli-bridge'
+  | 'gateway';
 
 export type ReviewLevel = 'soft' | 'normal' | 'strict';
 
@@ -55,6 +57,9 @@ export interface ProviderChainEntry {
 
   /** OpenCode model in `provider/model` format. Only meaningful when provider === 'cli-bridge'. */
   cliModel?: string;
+
+  /** Gateway base URL. Only meaningful when provider === 'gateway'. */
+  gatewayUrl?: string;
 }
 
 /**
@@ -541,4 +546,5 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   deepseek: 'deepseek-chat',
   openrouter: 'deepseek/deepseek-chat',
   'cli-bridge': 'auto',
+  gateway: 'auto',
 };

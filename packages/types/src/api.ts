@@ -17,7 +17,8 @@ export type LLMProvider =
   | 'cerebras'
   | 'deepseek'
   | 'openrouter'
-  | 'cli-bridge';
+  | 'cli-bridge'
+  | 'gateway';
 
 /** Providers available in the SaaS dashboard (excludes Ollama) */
 export type SaaSProvider =
@@ -30,7 +31,8 @@ export type SaaSProvider =
   | 'cerebras'
   | 'deepseek'
   | 'openrouter'
-  | 'cli-bridge';
+  | 'cli-bridge'
+  | 'gateway';
 
 // ─── User ───────────────────────────────────────────────────────
 
@@ -108,6 +110,8 @@ export interface ProviderChainView {
   maskedApiKey?: string;
   /** OpenCode model in `provider/model` format. Only present for cli-bridge entries. */
   cliModel?: string;
+  /** Gateway base URL. Only present for gateway entries. */
+  gatewayUrl?: string;
 }
 
 /** Chain entry for updates (sent to PUT /api/settings) */
@@ -117,6 +121,8 @@ export interface ProviderChainUpdate {
   apiKey?: string; // only sent when new/changed
   /** OpenCode model in `provider/model` format. Only meaningful when provider === 'cli-bridge'. */
   cliModel?: string;
+  /** Gateway base URL. Only meaningful when provider === 'gateway'. */
+  gatewayUrl?: string;
 }
 
 /** Provider validation response from POST /api/providers/validate */

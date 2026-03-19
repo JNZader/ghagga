@@ -131,6 +131,12 @@ export function createProvider(provider: LLMProvider, apiKey: string) {
       throw new Error(
         'cli-bridge provider cannot be used with createModel(). Use generateViaCLI() from providers/cli-bridge.js instead.',
       );
+    case 'gateway':
+      // Gateway does not use the AI SDK — it delegates to an external LLM Gateway service.
+      // The pipeline intercepts gateway before reaching createModel().
+      throw new Error(
+        'gateway provider cannot be used with createModel(). Use generateViaGateway() from providers/gateway.js instead.',
+      );
     default: {
       // Exhaustive check — TypeScript will error if a provider is missing
       const _exhaustive: never = provider;

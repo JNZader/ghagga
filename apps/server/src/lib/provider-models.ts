@@ -51,6 +51,7 @@ export const CURATED_MODELS: Record<SaaSProvider, string[]> = {
     'google/gemini-2.5-flash',
   ],
   'cli-bridge': ['auto', 'opencode', 'copilot', 'gemini'],
+  gateway: ['auto'],
 };
 
 /**
@@ -127,6 +128,12 @@ export async function validateProviderKey(
           detectedCliTools,
           cliModelSuggestions: detectedCliTools.includes('opencode') ? CURATED_OPENCODE_MODELS : [],
         };
+      }
+      case 'gateway': {
+        // Gateway validation: always return valid + models=['auto'].
+        // The actual URL/token are configured per-installation in the dashboard
+        // and validated at review time. No env vars needed.
+        return { valid: true, models: ['auto'] };
       }
       default: {
         const _exhaustive: never = provider;
