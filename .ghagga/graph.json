@@ -4385,7 +4385,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "23bef1e95ad473ea422db076c6c4698c68c025f6f7a8bef14258a4474a281c55",
+      "hash": "958a2e50f75c44e2efde07d77b31284341ffc128453c291341b83824dc2891f9",
       "language": "typescript",
       "imports": [
         "react",
