@@ -96,7 +96,10 @@ export function Settings() {
           hasExistingKey: entry.hasApiKey,
           maskedApiKey: entry.maskedApiKey,
           validated:
-            entry.hasApiKey || entry.provider === 'github' || entry.provider === 'cli-bridge',
+            entry.hasApiKey ||
+            entry.provider === 'github' ||
+            entry.provider === 'cli-bridge' ||
+            entry.provider === 'gateway',
           cliModel: entry.cliModel,
           gatewayUrl: entry.gatewayUrl,
         })),
@@ -120,7 +123,10 @@ export function Settings() {
           hasExistingKey: entry.hasApiKey,
           maskedApiKey: entry.maskedApiKey,
           validated:
-            entry.hasApiKey || entry.provider === 'github' || entry.provider === 'cli-bridge',
+            entry.hasApiKey ||
+            entry.provider === 'github' ||
+            entry.provider === 'cli-bridge' ||
+            entry.provider === 'gateway',
           cliModel: entry.cliModel,
           gatewayUrl: entry.gatewayUrl,
         })),

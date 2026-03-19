@@ -500,7 +500,8 @@ export function ProviderEntry({
               <span className="ml-1 text-red-400">*</span>
             </label>
             <input
-              type="text"
+              type="url"
+              autoComplete="off"
               value={entry.gatewayUrl ?? ''}
               onChange={(e) => {
                 onChange({
@@ -522,6 +523,7 @@ export function ProviderEntry({
             </label>
             <input
               type="text"
+              autoComplete="off"
               list={`gateway-models-${index}`}
               value={entry.model === 'auto' ? '' : entry.model}
               onChange={(e) => {
