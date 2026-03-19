@@ -12,7 +12,7 @@
  *   - If thresholds not met → NEEDS_HUMAN_REVIEW
  */
 
-import { createModel } from '../providers/index.js';
+import { createAISDKGenerateFn, type GenerateTextFn } from '../providers/generate-fn.js';
 import type {
   ConsensusStance,
   ConsensusVote,
@@ -23,7 +23,6 @@ import type {
   ReviewStatus,
 } from '../types.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import { calculateRateSchedule } from '../utils/token-budget.js';
 import {
   buildMemoryContext,
@@ -63,6 +62,13 @@ export interface ConsensusReviewInput {
    * Delay in ms between concurrency batches (default: 0).
    */
   delayMs?: number;
+
+  /**
+   * Backend-agnostic generation functions for votes (round-robin).
+   * When provided, each stance uses generateFns[index % generateFns.length].
+   * When omitted, functions are created from models config (backward compat).
+   */
+  generateFns?: GenerateTextFn[];
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -205,10 +211,21 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
   const { diff, models, staticContext, memoryContext, stackHints, reviewLevel } = input;
   const emit = input.onProgress ?? (() => {});
 
-  // Auto-calculate scheduling from primary model's TPM
+  // ── Resolve GenerateTextFn array ──────────────────────────
+  // When generateFns is provided, use them directly.
+  // Otherwise, build them from models config (backward compat).
+  const resolvedGenerateFns: GenerateTextFn[] =
+    input.generateFns ??
+    models.map((config) => createAISDKGenerateFn(config.provider, config.model, config.apiKey));
+
+  // Auto-calculate scheduling from primary model's TPM.
+  // For CLI bridge/gateway (single generateFn), force concurrency=1.
   const primaryModel = models[0]?.model ?? 'gpt-4o-mini';
   const rateSchedule = calculateRateSchedule(primaryModel);
-  const concurrency = input.concurrency ?? rateSchedule.concurrency;
+  const concurrency =
+    resolvedGenerateFns.length === 1
+      ? Math.min(input.concurrency ?? rateSchedule.concurrency, 1)
+      : (input.concurrency ?? rateSchedule.concurrency);
   const delayMs = input.delayMs ?? rateSchedule.delayMs;
 
   const startTime = Date.now();
@@ -227,6 +244,9 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
   // First vote gets full context; subsequent votes get compact calibration.
   const voteTasks = models.map((config, index) => {
     return async () => {
+      // Round-robin assignment of generateFn
+      const generateFn = resolvedGenerateFns[index % resolvedGenerateFns.length] as GenerateTextFn;
+
       const isFirst = index === 0;
       const system = [
         STANCE_PROMPTS[config.stance],
@@ -239,30 +259,11 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
         .filter(Boolean)
         .join('\n');
 
-      const languageModel = createModel(config.provider, config.model, config.apiKey);
-
-      const result = await generateTextWithTimeout(
-        {
-          model: languageModel,
-          system,
-          prompt: userPrompt,
-          temperature: 0.3,
-        },
-        { provider: config.provider, model: config.model },
-      );
-
-      // Timeout: treat as a failed vote (consensus handles missing votes gracefully)
-      if (result === null) {
-        throw new Error(
-          `LLM call timed out for ${config.provider}/${config.model} (stance: ${config.stance})`,
-        );
-      }
-
-      const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+      const result = await generateFn(system, userPrompt);
 
       return {
-        vote: parseVote(result.text, config.provider, config.model, config.stance),
-        tokensUsed,
+        vote: parseVote(result.text, result.provider as LLMProvider, result.model, config.stance),
+        tokensUsed: result.tokensUsed,
       };
     };
   });
@@ -284,7 +285,7 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
       const v = result.value.vote;
       emit({
         step: `vote-${config.stance}`,
-        message: `✓ ${config.stance} (${config.provider}/${config.model}) → ${v.decision} (${(v.confidence * 100).toFixed(0)}% confidence)`,
+        message: `✓ ${config.stance} (${v.provider}/${v.model}) → ${v.decision} (${(v.confidence * 100).toFixed(0)}% confidence)`,
         detail: v.reasoning,
       });
     } else {
