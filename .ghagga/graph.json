@@ -281,7 +281,7 @@
       "isTest": true
     },
     "packages/core/src/format.ts": {
-      "hash": "c34f6356d2afc92fabfe38e968c5089d31a384329989b4a173dec1b29f2ee929",
+      "hash": "2e19dbdf040f7baab19fb4ede1f4cdc5eef99fccca31d759fad07b2afb72fb9a",
       "language": "typescript",
       "imports": [
         "./tools/plugins/index.js",
