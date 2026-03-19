@@ -117,9 +117,7 @@ export async function validateProviderKey(
           valid: true,
           models: ['auto', ...detectedCliTools],
           detectedCliTools,
-          cliModelSuggestions: detectedCliTools.includes('opencode')
-            ? CURATED_OPENCODE_MODELS
-            : [],
+          cliModelSuggestions: detectedCliTools.includes('opencode') ? CURATED_OPENCODE_MODELS : [],
         };
       }
       default: {

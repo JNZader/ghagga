@@ -97,6 +97,7 @@ export {
 
 // ─── Providers (for direct model access) ────────────────────────
 
+export type { CLIBridgeOptions, CLIToolName } from './providers/cli-bridge.js';
 export {
   CLIConfigurationError,
   generateViaCLI,
@@ -104,7 +105,6 @@ export {
   OPENCODE_ENV_BY_PREFIX,
   sanitizeErrorMessage,
 } from './providers/cli-bridge.js';
-export type { CLIBridgeOptions, CLIToolName } from './providers/cli-bridge.js';
 export type { FallbackOptions, FallbackProvider, FallbackResult } from './providers/fallback.js';
 export { generateWithFallback } from './providers/fallback.js';
 export { createModel, createProvider } from './providers/index.js';

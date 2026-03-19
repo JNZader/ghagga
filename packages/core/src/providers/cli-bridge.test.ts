@@ -123,9 +123,9 @@ describe('cli-bridge', () => {
       // Should not throw when options object is passed (even if no CLIs available)
       const available = getAvailableCLIs();
       if (available.length === 0) {
-        expect(() => generateViaCLI('test prompt', undefined, { preferredCLI: 'opencode' })).toThrow(
-          'No CLI providers available',
-        );
+        expect(() =>
+          generateViaCLI('test prompt', undefined, { preferredCLI: 'opencode' }),
+        ).toThrow('No CLI providers available');
       }
     });
   });
@@ -195,39 +195,67 @@ describe('cli-bridge', () => {
   });
 
   describe('buildSubprocessEnv', () => {
-    it('removes sensitive env vars from process.env', () => {
-      // Temporarily set some sensitive vars
+    it('only includes allowlisted env vars (not arbitrary process.env keys)', () => {
+      // Temporarily set a non-allowlisted var
+      const original = process.env['MY_CUSTOM_SECRET'];
+      process.env['MY_CUSTOM_SECRET'] = 'should-not-leak';
+
+      try {
+        const env = buildSubprocessEnv();
+        expect(env['MY_CUSTOM_SECRET']).toBeUndefined();
+      } finally {
+        if (original !== undefined) {
+          process.env['MY_CUSTOM_SECRET'] = original;
+        } else {
+          delete process.env['MY_CUSTOM_SECRET'];
+        }
+      }
+    });
+
+    it('excludes sensitive env vars even if set in process.env', () => {
       const original = { ...process.env };
       process.env['ANTHROPIC_API_KEY'] = 'secret-anthropic';
       process.env['OPENAI_API_KEY'] = 'secret-openai';
+      process.env['AZURE_OPENAI_KEY'] = 'secret-azure';
+      process.env['REPLICATE_API_TOKEN'] = 'secret-replicate';
 
       try {
         const env = buildSubprocessEnv();
         expect(env['ANTHROPIC_API_KEY']).toBeUndefined();
         expect(env['OPENAI_API_KEY']).toBeUndefined();
+        expect(env['AZURE_OPENAI_KEY']).toBeUndefined();
+        expect(env['REPLICATE_API_TOKEN']).toBeUndefined();
       } finally {
-        // Restore
-        process.env['ANTHROPIC_API_KEY'] = original['ANTHROPIC_API_KEY'];
-        process.env['OPENAI_API_KEY'] = original['OPENAI_API_KEY'];
+        for (const key of [
+          'ANTHROPIC_API_KEY',
+          'OPENAI_API_KEY',
+          'AZURE_OPENAI_KEY',
+          'REPLICATE_API_TOKEN',
+        ]) {
+          if (original[key] !== undefined) {
+            process.env[key] = original[key];
+          } else {
+            delete process.env[key];
+          }
+        }
       }
     });
 
-    it('preserves non-sensitive env vars like PATH', () => {
+    it('preserves allowlisted env vars like PATH and HOME', () => {
       const env = buildSubprocessEnv();
       expect(env['PATH']).toBe(process.env['PATH']);
+      expect(env['HOME']).toBe(process.env['HOME']);
     });
 
-    it('adds back the single required credential', () => {
+    it('adds the single required credential', () => {
       const env = buildSubprocessEnv('ANTHROPIC_API_KEY', 'my-secret-key');
       expect(env['ANTHROPIC_API_KEY']).toBe('my-secret-key');
-      // Other sensitive vars should still be removed
-      expect(env['OPENAI_API_KEY']).toBeUndefined();
     });
 
     it('returns env without credentials when no args given', () => {
       const env = buildSubprocessEnv();
       expect(env['PATH']).toBeDefined();
-      // All sensitive vars removed
+      // No credentials should be present
       expect(env['COPILOT_GITHUB_TOKEN']).toBeUndefined();
       expect(env['GH_TOKEN']).toBeUndefined();
     });
@@ -406,7 +434,10 @@ describe('cli-bridge', () => {
         try {
           // Mock opencode to return valid JSON output
           const jsonOutput = [
-            JSON.stringify({ type: 'text', part: { text: 'STATUS: PASSED\nSUMMARY: Good\nFINDINGS:\n' } }),
+            JSON.stringify({
+              type: 'text',
+              part: { text: 'STATUS: PASSED\nSUMMARY: Good\nFINDINGS:\n' },
+            }),
           ].join('\n');
           mockExecSync.mockReturnValue(jsonOutput);
 
@@ -507,7 +538,7 @@ describe('cli-bridge', () => {
         // The injected credential MUST be present
         expect(env['ANTHROPIC_API_KEY']).toBe('injected-anthropic-key');
 
-        // ALL other sensitive vars MUST be absent
+        // ALL other sensitive vars MUST be absent (allowlist excludes them)
         expect(env['OPENAI_API_KEY']).toBeUndefined();
         expect(env['GEMINI_API_KEY']).toBeUndefined();
         expect(env['GROQ_API_KEY']).toBeUndefined();
@@ -535,10 +566,10 @@ describe('cli-bridge', () => {
       }
     });
 
-    it('preserves baseline runtime vars alongside injected credential', () => {
+    it('preserves allowlisted runtime vars alongside injected credential', () => {
       const env = buildSubprocessEnv('GEMINI_API_KEY', 'test-gemini-key');
 
-      // Baseline vars should survive
+      // Allowlisted vars should survive
       expect(env['PATH']).toBe(process.env['PATH']);
       expect(env['HOME']).toBe(process.env['HOME']);
 
@@ -546,7 +577,7 @@ describe('cli-bridge', () => {
       expect(env['GEMINI_API_KEY']).toBe('test-gemini-key');
     });
 
-    it('strips ALL known sensitive vars when no credential is injected', () => {
+    it('excludes ALL sensitive vars when no credential is injected (allowlist approach)', () => {
       const original = { ...process.env };
       process.env['ANTHROPIC_API_KEY'] = 'secret1';
       process.env['OPENAI_API_KEY'] = 'secret2';
@@ -560,6 +591,7 @@ describe('cli-bridge', () => {
       try {
         const env = buildSubprocessEnv();
 
+        // Allowlist approach: none of these are in SAFE_ENV_VARS, so all excluded
         expect(env['ANTHROPIC_API_KEY']).toBeUndefined();
         expect(env['OPENAI_API_KEY']).toBeUndefined();
         expect(env['GEMINI_API_KEY']).toBeUndefined();
@@ -579,6 +611,32 @@ describe('cli-bridge', () => {
           'COPILOT_GITHUB_TOKEN',
           'GH_TOKEN',
         ]) {
+          if (original[key] !== undefined) {
+            process.env[key] = original[key];
+          } else {
+            delete process.env[key];
+          }
+        }
+      }
+    });
+
+    it('prevents leakage of unknown credentials not in any denylist', () => {
+      // This is the key advantage of allowlist over denylist:
+      // credentials like AZURE_OPENAI_KEY or REPLICATE_API_TOKEN are
+      // automatically excluded even though they're not in any known list.
+      const original = { ...process.env };
+      process.env['AZURE_OPENAI_KEY'] = 'azure-secret';
+      process.env['REPLICATE_API_TOKEN'] = 'replicate-secret';
+      process.env['COHERE_API_KEY'] = 'cohere-secret';
+
+      try {
+        const env = buildSubprocessEnv();
+
+        expect(env['AZURE_OPENAI_KEY']).toBeUndefined();
+        expect(env['REPLICATE_API_TOKEN']).toBeUndefined();
+        expect(env['COHERE_API_KEY']).toBeUndefined();
+      } finally {
+        for (const key of ['AZURE_OPENAI_KEY', 'REPLICATE_API_TOKEN', 'COHERE_API_KEY']) {
           if (original[key] !== undefined) {
             process.env[key] = original[key];
           } else {
@@ -650,7 +708,8 @@ describe('cli-bridge', () => {
     });
 
     it('redacts multiple keys in a single message', () => {
-      const msg = 'Tried sk-ant-api03-abc123def456ghi789jkl012mno345pqr678 then ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890abcde';
+      const msg =
+        'Tried sk-ant-api03-abc123def456ghi789jkl012mno345pqr678 then ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890abcde';
       const result = sanitizeErrorMessage(msg);
       expect(result).not.toContain('sk-ant-');
       expect(result).not.toContain('ghp_');

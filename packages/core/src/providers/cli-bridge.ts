@@ -47,15 +47,40 @@ export const OPENCODE_ENV_BY_PREFIX: Record<string, string> = {
 };
 
 /**
- * All known sensitive env vars that should be stripped from the subprocess environment.
- * This is a superset of OPENCODE_ENV_BY_PREFIX values plus tool-specific variants.
+ * Known-safe env vars that the subprocess needs to function.
+ * Only these (plus the single required credential) are copied into the subprocess env.
+ *
+ * This ALLOWLIST approach prevents credential leakage — any env var NOT listed here
+ * (e.g., AZURE_OPENAI_KEY, REPLICATE_API_TOKEN) is automatically excluded.
  */
-const SENSITIVE_ENV_VARS: readonly string[] = [
-  ...new Set([
-    ...Object.values(OPENCODE_ENV_BY_PREFIX),
-    'COPILOT_GITHUB_TOKEN',
-    'GH_TOKEN',
-  ]),
+const SAFE_ENV_VARS: readonly string[] = [
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TERM',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'NODE_ENV',
+  'NODE_PATH',
+  'NODE_EXTRA_CA_CERTS',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'NODE_TLS_REJECT_UNAUTHORIZED',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+  'XDG_CACHE_HOME',
+  'XDG_RUNTIME_DIR',
 ];
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -157,26 +182,29 @@ export function resolveCredentialEnvVar(
 // ─── Subprocess Environment ─────────────────────────────────────
 
 /**
- * Build a subprocess environment using the subtraction approach:
- * 1. Start with a copy of process.env
- * 2. Remove all known sensitive env vars (provider secrets)
- * 3. Add back ONLY the single required credential
+ * Build a subprocess environment using the ALLOWLIST approach:
+ * 1. Start with an empty env
+ * 2. Copy ONLY known-safe vars from process.env
+ * 3. Add the single required credential
  *
- * This ensures CLIs get system vars (PATH, HTTP_PROXY, locale, etc.)
- * without leaking credentials for other providers.
+ * This prevents credential leakage — only explicitly safe vars plus the
+ * required credential are passed to the subprocess. Any env var NOT in
+ * SAFE_ENV_VARS (e.g., AZURE_OPENAI_KEY, REPLICATE_API_TOKEN) is excluded.
  */
 export function buildSubprocessEnv(
   credentialEnvName?: string,
   credentialValue?: string,
 ): NodeJS.ProcessEnv {
-  const env = { ...process.env };
+  const env: NodeJS.ProcessEnv = {};
 
-  // Remove all known sensitive env vars
-  for (const key of SENSITIVE_ENV_VARS) {
-    delete env[key];
+  // Copy only known-safe vars from process.env
+  for (const key of SAFE_ENV_VARS) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
   }
 
-  // Add back the single required credential
+  // Add the single required credential
   if (credentialEnvName && credentialValue) {
     env[credentialEnvName] = credentialValue;
   }
@@ -209,7 +237,10 @@ type OpenCodeEvent = OpenCodeTextEvent | OpenCodeStepFinishEvent | { type: strin
  *
  * @internal Exported for testing only.
  */
-export function parseOpenCodeOutput(raw: string): { text: string; tokens?: { input?: number; output?: number } } {
+export function parseOpenCodeOutput(raw: string): {
+  text: string;
+  tokens?: { input?: number; output?: number };
+} {
   const lines = raw.split('\n').filter((line) => line.trim().length > 0);
   const textParts: string[] = [];
   let tokens: { input?: number; output?: number } | undefined;
@@ -252,7 +283,7 @@ const API_KEY_PATTERNS: readonly RegExp[] = [
   // OpenAI: sk-proj*, sk-<20+ alphanum>
   /sk-[a-zA-Z0-9]{20,}/g,
   // Google: AIza*
-  new RegExp('AIza[a-zA-Z0-9_-]{30,}', 'g'),
+  /AIza[a-zA-Z0-9_-]{30,}/g,
   // GitHub PAT (classic): ghp_*
   /ghp_[a-zA-Z0-9]{30,}/g,
   // GitHub PAT (fine-grained): github_pat_*
@@ -260,7 +291,7 @@ const API_KEY_PATTERNS: readonly RegExp[] = [
   // Groq: gsk_*
   /gsk_[a-zA-Z0-9]{20,}/g,
   // OpenRouter: sk-or-*
-  /sk-or-[a-zA-Z0-9_-]{20,}/g,
+  /\bsk-or-[a-zA-Z0-9_-]{20,}\b/g,
   // GitHub OAuth/App tokens: gho_*, ghs_*
   /gh[os]_[a-zA-Z0-9]{30,}/g,
   // Copilot/GitHub general token (catch-all for longer tokens)
@@ -388,7 +419,7 @@ const adapters: CLIAdapter[] = [
     generate(prompt, _systemPrompt, _cliModel, env) {
       // copilot -p takes prompt as argument — too large for ARG_MAX with big diffs.
       // Write to temp file and tell copilot to read it.
-      const tmpFile = join(tmpdir(), `ghagga-prompt-${Date.now()}.txt`);
+      const tmpFile = join(tmpdir(), `ghagga-prompt-${process.pid}-${Date.now()}.txt`);
       try {
         writeFileSync(tmpFile, prompt, 'utf8');
         return execSync(

@@ -299,7 +299,7 @@ export function createSettingsRouter(db: Database) {
 
         if (entry.model === 'opencode') {
           // cliModel is REQUIRED for opencode
-          if (!entry.cliModel || entry.cliModel.trim() === '') {
+          if (!entry.cliModel?.trim()) {
             return c.json(
               {
                 error: 'VALIDATION_ERROR',
@@ -655,8 +655,8 @@ export function createSettingsRouter(db: Database) {
     }
 
     // CLI Bridge doesn't need API key validation — it uses local CLIs.
-    // Fall through to validateProviderKey() which detects available CLIs
-    // and returns structured metadata for the dashboard.
+    // Explicitly call validateProviderKey() to detect available CLIs
+    // and return structured metadata for the dashboard.
     if (provider === 'cli-bridge') {
       try {
         const result = await validateProviderKey('cli-bridge', '');

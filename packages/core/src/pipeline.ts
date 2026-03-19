@@ -33,7 +33,11 @@ import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
-import { generateViaCLI, resolveCredentialEnvVar, sanitizeErrorMessage } from './providers/cli-bridge.js';
+import {
+  generateViaCLI,
+  resolveCredentialEnvVar,
+  sanitizeErrorMessage,
+} from './providers/cli-bridge.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import {
@@ -349,9 +353,10 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     // CLI Bridge mode: call LLM CLIs directly instead of AI SDK
     // Resolve CLI bridge entry from provider chain or flat input fields
     const cliBridgeEntry = input.providerChain?.[0];
-    const preferredCLI = (cliBridgeEntry?.model ?? input.model) !== 'auto'
-      ? (cliBridgeEntry?.model ?? input.model)
-      : undefined;
+    const preferredCLI =
+      (cliBridgeEntry?.model ?? input.model) !== 'auto'
+        ? (cliBridgeEntry?.model ?? input.model)
+        : undefined;
 
     const cliModel = cliBridgeEntry?.cliModel;
 
@@ -359,7 +364,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     const decryptedKey = cliBridgeEntry?.apiKey || input.apiKey;
     const credentialEnvName = resolveCredentialEnvVar(preferredCLI, cliModel);
     const credentials: Record<string, string> = {};
-    if (decryptedKey && credentialEnvName) {
+    if (preferredCLI && credentialEnvName && decryptedKey) {
       credentials[credentialEnvName] = decryptedKey;
     }
 
@@ -383,10 +388,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     } catch (error) {
       const rawMsg = error instanceof Error ? error.message : String(error);
       const safeMsg = sanitizeErrorMessage(rawMsg);
-      console.warn(
-        '[ghagga] CLI bridge review failed, returning static analysis only:',
-        safeMsg,
-      );
+      console.warn('[ghagga] CLI bridge review failed, returning static analysis only:', safeMsg);
       emit({
         step: 'agent-failed',
         message: 'CLI bridge review failed — returning static analysis only',
@@ -795,7 +797,16 @@ interface CLIBridgeReviewInput {
  * Simple mode only — workflow/consensus would need multiple sequential calls.
  */
 async function runCLIBridgeReview(input: CLIBridgeReviewInput): Promise<ReviewResult> {
-  const { diff, staticContext, memoryContext, stackHints, reviewLevel, preferredCLI, cliModel, credentials } = input;
+  const {
+    diff,
+    staticContext,
+    memoryContext,
+    stackHints,
+    reviewLevel,
+    preferredCLI,
+    cliModel,
+    credentials,
+  } = input;
   const emit = input.onProgress ?? (() => {});
 
   const startTime = Date.now();

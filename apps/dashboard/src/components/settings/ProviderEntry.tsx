@@ -184,7 +184,8 @@ export function ProviderEntry({
   // For opencode: cliModel is required — disable save/validate if missing
   const isOpencode = isCLIBridge && entry.model === 'opencode';
   const cliModelMissing = isOpencode && !entry.cliModel?.trim();
-  const cliModelInvalid = isOpencode && entry.cliModel?.trim() && !isValidCliModelFormat(entry.cliModel.trim());
+  const cliModelInvalid =
+    isOpencode && entry.cliModel?.trim() && !isValidCliModelFormat(entry.cliModel.trim());
 
   // Saved key for the current provider (from global/installation settings)
   const savedKeyInfo = availableKeys[entry.provider];
@@ -414,8 +415,7 @@ export function ProviderEntry({
               onChange({
                 ...entry,
                 cliModel: newCliModel,
-                // Re-evaluate validation: opencode requires cliModel
-                validated: newCliModel.trim() && isValidCliModelFormat(newCliModel.trim()) ? entry.validated : false,
+                validated: false, // Model changed — prior validation is stale
               });
             }}
             placeholder="e.g., anthropic/claude-sonnet-4-5"
@@ -433,7 +433,8 @@ export function ProviderEntry({
           )}
           {cliModelInvalid && (
             <p className="mt-1 text-xs text-yellow-400">
-              Expected format: <code className="rounded bg-surface-bg px-1">provider/model</code> (e.g., anthropic/claude-sonnet-4-5)
+              Expected format: <code className="rounded bg-surface-bg px-1">provider/model</code>{' '}
+              (e.g., anthropic/claude-sonnet-4-5)
             </p>
           )}
         </div>

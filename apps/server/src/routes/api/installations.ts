@@ -197,7 +197,7 @@ export function createInstallationsRouter(db: Database) {
 
         if (entry.model === 'opencode') {
           // cliModel is REQUIRED for opencode
-          if (!entry.cliModel || entry.cliModel.trim() === '') {
+          if (!entry.cliModel?.trim()) {
             return c.json(
               {
                 error: 'VALIDATION_ERROR',
