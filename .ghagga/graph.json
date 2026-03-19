@@ -465,7 +465,7 @@
       "isTest": true
     },
     "packages/core/src/pipeline.ts": {
-      "hash": "62e36e0903e4bf5aeb4b7d9715449ee42ee17f403927869de732c8be9593bcd5",
+      "hash": "341ded22183bd97af5b1fd41921e3a1c4f1b075732d737daa0fb076aa11fd0ba",
       "language": "typescript",
       "imports": [
         "./agents/consensus.js",
@@ -1712,7 +1712,7 @@
       "isTest": false
     },
     "packages/core/src/providers/gateway.ts": {
-      "hash": "f5cc090f4c2cbee4bcfd966e5892ebee0e62e7b31c479b644ad6435f4ecbb124",
+      "hash": "f92a30496e1a4bc9b86db41efa128002e57e59864e15212845e732273c06b29a",
       "language": "typescript",
       "imports": [],
       "exports": [
@@ -2938,7 +2938,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/installations.ts": {
-      "hash": "7a3b938b250113c34b69d886b68d2abfdba5abee1ef3537affc0710f0ceffc06",
+      "hash": "5c6b77c52179d8547029f93a07ed2dc4f4564b738e1c9df994be4c4e82605f36",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3017,7 +3017,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/settings.ts": {
-      "hash": "f6fc4fd96a0e251debf08019fb19d9235a8e6e73335c5ad36563bd1145c44cda",
+      "hash": "8b8992b857c9a4b7936b9cd39ea3fa3ce315aec51abfbca396f34449331e3683",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3785,7 +3785,7 @@
       "isTest": true
     },
     "apps/dashboard/src/pages/Settings.tsx": {
-      "hash": "d312f1da822742bf93a97462cd3cca82c8f2c8ace843fb558e19c7ec8e5c83d3",
+      "hash": "10adb1a2443845e7e28412db89e0f4ea3ac96a73410f042651f6942dcb8ead1a",
       "language": "typescript",
       "imports": [
         "react",
@@ -4374,7 +4374,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "233a7ad9bd2a52f19af375b653fb9f45649983402b1dfed2aa62c0e388f7fdfe",
+      "hash": "b0d76ead2adb7d033a4b5083d670d3b136b99b6009f6a174c3103a61cf761037",
       "language": "typescript",
       "imports": [
         "react",
