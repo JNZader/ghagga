@@ -305,7 +305,7 @@
       "isTest": false
     },
     "packages/core/src/index.ts": {
-      "hash": "1517c8addae741423cfbb44241cc8f2339890f540b77ca19509a78665f8d0700",
+      "hash": "95ccb7a715ed0ccfc9cac9f9ee8e83b15ec47b9b862e10447ec24d1d1a1134da",
       "language": "typescript",
       "imports": [
         "./pipeline.js",
@@ -319,6 +319,7 @@
         "./providers/cli-bridge.js",
         "./providers/fallback.js",
         "./providers/gateway.js",
+        "./providers/generate-fn.js",
         "./providers/index.js",
         "./memory/context.js",
         "./memory/engram.js",
@@ -365,6 +366,9 @@
         "sanitizeErrorMessage",
         "generateWithFallback",
         "generateViaGateway",
+        "createAISDKGenerateFn",
+        "createCLIBridgeGenerateFn",
+        "createGatewayGenerateFn",
         "createModel",
         "createProvider",
         "formatMemoryContext",
@@ -465,7 +469,7 @@
       "isTest": true
     },
     "packages/core/src/pipeline.ts": {
-      "hash": "7d3f4fd0d2ce6d4db1aad7d0d3d4324ddd4dcd4d7396b3d146e247b81c7ed5bc",
+      "hash": "3b9d00099e9a5e78494c7d1afaac71083ebcb35bc137fe5639f36ee456c09995",
       "language": "typescript",
       "imports": [
         "./agents/consensus.js",
@@ -480,7 +484,7 @@
         "./memory/persist.js",
         "./memory/search.js",
         "./providers/cli-bridge.js",
-        "./providers/gateway.js",
+        "./providers/generate-fn.js",
         "./tools/plugins/index.js",
         "./tools/registry.js",
         "./tools/runner.js",
@@ -1733,6 +1737,41 @@
       "calls": [],
       "isTest": false
     },
+    "packages/core/src/providers/generate-fn.test.ts": {
+      "hash": "d32182e64c393533ec08032bafc234299b172e6fba9a7a82fd212c9d279aad3c",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./generate-fn.js",
+        "../utils/llm-timeout.js",
+        "./cli-bridge.js",
+        "./gateway.js",
+        "./index.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
+    "packages/core/src/providers/generate-fn.ts": {
+      "hash": "b9cdc639e97b8870f1531417b9558fea6d383f61a1037a851c21e795bbaa87ae",
+      "language": "typescript",
+      "imports": [
+        "../types.js",
+        "../utils/llm-timeout.js",
+        "./cli-bridge.js",
+        "./gateway.js",
+        "./index.js"
+      ],
+      "exports": [
+        "GenerateResult",
+        "GenerateTextFn",
+        "createAISDKGenerateFn",
+        "createCLIBridgeGenerateFn",
+        "createGatewayGenerateFn"
+      ],
+      "calls": [],
+      "isTest": false
+    },
     "packages/core/src/providers/index.test.ts": {
       "hash": "e3606f4ee1a28142f59e4e115905cee87ba91468dd6e48f45ccc06a1b5f240ce",
       "language": "typescript",
@@ -2536,13 +2575,12 @@
       "isTest": true
     },
     "packages/core/src/agents/consensus.ts": {
-      "hash": "a1349881a61928aaa465960df4d660d176a5b776453bff5d9098a9f3651f7280",
+      "hash": "cf5f06d22204b7157e4d9083da8a9f790ca5ce3402f3d9beb0581cee25feffdd",
       "language": "typescript",
       "imports": [
-        "../providers/index.js",
+        "../providers/generate-fn.js",
         "../types.js",
         "../utils/concurrency.js",
-        "../utils/llm-timeout.js",
         "../utils/token-budget.js",
         "./prompts.js"
       ],
@@ -2634,12 +2672,11 @@
       "isTest": true
     },
     "packages/core/src/agents/simple.ts": {
-      "hash": "3f638c3ed45289ff70b72d9ce0d73e367a4a5470da6927879d8bd48a7f147aaa",
+      "hash": "f725d361bbe525f8c80dd35e5e6f95b7c62cbc39b5d83831fcf3270c0744e133",
       "language": "typescript",
       "imports": [
-        "../providers/index.js",
+        "../providers/generate-fn.js",
         "../types.js",
-        "../utils/llm-timeout.js",
         "./prompts.js"
       ],
       "exports": [
@@ -2664,13 +2701,12 @@
       "isTest": true
     },
     "packages/core/src/agents/workflow.ts": {
-      "hash": "2a8d1baa6dccb1d964a1b5741edf715434ca72f9380833d0bec38d82538607f1",
+      "hash": "c6ef45cf06d3a60146f27f38ef4fa21ee2db63293c9ed91a6b82177acb1f3281",
       "language": "typescript",
       "imports": [
-        "../providers/index.js",
+        "../providers/generate-fn.js",
         "../types.js",
         "../utils/concurrency.js",
-        "../utils/llm-timeout.js",
         "../utils/token-budget.js",
         "./prompts.js",
         "./simple.js"
