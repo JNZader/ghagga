@@ -491,30 +491,65 @@ export function ProviderEntry({
         </div>
       )}
 
-      {/* LLM Gateway: URL input */}
+      {/* LLM Gateway: URL + Model input */}
       {isGateway && (
-        <div className="mb-3">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">
-            Gateway URL
-            <span className="ml-1 text-red-400">*</span>
-          </label>
-          <input
-            type="text"
-            value={entry.gatewayUrl ?? ''}
-            onChange={(e) => {
-              onChange({
-                ...entry,
-                gatewayUrl: e.target.value,
-                validated: false,
-              });
-            }}
-            placeholder="https://llm-gateway.example.com"
-            className="input-field w-full"
-          />
-          <p className="mt-1 text-xs text-text-secondary">
-            Enter the URL and token of your LLM Gateway instance. The token goes in the API Key
-            field below.
-          </p>
+        <div className="mb-3 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-secondary">
+              Gateway URL
+              <span className="ml-1 text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={entry.gatewayUrl ?? ''}
+              onChange={(e) => {
+                onChange({
+                  ...entry,
+                  gatewayUrl: e.target.value,
+                  validated: false,
+                });
+              }}
+              placeholder="https://llm-gateway.example.com"
+              className="input-field w-full"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-secondary">
+              Model
+              <span className="ml-2 font-normal text-text-muted">
+                (type or select from gateway)
+              </span>
+            </label>
+            <input
+              type="text"
+              list={`gateway-models-${index}`}
+              value={entry.model === 'auto' ? '' : entry.model}
+              onChange={(e) => {
+                onChange({
+                  ...entry,
+                  model: e.target.value || 'auto',
+                });
+              }}
+              placeholder="auto (gateway selects best available)"
+              className="input-field w-full"
+            />
+            <datalist id={`gateway-models-${index}`}>
+              <option value="auto">Auto — gateway selects best available</option>
+              <option value="opencode/gpt-5-nano">GPT-5 Nano (free)</option>
+              <option value="opencode/big-pickle">Big Pickle (free)</option>
+              <option value="opencode/minimax-m2.5-free">MiniMax M2.5 Free</option>
+              <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
+              <option value="anthropic/claude-opus-4-6">Claude Opus 4.6</option>
+              <option value="github-copilot/claude-sonnet-4.5">Claude Sonnet 4.5 (Copilot)</option>
+              <option value="github-copilot/gpt-5">GPT-5 (Copilot)</option>
+              <option value="openai/gpt-5-codex">GPT-5 Codex</option>
+              <option value="opencode-go/kimi-k2.5">Kimi K2.5</option>
+            </datalist>
+            <p className="mt-1 text-xs text-text-secondary">
+              Leave empty for auto-selection. Type any model ID available on your gateway.
+            </p>
+          </div>
+          <p className="text-xs text-text-secondary">The token goes in the API Key field below.</p>
         </div>
       )}
 
