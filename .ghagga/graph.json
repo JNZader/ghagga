@@ -744,7 +744,7 @@
       "isTest": true
     },
     "packages/core/src/utils/token-budget.ts": {
-      "hash": "dae19455b74a172519ce138c92ea5514208c37d20889792c2bc6ae5cdbdd080a",
+      "hash": "106882ab8fad9d9faed06aca2531aa3f27777035d3802a91cda345a3313f3d11",
       "language": "typescript",
       "imports": [],
       "exports": [
