@@ -107,7 +107,7 @@ const CONTEXT_BUDGET_RATIO = 0.3;
 export function getContextWindow(model: string): number {
   // Direct lookup first
   if (model in MODEL_CONTEXT_WINDOWS) {
-    return MODEL_CONTEXT_WINDOWS[model]!;
+    return MODEL_CONTEXT_WINDOWS[model] ?? DEFAULT_CONTEXT_WINDOW;
   }
 
   // Try without provider prefix (e.g., "deepseek/deepseek-chat" → "deepseek-chat")
@@ -115,7 +115,7 @@ export function getContextWindow(model: string): number {
   if (slashIndex !== -1) {
     const modelWithoutPrefix = model.slice(slashIndex + 1);
     if (modelWithoutPrefix in MODEL_CONTEXT_WINDOWS) {
-      return MODEL_CONTEXT_WINDOWS[modelWithoutPrefix]!;
+      return MODEL_CONTEXT_WINDOWS[modelWithoutPrefix] ?? DEFAULT_CONTEXT_WINDOW;
     }
   }
 
