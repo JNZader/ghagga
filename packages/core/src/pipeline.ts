@@ -17,14 +17,8 @@
 
 import { runConsensusReview } from './agents/consensus.js';
 import { runDiagnosticReview } from './agents/diagnostic.js';
-import {
-  buildMemoryContext,
-  buildReviewLevelInstruction,
-  buildStackHints,
-  REVIEW_CALIBRATION,
-  SIMPLE_REVIEW_SYSTEM,
-} from './agents/prompts.js';
-import { parseReviewResponse, runSimpleReview } from './agents/simple.js';
+import { buildStackHints } from './agents/prompts.js';
+import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
@@ -33,12 +27,13 @@ import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
+import { resolveCredentialEnvVar } from './providers/cli-bridge.js';
 import {
-  generateViaCLI,
-  resolveCredentialEnvVar,
-  sanitizeErrorMessage,
-} from './providers/cli-bridge.js';
-import { generateViaGateway } from './providers/gateway.js';
+  createAISDKGenerateFn,
+  createCLIBridgeGenerateFn,
+  createGatewayGenerateFn,
+  type GenerateTextFn,
+} from './providers/generate-fn.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import {
@@ -51,11 +46,12 @@ import type {
   ProviderChainEntry,
   ReviewFinding,
   ReviewInput,
+  ReviewMode,
   ReviewResult,
   ReviewStatus,
 } from './types.js';
 import { buildProgressiveContext } from './utils/context-levels.js';
-import { filterDiffFiles, filterIgnoredFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
+import { filterDiffFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
 import { detectStacks } from './utils/stack-detect.js';
 import { calculateTokenBudget } from './utils/token-budget.js';
 
@@ -360,139 +356,60 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     // Static-only mode: no LLM calls
     emit({ step: 'agent-start', message: 'AI review disabled — returning static analysis only' });
     result = createStaticOnlyResult(staticResult, input.mode, startTime);
-  } else if (isCliBridge) {
-    // CLI Bridge mode: call LLM CLIs directly instead of AI SDK
-    // Resolve CLI bridge entry from provider chain or flat input fields
-    const cliBridgeEntry = input.providerChain?.[0];
-    const preferredCLI =
-      (cliBridgeEntry?.model ?? input.model) !== 'auto'
-        ? (cliBridgeEntry?.model ?? input.model)
-        : undefined;
-
-    const cliModel = cliBridgeEntry?.cliModel;
-
-    // Build credentials from the decrypted API key (server decrypts before passing to pipeline)
-    const decryptedKey = cliBridgeEntry?.apiKey || input.apiKey;
-    const credentialEnvName = resolveCredentialEnvVar(preferredCLI, cliModel);
-    const credentials: Record<string, string> = {};
-    if (preferredCLI && credentialEnvName && decryptedKey) {
-      credentials[credentialEnvName] = decryptedKey;
-    }
-
-    emit({
-      step: 'agent-start',
-      message: `Running CLI bridge review (preferred: ${preferredCLI ?? 'auto'}${cliModel ? `, model: ${cliModel}` : ''})...`,
-    });
-
-    try {
-      result = await runCLIBridgeReview({
-        diff: truncatedDiff,
-        staticContext,
-        memoryContext,
-        stackHints,
-        reviewLevel: input.settings.reviewLevel,
-        preferredCLI,
-        cliModel,
-        credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
-        onProgress: input.onProgress,
-      });
-    } catch (error) {
-      const rawMsg = error instanceof Error ? error.message : String(error);
-      const safeMsg = sanitizeErrorMessage(rawMsg);
-      console.warn('[ghagga] CLI bridge review failed, returning static analysis only:', safeMsg);
-      emit({
-        step: 'agent-failed',
-        message: 'CLI bridge review failed — returning static analysis only',
-      });
-      result = createStaticOnlyResult(staticResult, input.mode, startTime);
-      result.status = 'NEEDS_HUMAN_REVIEW';
-      result.summary = `CLI bridge review failed (${safeMsg || 'unknown error'}). Static analysis results are shown below.`;
-    }
-  } else if (isGateway) {
-    // LLM Gateway mode: delegate to centralized gateway service
-    // Credentials come from the dashboard-configured provider chain entry (same pattern as CLI bridge)
-    const gatewayEntry = input.providerChain?.[0];
-    const gatewayModel = gatewayEntry?.model ?? input.model ?? 'auto';
-    const gatewayUrl = gatewayEntry?.gatewayUrl ?? '';
-    const gatewayToken = gatewayEntry?.apiKey || input.apiKey || '';
-
-    console.log(
-      '[ghagga] Gateway debug:',
-      JSON.stringify({
-        hasEntry: !!gatewayEntry,
-        provider: gatewayEntry?.provider,
-        model: gatewayModel,
-        gatewayUrl: gatewayUrl ? `${gatewayUrl.slice(0, 40)}...` : '(empty)',
-        hasToken: !!gatewayToken,
-        tokenLen: gatewayToken.length,
-        keys: gatewayEntry ? Object.keys(gatewayEntry) : [],
-      }),
-    );
-
-    emit({
-      step: 'agent-start',
-      message: `Running LLM Gateway review (model: ${gatewayModel})...`,
-    });
-
-    try {
-      result = await runGatewayReview({
-        diff: truncatedDiff,
-        staticContext,
-        memoryContext,
-        stackHints,
-        reviewLevel: input.settings.reviewLevel,
-        model: gatewayModel,
-        gatewayUrl,
-        gatewayToken,
-        onProgress: input.onProgress,
-      });
-    } catch (error) {
-      const rawMsg = error instanceof Error ? error.message : String(error);
-      console.warn('[ghagga] Gateway review failed, returning static analysis only:', rawMsg);
-      emit({
-        step: 'agent-failed',
-        message: 'Gateway review failed — returning static analysis only',
-      });
-      result = createStaticOnlyResult(staticResult, input.mode, startTime);
-      result.status = 'NEEDS_HUMAN_REVIEW';
-      result.summary = `Gateway review failed (${rawMsg || 'unknown error'}). Static analysis results are shown below.`;
-    }
   } else {
-    // Resolve the primary provider for agent calls
+    // ── Unified dispatch: all backends, all modes ──────────────
+    // Step 1: Build GenerateTextFn(s) for the detected backend
+    const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway);
+
+    // Step 2: Resolve effective mode (diagnostic → simple for non-SDK backends)
+    const effectiveMode = resolveEffectiveMode(input.mode, isCliBridge, isGateway);
+
+    if (effectiveMode !== input.mode) {
+      emit({
+        step: 'mode-fallback',
+        message: `Diagnostic mode not supported with ${isCliBridge ? 'CLI bridge' : 'gateway'} — falling back to simple mode`,
+      });
+    }
+
+    // Resolve primary provider for progress messages and metadata
     const primary = resolvePrimaryProvider(input);
     emit({
       step: 'agent-start',
-      message: `Running ${input.mode} agent with ${primary.provider}/${primary.model}...`,
+      message: `Running ${effectiveMode} agent with ${primary.provider}/${primary.model}...`,
     });
 
     try {
-      switch (input.mode) {
+      switch (effectiveMode) {
         case 'simple':
           result = await runSimpleReview({
             diff: truncatedDiff,
-            provider: primary.provider as LLMProvider,
-            model: primary.model,
-            apiKey: primary.apiKey,
             staticContext,
             memoryContext,
             stackHints,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
+            generateFn: generateFns[0],
+            // Backward compat fields (not used when generateFn is provided)
+            provider: (primary.provider as LLMProvider) ?? 'cli-bridge',
+            model: primary.model ?? 'auto',
+            apiKey: primary.apiKey ?? '',
           });
           break;
 
         case 'workflow':
           result = await runWorkflowReview({
             diff: truncatedDiff,
-            provider: primary.provider as LLMProvider,
-            model: primary.model,
-            apiKey: primary.apiKey,
-            providerChain: input.providerChain,
             staticContext,
             memoryContext,
             stackHints,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
+            generateFns,
+            // Backward compat fields (not used when generateFns is provided)
+            provider: (primary.provider as LLMProvider) ?? 'cli-bridge',
+            model: primary.model ?? 'auto',
+            apiKey: primary.apiKey ?? '',
+            providerChain: input.providerChain,
           });
           break;
 
@@ -505,10 +422,12 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             stackHints,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
+            generateFns,
           });
           break;
 
         case 'diagnostic':
+          // Diagnostic mode is AI SDK-only (resolveEffectiveMode ensures this)
           result = await runDiagnosticReview({
             diff: truncatedDiff,
             provider: primary.provider as LLMProvider,
@@ -523,14 +442,14 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
           break;
 
         default: {
-          const _exhaustive: never = input.mode;
+          const _exhaustive: never = effectiveMode;
           throw new Error(`Unknown review mode: ${_exhaustive}`);
         }
       }
     } catch (error) {
-      // All providers failed — return static results with NEEDS_HUMAN_REVIEW
+      // Agent failed — return static results with NEEDS_HUMAN_REVIEW
       console.warn(
-        '[ghagga] All AI providers failed, returning static analysis only:',
+        '[ghagga] AI review failed, returning static analysis only:',
         error instanceof Error ? error.message : String(error),
       );
       emit({ step: 'agent-failed', message: 'AI review failed — returning static analysis only' });
@@ -682,6 +601,94 @@ function resolvePrimaryModel(input: ReviewInput): string {
   return input.model ?? 'gpt-4o-mini';
 }
 
+// ─── GenerateTextFn Resolution ──────────────────────────────────
+
+/**
+ * Create the appropriate GenerateTextFn(s) based on the provider type.
+ *
+ * - CLI Bridge: single fn wrapping generateViaCLI
+ * - Gateway: single fn wrapping generateViaGateway
+ * - AI SDK: one fn per provider chain entry (for round-robin distribution)
+ */
+function resolveGenerateTextFns(
+  input: ReviewInput,
+  isCliBridge: boolean,
+  isGateway: boolean,
+): GenerateTextFn[] {
+  if (isCliBridge) {
+    // Resolve CLI bridge options from provider chain or flat input fields
+    const cliBridgeEntry = input.providerChain?.[0];
+    const preferredCLI =
+      (cliBridgeEntry?.model ?? input.model) !== 'auto'
+        ? (cliBridgeEntry?.model ?? input.model)
+        : undefined;
+
+    const cliModel = cliBridgeEntry?.cliModel;
+
+    // Build credentials from the decrypted API key
+    const decryptedKey = cliBridgeEntry?.apiKey || input.apiKey;
+    const credentialEnvName = resolveCredentialEnvVar(preferredCLI, cliModel);
+    const credentials: Record<string, string> = {};
+    if (preferredCLI && credentialEnvName && decryptedKey) {
+      credentials[credentialEnvName] = decryptedKey;
+    }
+
+    return [
+      createCLIBridgeGenerateFn({
+        preferredCLI,
+        cliModel,
+        credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
+      }),
+    ];
+  }
+
+  if (isGateway) {
+    // Resolve gateway options from provider chain or flat input fields
+    const gatewayEntry = input.providerChain?.[0];
+    const gatewayModel = gatewayEntry?.model ?? input.model ?? 'auto';
+    const gatewayUrl = gatewayEntry?.gatewayUrl ?? '';
+    const gatewayToken = gatewayEntry?.apiKey || input.apiKey || '';
+
+    return [
+      createGatewayGenerateFn({
+        gatewayUrl,
+        gatewayToken,
+        model: gatewayModel !== 'auto' ? gatewayModel : undefined,
+        project: 'ghagga',
+      }),
+    ];
+  }
+
+  // AI SDK: one function per chain entry (for round-robin distribution)
+  const chain = input.providerChain && input.providerChain.length > 0 ? input.providerChain : null;
+  if (chain) {
+    return chain.map((entry) =>
+      createAISDKGenerateFn(entry.provider as LLMProvider, entry.model, entry.apiKey),
+    );
+  }
+
+  // Single provider from flat fields (backward compat)
+  const primary = resolvePrimaryProvider(input);
+  return [createAISDKGenerateFn(primary.provider as LLMProvider, primary.model, primary.apiKey)];
+}
+
+/**
+ * Resolve the effective review mode.
+ *
+ * Diagnostic mode only works with AI SDK (it needs direct model access).
+ * For CLI bridge and gateway, fall back to simple mode.
+ */
+function resolveEffectiveMode(
+  mode: ReviewMode,
+  isCliBridge: boolean,
+  isGateway: boolean,
+): ReviewMode {
+  if (mode === 'diagnostic' && (isCliBridge || isGateway)) {
+    return 'simple';
+  }
+  return mode;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────
 
 /**
@@ -831,164 +838,4 @@ function createStaticOnlyResult(
       toolsSkipped: [],
     },
   };
-}
-
-// ─── CLI Bridge Review ──────────────────────────────────────────
-
-interface CLIBridgeReviewInput {
-  diff: string;
-  staticContext: string;
-  memoryContext: string | null;
-  stackHints: string;
-  reviewLevel: import('./types.js').ReviewLevel;
-  preferredCLI?: string;
-  /** OpenCode model in `provider/model` format. */
-  cliModel?: string;
-  /** Injected credentials mapped by env var name (e.g., { ANTHROPIC_API_KEY: 'sk-...' }). */
-  credentials?: Record<string, string>;
-  onProgress?: import('./types.js').ProgressCallback;
-}
-
-/**
- * Run a review using CLI bridge (calls LLM CLIs directly).
- *
- * Builds the same prompt as simple mode, calls generateViaCLI(),
- * and parses the response with the same parser.
- * Simple mode only — workflow/consensus would need multiple sequential calls.
- */
-async function runCLIBridgeReview(input: CLIBridgeReviewInput): Promise<ReviewResult> {
-  const {
-    diff,
-    staticContext,
-    memoryContext,
-    stackHints,
-    reviewLevel,
-    preferredCLI,
-    cliModel,
-    credentials,
-  } = input;
-  const emit = input.onProgress ?? (() => {});
-
-  const startTime = Date.now();
-
-  // Build the same system prompt as simple mode
-  const system = [
-    SIMPLE_REVIEW_SYSTEM,
-    staticContext,
-    buildMemoryContext(memoryContext),
-    stackHints,
-    buildReviewLevelInstruction(reviewLevel),
-    REVIEW_CALIBRATION,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  // Build the user prompt with the diff
-  const prompt = `Please review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
-
-  emit({
-    step: 'cli-bridge-call',
-    message: `Calling CLI bridge (preferred: ${preferredCLI ?? 'auto'})...`,
-  });
-
-  // generateViaCLI is synchronous (execSync) but we wrap in async for pipeline compat
-  const cliResult = generateViaCLI(prompt, system, { preferredCLI, cliModel, credentials });
-
-  const executionTimeMs = Date.now() - startTime;
-
-  emit({
-    step: 'cli-bridge-done',
-    message: `CLI bridge review complete via ${cliResult.cli} — ${(executionTimeMs / 1000).toFixed(1)}s`,
-  });
-
-  return parseReviewResponse(
-    cliResult.text,
-    'cli-bridge',
-    cliResult.cli,
-    0, // No token count available from CLI
-    executionTimeMs,
-    memoryContext,
-  );
-}
-
-// ─── LLM Gateway Review ────────────────────────────────────────
-
-interface GatewayReviewInput {
-  diff: string;
-  staticContext: string;
-  memoryContext: string | null;
-  stackHints: string;
-  reviewLevel: import('./types.js').ReviewLevel;
-  model?: string;
-  /** Gateway base URL (from dashboard-configured provider chain entry). */
-  gatewayUrl: string;
-  /** Gateway bearer token (decrypted from provider chain entry's apiKey). */
-  gatewayToken: string;
-  onProgress?: import('./types.js').ProgressCallback;
-}
-
-/**
- * Run a review using the LLM Gateway.
- *
- * Builds the same prompt as simple/CLI bridge mode, calls generateViaGateway(),
- * and parses the response with the same parser.
- * Simple mode only — workflow/consensus would need multiple sequential calls.
- */
-async function runGatewayReview(input: GatewayReviewInput): Promise<ReviewResult> {
-  const {
-    diff,
-    staticContext,
-    memoryContext,
-    stackHints,
-    reviewLevel,
-    model,
-    gatewayUrl,
-    gatewayToken,
-  } = input;
-  const emit = input.onProgress ?? (() => {});
-
-  const startTime = Date.now();
-
-  // Build the same system prompt as simple mode
-  const system = [
-    SIMPLE_REVIEW_SYSTEM,
-    staticContext,
-    buildMemoryContext(memoryContext),
-    stackHints,
-    buildReviewLevelInstruction(reviewLevel),
-    REVIEW_CALIBRATION,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  // Build the user prompt with the diff
-  const prompt = `Please review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
-
-  emit({
-    step: 'gateway-call',
-    message: `Calling LLM Gateway (model: ${model ?? 'auto'})...`,
-  });
-
-  const gatewayResult = await generateViaGateway(prompt, system, {
-    gatewayUrl,
-    gatewayToken,
-    model: model !== 'auto' ? model : undefined,
-    project: 'ghagga',
-  });
-
-  const executionTimeMs = Date.now() - startTime;
-
-  emit({
-    step: 'gateway-done',
-    message: `Gateway review complete via ${gatewayResult.provider}/${gatewayResult.model} — ${(executionTimeMs / 1000).toFixed(1)}s`,
-  });
-
-  return parseReviewResponse(
-    gatewayResult.text,
-    'gateway',
-    gatewayResult.model,
-    gatewayResult.tokensUsed ?? 0,
-    executionTimeMs,
-    memoryContext,
-  );
 }
