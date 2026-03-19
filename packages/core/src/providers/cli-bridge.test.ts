@@ -30,7 +30,7 @@ describe('cli-bridge', () => {
     });
 
     it('only contains known CLI names', () => {
-      const validNames = new Set(['claude', 'gemini', 'codex', 'copilot']);
+      const validNames = new Set(['opencode', 'copilot', 'gemini']);
       const result = getAvailableCLIs();
       for (const name of result) {
         expect(validNames.has(name)).toBe(true);
@@ -39,13 +39,12 @@ describe('cli-bridge', () => {
   });
 
   describe('_getAdapters', () => {
-    it('returns adapters in priority order: claude, gemini, codex, copilot', () => {
+    it('returns adapters in priority order: opencode, copilot, gemini', () => {
       const adapters = _getAdapters();
-      expect(adapters).toHaveLength(4);
-      expect(adapters[0]?.name).toBe('claude');
-      expect(adapters[1]?.name).toBe('gemini');
-      expect(adapters[2]?.name).toBe('codex');
-      expect(adapters[3]?.name).toBe('copilot');
+      expect(adapters).toHaveLength(3);
+      expect(adapters[0]?.name).toBe('opencode');
+      expect(adapters[1]?.name).toBe('copilot');
+      expect(adapters[2]?.name).toBe('gemini');
     });
 
     it('each adapter has required fields', () => {
@@ -73,7 +72,7 @@ describe('cli-bridge', () => {
       const available = getAvailableCLIs();
       if (available.length === 0) {
         expect(() => generateViaCLI('test prompt')).toThrow(
-          'No CLI providers available. Install one of: claude, gemini, codex, copilot',
+          'No CLI providers available. Install one of: opencode, copilot, gemini',
         );
       }
     });
@@ -110,7 +109,7 @@ describe('cli-bridge', () => {
       const adapters = _getAdapters();
       // Verify that preferredCLI would reorder (structural test)
       const names = adapters.map((a) => a.name);
-      expect(names).toEqual(['claude', 'gemini', 'codex', 'copilot']);
+      expect(names).toEqual(['opencode', 'copilot', 'gemini']);
     });
   });
 });
