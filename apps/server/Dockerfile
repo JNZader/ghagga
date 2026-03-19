@@ -51,10 +51,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
-# Install CLI tools for cli-bridge provider (uses subscriptions, not API tokens)
+# Install CLI tools for cli-bridge provider
+# OpenCode: primary CLI — supports 67+ models via opencode run --model provider/model
 # Gemini CLI: free tier 1M tokens/day — set GEMINI_API_KEY env var
 # Copilot CLI: @github/copilot — set COPILOT_GITHUB_TOKEN env var
-RUN npm install -g @google/gemini-cli @github/copilot 2>/dev/null || true
+RUN curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/local/bin bash 2>/dev/null || true && \
+    npm install -g @google/gemini-cli @github/copilot 2>/dev/null || true
 
 WORKDIR /app
 
