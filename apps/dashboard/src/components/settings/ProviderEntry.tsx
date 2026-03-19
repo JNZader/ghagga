@@ -535,15 +535,57 @@ export function ProviderEntry({
             />
             <datalist id={`gateway-models-${index}`}>
               <option value="auto">Auto — gateway selects best available</option>
-              <option value="opencode/gpt-5-nano">GPT-5 Nano (free)</option>
-              <option value="opencode/big-pickle">Big Pickle (free)</option>
-              <option value="opencode/minimax-m2.5-free">MiniMax M2.5 Free</option>
-              <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
-              <option value="anthropic/claude-opus-4-6">Claude Opus 4.6</option>
-              <option value="github-copilot/claude-sonnet-4.5">Claude Sonnet 4.5 (Copilot)</option>
-              <option value="github-copilot/gpt-5">GPT-5 (Copilot)</option>
-              <option value="openai/gpt-5-codex">GPT-5 Codex</option>
-              <option value="opencode-go/kimi-k2.5">Kimi K2.5</option>
+              {/* ── Copilot FREE (0x multiplier, no premium requests) ── */}
+              <option value="github-copilot/gpt-4o">GPT-4o (Copilot FREE)</option>
+              <option value="github-copilot/gpt-4.1">GPT-4.1 (Copilot FREE)</option>
+              <option value="github-copilot/gpt-5-mini">GPT-5 Mini (Copilot FREE)</option>
+              {/* ── Copilot CHEAP (0.25-0.33x multiplier) ── */}
+              <option value="github-copilot/claude-haiku-4.5">
+                Claude Haiku 4.5 (Copilot 0.33x)
+              </option>
+              <option value="github-copilot/gemini-3-flash-preview">
+                Gemini 3 Flash (Copilot 0.33x)
+              </option>
+              <option value="github-copilot/gpt-5.4-mini">GPT-5.4 Mini (Copilot 0.33x)</option>
+              <option value="github-copilot/grok-code-fast-1">
+                Grok Code Fast 1 (Copilot 0.25x)
+              </option>
+              {/* ── Copilot STANDARD (1x multiplier) ── */}
+              <option value="github-copilot/claude-sonnet-4">Claude Sonnet 4 (Copilot 1x)</option>
+              <option value="github-copilot/claude-sonnet-4.5">
+                Claude Sonnet 4.5 (Copilot 1x)
+              </option>
+              <option value="github-copilot/claude-sonnet-4.6">
+                Claude Sonnet 4.6 (Copilot 1x)
+              </option>
+              <option value="github-copilot/gemini-2.5-pro">Gemini 2.5 Pro (Copilot 1x)</option>
+              <option value="github-copilot/gemini-3-pro-preview">Gemini 3 Pro (Copilot 1x)</option>
+              <option value="github-copilot/gpt-5">GPT-5 (Copilot 1x)</option>
+              <option value="github-copilot/gpt-5.1">GPT-5.1 (Copilot 1x)</option>
+              <option value="github-copilot/gpt-5.1-codex">GPT-5.1 Codex (Copilot 1x)</option>
+              <option value="github-copilot/gpt-5.2-codex">GPT-5.2 Codex (Copilot 1x)</option>
+              {/* ── Copilot EXPENSIVE (3x multiplier) ── */}
+              <option value="github-copilot/claude-opus-4.5">Claude Opus 4.5 (Copilot 3x)</option>
+              <option value="github-copilot/claude-opus-4.6">Claude Opus 4.6 (Copilot 3x)</option>
+              {/* ── OpenCode FREE ── */}
+              <option value="opencode/gpt-5-nano">GPT-5 Nano (OpenCode free)</option>
+              <option value="opencode/big-pickle">Big Pickle (OpenCode free)</option>
+              <option value="opencode/minimax-m2.5-free">MiniMax M2.5 Free (OpenCode free)</option>
+              <option value="opencode/mimo-v2-pro-free">MIMO v2 Pro Free (OpenCode free)</option>
+              <option value="opencode/mimo-v2-omni-free">MIMO v2 Omni Free (OpenCode free)</option>
+              <option value="opencode/nemotron-3-super-free">
+                Nemotron 3 Super Free (OpenCode free)
+              </option>
+              {/* ── Anthropic via OpenCode ── */}
+              <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5 (Anthropic)</option>
+              <option value="anthropic/claude-opus-4-6">Claude Opus 4.6 (Anthropic)</option>
+              <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5 (Anthropic)</option>
+              {/* ── OpenAI via OpenCode ── */}
+              <option value="openai/gpt-5-codex">GPT-5 Codex (OpenAI)</option>
+              <option value="openai/gpt-5.2-codex">GPT-5.2 Codex (OpenAI)</option>
+              {/* ── OpenCode Subscription ── */}
+              <option value="opencode-go/kimi-k2.5">Kimi K2.5 (OpenCode sub)</option>
+              <option value="opencode-go/minimax-m2.7">MiniMax M2.7 (OpenCode sub)</option>
             </datalist>
             <p className="mt-1 text-xs text-text-secondary">
               Leave empty for auto-selection. Type any model ID available on your gateway.
