@@ -643,17 +643,32 @@ function resolveGenerateTextFns(
   }
 
   if (isGateway) {
-    // Resolve gateway options from provider chain or flat input fields
-    const gatewayEntry = input.providerChain?.[0];
-    const gatewayModel = gatewayEntry?.model ?? input.model ?? 'auto';
-    const gatewayUrl = gatewayEntry?.gatewayUrl ?? '';
-    const gatewayToken = gatewayEntry?.apiKey || input.apiKey || '';
+    // Map ALL gateway entries in the chain — one GenerateTextFn per model
+    // for round-robin distribution in workflow/consensus modes
+    const chain = input.providerChain?.filter((e) => e.provider === 'gateway') ?? [];
 
+    if (chain.length > 0) {
+      // Use gatewayUrl and token from the first entry (shared across all)
+      const gatewayUrl = chain[0]?.gatewayUrl ?? '';
+      const gatewayToken = chain[0]?.apiKey || input.apiKey || '';
+
+      return chain.map((entry) => {
+        const model = entry.model !== 'auto' ? entry.model : undefined;
+        return createGatewayGenerateFn({
+          gatewayUrl,
+          gatewayToken,
+          model,
+          project: 'ghagga',
+        });
+      });
+    }
+
+    // Fallback: single entry from flat input fields
     return [
       createGatewayGenerateFn({
-        gatewayUrl,
-        gatewayToken,
-        model: gatewayModel !== 'auto' ? gatewayModel : undefined,
+        gatewayUrl: '',
+        gatewayToken: input.apiKey || '',
+        model: input.model !== 'auto' ? input.model : undefined,
         project: 'ghagga',
       }),
     ];
