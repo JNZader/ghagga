@@ -55,8 +55,10 @@ RUN corepack enable && corepack prepare pnpm@9 --activate
 # Bump CLI_TOOLS_VERSION to force Docker cache invalidation when tools change
 ARG CLI_TOOLS_VERSION=4
 # OpenCode: download binary directly (install script fails silently in slim containers)
+# Bump OPENCODE_VERSION when upgrading — repo: https://github.com/anomalyco/opencode
+ARG OPENCODE_VERSION=1.2.27
 RUN curl -fsSL -o /tmp/opencode.tar.gz \
-      "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-x64.tar.gz" && \
+      "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" && \
     tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/opencode && \
     rm -f /tmp/opencode.tar.gz && \
