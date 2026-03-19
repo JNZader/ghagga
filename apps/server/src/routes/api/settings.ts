@@ -7,7 +7,7 @@
  */
 
 import type { SaaSProvider } from 'ghagga-core';
-import { toolRegistry } from 'ghagga-core';
+import { OPENCODE_ENV_BY_PREFIX, toolRegistry } from 'ghagga-core';
 import type { Database, DbProviderChainEntry, RepoSettings } from 'ghagga-db';
 import {
   DEFAULT_REPO_SETTINGS,
@@ -290,6 +290,50 @@ export function createSettingsRouter(db: Database) {
             },
             400,
           );
+        }
+      }
+
+      // Validate cliModel for cli-bridge entries
+      for (const entry of incomingChain) {
+        if (entry.provider !== 'cli-bridge') continue;
+
+        if (entry.model === 'opencode') {
+          // cliModel is REQUIRED for opencode
+          if (!entry.cliModel || entry.cliModel.trim() === '') {
+            return c.json(
+              {
+                error: 'VALIDATION_ERROR',
+                message:
+                  "cliModel is required when CLI tool is 'opencode'. Expected format: 'provider/model' (e.g., 'anthropic/claude-sonnet-4-5').",
+              },
+              400,
+            );
+          }
+          // Validate provider/model format
+          if (!/^[^/]+\/.+$/.test(entry.cliModel)) {
+            return c.json(
+              {
+                error: 'VALIDATION_ERROR',
+                message: `Invalid cliModel format: '${entry.cliModel}'. Expected 'provider/model' (e.g., 'anthropic/claude-sonnet-4-5').`,
+              },
+              400,
+            );
+          }
+          // Validate provider prefix is supported
+          const prefix = entry.cliModel.split('/')[0]!;
+          if (!OPENCODE_ENV_BY_PREFIX[prefix]) {
+            const supported = Object.keys(OPENCODE_ENV_BY_PREFIX).join(', ');
+            return c.json(
+              {
+                error: 'VALIDATION_ERROR',
+                message: `Unsupported OpenCode provider prefix: '${prefix}'. Supported: ${supported}.`,
+              },
+              400,
+            );
+          }
+        } else {
+          // For non-opencode tools (auto, gemini, copilot), strip cliModel
+          entry.cliModel = undefined;
         }
       }
 
@@ -610,12 +654,17 @@ export function createSettingsRouter(db: Database) {
       return c.json({ error: 'VALIDATION_ERROR', message: `Unknown provider: ${provider}` }, 400);
     }
 
-    // CLI Bridge doesn't need API key validation — it uses local CLIs
+    // CLI Bridge doesn't need API key validation — it uses local CLIs.
+    // Fall through to validateProviderKey() which detects available CLIs
+    // and returns structured metadata for the dashboard.
     if (provider === 'cli-bridge') {
-      return c.json({
-        valid: true,
-        models: ['auto', 'claude', 'gemini', 'codex', 'copilot'],
-      });
+      try {
+        const result = await validateProviderKey('cli-bridge', '');
+        return c.json(result);
+      } catch (err) {
+        logger.error({ err, provider, user: user.githubLogin }, 'CLI bridge validation error');
+        return c.json({ valid: false, models: [], error: 'CLI bridge validation failed' });
+      }
     }
 
     // For GitHub Models, use the user's session token

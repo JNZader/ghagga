@@ -8,6 +8,7 @@
  */
 
 import type { SaaSProvider } from 'ghagga-core';
+import { getAvailableCLIs } from 'ghagga-core';
 import { logger as rootLogger } from './logger.js';
 
 const logger = rootLogger.child({ module: 'provider-models' });
@@ -49,8 +50,21 @@ export const CURATED_MODELS: Record<SaaSProvider, string[]> = {
     'openai/gpt-4o',
     'google/gemini-2.5-flash',
   ],
-  'cli-bridge': ['auto', 'claude', 'gemini', 'codex', 'copilot'],
+  'cli-bridge': ['auto', 'opencode', 'copilot', 'gemini'],
 };
+
+/**
+ * Curated OpenCode model suggestions for the dashboard.
+ * These are well-known models that work with OpenCode's `--model provider/model` flag.
+ */
+const CURATED_OPENCODE_MODELS = [
+  'anthropic/claude-sonnet-4-5',
+  'anthropic/claude-opus-4-6',
+  'anthropic/claude-haiku-4-5',
+  'openai/gpt-5-codex',
+  'github-copilot/claude-sonnet-4.5',
+  'github-copilot/gpt-5',
+];
 
 // ─── Validation ─────────────────────────────────────────────────
 
@@ -58,6 +72,10 @@ export interface ValidationResult {
   valid: boolean;
   models: string[];
   error?: string;
+  /** Detected CLI tools on the server (cli-bridge only). */
+  detectedCliTools?: string[];
+  /** Curated OpenCode model suggestions (cli-bridge only, when opencode is detected). */
+  cliModelSuggestions?: string[];
 }
 
 /**
@@ -91,9 +109,19 @@ export async function validateProviderKey(
         return await validateOpenAICompat(apiKey, 'https://api.deepseek.com/v1', 'deepseek');
       case 'openrouter':
         return await validateOpenAICompat(apiKey, 'https://openrouter.ai/api/v1', 'openrouter');
-      case 'cli-bridge':
-        // CLI Bridge doesn't need API key validation — it uses local CLIs
-        return { valid: true, models: CURATED_MODELS['cli-bridge'] };
+      case 'cli-bridge': {
+        // CLI Bridge doesn't need API key validation — it uses local CLIs.
+        // Return detected tools and curated OpenCode model suggestions.
+        const detectedCliTools = getAvailableCLIs();
+        return {
+          valid: true,
+          models: ['auto', ...detectedCliTools],
+          detectedCliTools,
+          cliModelSuggestions: detectedCliTools.includes('opencode')
+            ? CURATED_OPENCODE_MODELS
+            : [],
+        };
+      }
       default: {
         const _exhaustive: never = provider;
         return { valid: false, models: [], error: `Unknown provider: ${_exhaustive}` };
