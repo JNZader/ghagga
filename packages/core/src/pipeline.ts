@@ -416,6 +416,19 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     const gatewayUrl = gatewayEntry?.gatewayUrl ?? '';
     const gatewayToken = gatewayEntry?.apiKey || input.apiKey || '';
 
+    console.log(
+      '[ghagga] Gateway debug:',
+      JSON.stringify({
+        hasEntry: !!gatewayEntry,
+        provider: gatewayEntry?.provider,
+        model: gatewayModel,
+        gatewayUrl: gatewayUrl ? `${gatewayUrl.slice(0, 40)}...` : '(empty)',
+        hasToken: !!gatewayToken,
+        tokenLen: gatewayToken.length,
+        keys: gatewayEntry ? Object.keys(gatewayEntry) : [],
+      }),
+    );
+
     emit({
       step: 'agent-start',
       message: `Running LLM Gateway review (model: ${gatewayModel})...`,
