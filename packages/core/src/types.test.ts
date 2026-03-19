@@ -24,12 +24,23 @@ describe('DEFAULT_SETTINGS', () => {
     });
   });
 
-  it('should have a non-empty ignorePatterns array', () => {
+  it('should have a non-empty ignorePatterns array covering all lockfile formats', () => {
     expect(DEFAULT_SETTINGS.ignorePatterns.length).toBeGreaterThan(0);
+    // Documentation and text files
     expect(DEFAULT_SETTINGS.ignorePatterns).toContain('*.md');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('*.txt');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('.gitignore');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('LICENSE');
+    // Lockfiles — all ecosystems
     expect(DEFAULT_SETTINGS.ignorePatterns).toContain('*.lock');
     expect(DEFAULT_SETTINGS.ignorePatterns).toContain('package-lock.json');
     expect(DEFAULT_SETTINGS.ignorePatterns).toContain('pnpm-lock.yaml');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('bun.lockb');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('composer.lock');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('Gemfile.lock');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('Cargo.lock');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('poetry.lock');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('go.sum');
   });
 });
 
