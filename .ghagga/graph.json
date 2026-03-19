@@ -1654,7 +1654,7 @@
       "isTest": true
     },
     "packages/core/src/providers/cli-bridge.ts": {
-      "hash": "e1be01e48f2ec86d0e3fad7056b2995d00efe852e370161497c31867406341cc",
+      "hash": "b887d51aff6b398bdcb824d1fae4e7c1e3da9f20db586f1240ff3798f0a55baa",
       "language": "typescript",
       "imports": [
         "node:child_process",
@@ -3266,7 +3266,7 @@
       "isTest": true
     },
     "apps/server/src/lib/provider-models.ts": {
-      "hash": "56b58a18215a06b393b4a114acffc945aace470420599def8ad85dbf7e0b99b3",
+      "hash": "0a58bab5531e0669224f3aa6884c69eff7c3eb480cab2e5e29fde9ab95350405",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -4360,7 +4360,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "183a3c9649e8ff4114af787994b484d2e649120505acbb1c4285f061828a3551",
+      "hash": "607524767b634a31308822300c27b94c6da11f31e657e9431468a40d040bdf93",
       "language": "typescript",
       "imports": [
         "react",
