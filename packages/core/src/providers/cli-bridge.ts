@@ -28,13 +28,75 @@ const CLAUDE_LEGACY_DEFAULT_MODEL = 'anthropic/claude-sonnet-4-5';
 /** Prompt size threshold (in chars) above which stdin is used instead of inline arg. */
 const STDIN_THRESHOLD = 10_000;
 
+/** Regex for validating OpenCode cliModel format: `provider/model`. */
+const CLI_MODEL_REGEX = /^[^/]+\/.+$/;
+
+// ─── Env-Var Mapping ────────────────────────────────────────────
+
+/**
+ * Maps OpenCode provider prefixes to the env var they need for authentication.
+ * Used to inject exactly the right credential into the subprocess environment.
+ */
+export const OPENCODE_ENV_BY_PREFIX: Record<string, string> = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  google: 'GEMINI_API_KEY',
+  'github-copilot': 'GITHUB_TOKEN',
+  groq: 'GROQ_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+};
+
+/**
+ * All known sensitive env vars that should be stripped from the subprocess environment.
+ * This is a superset of OPENCODE_ENV_BY_PREFIX values plus tool-specific variants.
+ */
+const SENSITIVE_ENV_VARS: readonly string[] = [
+  ...new Set([
+    ...Object.values(OPENCODE_ENV_BY_PREFIX),
+    'COPILOT_GITHUB_TOKEN',
+    'GH_TOKEN',
+  ]),
+];
+
 // ─── Types ──────────────────────────────────────────────────────
+
+/** Valid CLI tool names for explicit selection. */
+export type CLIToolName = 'opencode' | 'gemini' | 'copilot';
+
+/** Options for generateViaCLI(). */
+export interface CLIBridgeOptions {
+  /**
+   * Preferred CLI tool to use.
+   * Also accepts 'claude' as a legacy alias → mapped to 'opencode' at runtime.
+   */
+  preferredCLI?: CLIToolName | 'claude' | (string & {});
+  /** OpenCode model in `provider/model` format (e.g., 'anthropic/claude-sonnet-4-5'). */
+  cliModel?: string;
+  /** Injected credentials mapped by env var name (e.g., { ANTHROPIC_API_KEY: 'sk-...' }). */
+  credentials?: Record<string, string>;
+}
 
 interface CLIAdapter {
   name: string;
   command: string;
   available: boolean;
-  generate: (prompt: string, systemPrompt?: string, cliModel?: string) => string;
+  generate: (
+    prompt: string,
+    systemPrompt?: string,
+    cliModel?: string,
+    env?: NodeJS.ProcessEnv,
+  ) => string;
+}
+
+/**
+ * Error class for configuration failures that should NOT trigger fallback
+ * to other CLIs. These represent misconfiguration, not transient failures.
+ */
+export class CLIConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CLIConfigurationError';
+  }
 }
 
 // ─── CLI Detection ──────────────────────────────────────────────
@@ -60,6 +122,67 @@ const CLI_EXEC_OPTIONS: import('node:child_process').ExecSyncOptionsWithStringEn
   encoding: 'utf8',
   stdio: ['pipe', 'pipe', 'pipe'],
 };
+
+// ─── Credential Resolution ──────────────────────────────────────
+
+/**
+ * Resolve the env var name needed for a given CLI tool and model.
+ *
+ * - opencode: derives from cliModel provider prefix (e.g., 'anthropic' → 'ANTHROPIC_API_KEY')
+ * - gemini: always 'GEMINI_API_KEY'
+ * - copilot: always 'COPILOT_GITHUB_TOKEN'
+ *
+ * Returns undefined if the prefix is unknown or cliModel is not provided for opencode.
+ */
+export function resolveCredentialEnvVar(
+  preferredCLI: string | undefined,
+  cliModel?: string,
+): string | undefined {
+  switch (preferredCLI) {
+    case 'opencode': {
+      if (!cliModel) return undefined;
+      const prefix = cliModel.split('/')[0];
+      if (!prefix) return undefined;
+      return OPENCODE_ENV_BY_PREFIX[prefix];
+    }
+    case 'gemini':
+      return 'GEMINI_API_KEY';
+    case 'copilot':
+      return 'COPILOT_GITHUB_TOKEN';
+    default:
+      return undefined;
+  }
+}
+
+// ─── Subprocess Environment ─────────────────────────────────────
+
+/**
+ * Build a subprocess environment using the subtraction approach:
+ * 1. Start with a copy of process.env
+ * 2. Remove all known sensitive env vars (provider secrets)
+ * 3. Add back ONLY the single required credential
+ *
+ * This ensures CLIs get system vars (PATH, HTTP_PROXY, locale, etc.)
+ * without leaking credentials for other providers.
+ */
+export function buildSubprocessEnv(
+  credentialEnvName?: string,
+  credentialValue?: string,
+): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+
+  // Remove all known sensitive env vars
+  for (const key of SENSITIVE_ENV_VARS) {
+    delete env[key];
+  }
+
+  // Add back the single required credential
+  if (credentialEnvName && credentialValue) {
+    env[credentialEnvName] = credentialValue;
+  }
+
+  return env;
+}
 
 // ─── OpenCode JSON Output Parsing ───────────────────────────────
 
@@ -111,6 +234,57 @@ function parseOpenCodeOutput(raw: string): { text: string; tokens?: { input?: nu
   return { text: textParts.join(''), tokens };
 }
 
+// ─── Validation Helpers ─────────────────────────────────────────
+
+/**
+ * Validate cliModel format and provider prefix for OpenCode.
+ * Throws CLIConfigurationError for malformed or unsupported values.
+ *
+ * Only called when preferredCLI === 'opencode' and cliModel is provided.
+ */
+function validateCliModel(cliModel: string): void {
+  if (!CLI_MODEL_REGEX.test(cliModel)) {
+    throw new CLIConfigurationError(
+      `Invalid cliModel format: '${cliModel}'. Expected 'provider/model' (e.g., 'anthropic/claude-sonnet-4-5').`,
+    );
+  }
+
+  const prefix = cliModel.split('/')[0]!;
+  if (!OPENCODE_ENV_BY_PREFIX[prefix]) {
+    const supported = Object.keys(OPENCODE_ENV_BY_PREFIX).join(', ');
+    throw new CLIConfigurationError(
+      `Unsupported OpenCode provider prefix: '${prefix}'. Supported prefixes: ${supported}.`,
+    );
+  }
+}
+
+/**
+ * Validate that credentials are available for the selected tool.
+ * Throws CLIConfigurationError if the required credential is missing
+ * from both the injected credentials and the server environment.
+ */
+function validateCredentials(
+  credentialEnvName: string | undefined,
+  credentials?: Record<string, string>,
+): void {
+  if (!credentialEnvName) return; // No credential resolution possible (e.g., auto mode)
+
+  // Check injected credentials first
+  if (credentials) {
+    const value = credentials[credentialEnvName];
+    if (value && value.length > 0) return; // Has injected credential
+  }
+
+  // Check server environment as fallback
+  const serverValue = process.env[credentialEnvName];
+  if (serverValue && serverValue.length > 0) return; // Has server env credential
+
+  throw new CLIConfigurationError(
+    `Missing credential for CLI tool. Expected env var '${credentialEnvName}' to be set, ` +
+      `or provide it via installation credentials.`,
+  );
+}
+
 // ─── Adapters ───────────────────────────────────────────────────
 
 const adapters: CLIAdapter[] = [
@@ -118,7 +292,7 @@ const adapters: CLIAdapter[] = [
     name: 'opencode',
     command: 'opencode',
     available: detectCLI('opencode'),
-    generate(prompt, systemPrompt, cliModel) {
+    generate(prompt, systemPrompt, cliModel, env) {
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 
       // Build args: opencode run --model <model> --format json [inline-prompt]
@@ -130,17 +304,22 @@ const adapters: CLIAdapter[] = [
 
       const cmdArgs = args.map((a) => JSON.stringify(a)).join(' ');
 
+      const execOptions: import('node:child_process').ExecSyncOptionsWithStringEncoding = {
+        ...CLI_EXEC_OPTIONS,
+        ...(env ? { env } : {}),
+      };
+
       let raw: string;
       if (fullPrompt.length > STDIN_THRESHOLD) {
         // Large prompt: pipe via stdin (OpenCode auto-detects piped stdin)
         raw = execSync(`opencode ${cmdArgs}`, {
-          ...CLI_EXEC_OPTIONS,
+          ...execOptions,
           input: fullPrompt,
         });
       } else {
         // Inline prompt as trailing argument
         raw = execSync(`opencode ${cmdArgs} ${JSON.stringify(fullPrompt)}`, {
-          ...CLI_EXEC_OPTIONS,
+          ...execOptions,
         });
       }
 
@@ -155,7 +334,7 @@ const adapters: CLIAdapter[] = [
     name: 'copilot',
     command: 'copilot',
     available: detectCLI('copilot'),
-    generate(prompt, _systemPrompt) {
+    generate(prompt, _systemPrompt, _cliModel, env) {
       // copilot -p takes prompt as argument — too large for ARG_MAX with big diffs.
       // Write to temp file and tell copilot to read it.
       const tmpFile = join(tmpdir(), `ghagga-prompt-${Date.now()}.txt`);
@@ -163,7 +342,7 @@ const adapters: CLIAdapter[] = [
         writeFileSync(tmpFile, prompt, 'utf8');
         return execSync(
           `copilot -p "Read and analyze the file at ${tmpFile} and provide a code review"`,
-          { ...CLI_EXEC_OPTIONS },
+          { ...CLI_EXEC_OPTIONS, ...(env ? { env } : {}) },
         ).trim();
       } finally {
         try {
@@ -178,11 +357,12 @@ const adapters: CLIAdapter[] = [
     name: 'gemini',
     command: 'gemini',
     available: detectCLI('gemini'),
-    generate(prompt, systemPrompt) {
+    generate(prompt, systemPrompt, _cliModel, env) {
       // Gemini auto-detects non-TTY stdin and reads from it
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
       return execSync('gemini -p - --output-format text', {
         ...CLI_EXEC_OPTIONS,
+        ...(env ? { env } : {}),
         input: fullPrompt,
       }).trim();
     },
@@ -206,23 +386,51 @@ export function getAvailableCLIs(): string[] {
  * Legacy alias: 'claude' is mapped to 'opencode' with default model
  * 'anthropic/claude-sonnet-4-5'.
  *
+ * Configuration errors (malformed cliModel, unsupported provider prefix,
+ * missing credentials) throw CLIConfigurationError immediately — they do NOT
+ * fall through to retry other CLIs.
+ *
  * @param prompt - User prompt
  * @param systemPrompt - Optional system prompt
- * @param preferredCLI - Optional preferred CLI name ('opencode', 'gemini', 'copilot', or 'claude' legacy alias)
+ * @param options - Optional CLI bridge options (preferredCLI, cliModel, credentials)
  * @returns { text, provider, cli }
  */
 export function generateViaCLI(
   prompt: string,
   systemPrompt?: string,
-  preferredCLI?: string,
+  options?: CLIBridgeOptions,
 ): { text: string; provider: string; cli: string } {
-  // ── Legacy alias: 'claude' → 'opencode' with default model ──
-  let resolvedCLI = preferredCLI;
-  let cliModel: string | undefined;
+  const { preferredCLI: rawPreferredCLI, cliModel: rawCliModel, credentials } = options ?? {};
 
-  if (preferredCLI === 'claude') {
+  // ── Legacy alias: 'claude' → 'opencode' with default model ──
+  let resolvedCLI = rawPreferredCLI;
+  let cliModel = rawCliModel;
+
+  if (rawPreferredCLI === 'claude') {
     resolvedCLI = 'opencode';
-    cliModel = CLAUDE_LEGACY_DEFAULT_MODEL;
+    if (!cliModel) {
+      cliModel = CLAUDE_LEGACY_DEFAULT_MODEL;
+    }
+  }
+
+  // ── Validate cliModel (configuration error = hard fail) ──
+  if (resolvedCLI === 'opencode' && cliModel) {
+    validateCliModel(cliModel);
+  }
+
+  // ── Resolve credential env var ──
+  const credentialEnvName = resolveCredentialEnvVar(resolvedCLI, cliModel);
+
+  // ── Validate credentials (configuration error = hard fail) ──
+  if (resolvedCLI && credentialEnvName) {
+    validateCredentials(credentialEnvName, credentials);
+  }
+
+  // ── Build subprocess environment ──
+  let subprocessEnv: NodeJS.ProcessEnv | undefined;
+  if (credentials && credentialEnvName) {
+    const credentialValue = credentials[credentialEnvName];
+    subprocessEnv = buildSubprocessEnv(credentialEnvName, credentialValue);
   }
 
   const available = adapters.filter((a) => a.available);
@@ -243,9 +451,14 @@ export function generateViaCLI(
     try {
       // Pass cliModel only to the opencode adapter (others ignore it)
       const modelArg = adapter.name === 'opencode' ? cliModel : undefined;
-      const text = adapter.generate(prompt, systemPrompt, modelArg);
+      const text = adapter.generate(prompt, systemPrompt, modelArg, subprocessEnv);
       return { text, provider: 'cli-bridge', cli: adapter.name };
     } catch (error) {
+      // CLIConfigurationError should NOT be caught — re-throw immediately
+      if (error instanceof CLIConfigurationError) {
+        throw error;
+      }
+
       // Truncate error message — stderr from CLI failures can contain the entire prompt
       // (including huge diffs like package-lock.json), making logs unreadable.
       const fullMessage = (error as Error).message ?? String(error);

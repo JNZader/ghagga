@@ -798,7 +798,7 @@ async function runCLIBridgeReview(input: CLIBridgeReviewInput): Promise<ReviewRe
   });
 
   // generateViaCLI is synchronous (execSync) but we wrap in async for pipeline compat
-  const cliResult = generateViaCLI(prompt, system, preferredCLI);
+  const cliResult = generateViaCLI(prompt, system, { preferredCLI });
 
   const executionTimeMs = Date.now() - startTime;
 
