@@ -164,6 +164,7 @@ export function createInstallationsRouter(db: Database) {
         provider: string;
         model: string;
         apiKey?: string;
+        cliModel?: string;
       }>;
 
       const VALID_SAAS_PROVIDERS = [
@@ -220,15 +221,20 @@ export function createInstallationsRouter(db: Database) {
       );
 
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry, idx) => {
+        // Resolve cliModel: only meaningful for cli-bridge entries
+        const cliModel = entry.provider === 'cli-bridge' ? entry.cliModel : undefined;
+
         if (entry.apiKey) {
           const encrypted = encrypt(entry.apiKey);
           keysByProvider.set(entry.provider, encrypted);
           logger.info({ idx, provider: entry.provider, action: 'NEW_KEY' }, 'Chain entry: new key');
-          return {
+          const result: DbProviderChainEntry = {
             provider: entry.provider as SaaSProvider,
             model: entry.model,
             encryptedApiKey: encrypted,
           };
+          if (cliModel) result.cliModel = cliModel;
+          return result;
         }
         if (entry.provider === 'github') {
           return { provider: 'github' as const, model: entry.model, encryptedApiKey: null };
@@ -238,11 +244,13 @@ export function createInstallationsRouter(db: Database) {
           { idx, provider: entry.provider, action: resolved ? 'RESOLVED_FROM_MAP' : 'NULL_KEY' },
           'Chain entry: resolved',
         );
-        return {
+        const result: DbProviderChainEntry = {
           provider: entry.provider as SaaSProvider,
           model: entry.model,
           encryptedApiKey: resolved,
         };
+        if (cliModel) result.cliModel = cliModel;
+        return result;
       });
 
       // Build settings JSONB

@@ -52,6 +52,9 @@ export interface ProviderChainEntry {
 
   /** Decrypted API key (populated at runtime by the server, never stored in plaintext) */
   apiKey: string;
+
+  /** OpenCode model in `provider/model` format. Only meaningful when provider === 'cli-bridge'. */
+  cliModel?: string;
 }
 
 /**

@@ -353,8 +353,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       ? (cliBridgeEntry?.model ?? input.model)
       : undefined;
 
-    // TODO: Task 4 will add cliModel to ProviderChainEntry types
-    const cliModel = (cliBridgeEntry as Record<string, unknown> | undefined)?.cliModel as string | undefined;
+    const cliModel = cliBridgeEntry?.cliModel;
 
     // Build credentials from the decrypted API key (server decrypts before passing to pipeline)
     const decryptedKey = cliBridgeEntry?.apiKey || input.apiKey;
@@ -779,7 +778,7 @@ interface CLIBridgeReviewInput {
   stackHints: string;
   reviewLevel: import('./types.js').ReviewLevel;
   preferredCLI?: string;
-  /** OpenCode model in `provider/model` format. TODO: Task 4 will add cliModel to ProviderChainEntry types. */
+  /** OpenCode model in `provider/model` format. */
   cliModel?: string;
   /** Injected credentials mapped by env var name (e.g., { ANTHROPIC_API_KEY: 'sk-...' }). */
   credentials?: Record<string, string>;

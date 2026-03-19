@@ -33,10 +33,23 @@ export function maskApiKey(key: string): string {
  * Decrypts and masks API keys — never exposes raw encrypted values.
  */
 export function buildProviderChainView(chain: DbProviderChainEntry[]) {
-  return chain.map((entry) => ({
-    provider: entry.provider,
-    model: entry.model,
-    hasApiKey: entry.encryptedApiKey != null,
-    maskedApiKey: entry.encryptedApiKey ? maskApiKey(decrypt(entry.encryptedApiKey)) : undefined,
-  }));
+  return chain.map((entry) => {
+    const view: {
+      provider: typeof entry.provider;
+      model: string;
+      hasApiKey: boolean;
+      maskedApiKey?: string;
+      cliModel?: string;
+    } = {
+      provider: entry.provider,
+      model: entry.model,
+      hasApiKey: entry.encryptedApiKey != null,
+      maskedApiKey: entry.encryptedApiKey ? maskApiKey(decrypt(entry.encryptedApiKey)) : undefined,
+    };
+    // Only include cliModel when present (don't add undefined to every entry)
+    if (entry.cliModel) {
+      view.cliModel = entry.cliModel;
+    }
+    return view;
+  });
 }

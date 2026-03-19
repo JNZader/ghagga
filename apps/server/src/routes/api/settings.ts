@@ -266,6 +266,7 @@ export function createSettingsRouter(db: Database) {
         provider: string;
         model: string;
         apiKey?: string;
+        cliModel?: string;
       }>;
 
       const VALID_SAAS_PROVIDERS = [
@@ -322,32 +323,35 @@ export function createSettingsRouter(db: Database) {
       }
 
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry) => {
+        // Resolve cliModel: only meaningful for cli-bridge entries
+        const cliModel = entry.provider === 'cli-bridge' ? entry.cliModel : undefined;
+
         if (entry.apiKey) {
           // New key provided → encrypt it and also update the lookup
           // so subsequent entries of the same provider can reuse it
           const encrypted = encrypt(entry.apiKey);
           keysByProvider.set(entry.provider, encrypted);
-          return {
+          const result: DbProviderChainEntry = {
             provider: entry.provider as SaaSProvider,
             model: entry.model,
             encryptedApiKey: encrypted,
           };
+          if (cliModel) result.cliModel = cliModel;
+          return result;
         }
 
         if (entry.provider === 'github') {
-          return {
-            provider: 'github' as const,
-            model: entry.model,
-            encryptedApiKey: null,
-          };
+          return { provider: 'github' as const, model: entry.model, encryptedApiKey: null };
         }
 
         // No key provided → resolve from lookup (repo > global > null)
-        return {
+        const result: DbProviderChainEntry = {
           provider: entry.provider as SaaSProvider,
           model: entry.model,
           encryptedApiKey: keysByProvider.get(entry.provider) ?? null,
         };
+        if (cliModel) result.cliModel = cliModel;
+        return result;
       });
 
       // Build settings update
