@@ -16,6 +16,7 @@ const DEFAULT_ENTRY: ProviderEntryState = {
   availableModels: [],
   hasExistingKey: false,
   validated: false,
+  cliModel: undefined,
 };
 
 export function ProviderChainEditor({
