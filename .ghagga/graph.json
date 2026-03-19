@@ -1654,7 +1654,7 @@
       "isTest": true
     },
     "packages/core/src/providers/cli-bridge.ts": {
-      "hash": "48368bef8e26265cae94e381ae4059f74fb2ab5ad75516531fddc85dcab60a0f",
+      "hash": "9d70dd41da70c1c6fc089bdff48184fd06f6241a7111b763569632711f37d0db",
       "language": "typescript",
       "imports": [
         "node:child_process",
