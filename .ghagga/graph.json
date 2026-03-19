@@ -305,7 +305,7 @@
       "isTest": false
     },
     "packages/core/src/index.ts": {
-      "hash": "598daa35c2743c0063d684144c5725b48b032382e1034b3ef18af1a9ccd588a0",
+      "hash": "1517c8addae741423cfbb44241cc8f2339890f540b77ca19509a78665f8d0700",
       "language": "typescript",
       "imports": [
         "./pipeline.js",
@@ -317,8 +317,8 @@
         "./utils/stack-detect.js",
         "./utils/token-budget.js",
         "./providers/cli-bridge.js",
-        "./providers/gateway.js",
         "./providers/fallback.js",
+        "./providers/gateway.js",
         "./providers/index.js",
         "./memory/context.js",
         "./memory/engram.js",
@@ -363,8 +363,8 @@
         "getAvailableCLIs",
         "OPENCODE_ENV_BY_PREFIX",
         "sanitizeErrorMessage",
-        "generateViaGateway",
         "generateWithFallback",
+        "generateViaGateway",
         "createModel",
         "createProvider",
         "formatMemoryContext",
@@ -666,7 +666,7 @@
       "isTest": true
     },
     "packages/core/src/utils/llm-timeout.ts": {
-      "hash": "a388fd74fffdce86a04edb770e3b3fd5379f2304d5ba62b310ba053b5404cbcf",
+      "hash": "ed0406cce8dca0811f2095f6b455a5923cf5b96aa5d12181626cb8e87e24955e",
       "language": "typescript",
       "imports": [
         "ai"
@@ -4385,7 +4385,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "b0d76ead2adb7d033a4b5083d670d3b136b99b6009f6a174c3103a61cf761037",
+      "hash": "23bef1e95ad473ea422db076c6c4698c68c025f6f7a8bef14258a4474a281c55",
       "language": "typescript",
       "imports": [
         "react",
