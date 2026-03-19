@@ -512,7 +512,8 @@ export function ProviderEntry({
             className="input-field w-full"
           />
           <p className="mt-1 text-xs text-text-secondary">
-            Enter the URL and token of your LLM Gateway instance. The token goes in the API Key field below.
+            Enter the URL and token of your LLM Gateway instance. The token goes in the API Key
+            field below.
           </p>
         </div>
       )}
@@ -535,7 +536,11 @@ export function ProviderEntry({
       <div className={`mb-3 ${isGitHub || isFreeModel ? 'hidden' : ''}`}>
         <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-medium text-text-secondary">
-            {isGateway ? 'Gateway Token' : isCLIBridge ? getCliCredentialLabel(entry.model, entry.cliModel) : 'API Key'}
+            {isGateway
+              ? 'Gateway Token'
+              : isCLIBridge
+                ? getCliCredentialLabel(entry.model, entry.cliModel)
+                : 'API Key'}
           </label>
           {/* Toggle between reusing a saved key and entering a new one */}
           {showReuseSelector && !isCLIBridge && (

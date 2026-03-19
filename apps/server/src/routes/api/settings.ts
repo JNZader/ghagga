@@ -399,7 +399,11 @@ export function createSettingsRouter(db: Database) {
         }
 
         if (entry.provider === 'github') {
-          return { provider: entry.provider as SaaSProvider, model: entry.model, encryptedApiKey: null };
+          return {
+            provider: entry.provider as SaaSProvider,
+            model: entry.model,
+            encryptedApiKey: null,
+          };
         }
 
         // No key provided → resolve from lookup (repo > global > null)
@@ -689,7 +693,10 @@ export function createSettingsRouter(db: Database) {
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          logger.warn({ err: msg, gatewayUrl, user: user.githubLogin }, 'Gateway health check failed');
+          logger.warn(
+            { err: msg, gatewayUrl, user: user.githubLogin },
+            'Gateway health check failed',
+          );
           return c.json({ valid: false, models: [], error: `Cannot reach gateway: ${msg}` });
         }
       }

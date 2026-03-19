@@ -295,7 +295,11 @@ export function createInstallationsRouter(db: Database) {
           return result;
         }
         if (entry.provider === 'github') {
-          return { provider: entry.provider as SaaSProvider, model: entry.model, encryptedApiKey: null };
+          return {
+            provider: entry.provider as SaaSProvider,
+            model: entry.model,
+            encryptedApiKey: null,
+          };
         }
         const resolved = keysByProvider.get(entry.provider) ?? null;
         logger.info(

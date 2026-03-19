@@ -922,7 +922,16 @@ interface GatewayReviewInput {
  * Simple mode only — workflow/consensus would need multiple sequential calls.
  */
 async function runGatewayReview(input: GatewayReviewInput): Promise<ReviewResult> {
-  const { diff, staticContext, memoryContext, stackHints, reviewLevel, model, gatewayUrl, gatewayToken } = input;
+  const {
+    diff,
+    staticContext,
+    memoryContext,
+    stackHints,
+    reviewLevel,
+    model,
+    gatewayUrl,
+    gatewayToken,
+  } = input;
   const emit = input.onProgress ?? (() => {});
 
   const startTime = Date.now();

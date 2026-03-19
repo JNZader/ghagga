@@ -157,7 +157,9 @@ export function Settings() {
         model: entry.model,
         ...(entry.apiKey.trim() ? { apiKey: entry.apiKey.trim() } : {}),
         ...(entry.provider === 'cli-bridge' && entry.cliModel ? { cliModel: entry.cliModel } : {}),
-        ...(entry.provider === 'gateway' && entry.gatewayUrl ? { gatewayUrl: entry.gatewayUrl } : {}),
+        ...(entry.provider === 'gateway' && entry.gatewayUrl
+          ? { gatewayUrl: entry.gatewayUrl }
+          : {}),
       }));
 
       await updateSettings.mutateAsync({

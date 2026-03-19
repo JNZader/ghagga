@@ -54,7 +54,9 @@ export async function generateViaGateway(
     throw new Error('Gateway URL not configured — set it in the dashboard provider chain settings');
   }
   if (!gatewayToken) {
-    throw new Error('Gateway token not configured — set the API key in the dashboard provider chain settings');
+    throw new Error(
+      'Gateway token not configured — set the API key in the dashboard provider chain settings',
+    );
   }
 
   const response = await fetch(`${gatewayUrl}/v1/generate`, {
