@@ -465,7 +465,7 @@
       "isTest": true
     },
     "packages/core/src/pipeline.ts": {
-      "hash": "c1d17bba5432cb34b65da2cb67079bacc3efc462cd86cc3f4a40bc57e160ef28",
+      "hash": "7d3f4fd0d2ce6d4db1aad7d0d3d4324ddd4dcd4d7396b3d146e247b81c7ed5bc",
       "language": "typescript",
       "imports": [
         "./agents/consensus.js",
