@@ -305,7 +305,7 @@
       "isTest": false
     },
     "packages/core/src/index.ts": {
-      "hash": "d4e859575d2ac0a10b6aee467d8baa920ce218a5a7407e625e088ac4d8660406",
+      "hash": "c951af42f01b588f6758f3688341ba8a4ea00aa73687f8cb6472d2d2b85f3de3",
       "language": "typescript",
       "imports": [
         "./pipeline.js",
@@ -463,7 +463,7 @@
       "isTest": true
     },
     "packages/core/src/pipeline.ts": {
-      "hash": "003a71357a4debaf8acc70ade9cc7f348089b40ed202cdc48542b5be2555d48a",
+      "hash": "1a6ea51185f127ec249113294f818e95c705cafb251520c3bd2b850f82fcaa28",
       "language": "typescript",
       "imports": [
         "./agents/consensus.js",
@@ -1642,7 +1642,7 @@
       "isTest": false
     },
     "packages/core/src/providers/cli-bridge.test.ts": {
-      "hash": "26143a05d3f2e1b1f51c77be5c1db1d7deb4876ec6436621a0dd1a7af42d86fa",
+      "hash": "3162a60b0d30d8cd67cace018b924c4c48c9157a7bb855574922bfc48796b9ba",
       "language": "typescript",
       "imports": [
         "vitest",
@@ -1654,7 +1654,7 @@
       "isTest": true
     },
     "packages/core/src/providers/cli-bridge.ts": {
-      "hash": "9ab87f2b427420d8e8009fcc0364b7bde4826e58d55a2c82271cda540d712b69",
+      "hash": "e1be01e48f2ec86d0e3fad7056b2995d00efe852e370161497c31867406341cc",
       "language": "typescript",
       "imports": [
         "node:child_process",
@@ -2924,7 +2924,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/installations.ts": {
-      "hash": "49afd226865edb60dd7175ba26d5c15131b34c0109b137605668234a99ad073a",
+      "hash": "7b0dc22044efe60641c5b40787960dea1569b54c60488e145e3813ad735ae562",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3003,7 +3003,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/settings.ts": {
-      "hash": "13d564343db61a34af660124ba989261a72f1e29c5c6569ac9eee60e08a34fb1",
+      "hash": "a4f39c990f217d8217012ece8e6e4382e6d0fef11d29c818e5a1af0eb33e6ce7",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3266,7 +3266,7 @@
       "isTest": true
     },
     "apps/server/src/lib/provider-models.ts": {
-      "hash": "9e44f762950fabaab2d29fd12a43f8ec7209b914bdd2097f4ae48d848b9221a6",
+      "hash": "56b58a18215a06b393b4a114acffc945aace470420599def8ad85dbf7e0b99b3",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -4360,7 +4360,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "3afb5ed85d24a1253dc7c175cf066c5d4890a949b17cd47c322bf044ab15566b",
+      "hash": "183a3c9649e8ff4114af787994b484d2e649120505acbb1c4285f061828a3551",
       "language": "typescript",
       "imports": [
         "react",
