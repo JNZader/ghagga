@@ -28,6 +28,8 @@ describe('DEFAULT_SETTINGS', () => {
     expect(DEFAULT_SETTINGS.ignorePatterns.length).toBeGreaterThan(0);
     expect(DEFAULT_SETTINGS.ignorePatterns).toContain('*.md');
     expect(DEFAULT_SETTINGS.ignorePatterns).toContain('*.lock');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('package-lock.json');
+    expect(DEFAULT_SETTINGS.ignorePatterns).toContain('pnpm-lock.yaml');
   });
 });
 
