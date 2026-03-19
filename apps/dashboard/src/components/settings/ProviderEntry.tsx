@@ -392,7 +392,7 @@ export function ProviderEntry({
                   validated: false,
                   hasExistingKey: false,
                   maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS['gateway'] ?? [],
+                  availableModels: KNOWN_MODELS.gateway ?? [],
                   cliModel: undefined,
                   gatewayUrl: '',
                 });
