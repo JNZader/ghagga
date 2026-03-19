@@ -58,12 +58,20 @@ export const CURATED_MODELS: Record<SaaSProvider, string[]> = {
  * These are well-known models that work with OpenCode's `--model provider/model` flag.
  */
 const CURATED_OPENCODE_MODELS = [
+  // Free models — no API key needed
+  'opencode/gpt-5-nano',
+  'opencode/big-pickle',
+  'opencode/mimo-v2-pro-free',
+  'opencode/minimax-m2.5-free',
+  'opencode/nemotron-3-super-free',
+  'opencode/mimo-v2-omni-free',
+  // Paid models — require provider API key
   'anthropic/claude-sonnet-4-5',
   'anthropic/claude-opus-4-6',
   'anthropic/claude-haiku-4-5',
   'openai/gpt-5-codex',
-  'github-copilot/claude-sonnet-4.5',
-  'github-copilot/gpt-5',
+  'groq/openai/gpt-oss-120b',
+  'openrouter/deepseek/deepseek-chat',
 ];
 
 // ─── Validation ─────────────────────────────────────────────────

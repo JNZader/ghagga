@@ -38,6 +38,7 @@ const CLI_MODEL_REGEX = /^[^/]+\/.+$/;
  * Used to inject exactly the right credential into the subprocess environment.
  */
 export const OPENCODE_ENV_BY_PREFIX: Record<string, string> = {
+  opencode: '', // Free models — no API key needed
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   google: 'GEMINI_API_KEY',
@@ -349,7 +350,7 @@ function validateCredentials(
   credentialEnvName: string | undefined,
   credentials?: Record<string, string>,
 ): void {
-  if (!credentialEnvName) return; // No credential resolution possible (e.g., auto mode)
+  if (!credentialEnvName) return; // No credential needed (free models or auto mode)
 
   // Check injected credentials first
   if (credentials) {
