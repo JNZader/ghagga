@@ -53,12 +53,13 @@ RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # Install CLI tools for cli-bridge provider
 # Bump CLI_TOOLS_VERSION to force Docker cache invalidation when tools change
-ARG CLI_TOOLS_VERSION=2
+ARG CLI_TOOLS_VERSION=3
 # OpenCode: primary CLI — supports 67+ models via opencode run --model provider/model
 # Gemini CLI: free tier 1M tokens/day — set GEMINI_API_KEY env var
 # Copilot CLI: @github/copilot — set COPILOT_GITHUB_TOKEN env var
 RUN echo "CLI tools version: ${CLI_TOOLS_VERSION}" && \
-    curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/local/bin bash 2>/dev/null || true && \
+    curl -fsSL https://opencode.ai/install | bash --no-modify-path 2>&1 || true && \
+    ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode && \
     npm install -g @google/gemini-cli @github/copilot 2>/dev/null || true && \
     (which opencode && opencode --version || echo "WARNING: opencode not installed") && \
     (which gemini || echo "WARNING: gemini-cli not installed") && \
