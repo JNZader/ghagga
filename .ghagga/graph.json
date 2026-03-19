@@ -3,7 +3,7 @@
   "rootDir": ".",
   "nodes": {
     "packages/types/src/api.ts": {
-      "hash": "3ccb525272c83c4c8a61ce6e29ec2412e7f6f2291d0020ae2f268836dcd027e7",
+      "hash": "48660c3145aa3d4fe19afd70970a7f84d703bcefba11b3912fe02ac4be664505",
       "language": "typescript",
       "imports": [
         "./delegated-ci.js"
@@ -219,7 +219,7 @@
       "isTest": true
     },
     "packages/db/src/schema.ts": {
-      "hash": "1b56a64b508d81c2429264645d335f5328e3b6652f149cf5393916bb4d0db2cb",
+      "hash": "cb15e9254764fa293438b25f0860a88ddac27d13127589663a934b1aad5ce265",
       "language": "typescript",
       "imports": [
         "drizzle-orm/pg-core"
@@ -305,7 +305,7 @@
       "isTest": false
     },
     "packages/core/src/index.ts": {
-      "hash": "c900e268d7966b1aedd68d10164957e651bab43cc702ebeb74ffea673f529328",
+      "hash": "d4e859575d2ac0a10b6aee467d8baa920ce218a5a7407e625e088ac4d8660406",
       "language": "typescript",
       "imports": [
         "./pipeline.js",
@@ -357,8 +357,11 @@
         "calculateRateSchedule",
         "calculateTokenBudget",
         "getContextWindow",
+        "CLIConfigurationError",
         "generateViaCLI",
         "getAvailableCLIs",
+        "OPENCODE_ENV_BY_PREFIX",
+        "sanitizeErrorMessage",
         "generateWithFallback",
         "createModel",
         "createProvider",
@@ -460,7 +463,7 @@
       "isTest": true
     },
     "packages/core/src/pipeline.ts": {
-      "hash": "2db60ca9da2004d54a0c82351f44cc25f5e40a064f55b29e8336878fde65f305",
+      "hash": "003a71357a4debaf8acc70ade9cc7f348089b40ed202cdc48542b5be2555d48a",
       "language": "typescript",
       "imports": [
         "./agents/consensus.js",
@@ -514,7 +517,7 @@
       "isTest": true
     },
     "packages/core/src/types.ts": {
-      "hash": "65c20ede655c104afe9dd868a678ca949c4fbefd23648b71166b97000be61dbd",
+      "hash": "b49c13c94dcb5063e2525869d3baa2fdfae279dd6130ec43787ce6d9a0174490",
       "language": "typescript",
       "imports": [
         "./graph/schema.js",
@@ -1639,7 +1642,7 @@
       "isTest": false
     },
     "packages/core/src/providers/cli-bridge.test.ts": {
-      "hash": "69af06231c49f74bb4823a44f95dc8b00532057ed08b58def61b50c09ad80609",
+      "hash": "26143a05d3f2e1b1f51c77be5c1db1d7deb4876ec6436621a0dd1a7af42d86fa",
       "language": "typescript",
       "imports": [
         "vitest",
@@ -1651,7 +1654,7 @@
       "isTest": true
     },
     "packages/core/src/providers/cli-bridge.ts": {
-      "hash": "2ed4cfc78244bf719b987ac1ab1cf96ce992cfb1a983d10219bb8526e8d78ceb",
+      "hash": "9ab87f2b427420d8e8009fcc0364b7bde4826e58d55a2c82271cda540d712b69",
       "language": "typescript",
       "imports": [
         "node:child_process",
@@ -1660,6 +1663,15 @@
         "node:path"
       ],
       "exports": [
+        "OPENCODE_ENV_BY_PREFIX",
+        "CLIToolName",
+        "CLIBridgeOptions",
+        "CLIConfigurationError",
+        "resolveCredentialEnvVar",
+        "buildSubprocessEnv",
+        "parseOpenCodeOutput",
+        "sanitizeErrorMessage",
+        "validateCliModel",
         "getAvailableCLIs",
         "generateViaCLI",
         "_getAdapters"
@@ -2912,7 +2924,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/installations.ts": {
-      "hash": "94a0ed170f250f314bc004552c9af7de9330d56ca25886e562fc7e23bd2ff752",
+      "hash": "49afd226865edb60dd7175ba26d5c15131b34c0109b137605668234a99ad073a",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -2991,7 +3003,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/settings.ts": {
-      "hash": "cbc1893369e63cf25e595ccf7e8e09c7ffe79f749177df56e05bb6d134ebbf71",
+      "hash": "13d564343db61a34af660124ba989261a72f1e29c5c6569ac9eee60e08a34fb1",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3009,7 +3021,7 @@
       "isTest": false
     },
     "apps/server/src/routes/api/utils.ts": {
-      "hash": "1da8d3b65208bcfe0fd99bef9159071dbdc1c4b048e019aac2c0f8388cedd5fc",
+      "hash": "571b323c306c0576c45bce1ea6287bb3212256257dc1b4e65f8646677cd42f12",
       "language": "typescript",
       "imports": [
         "node:crypto",
@@ -3254,7 +3266,7 @@
       "isTest": true
     },
     "apps/server/src/lib/provider-models.ts": {
-      "hash": "fe346e337e80ff7002ac595c007d76f5deb4e86100f266d032da55185eea5405",
+      "hash": "9e44f762950fabaab2d29fd12a43f8ec7209b914bdd2097f4ae48d848b9221a6",
       "language": "typescript",
       "imports": [
         "ghagga-core",
@@ -3640,7 +3652,7 @@
       "isTest": true
     },
     "apps/dashboard/src/pages/GlobalSettings.tsx": {
-      "hash": "d93a64b1637d378fd34af5cec1a2f06d4c434e3d3b6edd315df7f884c76d7535",
+      "hash": "f80f6f5cdd3321995b8335284e92d9299c83d37a4b51644c1cacaaf689dcac7e",
       "language": "typescript",
       "imports": [
         "react",
@@ -3759,7 +3771,7 @@
       "isTest": true
     },
     "apps/dashboard/src/pages/Settings.tsx": {
-      "hash": "f76cdd837085a014a36551e32341bdc8f64da43de8ca40d34f8e286bbdc80f97",
+      "hash": "4d50f024c0e8034b3b383715a3f9aeb79ddd856f0ec9e6a6b716b5c5893c892e",
       "language": "typescript",
       "imports": [
         "react",
@@ -4319,7 +4331,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderChainEditor.tsx": {
-      "hash": "a8ad2f7376eab4ec003882f35ec2db7046696a6f766969349951d78dfbce80dc",
+      "hash": "08b6bba3ca1bc1c5f8160941b10ac0b22e21df46b0bb0f1db31a2f94ecc25f84",
       "language": "typescript",
       "imports": [
         "@/lib/api",
@@ -4348,7 +4360,7 @@
       "isTest": true
     },
     "apps/dashboard/src/components/settings/ProviderEntry.tsx": {
-      "hash": "14d3b9751d5bdc6cb566991272e38d51f06c881563660097c7b7cd82c313e902",
+      "hash": "3afb5ed85d24a1253dc7c175cf066c5d4890a949b17cd47c322bf044ab15566b",
       "language": "typescript",
       "imports": [
         "react",
