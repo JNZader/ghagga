@@ -405,7 +405,11 @@ const adapters: CLIAdapter[] = [
         });
       } catch (execError: unknown) {
         // execSync throws on non-zero exit — capture stderr for diagnostics
-        const err = execError as { stderr?: Buffer | string; stdout?: Buffer | string; status?: number };
+        const err = execError as {
+          stderr?: Buffer | string;
+          stdout?: Buffer | string;
+          status?: number;
+        };
         const stderr = err.stderr ? String(err.stderr).slice(0, 500) : 'no stderr';
         const stdout = err.stdout ? String(err.stdout).slice(0, 200) : 'no stdout';
         throw new Error(
@@ -417,7 +421,9 @@ const adapters: CLIAdapter[] = [
       if (!parsed.text) {
         // Log raw output for debugging empty responses
         const preview = raw.slice(0, 500) || '(empty)';
-        throw new Error(`OpenCode returned no text content in JSON output. Raw preview: ${preview}`);
+        throw new Error(
+          `OpenCode returned no text content in JSON output. Raw preview: ${preview}`,
+        );
       }
       return parsed.text.trim();
     },
