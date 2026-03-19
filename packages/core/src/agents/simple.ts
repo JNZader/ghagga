@@ -6,7 +6,7 @@
  * would be overkill.
  */
 
-import { createModel } from '../providers/index.js';
+import { createAISDKGenerateFn, type GenerateTextFn } from '../providers/generate-fn.js';
 import type {
   FindingSeverity,
   FindingSource,
@@ -17,7 +17,6 @@ import type {
   ReviewResult,
   ReviewStatus,
 } from '../types.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
@@ -37,6 +36,13 @@ export interface SimpleReviewInput {
   stackHints: string;
   reviewLevel: ReviewLevel;
   onProgress?: ProgressCallback;
+
+  /**
+   * Optional backend-agnostic generation function.
+   * When provided, used instead of createModel + generateTextWithTimeout.
+   * When omitted, one is created internally from provider/model/apiKey (backward compat).
+   */
+  generateFn?: GenerateTextFn;
 }
 
 // ─── Response Parsing ───────────────────────────────────────────
@@ -157,6 +163,9 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     input;
   const emit = input.onProgress ?? (() => {});
 
+  // Resolve the generation function: use injected or create from provider/model/apiKey
+  const generateFn = input.generateFn ?? createAISDKGenerateFn(provider, model, apiKey);
+
   const startTime = Date.now();
 
   // Build the full system prompt with all context layers
@@ -174,34 +183,40 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
   // Build the user prompt with the diff
   const prompt = `Please review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
 
-  const languageModel = createModel(provider, model, apiKey);
-
   emit({
     step: 'simple-call',
     message: `Calling ${provider}/${model} for single-pass review...`,
   });
 
-  const result = await generateTextWithTimeout(
-    {
-      model: languageModel,
-      system,
-      prompt,
-      temperature: 0.3,
-    },
-    { provider, model },
-  );
+  try {
+    const result = await generateFn(system, prompt);
 
-  const executionTimeMs = Date.now() - startTime;
+    const executionTimeMs = Date.now() - startTime;
 
-  // Timeout: fall back to empty AI result (static analysis still applies)
-  if (result === null) {
     emit({
       step: 'simple-done',
-      message: `LLM timed out — falling back to static-analysis-only results`,
+      message: `Review complete — ${result.tokensUsed} tokens, ${(executionTimeMs / 1000).toFixed(1)}s`,
     });
 
     return parseReviewResponse(
-      'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: LLM call timed out. Only static analysis results are available.\nFINDINGS:\n',
+      result.text,
+      result.provider as LLMProvider,
+      result.model,
+      result.tokensUsed,
+      executionTimeMs,
+      memoryContext,
+    );
+  } catch (error) {
+    const executionTimeMs = Date.now() - startTime;
+
+    // Timeout or other failure: fall back to empty AI result (static analysis still applies)
+    emit({
+      step: 'simple-done',
+      message: `LLM failed — falling back to static-analysis-only results: ${error instanceof Error ? error.message : String(error)}`,
+    });
+
+    return parseReviewResponse(
+      'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: LLM call failed. Only static analysis results are available.\nFINDINGS:\n',
       provider,
       model,
       0,
@@ -209,22 +224,6 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
       memoryContext,
     );
   }
-
-  const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
-
-  emit({
-    step: 'simple-done',
-    message: `Review complete — ${tokensUsed} tokens, ${(executionTimeMs / 1000).toFixed(1)}s`,
-  });
-
-  return parseReviewResponse(
-    result.text,
-    provider,
-    model,
-    tokensUsed,
-    executionTimeMs,
-    memoryContext,
-  );
 }
 
 // Re-export the parser for use in workflow and consensus modes

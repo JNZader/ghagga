@@ -109,6 +109,12 @@ export type { FallbackOptions, FallbackProvider, FallbackResult } from './provid
 export { generateWithFallback } from './providers/fallback.js';
 export type { GatewayOptions, GatewayResponse } from './providers/gateway.js';
 export { generateViaGateway } from './providers/gateway.js';
+export type { GenerateResult, GenerateTextFn } from './providers/generate-fn.js';
+export {
+  createAISDKGenerateFn,
+  createCLIBridgeGenerateFn,
+  createGatewayGenerateFn,
+} from './providers/generate-fn.js';
 export { createModel, createProvider } from './providers/index.js';
 
 // ─── Memory (for custom memory integrations) ────────────────────
