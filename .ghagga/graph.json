@@ -1711,6 +1711,17 @@
       "calls": [],
       "isTest": false
     },
+    "packages/core/src/providers/gateway.test.ts": {
+      "hash": "2f5404cc8201eb94fe6d759b872f906b947293604b35e0b3dc618c8cbdd775e2",
+      "language": "typescript",
+      "imports": [
+        "vitest",
+        "./gateway.js"
+      ],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    },
     "packages/core/src/providers/gateway.ts": {
       "hash": "f92a30496e1a4bc9b86db41efa128002e57e59864e15212845e732273c06b29a",
       "language": "typescript",
@@ -3269,7 +3280,7 @@
       "isTest": false
     },
     "apps/server/src/lib/provider-models.test.ts": {
-      "hash": "bc10e1cd9c7f284366b81b5682389780b07ac8c2f3f7b17444bc71f7227f3383",
+      "hash": "174369c84720aa48cbd9955dcf3bfc10ff031dae48b40ffb0a6a04145028931d",
       "language": "typescript",
       "imports": [
         "vitest",
