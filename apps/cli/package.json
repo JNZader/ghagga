@@ -1,6 +1,6 @@
 {
   "name": "ghagga",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "private": false,
   "type": "module",
   "description": "AI-powered code review from the command line — free with GitHub Models",
