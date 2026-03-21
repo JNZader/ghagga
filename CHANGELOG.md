@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.6.0] - 2026-03-21
+
+### Added
+- **LLM Gateway provider** — Centralized provider for routing to multiple LLM endpoints with round-robin distribution, API key management, and model selection UI in dashboard.
+- **Model selector in dashboard** — Dropdown for choosing specific models within the LLM Gateway provider, with Copilot pricing tiers support.
+- **Models used in review comments** — Review output now shows which specialist agent used which model for each finding.
+- **Gateway debug logging** — Enhanced logging for troubleshooting provider chain issues.
+
+### Fixed
+- **Gateway provider chain** — Now maps ALL provider entries for proper round-robin distribution instead of just the first one.
+- **Gateway dashboard bugs** — Fixed validated state, autocomplete, and MIMO model handling.
+- **Default ignorePatterns** — Added all lockfile formats (package-lock.json, yarn.lock, pnpm-lock.yaml, etc.) to prevent review noise.
+- **Workflow and consensus modes** — Now work with all backends (CLI bridge, gateway, SDK) instead of only GitHub provider.
+
+### Refactored
+- **Backend compatibility** — Unified workflow and consensus agent implementations to work across all provider backends.
+
 ## [2.5.0] - 2026-03-08
 
 ### Added
