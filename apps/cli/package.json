@@ -1,6 +1,6 @@
 {
   "name": "ghagga",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "private": false,
   "type": "module",
   "description": "AI-powered code review from the command line — free with GitHub Models",
@@ -50,7 +50,7 @@
   "dependencies": {
     "@clack/prompts": "^1.1.0",
     "chalk": "^5.6.0",
-    "ghagga-core": "workspace:^",
+    "ghagga-core": "^2.6.0",
     "commander": "^14.0.3",
     "dotenv": "^17.3.0"
   },
