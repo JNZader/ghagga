@@ -2,8 +2,7 @@
 # GHAGGA Server — Build & Push Docker Image
 # ============================================
 # Builds the production Docker image and pushes it to GHCR.
-# This offloads the build process from Render to GitHub Actions,
-# saving Render Free Tier build minutes.
+# Coolify (Hetzner) pulls the image from GHCR for deployment.
 
 name: Docker Build & Push
 
