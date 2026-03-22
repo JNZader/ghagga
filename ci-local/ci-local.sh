@@ -46,9 +46,24 @@ setup_ci_commands() {
             ;;
         node)
             DOCKERFILE="node.Dockerfile"
-            LINT_CMD="$BUILD_TOOL run lint"
-            COMPILE_CMD="$BUILD_TOOL run build"
-            TEST_CMD="$BUILD_TOOL test"
+            # Only set lint if the script exists in package.json
+            if grep -q '"lint"' "$PROJECT_DIR/package.json" 2>/dev/null; then
+                LINT_CMD="$BUILD_TOOL run lint"
+            else
+                LINT_CMD=""
+            fi
+            # Only set compile if build script exists
+            if grep -q '"build"' "$PROJECT_DIR/package.json" 2>/dev/null; then
+                COMPILE_CMD="$BUILD_TOOL run build"
+            else
+                COMPILE_CMD=""
+            fi
+            # Only set test if test script exists
+            if grep -q '"test"' "$PROJECT_DIR/package.json" 2>/dev/null; then
+                TEST_CMD="$BUILD_TOOL test"
+            else
+                TEST_CMD=""
+            fi
             ;;
         python)
             DOCKERFILE="python.Dockerfile"
