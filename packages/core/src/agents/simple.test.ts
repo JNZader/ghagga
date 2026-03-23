@@ -104,13 +104,71 @@ describe('parseReviewResponse', () => {
     expect(result.findings[0]?.file).toBe('src/utils.ts');
   });
 
-  it('includes staticAnalysis skeleton with skipped tools', () => {
+  it('includes staticAnalysis skeleton with skipped tools and empty findings', () => {
     const text = 'STATUS: PASSED\nSUMMARY: OK.\nFINDINGS:\n';
     const result = callParse(text);
 
     expect(result.staticAnalysis.semgrep.status).toBe('skipped');
+    expect(result.staticAnalysis.semgrep.findings).toEqual([]);
+    expect(result.staticAnalysis.semgrep.executionTimeMs).toBe(0);
     expect(result.staticAnalysis.trivy.status).toBe('skipped');
+    expect(result.staticAnalysis.trivy.findings).toEqual([]);
     expect(result.staticAnalysis.cpd.status).toBe('skipped');
+    expect(result.staticAnalysis.cpd.findings).toEqual([]);
+  });
+
+  it('metadata has correct default arrays', () => {
+    const text = 'STATUS: PASSED\nSUMMARY: OK.\nFINDINGS:\n';
+    const result = callParse(text);
+    expect(result.metadata.toolsRun).toEqual([]);
+    expect(result.metadata.toolsSkipped).toEqual([]);
+    expect(result.metadata.mode).toBe('simple');
+  });
+
+  it('summary fallback: uses raw text when SUMMARY marker missing', () => {
+    const text = 'This is just raw text from a CLI provider without markers.';
+    const result = callParse(text);
+    expect(result.summary).toBe('This is just raw text from a CLI provider without markers.');
+  });
+
+  it('summary fallback: strips FINDINGS block from raw text', () => {
+    const text = 'Raw text here.\nFINDINGS:\n- SEVERITY: low\n  CATEGORY: style\n  FILE: a.ts\n  LINE: 1\n  MESSAGE: minor\n  SUGGESTION: fix';
+    const result = callParse(text);
+    expect(result.summary).toBe('Raw text here.');
+  });
+
+  it('summary fallback: generic message when completely empty', () => {
+    const text = 'FINDINGS:\n- SEVERITY: low\n  CATEGORY: style\n  FILE: a.ts\n  LINE: 1\n  MESSAGE: m\n  SUGGESTION: s';
+    const result = callParse(text);
+    expect(result.summary).toContain('could not be parsed');
+  });
+
+  it('status is case-insensitive', () => {
+    expect(callParse('STATUS: passed\nSUMMARY: ok\nFINDINGS:\n').status).toBe('PASSED');
+    expect(callParse('STATUS: Failed\nSUMMARY: bad\nFINDINGS:\n').status).toBe('FAILED');
+  });
+
+  it('findings severity validated against VALID_SEVERITIES set', () => {
+    const text = [
+      'STATUS: PASSED\nSUMMARY: ok\nFINDINGS:',
+      '- SEVERITY: critical',
+      '  CATEGORY: sec',
+      '  FILE: a.ts',
+      '  LINE: 1',
+      '  MESSAGE: m',
+      '  SUGGESTION: s',
+    ].join('\n');
+    const result = callParse(text);
+    expect(result.findings[0]?.severity).toBe('critical');
+  });
+
+  it('passes tokensUsed and executionTimeMs through to metadata', () => {
+    const result = callParse('STATUS: PASSED\nSUMMARY: ok\nFINDINGS:\n', {
+      tokensUsed: 999,
+      executionTimeMs: 5000,
+    });
+    expect(result.metadata.tokensUsed).toBe(999);
+    expect(result.metadata.executionTimeMs).toBe(5000);
   });
 });
 

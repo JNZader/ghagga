@@ -547,4 +547,188 @@ describe('parseVote (mutant killers)', () => {
     expect(result.summary).toContain('REJECTED');
     expect(result.summary).toContain('80%');
   });
+
+  // ── More mutant killers for parseVote ───────────────────────
+
+  it('parseVote: returns all fields correctly for standard input', () => {
+    const vote = call('DECISION: approve\nCONFIDENCE: 0.9\nREASONING: Code is clean.');
+    expect(vote.provider).toBe('anthropic');
+    expect(vote.model).toBe('claude-sonnet-4-20250514');
+    expect(vote.stance).toBe('neutral');
+    expect(vote.decision).toBe('approve');
+    expect(vote.confidence).toBe(0.9);
+    expect(vote.reasoning).toBe('Code is clean.');
+  });
+
+  it('parseVote: defaults decision to abstain when missing', () => {
+    const vote = call('CONFIDENCE: 0.5\nREASONING: Unclear.');
+    expect(vote.decision).toBe('abstain');
+  });
+
+  it('parseVote: defaults confidence to 0.5 when missing', () => {
+    const vote = call('DECISION: approve\nREASONING: ok');
+    expect(vote.confidence).toBe(0.5);
+  });
+
+  it('parseVote: defaults reasoning when missing', () => {
+    const vote = call('DECISION: approve\nCONFIDENCE: 0.8');
+    expect(vote.reasoning).toBe('No reasoning provided.');
+  });
+
+  it('parseVote: clamps confidence above 1.0 to 1.0', () => {
+    const vote = call('DECISION: approve\nCONFIDENCE: 1.5\nREASONING: ok');
+    expect(vote.confidence).toBe(1.0);
+  });
+
+  it('parseVote: non-numeric confidence defaults to 0.5', () => {
+    const vote = call('DECISION: approve\nCONFIDENCE: invalid\nREASONING: ok');
+    expect(vote.confidence).toBe(0.5);
+  });
+
+  it('parseVote: confidence exactly 0.0 stays 0.0', () => {
+    const vote = call('DECISION: reject\nCONFIDENCE: 0.0\nREASONING: ok');
+    expect(vote.confidence).toBe(0.0);
+  });
+
+  it('parseVote: confidence exactly 1.0 stays 1.0', () => {
+    const vote = call('DECISION: reject\nCONFIDENCE: 1.0\nREASONING: ok');
+    expect(vote.confidence).toBe(1.0);
+  });
+
+  it('parseVote: reject decision parsed correctly', () => {
+    const vote = call('DECISION: reject\nCONFIDENCE: 0.7\nREASONING: bad code');
+    expect(vote.decision).toBe('reject');
+    expect(vote.confidence).toBe(0.7);
+  });
+
+  it('parseVote: case insensitive decision', () => {
+    expect(call('DECISION: APPROVE\nCONFIDENCE: 0.5\nREASONING: ok').decision).toBe('approve');
+    expect(call('DECISION: Reject\nCONFIDENCE: 0.5\nREASONING: ok').decision).toBe('reject');
+    expect(call('DECISION: ABSTAIN\nCONFIDENCE: 0.5\nREASONING: ok').decision).toBe('abstain');
+  });
+
+  // ── More mutant killers for calculateConsensus ──────────────
+
+  it('calculateConsensus: all abstain → NEEDS_HUMAN_REVIEW', () => {
+    const votes = [
+      makeVote({ decision: 'abstain', confidence: 0.5 }),
+      makeVote({ decision: 'abstain', confidence: 0.8 }),
+    ];
+    const result = calculateConsensus(votes);
+    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.summary).toContain('abstained');
+  });
+
+  it('calculateConsensus: summary includes model count', () => {
+    const votes = [
+      makeVote({ decision: 'approve', confidence: 0.9 }),
+      makeVote({ decision: 'approve', confidence: 0.8 }),
+      makeVote({ decision: 'approve', confidence: 0.7 }),
+    ];
+    const result = calculateConsensus(votes);
+    expect(result.summary).toContain('3 models');
+  });
+
+  it('calculateConsensus: gap below threshold shows percentages', () => {
+    const votes = [
+      makeVote({ decision: 'approve', confidence: 0.5 }),
+      makeVote({ decision: 'reject', confidence: 0.5 }),
+    ];
+    const result = calculateConsensus(votes);
+    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.summary).toContain('50%');
+    expect(result.summary).toContain('threshold');
+  });
+
+  it('calculateConsensus: approve weight accumulates correctly', () => {
+    // 0.9 + 0.8 = 1.7 approve, 0.1 reject, total 1.8
+    // approve ratio = 1.7/1.8 = 94.4%
+    const votes = [
+      makeVote({ decision: 'approve', confidence: 0.9 }),
+      makeVote({ decision: 'approve', confidence: 0.8 }),
+      makeVote({ decision: 'reject', confidence: 0.1 }),
+    ];
+    const result = calculateConsensus(votes);
+    expect(result.status).toBe('PASSED');
+    expect(result.summary).toContain('94%');
+  });
+
+  // ── runConsensusReview with fake generateFns ─────────────────
+
+  it('runConsensusReview: runs 3 votes and returns result', async () => {
+    const { runConsensusReview } = await import('./consensus.js');
+    const fakeGen = async (_sys: string, _prompt: string) => ({
+      text: 'DECISION: approve\nCONFIDENCE: 0.85\nREASONING: Looks good.\nFINDINGS:\n',
+      tokensUsed: 200,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
+    });
+
+    const result = await runConsensusReview({
+      diff: '--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new',
+      models: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'for' },
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'against' },
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'neutral' },
+      ],
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFns: [fakeGen, fakeGen, fakeGen],
+    });
+
+    expect(result.status).toBe('PASSED');
+    expect(result.metadata.mode).toBe('consensus');
+    expect(result.metadata.tokensUsed).toBeGreaterThan(0);
+    expect(result.metadata.executionTimeMs).toBeGreaterThanOrEqual(0);
+    expect(result.summary).toContain('Individual Votes');
+    expect(result.metadata.modelsUsed).toHaveLength(3);
+  });
+
+  it('runConsensusReview: handles mixed votes (approve + reject)', async () => {
+    const { runConsensusReview } = await import('./consensus.js');
+    let callCount = 0;
+    const fakeGen = async (_sys: string, _prompt: string) => {
+      callCount++;
+      const decision = callCount <= 2 ? 'approve' : 'reject';
+      return {
+        text: `DECISION: ${decision}\nCONFIDENCE: 0.7\nREASONING: Mixed opinions.\nFINDINGS:\n`,
+        tokensUsed: 150,
+        provider: 'anthropic',
+        model: 'test',
+      };
+    };
+
+    const result = await runConsensusReview({
+      diff: '--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new',
+      models: [
+        { provider: 'anthropic', model: 'test', apiKey: 'k', stance: 'for' },
+        { provider: 'anthropic', model: 'test', apiKey: 'k', stance: 'against' },
+        { provider: 'anthropic', model: 'test', apiKey: 'k', stance: 'neutral' },
+      ],
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFns: [fakeGen, fakeGen, fakeGen],
+    });
+
+    expect(result.status).toBeDefined();
+    expect(result.metadata.modelsUsed).toHaveLength(3);
+    expect(result.metadata.mode).toBe('consensus');
+  });
+
+  it('calculateConsensus: reject weight accumulates correctly', () => {
+    // 0.9 + 0.8 = 1.7 reject, 0.1 approve, total 1.8
+    // reject ratio = 94.4%
+    const votes = [
+      makeVote({ decision: 'reject', confidence: 0.9 }),
+      makeVote({ decision: 'reject', confidence: 0.8 }),
+      makeVote({ decision: 'approve', confidence: 0.1 }),
+    ];
+    const result = calculateConsensus(votes);
+    expect(result.status).toBe('FAILED');
+    expect(result.summary).toContain('94%');
+  });
 });
