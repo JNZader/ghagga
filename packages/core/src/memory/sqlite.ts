@@ -9,7 +9,12 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import initSqlJs, { type Database } from 'fts5-sql-bundle';
+import initSqlJsModule, { type Database } from 'fts5-sql-bundle';
+
+// CJS/ESM interop: default import of CJS module may be the module object, not the function
+const initSqlJs = typeof initSqlJsModule === 'function'
+  ? initSqlJsModule
+  : (initSqlJsModule as unknown as { initSqlJs: typeof initSqlJsModule }).initSqlJs;
 import type {
   ListObservationsOptions,
   MemoryObservationDetail,

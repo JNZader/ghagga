@@ -81,6 +81,9 @@ importers:
       dotenv:
         specifier: ^17.3.0
         version: 17.3.1
+      fts5-sql-bundle:
+        specifier: ^1.0.2
+        version: 1.0.2
       ghagga-core:
         specifier: ^2.6.0
         version: 2.6.0
