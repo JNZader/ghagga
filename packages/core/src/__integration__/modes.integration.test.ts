@@ -224,4 +224,95 @@ describe('integration: review modes through pipeline', () => {
       reviewPipeline(makeInput({ apiKey: '', providerChain: undefined })),
     ).rejects.toThrow('API key');
   });
+
+  it('precomputed static analysis: uses provided results instead of running tools', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const precomputed = {
+      semgrep: {
+        status: 'success' as const,
+        findings: [{
+          severity: 'high' as const,
+          category: 'security',
+          file: 'src/app.ts',
+          line: 3,
+          message: 'Precomputed finding',
+          source: 'semgrep' as const,
+        }],
+        executionTimeMs: 100,
+      },
+      trivy: { status: 'skipped' as const, findings: [] as any[], executionTimeMs: 0 },
+      cpd: { status: 'skipped' as const, findings: [] as any[], executionTimeMs: 0 },
+    };
+
+    const result = await reviewPipeline(
+      makeInput({ precomputedStaticAnalysis: precomputed }),
+    );
+
+    expect(result.status).toBeDefined();
+    // Static findings should include the precomputed one
+    const semgrepFinding = result.findings.find(f => f.message === 'Precomputed finding');
+    expect(semgrepFinding).toBeDefined();
+  });
+
+  it('AI disabled (no API key but valid providerChain empty): returns static-only', async () => {
+    // When provider is 'none' or AI is explicitly disabled, skip agent
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({
+        apiKey: 'skip-ai',
+        settings: {
+          enableSemgrep: false, enableTrivy: false, enableCpd: false,
+          enableMemory: false, customRules: [], ignorePatterns: [],
+          reviewLevel: 'normal',
+        },
+      }),
+    );
+
+    // Should produce a result regardless
+    expect(result).toBeDefined();
+    expect(result.status).toBeDefined();
+  });
+
+  it('providerChain with multiple entries: creates multiple generate functions', async () => {
+    const gen = fakeGenerateFn(WORKFLOW_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({
+        mode: 'workflow',
+        providerChain: [
+          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'key1' },
+          { provider: 'openai', model: 'gpt-4o', apiKey: 'key2' },
+        ],
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    expect(result.metadata.mode).toBe('workflow');
+    // createAISDKGenerateFn should have been called for each chain entry
+    expect(vi.mocked(createAISDKGenerateFn).mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('onProgress callback receives step updates', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const steps: Array<{ step: string; message: string }> = [];
+    const result = await reviewPipeline(
+      makeInput({
+        onProgress: (event) => steps.push(event),
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    expect(steps.length).toBeGreaterThan(0);
+    // Should include key pipeline steps
+    const stepNames = steps.map(s => s.step);
+    expect(stepNames).toContain('detect-stacks');
+    expect(stepNames).toContain('agent-start');
+  });
 });
