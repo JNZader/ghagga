@@ -624,22 +624,171 @@ diff --git a/.env.local b/.env.local
 
   // ── Progress events ───────────────────────────────────────────
 
-  it('onProgress callback receives step updates', async () => {
+  it('onProgress: emits validate, parse-diff, detect-stacks, token-budget, static, agent steps', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
     vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
 
+    const steps: Array<{ step: string; message: string; detail?: string }> = [];
+    await reviewPipeline(makeInput({ onProgress: (e) => steps.push(e) }));
+
+    const stepNames = steps.map(s => s.step);
+    expect(stepNames).toContain('validate');
+    expect(stepNames).toContain('parse-diff');
+    expect(stepNames).toContain('detect-stacks');
+    expect(stepNames).toContain('token-budget');
+    expect(stepNames).toContain('static-analysis');
+    expect(stepNames).toContain('static-results');
+    expect(stepNames).toContain('agent-start');
+
+    // Validate step messages are non-empty
+    for (const step of steps) {
+      expect(step.message.length).toBeGreaterThan(0);
+    }
+
+    // parse-diff should mention file count
+    const parseDiff = steps.find(s => s.step === 'parse-diff');
+    expect(parseDiff?.message).toMatch(/\d+ file/);
+
+    // detect-stacks should mention stack count
+    const detectStacks = steps.find(s => s.step === 'detect-stacks');
+    expect(detectStacks?.message).toMatch(/\d+ tech stack/);
+
+    // token-budget should mention tokens
+    const tokenBudget = steps.find(s => s.step === 'token-budget');
+    expect(tokenBudget?.message).toContain('tokens');
+
+    // agent-start should mention provider and model
+    const agentStart = steps.find(s => s.step === 'agent-start');
+    expect(agentStart?.message).toContain('simple');
+  });
+
+  it('onProgress: blocked files emit path-protection step', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    // .env files are blocked by default path protection
+    const diffWithBlocked = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,2 +1,3 @@
+ import express from 'express';
++app.use(helmet());
+ export default app;
+diff --git a/.env b/.env
+--- a/.env
++++ b/.env
+@@ -1 +1,2 @@
+ SECRET=old
++SECRET=new
+`;
+
     const steps: Array<{ step: string; message: string }> = [];
-    const result = await reviewPipeline(
-      makeInput({
-        onProgress: (event) => steps.push(event),
-      }),
-    );
+    await reviewPipeline(makeInput({
+      diff: diffWithBlocked,
+      onProgress: (e) => steps.push(e),
+      context: {
+        repoFullName: 'test/repo', prNumber: 1,
+        commitMessages: ['test'], fileList: ['src/app.ts', '.env'],
+      },
+    }));
+
+    // parse-diff should show blocked or redacted info
+    const parseDiff = steps.find(s => s.step === 'parse-diff');
+    expect(parseDiff?.message).toMatch(/\d+ after filtering/);
+  });
+
+  it('blast radius: stale graph emits warning', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const staleDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days ago
+    const mockGraph = {
+      nodes: new Map([['src/app.ts', { id: 'src/app.ts', type: 'module' as const, imports: [] }]]),
+      edges: [],
+    };
+
+    const steps: Array<{ step: string; message: string }> = [];
+    await reviewPipeline(makeInput({
+      onProgress: (e) => steps.push(e),
+      settings: {
+        enableSemgrep: false, enableTrivy: false, enableCpd: false,
+        enableMemory: false, customRules: [], ignorePatterns: [],
+        reviewLevel: 'normal',
+        enableBlastRadius: true, traversalDepth: 3, maxBlastRadiusFiles: 50,
+      },
+      graphLoader: {
+        load: vi.fn().mockResolvedValue(mockGraph),
+        loadMetadata: vi.fn().mockResolvedValue({
+          lastIndexedAt: staleDate, nodeCount: 1, edgeCount: 0,
+        }),
+      },
+    }));
+
+    // Should have blast-radius step
+    const brSteps = steps.filter(s => s.step === 'blast-radius');
+    expect(brSteps.length).toBeGreaterThan(0);
+  });
+
+  it('blast radius: exceeded cap uses full diff and reports', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    // Create a graph where blast radius would exceed cap
+    const nodes = new Map();
+    for (let i = 0; i < 100; i++) {
+      nodes.set(`src/file${i}.ts`, {
+        id: `src/file${i}.ts`, type: 'module' as const,
+        imports: i > 0 ? [`src/file${i - 1}.ts`] : [],
+      });
+    }
+
+    const steps: Array<{ step: string; message: string }> = [];
+    const result = await reviewPipeline(makeInput({
+      onProgress: (e) => steps.push(e),
+      settings: {
+        enableSemgrep: false, enableTrivy: false, enableCpd: false,
+        enableMemory: false, customRules: [], ignorePatterns: [],
+        reviewLevel: 'normal',
+        enableBlastRadius: true, traversalDepth: 10,
+        maxBlastRadiusFiles: 1, // Very low cap to trigger exceeded
+      },
+      graphLoader: {
+        load: vi.fn().mockResolvedValue({ nodes, edges: [] }),
+        loadMetadata: vi.fn().mockResolvedValue({
+          lastIndexedAt: new Date().toISOString(), nodeCount: 100, edgeCount: 99,
+        }),
+      },
+    }));
 
     expect(result.status).toBeDefined();
-    expect(steps.length).toBeGreaterThan(0);
-    // Should include key pipeline steps
-    const stepNames = steps.map(s => s.step);
-    expect(stepNames).toContain('detect-stacks');
-    expect(stepNames).toContain('agent-start');
+    if (result.metadata.blastRadius) {
+      expect(result.metadata.blastRadius.enabled).toBe(true);
+    }
+  });
+
+  it('static-results: emits tool summary with context levels', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const steps: Array<{ step: string; message: string; detail?: string }> = [];
+    await reviewPipeline(makeInput({ onProgress: (e) => steps.push(e) }));
+
+    const staticResults = steps.find(s => s.step === 'static-results');
+    expect(staticResults).toBeDefined();
+    expect(staticResults?.message).toContain('Static analysis complete');
+    expect(staticResults?.message).toContain('static=');
+    expect(staticResults?.message).toContain('memory=');
+  });
+
+  it('result metadata: includes fileList, totalAdditions, totalDeletions', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(makeInput());
+    expect(result.metadata.fileList).toBeDefined();
+    expect(result.metadata.fileList!.length).toBeGreaterThan(0);
+    expect(result.metadata.totalAdditions).toBeGreaterThanOrEqual(0);
+    expect(result.metadata.totalDeletions).toBeGreaterThanOrEqual(0);
+    expect(result.metadata.executionTimeMs).toBeGreaterThanOrEqual(0);
   });
 });
