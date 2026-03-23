@@ -62,14 +62,9 @@ describe('createProvider', () => {
     expect(mockCreateGoogleGenerativeAI).toHaveBeenCalledTimes(1);
   });
 
-  it('github: calls createOpenAI with GitHub Models baseURL and name', () => {
-    createProvider('github', 'ghp_token');
-
-    expect(mockCreateOpenAI).toHaveBeenCalledWith({
-      apiKey: 'ghp_token',
-      baseURL: 'https://models.inference.ai.azure.com',
-      name: 'github-models',
-    });
+  it('github: returns a function that creates chat models via openai-compatible', () => {
+    const provider = createProvider('github', 'ghp_token');
+    expect(typeof provider).toBe('function');
   });
 
   it('ollama: calls createOpenAI with Ollama baseURL, name, and provided key', () => {

@@ -70,12 +70,17 @@ export function createProvider(provider: LLMProvider, apiKey: string) {
       return createOpenAI({ apiKey });
     case 'google':
       return createGoogleGenerativeAI({ apiKey });
-    case 'github':
-      return createOpenAI({
+    case 'github': {
+      // GitHub Models doesn't support the OpenAI Responses API (/responses).
+      // Use openai-compatible which sends to /chat/completions instead.
+      const ghProvider = createOpenAICompatible({
         apiKey,
         baseURL: GITHUB_MODELS_BASE_URL,
         name: 'github-models',
       });
+      // Return a callable that matches createOpenAI's interface
+      return ((modelId: string) => ghProvider.chatModel(modelId)) as ReturnType<typeof createOpenAI>;
+    }
     case 'ollama':
       return createOpenAI({
         apiKey: apiKey || 'ollama',
