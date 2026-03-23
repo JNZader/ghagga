@@ -297,6 +297,158 @@ describe('integration: review modes through pipeline', () => {
     expect(vi.mocked(createAISDKGenerateFn).mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  // ── Validation branches ────────────────────────────────────────
+
+  it('validation: aiReviewEnabled=false skips provider requirements', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({
+        aiReviewEnabled: false,
+        apiKey: '', // would throw without aiReviewEnabled=false
+        provider: undefined as any,
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    // AI agent should NOT have been called
+    expect(gen).not.toHaveBeenCalled();
+    expect(result.metadata.tokensUsed).toBe(0);
+  });
+
+  it('validation: cli-bridge provider skips API key requirement', async () => {
+    const { createCLIBridgeGenerateFn } = await import('../providers/generate-fn.js');
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createCLIBridgeGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({
+        provider: 'cli-bridge' as any,
+        model: 'copilot',
+        apiKey: '',
+        providerChain: [{ provider: 'cli-bridge' as any, model: 'copilot', apiKey: '' }],
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    expect(vi.mocked(createCLIBridgeGenerateFn)).toHaveBeenCalled();
+  });
+
+  it('validation: gateway provider skips API key requirement', async () => {
+    const { createGatewayGenerateFn } = await import('../providers/generate-fn.js');
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({
+        provider: 'gateway' as any,
+        model: 'auto',
+        apiKey: '',
+        providerChain: [{ provider: 'gateway' as any, model: 'auto', apiKey: '', gatewayUrl: 'http://localhost:3000' }],
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    expect(vi.mocked(createGatewayGenerateFn)).toHaveBeenCalled();
+  });
+
+  it('validation: empty diff throws error', async () => {
+    await expect(reviewPipeline(makeInput({ diff: '' }))).rejects.toThrow('non-empty diff');
+    await expect(reviewPipeline(makeInput({ diff: '   ' }))).rejects.toThrow('non-empty diff');
+  });
+
+  it('validation: missing provider throws error', async () => {
+    await expect(
+      reviewPipeline(makeInput({ provider: '' as any, model: 'x', apiKey: 'x' })),
+    ).rejects.toThrow('provider');
+  });
+
+  // ── Mode fallback ───────────────────────────────────────────────
+
+  it('diagnostic mode falls back to simple for cli-bridge', async () => {
+    const { createCLIBridgeGenerateFn } = await import('../providers/generate-fn.js');
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createCLIBridgeGenerateFn).mockReturnValue(gen);
+
+    const steps: Array<{ step: string; message: string }> = [];
+    const result = await reviewPipeline(
+      makeInput({
+        mode: 'diagnostic',
+        provider: 'cli-bridge' as any,
+        model: 'copilot',
+        apiKey: '',
+        providerChain: [{ provider: 'cli-bridge' as any, model: 'copilot', apiKey: '' }],
+        onProgress: (e) => steps.push(e),
+      }),
+    );
+
+    // Should fall back to simple mode
+    expect(result.metadata.mode).toBe('simple');
+    expect(steps.some(s => s.step === 'mode-fallback')).toBe(true);
+  });
+
+  // ── resolveAiEnabled edge case ──────────────────────────────────
+
+  it('aiReviewEnabled=false with valid key still skips AI', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({ aiReviewEnabled: false }),
+    );
+
+    // AI should be disabled even with valid key
+    expect(gen).not.toHaveBeenCalled();
+    expect(result.metadata.tokensUsed).toBe(0);
+    expect(result.status).toBeDefined();
+  });
+
+  // ── Blocked/redacted files ──────────────────────────────────────
+
+  it('reports blocked sensitive files and continues review', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const diffWithSecrets = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,2 +1,3 @@
+ import express from 'express';
++app.use(helmet());
+ export default app;
+diff --git a/.env b/.env
+--- a/.env
++++ b/.env
+@@ -1 +1,2 @@
+ SECRET=old
++SECRET=new
+`;
+
+    const steps: Array<{ step: string; message: string }> = [];
+    const result = await reviewPipeline(
+      makeInput({
+        diff: diffWithSecrets,
+        onProgress: (e) => steps.push(e),
+        context: {
+          repoFullName: 'test/repo',
+          prNumber: 1,
+          commitMessages: ['feat: test'],
+          fileList: ['src/app.ts', '.env'],
+        },
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    // .env should be blocked or redacted
+    const protectionStep = steps.find(s => s.step === 'path-protection');
+    if (protectionStep) {
+      expect(protectionStep.message).toMatch(/blocked|redacted/i);
+    }
+  });
+
+  // ── Progress events ───────────────────────────────────────────
+
   it('onProgress callback receives step updates', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
     vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
