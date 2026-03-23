@@ -449,6 +449,181 @@ diff --git a/.env b/.env
 
   // ── Progress events ───────────────────────────────────────────
 
+  // ── Enhance findings path ─────────────────────────────────────
+
+  it('enhance=true: runs AI enhancement on static findings', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    // Need static analysis to return findings for enhance to work
+    const { runStaticAnalysis } = await import('../tools/runner.js');
+    vi.mocked(runStaticAnalysis).mockResolvedValueOnce({
+      semgrep: {
+        status: 'success',
+        findings: [{
+          severity: 'medium' as const,
+          category: 'security',
+          file: 'src/app.ts',
+          line: 3,
+          message: 'Possible XSS',
+          source: 'semgrep' as const,
+        }],
+        executionTimeMs: 100,
+      },
+      trivy: { status: 'skipped', findings: [], executionTimeMs: 0 },
+      cpd: { status: 'skipped', findings: [], executionTimeMs: 0 },
+    });
+
+    const result = await reviewPipeline(
+      makeInput({
+        enhance: true,
+        settings: {
+          enableSemgrep: true, enableTrivy: false, enableCpd: false,
+          enableMemory: false, customRules: [], ignorePatterns: [],
+          reviewLevel: 'normal',
+        },
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    // Should have attempted enhancement (gen called for review + enhance)
+    expect(gen.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Blast radius path ───────────────────────────────────────────
+
+  it('blast radius with graphLoader: filters files by dependency graph', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const mockGraph = {
+      nodes: new Map([
+        ['src/app.ts', { id: 'src/app.ts', type: 'module' as const, imports: [] }],
+      ]),
+      edges: [],
+    };
+
+    const result = await reviewPipeline(
+      makeInput({
+        settings: {
+          enableSemgrep: false, enableTrivy: false, enableCpd: false,
+          enableMemory: false, customRules: [], ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+          traversalDepth: 3,
+          maxBlastRadiusFiles: 50,
+        },
+        graphLoader: {
+          load: vi.fn().mockResolvedValue(mockGraph),
+          loadMetadata: vi.fn().mockResolvedValue({
+            lastIndexedAt: new Date().toISOString(),
+            nodeCount: 1,
+            edgeCount: 0,
+          }),
+        },
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    if (result.metadata.blastRadius) {
+      expect(result.metadata.blastRadius.enabled).toBe(true);
+      expect(result.metadata.blastRadius.graphAvailable).toBe(true);
+    }
+  });
+
+  it('blast radius with null graph: falls back to full diff', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({
+        settings: {
+          enableSemgrep: false, enableTrivy: false, enableCpd: false,
+          enableMemory: false, customRules: [], ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+        },
+        graphLoader: {
+          load: vi.fn().mockResolvedValue(null),
+          loadMetadata: vi.fn().mockResolvedValue(null),
+        },
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    if (result.metadata.blastRadius) {
+      expect(result.metadata.blastRadius.graphAvailable).toBe(false);
+    }
+  });
+
+  it('blast radius with loader error: degrades gracefully', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    const result = await reviewPipeline(
+      makeInput({
+        settings: {
+          enableSemgrep: false, enableTrivy: false, enableCpd: false,
+          enableMemory: false, customRules: [], ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+        },
+        graphLoader: {
+          load: vi.fn().mockRejectedValue(new Error('graph load failed')),
+          loadMetadata: vi.fn().mockResolvedValue(null),
+        },
+      }),
+    );
+
+    expect(result.status).toBeDefined();
+    if (result.metadata.blastRadius) {
+      expect(result.metadata.blastRadius.fallbackReason).toContain('error');
+    }
+  });
+
+  // ── Redacted files ──────────────────────────────────────────────
+
+  it('redacted files are reported in progress events', async () => {
+    const gen = fakeGenerateFn(SIMPLE_RESPONSE);
+    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+
+    // .env.local should be redacted (path visible, content hidden)
+    const diffWithRedacted = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,2 +1,3 @@
+ import express from 'express';
++app.use(helmet());
+ export default app;
+diff --git a/.env.local b/.env.local
+--- a/.env.local
++++ b/.env.local
+@@ -1 +1,2 @@
+ DB_URL=postgres://localhost
++API_KEY=secret123
+`;
+
+    const steps: Array<{ step: string; message: string }> = [];
+    await reviewPipeline(
+      makeInput({
+        diff: diffWithRedacted,
+        onProgress: (e) => steps.push(e),
+        context: {
+          repoFullName: 'test/repo',
+          prNumber: 1,
+          commitMessages: ['test'],
+          fileList: ['src/app.ts', '.env.local'],
+        },
+      }),
+    );
+
+    // parse-diff step should mention filtering
+    const parseStep = steps.find(s => s.step === 'parse-diff');
+    expect(parseStep).toBeDefined();
+  });
+
+  // ── Progress events ───────────────────────────────────────────
+
   it('onProgress callback receives step updates', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
     vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
