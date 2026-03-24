@@ -40,3 +40,6 @@ reports/
 # Logs
 *.log
 DEPLOY-GUIDE.md
+
+# Cloudflare Pages build output
+_site/
