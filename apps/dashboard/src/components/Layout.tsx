@@ -174,7 +174,7 @@ export function Layout({ children }: LayoutProps) {
           {/* External links */}
           <div className="mt-4 border-t border-surface-border pt-4 space-y-1">
             <a
-              href="/ghagga/"
+              href="/"
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
             >
               <svg
@@ -195,7 +195,7 @@ export function Layout({ children }: LayoutProps) {
               Home
             </a>
             <a
-              href="/ghagga/docs/"
+              href="/docs/"
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
             >
               <svg

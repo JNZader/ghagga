@@ -5,9 +5,9 @@
 # into a single GitHub Pages deployment.
 #
 # Final URL structure:
-#   /ghagga/          → Landing page (static HTML)
-#   /ghagga/app/      → Dashboard (React SPA)
-#   /ghagga/docs/     → Documentation (Docsify)
+#   /              → Landing page (static HTML)
+#   /app/          → Dashboard (React SPA)
+#   /docs/         → Documentation (Docsify)
 
 name: Deploy Pages
 
