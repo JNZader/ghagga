@@ -85,8 +85,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       ghagga-core:
-        specifier: ^2.6.0
-        version: 2.6.0
+        specifier: ^2.6.1
+        version: 2.6.1
     devDependencies:
       '@types/node':
         specifier: ^25.3.5
@@ -2540,8 +2540,8 @@ packages:
   get-tsconfig@4.13.6:
     resolution: {integrity: sha512-shZT/QMiSHc/YBLxxOkMtgSid5HFoauqCE3/exfsEcwg1WkeqjG+V40yBbBrsD+jW2HDXcs28xOfcbm2jI8Ddw==}
 
-  ghagga-core@2.6.0:
-    resolution: {integrity: sha512-qr+Knx63ubgAzMASioej22uL95HRLVbw+wNRD09D+faoKLJiOZED7mskBTDn8SDhlxH3faMhIbHQK+voQW/Nag==}
+  ghagga-core@2.6.1:
+    resolution: {integrity: sha512-SFiBABIO+Z+jiStMGeiRAyrw9d+xnAq27wri2BEdE1ppfE+N00ktjgcu4R0MsxWHuJCtvMRN34SwUwmbRu+Fdw==}
     engines: {node: '>=20.0.0'}
 
   gopd@1.2.0:
@@ -5642,7 +5642,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  ghagga-core@2.6.0:
+  ghagga-core@2.6.1:
     dependencies:
       '@ai-sdk/anthropic': 3.0.58(zod@4.3.6)
       '@ai-sdk/google': 3.0.43(zod@4.3.6)
