@@ -87,13 +87,13 @@ See [Self-Hosted](self-hosted.md) for full deployment details.
 
 If you're using the hosted GHAGGA SaaS (Render deployment), static analysis runs on a delegated runner.
 
-> **Important**: After installing the GitHub App, you must configure an LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/) before reviews will work. See the [SaaS Getting Started Guide](saas-getting-started.md) for the full setup flow.
+> **Important**: After installing the GitHub App, you must configure an LLM provider in the [Dashboard](https://ghagga.javierzader.com/app/) before reviews will work. See the [SaaS Getting Started Guide](saas-getting-started.md) for the full setup flow.
 
 > **Auth note**: The dashboard signs in with GitHub OAuth Web Flow. That login is separate from GitHub Models credentials in SaaS/server mode.
 
 To enable static analysis:
 
-1. **[Open the Dashboard](https://jnzader.github.io/ghagga/app/)** and go to **Global Settings**
+1. **[Open the Dashboard](https://ghagga.javierzader.com/app/)** and go to **Global Settings**
 2. **Click "Enable Runner"** in the Static Analysis Runner card
 3. A public repository named `ghagga-runner` will be created in your GitHub account from the official template
 

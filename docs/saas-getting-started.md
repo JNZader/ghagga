@@ -1,6 +1,6 @@
 # Getting Started with GHAGGA (SaaS / GitHub App)
 
-Go from zero to your first AI code review in under 5 minutes. This guide walks you through installing the GHAGGA GitHub App, configuring your LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/), and getting your first review on a Pull Request.
+Go from zero to your first AI code review in under 5 minutes. This guide walks you through installing the GHAGGA GitHub App, configuring your LLM provider in the [Dashboard](https://ghagga.javierzader.com/app/), and getting your first review on a Pull Request.
 
 ## Prerequisites
 
@@ -31,13 +31,13 @@ Go from zero to your first AI code review in under 5 minutes. This guide walks y
 | **Secrets** | Read and write | Store and retrieve encrypted LLM API keys per installation |
 | **Metadata** | Read-only | List repositories (auto-selected by GitHub) |
 
-> **Important**: After installing the App, reviews will **NOT** work until you configure at least one LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/). Continue to Step 2.
+> **Important**: After installing the App, reviews will **NOT** work until you configure at least one LLM provider in the [Dashboard](https://ghagga.javierzader.com/app/). Continue to Step 2.
 
 ---
 
 ## Step 2: Open the Dashboard
 
-**[Open the GHAGGA Dashboard](https://jnzader.github.io/ghagga/app/)**
+**[Open the GHAGGA Dashboard](https://ghagga.javierzader.com/app/)**
 
 1. Click **"Login"** on the Dashboard
 2. You'll be redirected to GitHub's **OAuth Web Flow** consent screen
@@ -183,7 +183,7 @@ sequenceDiagram
 
 ### No review comment posted
 
-1. **Check your LLM provider**: Go to [Dashboard](https://jnzader.github.io/ghagga/app/) > Settings and verify a provider is configured with a valid API key. For **GitHub Models** in SaaS mode, that means a PAT with `models:read`.
+1. **Check your LLM provider**: Go to [Dashboard](https://ghagga.javierzader.com/app/) > Settings and verify a provider is configured with a valid API key. For **GitHub Models** in SaaS mode, that means a PAT with `models:read`.
 2. **Check the App is installed on that repo**: Go to your GitHub Settings > Applications > GHAGGA > Configure — make sure the repo is in the list
 3. **Check the PR is on the right event type**: GHAGGA triggers on `opened`, `synchronize`, and `reopened` events. Draft PRs may not trigger reviews depending on your config.
 

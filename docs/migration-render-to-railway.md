@@ -62,7 +62,7 @@ En https://github.com/settings/apps/ghagga-review:
    - Actualizar al nuevo dominio de Railway
 
 3. **OAuth Callback URL** (para Dashboard login)
-   - Cambiar: `https://jnzader.github.io/ghagga/app/callback`
+   - Cambiar: `https://ghagga.javierzader.com/app/callback`
    - OJO: Esto NO cambia, es el mismo dashboard estático
    - Pero el backend callback es: `https://<tu-app>.up.railway.app/auth/callback`
 

@@ -19,7 +19,7 @@ GHAGGA delegates static analysis to **user-owned GitHub Actions runners** on pub
 ### Setup
 
 **SaaS Dashboard (recommended)**:
-1. [Open the Dashboard](https://jnzader.github.io/ghagga/app/) → **Global Settings**
+1. [Open the Dashboard](https://ghagga.javierzader.com/app/) → **Global Settings**
 2. Click **"Enable Runner"** — this auto-creates a public `ghagga-runner` repo from the template using the GitHub Template API
 3. The server auto-discovers and uses it
 

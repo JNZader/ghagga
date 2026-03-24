@@ -79,7 +79,7 @@ The runner supports 16 static analysis tools across 5 categories. Core tools inc
 | [ShellCheck](https://www.shellcheck.net) | Shell script linting |
 | [Lizard](https://github.com/terryyin/lizard) | Cyclomatic complexity |
 
-Additional language-specific tools (Ruff, Bandit, golangci-lint, Biome, Psalm, clippy, Hadolint, zizmor) activate automatically when matching files are in the diff. See the [Static Analysis docs](https://jnzader.github.io/ghagga/docs/#/static-analysis) for the full list.
+Additional language-specific tools (Ruff, Bandit, golangci-lint, Biome, Psalm, clippy, Hadolint, zizmor) activate automatically when matching files are in the diff. See the [Static Analysis docs](https://ghagga.javierzader.com/docs/#/static-analysis) for the full list.
 
 ## Links
 

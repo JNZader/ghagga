@@ -21,7 +21,7 @@ El servidor Hono MUST implementar dos nuevos endpoints públicos (sin auth middl
    - `state`: Parámetro HMAC-signed (ver R2)
 2. **`GET /auth/callback`** — MUST recibir `code` y `state` de GitHub, validar el state (ver R2), intercambiar el code por un access_token via `POST https://github.com/login/oauth/access_token` usando `CLIENT_ID` + `CLIENT_SECRET`, y redirigir al Dashboard con el token en el URL fragment.
 
-El redirect al Dashboard MUST usar el formato: `https://jnzader.github.io/ghagga/app/#/auth/callback?token={access_token}`.
+El redirect al Dashboard MUST usar el formato: `https://ghagga.javierzader.com/app/#/auth/callback?token={access_token}`.
 
 El endpoint `/auth/callback` MUST responder con HTTP 302 (redirect) en caso de éxito, no con un body JSON.
 
@@ -46,7 +46,7 @@ Los endpoints MUST NOT requerir autenticación previa (son usados ANTES del logi
 - AND el servidor hace `POST https://github.com/login/oauth/access_token` con `client_id`, `client_secret`, y `code`
 - AND recibe un `access_token` válido de GitHub
 - AND el servidor responde con HTTP 302
-- AND el header `Location` es `https://jnzader.github.io/ghagga/app/#/auth/callback?token={access_token}`
+- AND el header `Location` es `https://ghagga.javierzader.com/app/#/auth/callback?token={access_token}`
 
 #### Scenario: S-R1.3 — Callback con code inválido de GitHub
 
@@ -54,7 +54,7 @@ Los endpoints MUST NOT requerir autenticación previa (son usados ANTES del logi
 - WHEN el servidor intenta intercambiar el code por un token
 - AND GitHub responde con error (code expirado, ya usado, o inválido)
 - THEN el servidor redirige al Dashboard con un parámetro de error en el fragment
-- AND el redirect MUST ser `https://jnzader.github.io/ghagga/app/#/auth/callback?error=exchange_failed`
+- AND el redirect MUST ser `https://ghagga.javierzader.com/app/#/auth/callback?error=exchange_failed`
 
 #### Scenario: S-R1.4 — Callback sin parámetro code
 
@@ -503,9 +503,9 @@ Los fragments HTTP (`#`) no se envían al servidor en requests HTTP, por lo que 
 
 #### Scenario: S-CC1.2 — Token no se envía a GitHub Pages
 
-- GIVEN que el navegador navega a `https://jnzader.github.io/ghagga/app/#/auth/callback?token=abc`
+- GIVEN que el navegador navega a `https://ghagga.javierzader.com/app/#/auth/callback?token=abc`
 - WHEN el navegador hace la request HTTP a GitHub Pages
-- THEN el request HTTP es a `https://jnzader.github.io/ghagga/app/` (sin fragment)
+- THEN el request HTTP es a `https://ghagga.javierzader.com/app/` (sin fragment)
 - AND GitHub Pages nunca recibe el token
 
 ### CC2: Error Handling — Errores en el Flujo de Autenticación

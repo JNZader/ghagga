@@ -31,6 +31,6 @@
   - [v1 vs v2](v1-vs-v2.md)
 
 - Links
-  - [Home](https://jnzader.github.io/ghagga/)
-  - [Dashboard](https://jnzader.github.io/ghagga/app/)
+  - [Home](https://ghagga.javierzader.com/)
+  - [Dashboard](https://ghagga.javierzader.com/app/)
   - [GitHub](https://github.com/JNZader/ghagga)

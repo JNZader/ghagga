@@ -29,7 +29,7 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? '';
 const SERVER_URL = process.env.SERVER_URL ?? 'https://api.javierzader.com';
 
 /** Dashboard URL for redirects after OAuth callback */
-const DASHBOARD_URL = 'https://jnzader.github.io/ghagga/app';
+const DASHBOARD_URL = 'https://ghagga.javierzader.com/app';
 
 /** State expiration time: 5 minutes in milliseconds */
 const STATE_TTL_MS = 5 * 60 * 1000;

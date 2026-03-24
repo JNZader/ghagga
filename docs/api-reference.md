@@ -202,9 +202,9 @@ GET /auth/callback
 
 Validates the signed `state`, exchanges the authorization `code` for a GitHub access token, and redirects back to the dashboard hash route.
 
-**Success response**: `302` redirect to `https://jnzader.github.io/ghagga/app/#/auth/callback?token=...`
+**Success response**: `302` redirect to `https://ghagga.javierzader.com/app/#/auth/callback?token=...`
 
-**Failure response**: `302` redirect to `https://jnzader.github.io/ghagga/app/#/auth/callback?error=...`
+**Failure response**: `302` redirect to `https://ghagga.javierzader.com/app/#/auth/callback?error=...`
 
 ---
 

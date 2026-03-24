@@ -46,7 +46,7 @@ function createApp() {
 
 const TEST_STATE_SECRET = 'test-secret-key-for-hmac-validation';
 const TEST_CLIENT_SECRET = 'test-client-secret-value';
-const DASHBOARD_URL = 'https://jnzader.github.io/ghagga/app';
+const DASHBOARD_URL = 'https://ghagga.javierzader.com/app';
 
 // ═══════════════════════════════════════════════════════════════════
 // POST /auth/device/code

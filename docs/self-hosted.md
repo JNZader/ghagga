@@ -352,7 +352,7 @@ Create a test Pull Request on a repository where you installed the GitHub App. Y
 
 ### 7.3 Check the dashboard
 
-Navigate to the [GitHub Pages dashboard](https://jnzader.github.io/ghagga/app/) with your server URL configured, or host the dashboard on your own domain.
+Navigate to the [GitHub Pages dashboard](https://ghagga.javierzader.com/app/) with your server URL configured, or host the dashboard on your own domain.
 
 Log in with your GitHub account (OAuth) or a Personal Access Token. OAuth login requires `GITHUB_CLIENT_SECRET` and `STATE_SECRET` to be configured.
 

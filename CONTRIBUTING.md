@@ -317,4 +317,4 @@ pnpm --filter ghagga-db db:push
 
 ## Questions?
 
-Open an issue on [GitHub](https://github.com/JNZader/ghagga/issues) or check the [documentation](https://jnzader.github.io/ghagga/docs/).
+Open an issue on [GitHub](https://github.com/JNZader/ghagga/issues) or check the [documentation](https://ghagga.javierzader.com/docs/).

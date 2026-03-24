@@ -8,7 +8,7 @@
 
 **Multi-agent code reviewer** that posts intelligent comments on your Pull Requests. Combines LLM analysis with 16 static analysis tools and project memory that learns across reviews. Self-hosted on Coolify (Hetzner VPS) with BullMQ + Redis for async job processing.
 
-**[Website](https://jnzader.github.io/ghagga/)** | **[Documentation](https://jnzader.github.io/ghagga/docs/)** | **[Dashboard](https://jnzader.github.io/ghagga/app/)**
+**[Website](https://ghagga.javierzader.com/)** | **[Documentation](https://ghagga.javierzader.com/docs/)** | **[Dashboard](https://ghagga.javierzader.com/app/)**
 
 ## Table of Contents
 
@@ -68,11 +68,11 @@ You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plai
 The easiest way to get started. Install the App, configure in the Dashboard, get reviews.
 
 1. **[Install the GHAGGA GitHub App](https://github.com/apps/ghagga-review/installations/new)** on your repositories
-2. **[Open the Dashboard](https://jnzader.github.io/ghagga/app/)** and log in with GitHub
+2. **[Open the Dashboard](https://ghagga.javierzader.com/app/)** and log in with GitHub
 3. **Configure your LLM provider** -- in SaaS mode, GitHub Models requires a PAT with `models:read`, or bring your own provider key
 4. **Open a PR** -- get an AI-powered review in ~1-2 minutes
 
-> **Important**: After installing the App, reviews won't work until you configure an LLM provider in the [Dashboard](https://jnzader.github.io/ghagga/app/). If no LLM provider is configured, GHAGGA falls back to static-analysis-only mode. See the [full SaaS guide](https://jnzader.github.io/ghagga/docs/#/saas-getting-started) for detailed steps.
+> **Important**: After installing the App, reviews won't work until you configure an LLM provider in the [Dashboard](https://ghagga.javierzader.com/app/). If no LLM provider is configured, GHAGGA falls back to static-analysis-only mode. See the [full SaaS guide](https://ghagga.javierzader.com/docs/#/saas-getting-started) for detailed steps.
 
 ---
 
@@ -529,7 +529,7 @@ Before any observation is stored in memory, GHAGGA strips sensitive data using 1
 
 React SPA deployed on GitHub Pages. Dark theme with GitHub-dark palette and purple accent.
 
-**Live**: [https://jnzader.github.io/ghagga/app/](https://jnzader.github.io/ghagga/app/)
+**Live**: [https://ghagga.javierzader.com/app/](https://ghagga.javierzader.com/app/)
 
 ### Pages
 

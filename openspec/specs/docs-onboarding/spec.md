@@ -19,7 +19,7 @@ The guide MUST include the following sections in order:
 1. **Title and introduction** — one-paragraph summary of what the user will achieve
 2. **Prerequisites** — GitHub account, a repository (public or private), ability to create a PR
 3. **Step 1: Install the GitHub App** — MUST include the actual GitHub App install URL as a clickable link. MUST describe what permissions the App requests and why.
-4. **Step 2: Open the Dashboard** — MUST include the Dashboard URL (`https://jnzader.github.io/ghagga/app/`) as a clickable link. MUST describe the GitHub OAuth Device Flow login process.
+4. **Step 2: Open the Dashboard** — MUST include the Dashboard URL (`https://ghagga.javierzader.com/app/`) as a clickable link. MUST describe the GitHub OAuth Device Flow login process.
 5. **Step 3: Configure your LLM provider** — MUST explain that GitHub Models is the free default (no API key needed). SHOULD list all 6 providers with a table. MUST explain how to add a BYOK API key via Dashboard Settings.
 6. **Step 4: Enable the Runner (optional)** — MUST explain what the runner provides (static analysis). MUST explain the "Enable Runner" button in Global Settings. MUST note this step is optional — reviews work without it (LLM-only).
 7. **Step 5: Open a PR and get your first review** — MUST describe what to expect: timing (~1-2 minutes), what the review comment looks like, where to find it.
@@ -114,7 +114,7 @@ The warning MUST include a link to the Dashboard for the user to configure the p
 
 ### R3 (P0): Dashboard URL Linkification
 
-Every textual reference to "Open the Dashboard" or "the Dashboard" in the documentation MUST include a clickable hyperlink to `https://jnzader.github.io/ghagga/app/`.
+Every textual reference to "Open the Dashboard" or "the Dashboard" in the documentation MUST include a clickable hyperlink to `https://ghagga.javierzader.com/app/`.
 
 Files that MUST be updated:
 - `docs/quick-start.md` — line 66 ("Open the Dashboard")
@@ -129,19 +129,19 @@ Within `landing/index.html`, the Dashboard link SHOULD use the relative path `ap
 
 - GIVEN a user reading `docs/quick-start.md`
 - WHEN the user encounters the text "Open the Dashboard"
-- THEN the text is a clickable hyperlink to `https://jnzader.github.io/ghagga/app/`
+- THEN the text is a clickable hyperlink to `https://ghagga.javierzader.com/app/`
 
 #### Scenario: User clicks Dashboard link in runner-architecture
 
 - GIVEN a user reading `docs/runner-architecture.md`
 - WHEN the user encounters the text "Open the Dashboard"
-- THEN the text is a clickable hyperlink to `https://jnzader.github.io/ghagga/app/`
+- THEN the text is a clickable hyperlink to `https://ghagga.javierzader.com/app/`
 
 #### Scenario: Dashboard URL consistency across all docs
 
 - GIVEN all Markdown files in the `docs/` directory
 - WHEN any file contains the phrase "Open the Dashboard" or "the Dashboard" as a navigation instruction
-- THEN the phrase MUST be a Markdown link pointing to `https://jnzader.github.io/ghagga/app/`
+- THEN the phrase MUST be a Markdown link pointing to `https://ghagga.javierzader.com/app/`
 - AND no occurrence of "Open the Dashboard" exists as plain unlinked text
 
 ---
@@ -167,7 +167,7 @@ The landing page MUST NOT:
 
 #### Scenario: Visitor sees Install CTA on landing page
 
-- GIVEN a visitor arriving at the GHAGGA landing page (`https://jnzader.github.io/ghagga/`)
+- GIVEN a visitor arriving at the GHAGGA landing page (`https://ghagga.javierzader.com/`)
 - WHEN the page loads
 - THEN the hero section displays "Install GitHub App" as the primary (most prominent) button
 - AND "Documentation" and "Open Dashboard" are visible as secondary buttons
@@ -349,7 +349,7 @@ A callout MUST be added to the top of `docs/configuration.md` (before the Enviro
 
 The callout MUST:
 1. State that SaaS users configure everything in the Dashboard, not via environment variables
-2. Include a clickable link to the Dashboard (`https://jnzader.github.io/ghagga/app/`)
+2. Include a clickable link to the Dashboard (`https://ghagga.javierzader.com/app/`)
 3. Clarify that the environment variables documented on the page are for CLI and self-hosted modes only
 
 The callout SHOULD use Docsify's `>` blockquote syntax for visual prominence.
@@ -414,7 +414,7 @@ The section SHOULD:
 
 #### Scenario: New user finds orientation on docs landing
 
-- GIVEN a new user arriving at the docs site (`https://jnzader.github.io/ghagga/docs/`)
+- GIVEN a new user arriving at the docs site (`https://ghagga.javierzader.com/docs/`)
 - WHEN the docs landing page renders
 - THEN a "New here?" or "Start here" section is visible near the top
 - AND it recommends the SaaS guide for most users

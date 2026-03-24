@@ -108,7 +108,7 @@ En https://github.com/settings/apps/ghagga-review:
 
 ### 2. OAuth Callback URL
 - Cambiar backend callback a: `https://<tu-servicio>.northflank.app/auth/callback`
-- El frontend sigue igual: `https://jnzader.github.io/ghagga/app/callback`
+- El frontend sigue igual: `https://ghagga.javierzader.com/app/callback`
 
 ## Actualizar Dashboard (2 minutos)
 
