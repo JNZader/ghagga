@@ -128,7 +128,7 @@ export const trivyPlugin: ToolDefinition = {
       'bash',
       [
         '-c',
-        `curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v${TRIVY_VERSION}`,
+        `curl -sL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -o /tmp/trivy.tar.gz && tar -xzf /tmp/trivy.tar.gz -C /tmp && mv /tmp/trivy /usr/local/bin/trivy && chmod +x /usr/local/bin/trivy && rm -f /tmp/trivy.tar.gz /tmp/LICENSE /tmp/README.md`,
       ],
       { timeoutMs: 120_000 },
     );

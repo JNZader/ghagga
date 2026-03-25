@@ -143,7 +143,7 @@ describe('installTrivy', () => {
       [
         '-c',
         expect.stringContaining(
-          `https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh`,
+          `https://github.com/aquasecurity/trivy/releases/download/`,
         ),
       ],
       expect.any(Object),

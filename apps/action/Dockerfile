@@ -62,8 +62,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Semgrep
 RUN pip3 install --no-cache-dir --break-system-packages semgrep
 
-# Install Trivy
-RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+# Install Trivy (direct binary — avoid install.sh from main, compromised in supply chain attack)
+ENV TRIVY_VERSION=0.69.3
+RUN curl -sL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -o /tmp/trivy.tar.gz \
+    && tar -xzf /tmp/trivy.tar.gz -C /tmp \
+    && mv /tmp/trivy /usr/local/bin/trivy \
+    && chmod +x /usr/local/bin/trivy \
+    && rm -f /tmp/trivy.tar.gz /tmp/LICENSE /tmp/README.md
 
 # Install PMD (for CPD)
 ENV PMD_VERSION=7.8.0

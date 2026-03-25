@@ -61,7 +61,7 @@ export async function installTrivy(): Promise<boolean> {
       'bash',
       [
         '-c',
-        `curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v${TOOL_VERSIONS.trivy}`,
+        `curl -sL "https://github.com/aquasecurity/trivy/releases/download/v${TOOL_VERSIONS.trivy}/trivy_${TOOL_VERSIONS.trivy}_Linux-64bit.tar.gz" -o /tmp/trivy.tar.gz && tar -xzf /tmp/trivy.tar.gz -C /tmp && mv /tmp/trivy /usr/local/bin/trivy && chmod +x /usr/local/bin/trivy && rm -f /tmp/trivy.tar.gz /tmp/LICENSE /tmp/README.md`,
       ],
       { timeoutMs: 120_000 },
     );
