@@ -135,6 +135,7 @@ export async function searchMemoryForContext(
         type: obs.type,
         title: obs.title,
         content: obs.content,
+        strength: obs.strength,
       })),
     );
   } catch (error) {

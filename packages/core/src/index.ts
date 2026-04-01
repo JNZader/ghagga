@@ -59,7 +59,8 @@ export { parseHypotheses, runDiagnosticReview } from './agents/diagnostic.js';
 
 // ─── Constants ──────────────────────────────────────────────────
 
-export { DEFAULT_MODELS, DEFAULT_SETTINGS } from './types.js';
+export type { DecayConfig } from './types.js';
+export { DEFAULT_DECAY_CONFIG, DEFAULT_MODELS, DEFAULT_SETTINGS } from './types.js';
 
 // ─── Utilities (for advanced usage) ─────────────────────────────
 
@@ -120,6 +121,7 @@ export { createModel, createProvider } from './providers/index.js';
 // ─── Memory (for custom memory integrations) ────────────────────
 
 export { formatMemoryContext } from './memory/context.js';
+export { computeStrength, decayPhase } from './memory/decay.js';
 export { EngramMemoryStorage } from './memory/engram.js';
 export { stripPrivateData } from './memory/privacy.js';
 export { SqliteMemoryStorage, type SqliteMemoryStorageOptions } from './memory/sqlite.js';

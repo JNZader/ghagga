@@ -12,6 +12,9 @@ export interface ObservationForContext {
   type: string;
   title: string;
   content: string;
+
+  /** Decay strength score (0.0–1.0). Omit if decay is not active. */
+  strength?: number;
 }
 
 // ─── Main Function ──────────────────────────────────────────────
@@ -36,7 +39,9 @@ export function formatMemoryContext(observations: ObservationForContext[]): stri
   ];
 
   for (const obs of observations) {
-    lines.push(`### [${obs.type.toUpperCase()}] ${obs.title}`);
+    const strengthLabel =
+      obs.strength != null ? ` (strength: ${Math.round(obs.strength * 100)}%)` : '';
+    lines.push(`### [${obs.type.toUpperCase()}] ${obs.title}${strengthLabel}`);
     lines.push('');
     lines.push(obs.content);
     lines.push('');

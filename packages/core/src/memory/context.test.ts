@@ -81,4 +81,33 @@ describe('formatMemoryContext', () => {
     // Ensure lowercase version is NOT used as the label
     expect(result).not.toContain('[architecture]');
   });
+
+  it('includes strength percentage when strength is present', () => {
+    const observations: ObservationForContext[] = [
+      { type: 'pattern', title: 'Auth pattern', content: 'JWT validation.', strength: 0.75 },
+    ];
+
+    const result = formatMemoryContext(observations);
+    expect(result).toContain('(strength: 75%)');
+    expect(result).toContain('### [PATTERN] Auth pattern (strength: 75%)');
+  });
+
+  it('omits strength label when strength is undefined', () => {
+    const observations: ObservationForContext[] = [
+      { type: 'pattern', title: 'Auth pattern', content: 'JWT validation.' },
+    ];
+
+    const result = formatMemoryContext(observations);
+    expect(result).toContain('### [PATTERN] Auth pattern');
+    expect(result).not.toContain('strength');
+  });
+
+  it('shows 100% for full strength observations', () => {
+    const observations: ObservationForContext[] = [
+      { type: 'bugfix', title: 'Fix', content: 'Fixed.', strength: 1.0 },
+    ];
+
+    const result = formatMemoryContext(observations);
+    expect(result).toContain('(strength: 100%)');
+  });
 });
