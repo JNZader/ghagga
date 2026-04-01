@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.7.0] - 2026-03-31
+## [2.8.0] - 2026-03-31
 
 ### Added
 - **Review Checklist** -- Configurable SOLID principles, error handling, boundary conditions, and security checklist with weighted scoring engine. Each dimension contains named checks with importance weights (1-10). Findings are mapped to the most relevant dimension and check via keyword analysis, producing per-dimension score summaries. Checklist is injected into agent prompts for structured evaluation. Configurable via `ChecklistConfig` (enable/disable dimensions, adjust weights).

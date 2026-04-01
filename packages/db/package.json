@@ -1,6 +1,6 @@
 {
   "name": "ghagga-db",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "private": false,
   "type": "module",
   "description": "Database layer for GHAGGA — AI-powered code reviewer",
