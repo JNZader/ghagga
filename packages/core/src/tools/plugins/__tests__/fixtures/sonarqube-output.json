@@ -1,0 +1,58 @@
+{
+  "issues": [
+    {
+      "key": "AZQ1234567890",
+      "rule": "java:S1192",
+      "severity": "MAJOR",
+      "component": "src/main/java/com/example/App.java",
+      "line": 42,
+      "message": "Define a constant instead of duplicating this literal \"SELECT * FROM users\" 3 times.",
+      "type": "CODE_SMELL",
+      "effort": "10min"
+    },
+    {
+      "key": "AZQ1234567891",
+      "rule": "java:S3649",
+      "severity": "BLOCKER",
+      "component": "src/main/java/com/example/UserDAO.java",
+      "line": 78,
+      "message": "Use a parameterized query instead of concatenating user input into this SQL string.",
+      "type": "VULNERABILITY",
+      "effort": "30min"
+    },
+    {
+      "key": "AZQ1234567892",
+      "rule": "typescript:S1854",
+      "severity": "MINOR",
+      "component": "src/utils/helpers.ts",
+      "line": 15,
+      "message": "Remove this useless assignment to local variable \"temp\".",
+      "type": "CODE_SMELL",
+      "effort": "2min"
+    },
+    {
+      "key": "AZQ1234567893",
+      "rule": "python:S5527",
+      "severity": "CRITICAL",
+      "component": "src/api/client.py",
+      "line": 33,
+      "message": "Enable server certificate verification on this SSL/TLS connection.",
+      "type": "VULNERABILITY",
+      "effort": "15min"
+    },
+    {
+      "key": "AZQ1234567894",
+      "rule": "java:S1135",
+      "severity": "INFO",
+      "component": "src/main/java/com/example/Config.java",
+      "message": "Complete the task associated to this TODO comment.",
+      "type": "CODE_SMELL",
+      "effort": "0min"
+    }
+  ],
+  "paging": {
+    "pageIndex": 1,
+    "pageSize": 100,
+    "total": 5
+  }
+}

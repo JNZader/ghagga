@@ -101,5 +101,8 @@ export function createNodeExecutionContext(logger?: {
     log(level: 'info' | 'warn' | 'error', message: string): void {
       log[level](message);
     },
+
+    // No MCP server in default Node context — plugins that need MCP will skip gracefully
+    mcpCall: undefined,
   };
 }
