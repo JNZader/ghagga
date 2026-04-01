@@ -23,6 +23,7 @@ import { runWorkflowReview } from './agents/workflow.js';
 import { buildChecklistContext, resolveChecklistConfig, scoreFindings } from './checklist/index.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
+import { analyzeExploitability } from './exploitability/index.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
 import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
@@ -521,6 +522,55 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // Add blast-radius metadata (if applicable)
   if (blastRadiusMetadata) {
     result.metadata.blastRadius = blastRadiusMetadata;
+  }
+
+  // ── Step 7.4: Exploitability analysis (optional) ────────────
+  if (input.settings.enableBlastRadius && result.findings.length > 0) {
+    const trivyCveCount = result.findings.filter(
+      (f) => f.source === 'trivy' && f.category === 'dependency-vulnerability',
+    ).length;
+
+    if (trivyCveCount > 0) {
+      emit({
+        step: 'exploitability',
+        message: `Analyzing exploitability for ${trivyCveCount} CVE(s)...`,
+      });
+      try {
+        // Load graph if not already loaded (reuse from blast-radius when available)
+        const exploitGraph = input.graphLoader ? await input.graphLoader.load() : null;
+
+        analyzeExploitability(result.findings, exploitGraph);
+
+        const labels = result.findings
+          .filter((f) => f.exploitability)
+          .reduce(
+            (acc, f) => {
+              const key = f.exploitability ?? 'unknown';
+              acc[key] = (acc[key] ?? 0) + 1;
+              return acc;
+            },
+            {} as Record<string, number>,
+          );
+
+        const exploitable = labels.exploitable ?? 0;
+        const potential = labels['potentially-exploitable'] ?? 0;
+        const notExploitable = labels['not-exploitable'] ?? 0;
+
+        emit({
+          step: 'exploitability',
+          message: `Exploitability analysis complete: ${exploitable} exploitable, ${potential} potentially, ${notExploitable} not exploitable`,
+        });
+      } catch (error) {
+        console.warn(
+          '[ghagga] Exploitability analysis failed (non-fatal):',
+          error instanceof Error ? error.message : String(error),
+        );
+        emit({
+          step: 'exploitability',
+          message: 'Exploitability analysis failed — continuing without',
+        });
+      }
+    }
   }
 
   // ── Step 7.5: Score findings against checklist (optional) ───

@@ -292,6 +292,18 @@ export {
   saveHistory,
 } from './health/index.js';
 
+// ─── Exploitability (CVE Reachability Analysis) ────────────────
+
+export type { ExploitabilityDetail, ExploitabilityLabel } from './exploitability/index.js';
+
+export {
+  analyzeExploitability,
+  checkReachability,
+  extractVulnPackages,
+  findEntryPoints,
+  tracePackageImports,
+} from './exploitability/index.js';
+
 // ─── Scope (Tree-sitter Symbol Scoping) ────────────────────────
 
 export type {
