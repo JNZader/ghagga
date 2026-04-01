@@ -69,6 +69,9 @@ export interface ConsensusReviewInput {
    * When omitted, functions are created from models config (backward compat).
    */
   generateFns?: GenerateTextFn[];
+
+  /** Optional SOLID/boundary checklist context for structured review. */
+  checklistContext?: string;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -253,6 +256,7 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
         isFirst ? staticContext : '',
         isFirst ? buildMemoryContext(memoryContext) : '',
         isFirst ? stackHints : '',
+        input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
       ]

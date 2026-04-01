@@ -83,6 +83,9 @@ export interface WorkflowReviewInput {
    * When omitted, functions are created from providerChain or flat fields (backward compat).
    */
   generateFns?: GenerateTextFn[];
+
+  /** Optional SOLID/boundary checklist context for structured review. */
+  checklistContext?: string;
 }
 
 interface SpecialistConfig {
@@ -201,11 +204,12 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
       const contextKeys = SPECIALIST_CONTEXT_MAP[specialist.name] ?? [];
       const contextParts = contextKeys.map((key) => contextSources[key]).filter(Boolean);
 
-      const hasContext = contextParts.length > 0;
+      const hasContext = contextParts.length > 0 || !!input.checklistContext;
 
       const system = [
         specialist.system,
         ...contextParts,
+        input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         hasContext ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
       ]

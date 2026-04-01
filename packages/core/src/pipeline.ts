@@ -20,6 +20,8 @@ import { runDiagnosticReview } from './agents/diagnostic.js';
 import { buildStackHints } from './agents/prompts.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
+import { buildChecklistContext, resolveChecklistConfig, scoreFindings } from './checklist/index.js';
+import type { ChecklistScoreResult } from './checklist/index.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
@@ -306,6 +308,19 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     });
   }
 
+  // ── Step 5.4: Build checklist context (optional) ────────────
+  let checklistContext = '';
+  const resolvedChecklist = resolveChecklistConfig(input.settings.checklist);
+  if (resolvedChecklist) {
+    checklistContext = buildChecklistContext(resolvedChecklist);
+    if (checklistContext) {
+      emit({
+        step: 'checklist',
+        message: `Checklist active: ${resolvedChecklist.dimensions.filter((d) => d.enabled).length} dimensions`,
+      });
+    }
+  }
+
   // ── Step 5.5: AI Enhance (optional) ─────────────────────────
   let enhancedStaticFindings: ReviewFinding[] | undefined;
   let enhanceMetadata: import('./enhance/types.js').EnhanceMetadata | undefined;
@@ -386,6 +401,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             staticContext,
             memoryContext,
             stackHints,
+            checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
             generateFn: generateFns[0],
@@ -402,6 +418,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             staticContext,
             memoryContext,
             stackHints,
+            checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
             generateFns,
@@ -420,6 +437,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             staticContext,
             memoryContext,
             stackHints,
+            checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
             generateFns,
@@ -436,6 +454,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             staticContext,
             memoryContext,
             stackHints,
+            checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
           });
@@ -502,6 +521,15 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // Add blast-radius metadata (if applicable)
   if (blastRadiusMetadata) {
     result.metadata.blastRadius = blastRadiusMetadata;
+  }
+
+  // ── Step 7.5: Score findings against checklist (optional) ───
+  if (resolvedChecklist && result.findings.length > 0) {
+    result.checklistScore = scoreFindings(result.findings, resolvedChecklist);
+    emit({
+      step: 'checklist-score',
+      message: `Checklist score: ${result.checklistScore.totalScore} (${result.checklistScore.findings.length} matched findings)`,
+    });
   }
 
   // ── Step 8: Persist to memory (awaited for SQLite correctness) ──

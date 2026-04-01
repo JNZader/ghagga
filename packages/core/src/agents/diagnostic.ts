@@ -42,6 +42,9 @@ export interface DiagnosticReviewInput {
   stackHints: string;
   reviewLevel: ReviewLevel;
   onProgress?: ProgressCallback;
+
+  /** Optional SOLID/boundary checklist context for structured review. */
+  checklistContext?: string;
 }
 
 // ─── Hypothesis Parsing ─────────────────────────────────────────
@@ -146,6 +149,7 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
     staticContext,
     buildMemoryContext(memoryContext),
     stackHints,
+    input.checklistContext ?? '',
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,
   ]

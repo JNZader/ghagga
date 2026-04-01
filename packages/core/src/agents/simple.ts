@@ -37,6 +37,9 @@ export interface SimpleReviewInput {
   reviewLevel: ReviewLevel;
   onProgress?: ProgressCallback;
 
+  /** Optional SOLID/boundary checklist context for structured review. */
+  checklistContext?: string;
+
   /**
    * Optional backend-agnostic generation function.
    * When provided, used instead of createModel + generateTextWithTimeout.
@@ -174,6 +177,7 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     staticContext,
     buildMemoryContext(memoryContext),
     stackHints,
+    input.checklistContext ?? '',
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,
   ]
