@@ -516,6 +516,7 @@ export async function saveObservation(
           severity: data.severity ?? null,
           revisionCount: sql`${memoryObservations.revisionCount} + 1`,
           updatedAt: new Date(),
+          lastAccessedAt: new Date(),
         })
         .where(eq(memoryObservations.id, existingByTopic.id))
         .returning();
@@ -568,12 +569,23 @@ export async function searchObservations(
     conditions.push(eq(memoryObservations.type, type));
   }
 
-  return db
+  const results = await db
     .select()
     .from(memoryObservations)
     .where(and(...conditions))
     .orderBy(sql`ts_rank(search_observations, to_tsquery('english', ${sanitizedQuery})) DESC`)
     .limit(limit);
+
+  // Update last_accessed_at for returned observations (decay tracking)
+  if (results.length > 0) {
+    const ids = results.map((r) => r.id);
+    await db
+      .update(memoryObservations)
+      .set({ lastAccessedAt: new Date() })
+      .where(inArray(memoryObservations.id, ids));
+  }
+
+  return results;
 }
 
 export async function getObservationsBySession(db: Database, sessionId: number) {

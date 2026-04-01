@@ -232,6 +232,7 @@ export const memoryObservations = pgTable(
     revisionCount: integer('revision_count').default(1).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    lastAccessedAt: timestamp('last_accessed_at').defaultNow().notNull(),
   },
   (t) => [
     index('idx_observations_project').on(t.project),
@@ -239,6 +240,7 @@ export const memoryObservations = pgTable(
     index('idx_observations_type').on(t.type),
     index('idx_observations_content_hash').on(t.contentHash),
     index('idx_observations_created_at').on(t.createdAt),
+    index('idx_observations_last_accessed_at').on(t.lastAccessedAt),
   ],
 );
 
