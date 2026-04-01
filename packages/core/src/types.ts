@@ -7,7 +7,7 @@
 
 // ─── Review Input ───────────────────────────────────────────────
 
-export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'diagnostic';
+export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'diagnostic' | 'fan-out';
 export type LLMProvider =
   | 'anthropic'
   | 'openai'

@@ -4,7 +4,7 @@ import type { DelegatedCiClassification, DelegatedCiRunState } from './delegated
 
 export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED';
 
-export type ReviewMode = 'simple' | 'workflow' | 'consensus';
+export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'fan-out';
 
 export type LLMProvider =
   | 'anthropic'
