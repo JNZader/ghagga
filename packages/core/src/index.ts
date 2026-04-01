@@ -57,6 +57,24 @@ export type {
 export type { DiagnosticReviewInput } from './agents/diagnostic.js';
 export { parseHypotheses, runDiagnosticReview } from './agents/diagnostic.js';
 
+// ─── Fan-Out Lenses Agent ──────────────────────────────────────
+
+export type { FanOutReviewInput, ReviewLens } from './agents/fan-out-lenses.js';
+export {
+  DEFAULT_LENSES,
+  getAllLenses,
+  getLens,
+  LENS_ACCESSIBILITY,
+  LENS_ERROR_HANDLING,
+  LENS_PERFORMANCE,
+  LENS_SECURITY,
+  LENS_TYPING,
+  mergeFindings,
+  registerLens,
+  resetLensRegistry,
+  runFanOutReview,
+} from './agents/fan-out-lenses.js';
+
 // ─── Constants ──────────────────────────────────────────────────
 
 export type { DecayConfig } from './types.js';
