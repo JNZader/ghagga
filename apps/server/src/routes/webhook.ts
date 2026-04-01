@@ -87,8 +87,54 @@ const ALLOWED_ASSOCIATIONS = new Set([
   'FIRST_TIME_CONTRIBUTOR',
 ]);
 
-/** Regex to detect "ghagga review" keyword (case-insensitive, allows leading whitespace/punctuation) */
-const REVIEW_TRIGGER_REGEX = /\bghagga\s+review\b/i;
+// ─── Comment Command Parsing ───────────────────────────────────
+
+/** Valid slash commands that can be triggered from PR comments */
+type CommentCommand = 'review' | 'security' | 'perf' | 'describe';
+
+/** Parsed result from a comment command */
+interface ParsedCommand {
+  /** The recognized command */
+  command: CommentCommand;
+  /** Review mode override (null = use repo default) */
+  reviewMode: string | null;
+}
+
+/** Maps each command to a review mode override. null = use repo's effective settings. */
+const COMMAND_MODE_MAP: Record<CommentCommand, string | null> = {
+  review: null,
+  security: 'workflow',
+  perf: 'workflow',
+  describe: 'simple',
+};
+
+const VALID_COMMANDS = new Set<string>(Object.keys(COMMAND_MODE_MAP));
+
+/**
+ * Regex to detect "/ghagga <command>" or "ghagga <command>" in a comment body.
+ * Case-insensitive. The leading slash is optional for backward compatibility.
+ * Captures the command word in group 1.
+ */
+const COMMAND_REGEX = /\/?ghagga\s+(\w+)/i;
+
+/**
+ * Parse a PR comment body for a ghagga command.
+ *
+ * @returns ParsedCommand if a valid command is found, 'unknown' if ghagga was
+ *          mentioned with an unrecognized command, or null if no trigger at all.
+ */
+export function parseCommentCommand(body: string): ParsedCommand | 'unknown' | null {
+  const match = COMMAND_REGEX.exec(body);
+  if (!match?.[1]) return null;
+
+  const command = match[1].toLowerCase();
+  if (!VALID_COMMANDS.has(command)) return 'unknown';
+
+  return {
+    command: command as CommentCommand,
+    reviewMode: COMMAND_MODE_MAP[command as CommentCommand],
+  };
+}
 
 interface InstallationEvent {
   action: string;
@@ -388,9 +434,16 @@ async function handleIssueComment(
     return c.json({ message: 'Bot comment ignored' }, 200);
   }
 
-  // Check for the trigger keyword
-  if (!REVIEW_TRIGGER_REGEX.test(payload.comment.body)) {
+  // Parse comment for a ghagga command
+  const parsed = parseCommentCommand(payload.comment.body);
+  if (parsed === null) {
     return c.json({ message: 'No review trigger keyword found' }, 200);
+  }
+  if (parsed === 'unknown') {
+    return c.json(
+      { message: 'Unknown ghagga command. Valid commands: review, security, perf, describe' },
+      200,
+    );
   }
 
   // Check author association (only contributors/members can trigger)
@@ -479,7 +532,7 @@ async function handleIssueComment(
     aiReviewEnabled: effective.aiReviewEnabled,
     llmProvider: repo.llmProvider,
     llmModel: repo.llmModel ?? 'gpt-4o-mini',
-    reviewMode: effective.reviewMode,
+    reviewMode: parsed.reviewMode ?? effective.reviewMode,
     encryptedApiKey: repo.encryptedApiKey,
     settings: {
       enableSemgrep: effective.settings.enableSemgrep,
@@ -500,6 +553,7 @@ async function handleIssueComment(
       repo: payload.repository.full_name,
       pr: prNumber,
       triggeredBy: payload.comment.user.login,
+      command: parsed.command,
       reviewId,
     },
     'Review re-triggered via comment',
@@ -511,6 +565,7 @@ async function handleIssueComment(
       pr: prNumber,
       repo: payload.repository.full_name,
       triggeredBy: payload.comment.user.login,
+      command: parsed.command,
       reviewId,
     },
     202,

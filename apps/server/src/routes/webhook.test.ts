@@ -7,7 +7,7 @@
 
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createWebhookRouter } from './webhook.js';
+import { createWebhookRouter, parseCommentCommand } from './webhook.js';
 
 // ─── Mocks ──────────────────────────────────────────────────────
 
@@ -735,6 +735,171 @@ describe('issue_comment event handling', () => {
     const res = await router.fetch(req);
 
     // Should still dispatch the review despite reaction failure
+    expect(res.status).toBe(202);
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
+  });
+});
+
+// ─── parseCommentCommand Unit Tests ───────────────────────────────
+
+describe('parseCommentCommand', () => {
+  it('parses "/ghagga review" with slash prefix', () => {
+    const result = parseCommentCommand('/ghagga review');
+    expect(result).toEqual({ command: 'review', reviewMode: null });
+  });
+
+  it('parses "ghagga review" without slash (backward compat)', () => {
+    const result = parseCommentCommand('ghagga review');
+    expect(result).toEqual({ command: 'review', reviewMode: null });
+  });
+
+  it('parses "/ghagga security" as workflow mode', () => {
+    const result = parseCommentCommand('/ghagga security');
+    expect(result).toEqual({ command: 'security', reviewMode: 'workflow' });
+  });
+
+  it('parses "/ghagga perf" as workflow mode', () => {
+    const result = parseCommentCommand('/ghagga perf');
+    expect(result).toEqual({ command: 'perf', reviewMode: 'workflow' });
+  });
+
+  it('parses "/ghagga describe" as simple mode', () => {
+    const result = parseCommentCommand('/ghagga describe');
+    expect(result).toEqual({ command: 'describe', reviewMode: 'simple' });
+  });
+
+  it('is case-insensitive', () => {
+    expect(parseCommentCommand('/GHAGGA SECURITY')).toEqual({
+      command: 'security',
+      reviewMode: 'workflow',
+    });
+    expect(parseCommentCommand('Ghagga Review')).toEqual({ command: 'review', reviewMode: null });
+  });
+
+  it('extracts command embedded in longer text', () => {
+    const result = parseCommentCommand('Please /ghagga review this PR, thanks!');
+    expect(result).toEqual({ command: 'review', reviewMode: null });
+  });
+
+  it('returns "unknown" for unrecognized command', () => {
+    expect(parseCommentCommand('/ghagga foobar')).toBe('unknown');
+    expect(parseCommentCommand('ghagga deploy')).toBe('unknown');
+  });
+
+  it('returns null when no ghagga mention at all', () => {
+    expect(parseCommentCommand('Looks good to me!')).toBeNull();
+    expect(parseCommentCommand('review this please')).toBeNull();
+  });
+});
+
+// ─── Comment Command Dispatch (integration) ──────────────────────
+
+describe('comment command dispatch', () => {
+  const makeCommentPayload = (body: string) => ({
+    action: 'created',
+    comment: {
+      id: 777,
+      body,
+      user: { login: 'contributor-user', type: 'User' },
+      author_association: 'CONTRIBUTOR',
+    },
+    issue: {
+      number: 42,
+      pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/42' },
+    },
+    repository: { id: 12345, full_name: 'owner/repo' },
+    installation: { id: 999 },
+  });
+
+  it('dispatches /ghagga security with workflow mode override', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const body = JSON.stringify(makeCommentPayload('/ghagga security'));
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(202);
+    const json = await res.json();
+    expect(json).toHaveProperty('command', 'security');
+
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.reviewMode).toBe('workflow');
+  });
+
+  it('dispatches /ghagga perf with workflow mode override', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const body = JSON.stringify(makeCommentPayload('/ghagga perf'));
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(202);
+    const json = await res.json();
+    expect(json).toHaveProperty('command', 'perf');
+
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.reviewMode).toBe('workflow');
+  });
+
+  it('dispatches /ghagga describe with simple mode override', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const body = JSON.stringify(makeCommentPayload('/ghagga describe'));
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(202);
+    const json = await res.json();
+    expect(json).toHaveProperty('command', 'describe');
+
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.reviewMode).toBe('simple');
+  });
+
+  it('dispatches /ghagga review using repo default mode (no override)', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    mockGetEffectiveRepoSettings.mockResolvedValue({
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'consensus',
+      settings: {
+        enableSemgrep: true,
+        enableTrivy: true,
+        enableCpd: false,
+        enableMemory: true,
+        customRules: [],
+        ignorePatterns: ['*.md'],
+        reviewLevel: 'standard',
+      },
+      source: 'repo',
+    });
+    const body = JSON.stringify(makeCommentPayload('/ghagga review'));
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(202);
+    const json = await res.json();
+    expect(json).toHaveProperty('command', 'review');
+
+    // Should use repo's effective reviewMode, not an override
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.reviewMode).toBe('consensus');
+  });
+
+  it('returns 200 with message for unknown command /ghagga foobar', async () => {
+    const body = JSON.stringify(makeCommentPayload('/ghagga foobar'));
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.message).toContain('Unknown ghagga command');
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
+  });
+
+  it('backward compat: "ghagga review" without slash still dispatches', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const body = JSON.stringify(makeCommentPayload('ghagga review'));
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
     expect(res.status).toBe(202);
     expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
