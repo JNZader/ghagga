@@ -89,6 +89,32 @@ const SCHEMA_SQL = `
     INSERT INTO memory_observations_fts(memory_observations_fts, rowid, title, content)
       VALUES ('delete', old.id, old.title, old.content);
   END;
+
+  -- ── Versioning tables ────────────────────────────────────────────
+
+  CREATE TABLE IF NOT EXISTS memory_branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    parent_id INTEGER REFERENCES memory_branches(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS memory_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    branch_id INTEGER NOT NULL REFERENCES memory_branches(id) ON DELETE CASCADE,
+    observation_ids TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS memory_branch_observations (
+    branch_id INTEGER NOT NULL REFERENCES memory_branches(id) ON DELETE CASCADE,
+    observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
+    PRIMARY KEY (branch_id, observation_id)
+  );
+
+  -- Seed the default "main" branch (idempotent via INSERT OR IGNORE)
+  INSERT OR IGNORE INTO memory_branches (id, name, parent_id) VALUES (1, 'main', NULL);
 `;
 
 const DEFAULT_DEDUP_WINDOW_MINUTES = 15;
@@ -112,6 +138,14 @@ export class SqliteMemoryStorage implements MemoryStorage {
   ) {
     this.dedupWindowMinutes = options.dedupWindowMinutes ?? DEFAULT_DEDUP_WINDOW_MINUTES;
     this.decayConfig = options.decayConfig ?? DEFAULT_DECAY_CONFIG;
+  }
+
+  /**
+   * Expose the underlying database for the versioning layer.
+   * Only used by MemoryVersioning — not part of the MemoryStorage interface.
+   */
+  getDatabase(): DatabaseWithParams {
+    return this.db;
   }
 
   /**
@@ -359,8 +393,17 @@ export class SqliteMemoryStorage implements MemoryStorage {
 
     const row = inserted[0]?.values[0];
     if (!row) throw new Error('Unexpected empty row after insert');
+
+    const newId = row[0] as number;
+
+    // Link new observation to the default "main" branch
+    this.db.run(
+      'INSERT OR IGNORE INTO memory_branch_observations (branch_id, observation_id) VALUES (1, ?)',
+      [newId],
+    );
+
     return {
-      id: row[0] as number,
+      id: newId,
       type: row[1] as string,
       title: row[2] as string,
       content: row[3] as string,
