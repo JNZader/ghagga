@@ -571,6 +571,64 @@ export interface ListObservationsOptions {
   offset?: number;
 }
 
+// ─── Memory Versioning ─────────────────────────────────────────
+
+/**
+ * A named branch in the memory versioning system.
+ * Observations are scoped to branches, enabling isolated experimentation.
+ */
+export interface MemoryBranch {
+  id: number;
+  name: string;
+  parentId: number | null;
+  createdAt: string; // ISO 8601
+}
+
+/**
+ * A named snapshot capturing the set of observation IDs at a point in time.
+ * Used for rollback operations.
+ */
+export interface MemorySnapshot {
+  id: number;
+  name: string;
+  branchId: number;
+  observationIds: number[];
+  createdAt: string; // ISO 8601
+}
+
+/**
+ * A pair of contradicting observations detected during merge.
+ * Both observations target the same file and category but suggest conflicting actions.
+ */
+export interface Contradiction {
+  observationA: MemoryObservationRow;
+  observationB: MemoryObservationRow;
+  reason: string;
+}
+
+/**
+ * Result of a branch merge operation.
+ */
+export interface MergeResult {
+  /** IDs of observations successfully merged into the target branch. */
+  merged: number[];
+
+  /** Contradictions detected during merge (observations are still merged). */
+  contradictions: Contradiction[];
+}
+
+/**
+ * Configuration for the memory versioning system.
+ */
+export interface VersioningConfig {
+  /** Similarity threshold for contradiction detection (0.0–1.0). Default: 0.5 */
+  contradictionThreshold: number;
+}
+
+export const DEFAULT_VERSIONING_CONFIG: VersioningConfig = {
+  contradictionThreshold: 0.5,
+};
+
 // ─── Configuration Defaults ─────────────────────────────────────
 
 export const DEFAULT_SETTINGS: ReviewSettings = {
