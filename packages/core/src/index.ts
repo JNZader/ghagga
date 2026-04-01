@@ -179,8 +179,10 @@ export { buildSarif } from './sarif/index.js';
 
 // ─── Checklist ─────────────────────────────────────────────────
 
-export type { ChecklistCheck, ChecklistConfig, ChecklistDimension } from './checklist/index.js';
 export type {
+  ChecklistCheck,
+  ChecklistConfig,
+  ChecklistDimension,
   ChecklistScoreResult,
   DimensionScore,
   ScorableFinding,
@@ -192,8 +194,8 @@ export {
   DEFAULT_CHECKLIST,
   DEFAULT_DIMENSIONS,
   resolveChecklistConfig,
-  scoreFindings,
   SEVERITY_MULTIPLIER,
+  scoreFindings,
 } from './checklist/index.js';
 
 // ─── AI Enhance ─────────────────────────────────────────────────
@@ -207,6 +209,26 @@ export type {
   FindingGroup,
 } from './enhance/index.js';
 export { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
+
+// ─── Recursive Review ──────────────────────────────────────────
+
+export type {
+  RecursiveReviewConfig,
+  RecursiveReviewInput,
+  RecursiveReviewReport,
+  RegressionFinding,
+  ReReviewInput,
+  ReReviewResult,
+  SuggestionPatch,
+} from './recursive/index.js';
+export {
+  applyVirtualPatches,
+  buildPatchContext,
+  DEFAULT_RECURSIVE_CONFIG,
+  extractPatches,
+  recursiveReview,
+  runReReview,
+} from './recursive/index.js';
 
 // ─── Dependency Graph & Blast-Radius ────────────────────────────
 
@@ -273,8 +295,8 @@ export {
 export type {
   AffectedSymbol,
   DiffHunk,
-  ScopeLanguage,
   ScopedFile,
+  ScopeLanguage,
   SymbolInfo,
   SymbolKind,
 } from './scope/index.js';

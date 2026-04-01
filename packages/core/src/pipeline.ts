@@ -21,7 +21,6 @@ import { buildStackHints } from './agents/prompts.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
 import { buildChecklistContext, resolveChecklistConfig, scoreFindings } from './checklist/index.js';
-import type { ChecklistScoreResult } from './checklist/index.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
@@ -36,6 +35,7 @@ import {
   createGatewayGenerateFn,
   type GenerateTextFn,
 } from './providers/generate-fn.js';
+import { recursiveReview } from './recursive/index.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import {
@@ -530,6 +530,47 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       step: 'checklist-score',
       message: `Checklist score: ${result.checklistScore.totalScore} (${result.checklistScore.findings.length} matched findings)`,
     });
+  }
+
+  // ── Step 7.6: Recursive review (optional) ──────────────────────
+  if (input.settings.enableRecursiveReview && aiEnabled && result.findings.length > 0) {
+    emit({ step: 'recursive-review', message: 'Running recursive review on suggested fixes...' });
+    try {
+      const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway);
+      const report = await recursiveReview({
+        originalDiff: truncatedDiff,
+        findings: result.findings,
+        generateFn: generateFns[0],
+        config: {
+          maxIterations: input.settings.maxRecursiveIterations ?? 2,
+        },
+        onProgress: (message) => emit({ step: 'recursive-review', message }),
+      });
+
+      if (report) {
+        result.recursiveReview = report;
+
+        // Add regressions to the findings array
+        if (report.regressions.length > 0) {
+          result.findings = [...result.findings, ...report.regressions];
+          emit({
+            step: 'recursive-review',
+            message: `Recursive review: ${report.regressions.length} regression(s) found in suggested fixes`,
+          });
+        } else {
+          emit({
+            step: 'recursive-review',
+            message: `Recursive review: suggestions validated — ${report.converged ? 'converged' : 'no regressions'} after ${report.iterations} iteration(s)`,
+          });
+        }
+      }
+    } catch (error) {
+      console.warn(
+        '[ghagga] Recursive review failed (non-fatal):',
+        error instanceof Error ? error.message : String(error),
+      );
+      emit({ step: 'recursive-review', message: 'Recursive review failed — continuing without' });
+    }
   }
 
   // ── Step 8: Persist to memory (awaited for SQLite correctness) ──

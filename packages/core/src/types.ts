@@ -169,6 +169,11 @@ export interface ReviewSettings {
 
   /** SOLID + boundary conditions review checklist configuration. */
   checklist?: import('./checklist/types.js').ChecklistConfig;
+
+  /** Enable recursive review loop to validate suggested fixes. Default: false. */
+  enableRecursiveReview?: boolean;
+  /** Max re-review iterations for recursive review. Default: 2. */
+  maxRecursiveIterations?: number;
 }
 
 export interface ReviewContext {
@@ -249,6 +254,9 @@ export interface ReviewResult {
 
   /** Checklist scoring results (present when checklist is enabled). */
   checklistScore?: import('./checklist/scorer.js').ChecklistScoreResult;
+
+  /** Recursive review report (present when enableRecursiveReview is true). */
+  recursiveReview?: import('./recursive/types.js').RecursiveReviewReport;
 }
 
 export interface ReviewFinding {
