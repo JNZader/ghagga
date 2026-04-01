@@ -267,3 +267,26 @@ export {
   SEVERITY_WEIGHTS,
   saveHistory,
 } from './health/index.js';
+
+// ─── Scope (Tree-sitter Symbol Scoping) ────────────────────────
+
+export type {
+  AffectedSymbol,
+  DiffHunk,
+  ScopeLanguage,
+  ScopedFile,
+  SymbolInfo,
+  SymbolKind,
+} from './scope/index.js';
+
+export {
+  buildScopedContext,
+  extractSymbolsFromTree,
+  initParser,
+  loadLanguage,
+  mapDiffToSymbols,
+  parseHunks,
+  parseSource,
+  resetParser,
+  resolveGrammarPath,
+} from './scope/index.js';
