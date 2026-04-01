@@ -177,6 +177,25 @@ export type {
 } from './sarif/index.js';
 export { buildSarif } from './sarif/index.js';
 
+// ─── Checklist ─────────────────────────────────────────────────
+
+export type { ChecklistCheck, ChecklistConfig, ChecklistDimension } from './checklist/index.js';
+export type {
+  ChecklistScoreResult,
+  DimensionScore,
+  ScorableFinding,
+  ScoredFinding,
+} from './checklist/index.js';
+export {
+  buildChecklistContext,
+  countActiveChecks,
+  DEFAULT_CHECKLIST,
+  DEFAULT_DIMENSIONS,
+  resolveChecklistConfig,
+  scoreFindings,
+  SEVERITY_MULTIPLIER,
+} from './checklist/index.js';
+
 // ─── AI Enhance ─────────────────────────────────────────────────
 
 export type {

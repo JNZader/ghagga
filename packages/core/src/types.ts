@@ -166,6 +166,9 @@ export interface ReviewSettings {
   maxBlastRadiusFiles?: number;
   /** Max traversal depth for dependency graph. Default: 3. */
   traversalDepth?: number;
+
+  /** SOLID + boundary conditions review checklist configuration. */
+  checklist?: import('./checklist/types.js').ChecklistConfig;
 }
 
 export interface ReviewContext {
@@ -243,6 +246,9 @@ export interface ReviewResult {
 
   /** Diagnostic hypotheses (present when mode === 'diagnostic'). */
   hypotheses?: Hypothesis[];
+
+  /** Checklist scoring results (present when checklist is enabled). */
+  checklistScore?: import('./checklist/scorer.js').ChecklistScoreResult;
 }
 
 export interface ReviewFinding {
