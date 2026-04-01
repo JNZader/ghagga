@@ -12,9 +12,11 @@ import { dirname } from 'node:path';
 import initSqlJsModule, { type Database } from 'fts5-sql-bundle';
 
 // CJS/ESM interop: default import of CJS module may be the module object, not the function
-const initSqlJs = typeof initSqlJsModule === 'function'
-  ? initSqlJsModule
-  : (initSqlJsModule as unknown as { initSqlJs: typeof initSqlJsModule }).initSqlJs;
+const initSqlJs =
+  typeof initSqlJsModule === 'function'
+    ? initSqlJsModule
+    : (initSqlJsModule as unknown as { initSqlJs: typeof initSqlJsModule }).initSqlJs;
+
 import type {
   ListObservationsOptions,
   MemoryObservationDetail,
@@ -22,6 +24,8 @@ import type {
   MemoryStats,
   MemoryStorage,
 } from '../types.js';
+import { DEFAULT_DECAY_CONFIG, type DecayConfig } from '../types.js';
+import { computeStrength } from './decay.js';
 
 /**
  * Extended Database interface — fts5-sql-bundle types omit the params overload
@@ -57,12 +61,14 @@ const SCHEMA_SQL = `
     content_hash TEXT,
     revision_count INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_accessed_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_obs_project ON memory_observations(project);
   CREATE INDEX IF NOT EXISTS idx_obs_topic_key ON memory_observations(topic_key);
   CREATE INDEX IF NOT EXISTS idx_obs_content_hash ON memory_observations(content_hash);
+  CREATE INDEX IF NOT EXISTS idx_obs_last_accessed ON memory_observations(last_accessed_at);
 
   CREATE VIRTUAL TABLE IF NOT EXISTS memory_observations_fts
     USING fts5(title, content, content='memory_observations', content_rowid='id');
@@ -90,10 +96,14 @@ const DEFAULT_DEDUP_WINDOW_MINUTES = 15;
 export interface SqliteMemoryStorageOptions {
   /** Dedup window in minutes. Observations with the same content hash within this window are deduplicated. Defaults to 15. */
   dedupWindowMinutes?: number;
+
+  /** Decay configuration for memory strength. Uses defaults when not provided. */
+  decayConfig?: DecayConfig;
 }
 
 export class SqliteMemoryStorage implements MemoryStorage {
   private dedupWindowMinutes: number;
+  private decayConfig: DecayConfig;
 
   private constructor(
     private db: DatabaseWithParams,
@@ -101,6 +111,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
     options: SqliteMemoryStorageOptions = {},
   ) {
     this.dedupWindowMinutes = options.dedupWindowMinutes ?? DEFAULT_DEDUP_WINDOW_MINUTES;
+    this.decayConfig = options.decayConfig ?? DEFAULT_DECAY_CONFIG;
   }
 
   /**
@@ -130,6 +141,19 @@ export class SqliteMemoryStorage implements MemoryStorage {
       // Column already exists — idempotent migration
     }
 
+    // Migration: add last_accessed_at column for decay tracking
+    try {
+      db.run(
+        "ALTER TABLE memory_observations ADD COLUMN last_accessed_at TEXT NOT NULL DEFAULT (datetime('now'))",
+      );
+      // Backfill: set last_accessed_at = updated_at for existing rows
+      db.run(
+        'UPDATE memory_observations SET last_accessed_at = updated_at WHERE last_accessed_at IS NULL OR last_accessed_at = ""',
+      );
+    } catch {
+      // Column already exists — idempotent migration
+    }
+
     return new SqliteMemoryStorage(db, filePath, options);
   }
 
@@ -150,8 +174,11 @@ export class SqliteMemoryStorage implements MemoryStorage {
 
     if (!ftsQuery) return [];
 
+    // Fetch more than limit to account for decay filtering
+    const fetchLimit = limit * 3;
+
     let sql = `
-      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity
+      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity, o.last_accessed_at
       FROM memory_observations o
       JOIN memory_observations_fts fts ON fts.rowid = o.id
       WHERE memory_observations_fts MATCH ?
@@ -165,24 +192,48 @@ export class SqliteMemoryStorage implements MemoryStorage {
     }
 
     sql += ' ORDER BY bm25(memory_observations_fts) LIMIT ?';
-    params.push(limit);
+    params.push(fetchLimit);
 
     const stmt = this.db.prepare(sql);
     stmt.bind(params);
 
+    const now = new Date();
     const rows: MemoryObservationRow[] = [];
+    const accessedIds: number[] = [];
+
     while (stmt.step()) {
       const row = stmt.getAsObject();
+      const lastAccessed = row.last_accessed_at ? new Date(row.last_accessed_at as string) : now;
+      const strength = computeStrength(lastAccessed, now, this.decayConfig);
+
+      // Filter by minimum strength
+      if (strength < this.decayConfig.minStrength) continue;
+
+      const id = row.id as number;
+      accessedIds.push(id);
+
       rows.push({
-        id: row.id as number,
+        id,
         type: row.type as string,
         title: row.title as string,
         content: row.content as string,
         filePaths: row.file_paths ? JSON.parse(row.file_paths as string) : null,
         severity: (row.severity as string) ?? null,
+        strength,
       });
+
+      if (rows.length >= limit) break;
     }
     stmt.free();
+
+    // Update last_accessed_at for returned observations
+    if (accessedIds.length > 0) {
+      const placeholders = accessedIds.map(() => '?').join(',');
+      this.db.run(
+        `UPDATE memory_observations SET last_accessed_at = datetime('now') WHERE id IN (${placeholders})`,
+        accessedIds,
+      );
+    }
 
     return rows;
   }
@@ -263,7 +314,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
           SET content = ?, title = ?, content_hash = ?, file_paths = ?,
               severity = ?,
               revision_count = revision_count + 1,
-              updated_at = datetime('now')
+              updated_at = datetime('now'),
+              last_accessed_at = datetime('now')
           WHERE id = ?
           RETURNING id, type, title, content, file_paths, severity
         `,

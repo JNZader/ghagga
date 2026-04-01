@@ -447,6 +447,7 @@ describe('SqliteMemoryStorage', () => {
         content: 'Middleware handles auth validation.',
         filePaths: ['src/auth.ts', 'src/middleware.ts'],
         severity: null,
+        strength: expect.any(Number),
       });
 
       await storage.close();
@@ -1033,6 +1034,158 @@ describe('SqliteMemoryStorage', () => {
       expect(stats.totalObservations).toBe(0);
 
       await storage2.close();
+    });
+  });
+
+  // ── Memory Decay ──
+
+  describe('memory decay', () => {
+    it('returns strength=1.0 for freshly created observations', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath);
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Fresh finding',
+          content: 'This is a fresh finding about authentication.',
+        }),
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'authentication');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.strength).toBe(1.0);
+
+      await storage.close();
+    });
+
+    it('filters out observations past clearance threshold', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        decayConfig: {
+          dormancyDays: 1,
+          decayDays: 5,
+          clearanceDays: 10,
+          minStrength: 0.1,
+        },
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Old authentication finding',
+          content: 'A stale authentication finding.',
+        }),
+      );
+
+      // Manually backdate the last_accessed_at to 15 days ago
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      const db = (storage as any).db;
+      db.run(
+        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-15 days')",
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'authentication');
+      expect(results).toHaveLength(0);
+
+      await storage.close();
+    });
+
+    it('returns decayed strength for observations in decay window', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        decayConfig: {
+          dormancyDays: 0,
+          decayDays: 10,
+          clearanceDays: 10,
+          minStrength: 0.0,
+        },
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Decaying zeppelin observation',
+          content: 'A zeppelin observation in the decay window.',
+        }),
+      );
+
+      // Backdate to 5 days ago — should be ~0.5 strength
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      const db = (storage as any).db;
+      db.run(
+        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-5 days')",
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'zeppelin');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.strength).toBeGreaterThan(0.3);
+      expect(results[0]?.strength).toBeLessThan(0.7);
+
+      await storage.close();
+    });
+
+    it('updates last_accessed_at when observation is returned in search', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath);
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Access tracking quasar',
+          content: 'Quasar observation for access tracking test.',
+        }),
+      );
+
+      // Backdate last_accessed_at
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      const db = (storage as any).db;
+      db.run(
+        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-2 days')",
+      );
+
+      // Capture the old value
+      const before = db.exec('SELECT last_accessed_at FROM memory_observations LIMIT 1');
+      const oldValue = before[0]?.values[0]?.[0] as string;
+
+      // Search should update last_accessed_at
+      await storage.searchObservations('owner/repo', 'quasar');
+
+      // Verify last_accessed_at changed (is newer than the old backdated value)
+      const after = db.exec('SELECT last_accessed_at FROM memory_observations LIMIT 1');
+      const newValue = after[0]?.values[0]?.[0] as string;
+      expect(newValue).not.toBe(oldValue);
+      expect(new Date(newValue).getTime()).toBeGreaterThan(new Date(oldValue).getTime());
+
+      await storage.close();
+    });
+
+    it('topic upsert resets last_accessed_at', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath);
+
+      await storage.saveObservation(
+        makeObservationData({
+          topicKey: 'decay-topic',
+          content: 'Version 1 content',
+        }),
+      );
+
+      // Backdate
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      const db = (storage as any).db;
+      db.run(
+        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-30 days')",
+      );
+
+      // Capture the old value
+      const before = db.exec('SELECT last_accessed_at FROM memory_observations LIMIT 1');
+      const oldValue = before[0]?.values[0]?.[0] as string;
+
+      // Upsert should reset last_accessed_at
+      await storage.saveObservation(
+        makeObservationData({
+          topicKey: 'decay-topic',
+          content: 'Version 2 content',
+        }),
+      );
+
+      const after = db.exec('SELECT last_accessed_at FROM memory_observations LIMIT 1');
+      const newValue = after[0]?.values[0]?.[0] as string;
+      expect(new Date(newValue).getTime()).toBeGreaterThan(new Date(oldValue).getTime());
+
+      await storage.close();
     });
   });
 });
