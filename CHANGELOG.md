@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.8.1] - 2026-03-31
+
+### Fixed
+- CLI published with unresolvable `workspace:*` dependency for ghagga-core
+
 ## [2.8.0] - 2026-03-31
 
 ### Added

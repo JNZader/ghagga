@@ -1,6 +1,6 @@
 {
   "name": "ghagga",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "private": true,
   "description": "Multi-agent AI code reviewer for GitHub Pull Requests",
   "author": "JNZader",
