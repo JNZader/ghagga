@@ -292,6 +292,12 @@ export interface ReviewFinding {
 
   /** Reason for AI filtering (present when aiFiltered === true). */
   filterReason?: string;
+
+  /** Exploitability label for CVE findings (present when exploitability analysis runs). */
+  exploitability?: import('./exploitability/types.js').ExploitabilityLabel;
+
+  /** Detailed exploitability analysis (present when exploitability analysis runs). */
+  exploitabilityDetail?: import('./exploitability/types.js').ExploitabilityDetail;
 }
 
 export interface ReviewMetadata {
