@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Review Checklist** -- Configurable SOLID principles, error handling, boundary conditions, and security checklist with weighted scoring engine. Each dimension contains named checks with importance weights (1-10). Findings are mapped to the most relevant dimension and check via keyword analysis, producing per-dimension score summaries. Checklist is injected into agent prompts for structured evaluation. Configurable via `ChecklistConfig` (enable/disable dimensions, adjust weights).
+- **Tree-sitter Symbol Scoping** -- Symbol-level review scoping using `web-tree-sitter`. Extracts functions, classes, methods, and interfaces from source files (TypeScript, JavaScript, Python, Go), maps diff hunks to affected symbols, and builds scoped context so AI agents review only the symbols touched by the change instead of entire files.
+- **Recursive Quality Feedback Loop** -- Self-validating review cycle that re-reviews suggested patches before presenting them to the user. Extracts patches from review suggestions, runs them through a second review pass, and flags regressions. Converges early if no new issues are found. Configurable max iterations (default: 2).
+- **PR Comment Commands** -- 5 commands triggered via PR comments: `/ghagga review` (re-trigger with repo defaults), `/ghagga security` (security-focused workflow mode), `/ghagga perf` (performance-focused workflow mode), `/ghagga describe` (PR summary via simple mode), `/ghagga fan-out` (5-lens parallel review). Leading slash is optional for backward compatibility.
+- **Memory Strength Decay** -- Observations that haven't been re-accessed lose relevance over time. Three-phase lifecycle: active (full strength), decaying (linear drop), cleared (excluded from context). Decay strength is shown in review context so the AI knows observation freshness. Integrated into both SQLite and PostgreSQL backends.
+- **Memory Versioning** -- Git-style branching for review memory with `MemoryVersioning` class. Operations: create branch (fork from parent), delete branch (preserves shared observations), create/list snapshots, merge branches with contradiction detection, rollback to snapshot. Default branch is `main`. Contradiction detection flags observations covering the same files with conflicting content.
+- **Fan-out Lenses Review Mode** -- New `fan-out` review mode that launches 5 specialized lenses in parallel: security, performance, error-handling, typing, and accessibility. Each lens gets a focused system prompt constraining analysis to its perspective. Findings are merged with deduplication by file+line (highest severity wins on conflicts). Added to CLI `--mode` flag, Action `mode` input, and PR comment commands.
+- **Exploitability-aware CVE Labeling** -- Reachability analysis for Trivy CVE findings. Classifies each vulnerability as `exploitable` (imported and reachable from entry points), `potentially-exploitable` (imported but reachability unclear), or `not-exploitable` (package not imported). Attached as `ExploitabilityDetail` on `ReviewFinding` for transparency.
+- **SonarQube MCP Integration** -- Static analysis plugin that fetches SonarQube issues via MCP (Model Context Protocol). Activates when an MCP server with `sonarqube_issues` tool is available. Maps SonarQube severity levels (BLOCKER/CRITICAL/MAJOR/MINOR/INFO) to GHAGGA severity. Uses `ctx.mcpCall()` instead of binary execution.
+
 ## [2.6.0] - 2026-03-21
 
 ### Added

@@ -47,7 +47,7 @@ You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plai
 
 | Feature | Description |
 |---------|-------------|
-| **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (same model, three perspectives with algorithmic voting) |
+| **4 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (three perspectives with algorithmic voting), Fan-out (5 specialized lenses in parallel) |
 | **16 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 9 auto-detect tools -- zero tokens |
 | **Static-Analysis-Only Fallback** | When no LLM API key is configured, GHAGGA runs all applicable static analysis tools and posts results without any LLM call |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews (PostgreSQL + tsvector FTS) |
@@ -55,7 +55,14 @@ You bring your own API key (BYOK). GHAGGA never sees or stores your keys in plai
 | **3 Distribution Modes** | Self-hosted (Coolify), GitHub Action, CLI |
 | **Delegated CI** | CI job auto-discovery with orchestrated execution on user-owned GitHub Actions runners |
 | **Pagination** | Full GitHub API pagination for PRs with >100 files/commits -- no silent truncation |
-| **Comment Trigger** | Type `ghagga review` on any PR to re-trigger a review on demand |
+| **PR Comment Commands** | `/ghagga review` (re-trigger), `/ghagga security` (security-focused workflow), `/ghagga perf` (performance-focused workflow), `/ghagga describe` (PR summary), `/ghagga fan-out` (5-lens parallel review) |
+| **Review Checklist** | Configurable SOLID, error handling, boundary conditions, and security checklist with weighted scoring -- findings mapped to dimensions via keyword analysis |
+| **Tree-sitter Scoping** | Symbol-level review scoping using tree-sitter -- extracts functions, classes, methods, and interfaces affected by the diff (TypeScript, JavaScript, Python, Go) |
+| **Recursive Review** | Self-validating feedback loop -- re-reviews suggested patches to catch regressions before they reach the user (max 2 iterations, converges early) |
+| **Memory Decay** | Observations lose relevance over time via three-phase strength decay: active, decaying, cleared -- configurable dormancy and clearance thresholds |
+| **Memory Versioning** | Git-style branching for review memory -- branch, snapshot, merge, rollback with contradiction detection on merge |
+| **CVE Exploitability** | Reachability-aware CVE labeling -- classifies vulnerabilities as exploitable, potentially-exploitable, or not-exploitable based on import analysis |
+| **SonarQube MCP** | SonarQube integration via MCP -- fetches issues for reviewed files when an MCP server with `sonarqube_issues` tool is available |
 | **Dashboard** | React 19 SPA on GitHub Pages -- review history, stats, settings, memory browser |
 | **BYOK Security** | AES-256-GCM encryption, HMAC-SHA256 webhook verification, privacy stripping |
 
@@ -105,7 +112,7 @@ jobs:
 |-------|----------|---------|-------------|
 | `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `model` | No | Auto | Model identifier (auto-selects best per provider) |
-| `mode` | No | `simple` | Review mode: `simple`, `workflow`, `consensus` |
+| `mode` | No | `simple` | Review mode: `simple`, `workflow`, `consensus`, `fan-out` |
 | `api-key` | No | -- | LLM provider API key. Not required for `github` provider (free default). |
 | `github-token` | No | `${{ github.token }}` | GitHub token for PR access. Automatic. |
 | `enabled-tools` | No | -- | Comma-separated list of tools to force-enable |
@@ -173,7 +180,7 @@ ghagga hooks install
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `[path]` | -- | `.` | Path to repository or subdirectory |
-| `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus` |
+| `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus`, `fan-out` |
 | `--provider <provider>` | `-p` | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
 | `--model <model>` | -- | Auto | Model identifier (or `GHAGGA_MODEL` env var) |
 | `--api-key <key>` | -- | -- | API key (or `GHAGGA_API_KEY` env var) |
@@ -271,9 +278,13 @@ graph TB
   end
 
   subgraph Core["@ghagga/core"]
-    SA["Static Analysis<br/>16-tool registry"]
-    Agents["AI Agents<br/>Simple / Workflow / Consensus"]
-    Memory["Memory<br/>Search / Persist / Privacy"]
+    SA["Static Analysis<br/>16-tool registry + SonarQube MCP"]
+    Agents["AI Agents<br/>Simple / Workflow / Consensus / Fan-out"]
+    Memory["Memory<br/>Search / Persist / Decay / Versioning"]
+    Checklist["Checklist<br/>SOLID + Boundary + Security scoring"]
+    Scope["Scope<br/>Tree-sitter symbol extraction"]
+    Recursive["Recursive Loop<br/>Re-review patches"]
+    Exploitability["CVE Analysis<br/>Reachability labeling"]
   end
 
   subgraph DB["@ghagga/db"]
@@ -387,6 +398,28 @@ flowchart LR
 **Token usage**: ~3x (exactly 3 LLM calls, same model)
 **Best for**: Critical code paths, high-confidence decisions, security-sensitive changes
 
+### Fan-out Mode
+
+5 specialized "lenses" run **in parallel**, each constrained to a single analysis perspective. Findings are merged with deduplication by file+line (highest severity wins on conflicts).
+
+```mermaid
+flowchart LR
+  Input["Diff + Context"] --> L1["Security Lens"]
+  Input --> L2["Performance Lens"]
+  Input --> L3["Error Handling Lens"]
+  Input --> L4["Typing Lens"]
+  Input --> L5["Accessibility Lens"]
+  L1 --> Merge["Merge + Deduplicate<br/>highest severity wins"]
+  L2 --> Merge
+  L3 --> Merge
+  L4 --> Merge
+  L5 --> Merge
+  Merge --> Output["Structured Response"]
+```
+
+**Token usage**: ~5x (5 lenses, no synthesis step)
+**Best for**: Broad coverage reviews where you want every finding category explored independently
+
 ---
 
 ## Static Analysis
@@ -490,6 +523,31 @@ All three backends implement the same `MemoryStorage` interface:
 3. Creates session, saves observations, saves PR summary
 4. **Content deduplication**: SHA-256 hash of `type:title:content`, 15-min dedup window
 5. **Topic-key upsert**: Re-reviews of same PR update existing summary instead of duplicating
+
+### Strength Decay
+
+Observations lose relevance over time. Strength follows a three-phase lifecycle:
+
+| Phase | Duration | Strength |
+|-------|----------|----------|
+| **Active** | 0 to dormancy threshold | 1.0 (full relevance) |
+| **Decaying** | Dormancy to clearance threshold | Linear drop from 1.0 to 0.0 |
+| **Cleared** | Past clearance threshold | 0.0 (excluded from search context) |
+
+Decay strength is computed at search time and displayed in the review context so the AI knows how fresh each past observation is.
+
+### Memory Versioning
+
+Git-style branching for review memory. The default branch is `main` -- all observations from standard reviews are linked to it.
+
+| Operation | Description |
+|-----------|-------------|
+| **Branch** | Fork a branch from any parent -- copies all observation links |
+| **Snapshot** | Named checkpoint of a branch's current state (observation ID set) |
+| **Merge** | Bring source-exclusive observations into target branch with contradiction detection |
+| **Rollback** | Restore a branch to a named snapshot, removing post-snapshot observations |
+
+Contradiction detection runs during merge: observations on the source and target that cover the same files but disagree on type or content are flagged. Both observations are kept on the target (no auto-resolution).
 
 ### Observation Types
 
@@ -615,7 +673,8 @@ ghagga/
 |   |       |   |-- prompts.ts     # All agent prompts (rescued from v1)
 |   |       |   |-- simple.ts      # Simple single-pass review
 |   |       |   |-- workflow.ts    # 5-specialist parallel workflow
-|   |       |   +-- consensus.ts   # Three-perspective voting with algorithmic consensus
+|   |       |   |-- consensus.ts   # Three-perspective voting with algorithmic consensus
+|   |       |   +-- fan-out-lenses.ts  # 5-lens parallel review (security, perf, errors, typing, a11y)
 |   |       |-- tools/
 |   |       |   |-- registry.ts    # 16-tool plugin registry
 |   |       |   |-- orchestrator.ts # Parallel tool orchestration
@@ -624,15 +683,35 @@ ghagga/
 |   |       |   |-- trivy.ts       # Trivy runner + JSON parser
 |   |       |   |-- cpd.ts         # PMD/CPD runner + XML parser
 |   |       |   |-- runner.ts      # Parallel orchestrator
-|   |       |   |-- plugins/       # Auto-detect tool plugins (ruff, bandit, biome, etc.)
+|   |       |   |-- plugins/       # Auto-detect tool plugins (ruff, bandit, biome, sonarqube, etc.)
 |   |       |   +-- semgrep-rules.yml  # 20 custom security rules
+|   |       |-- checklist/
+|   |       |   |-- types.ts       # Dimension and check interfaces
+|   |       |   |-- defaults.ts    # 4 default dimensions (SOLID, errors, boundaries, security)
+|   |       |   |-- scorer.ts      # Weighted scoring engine (keyword matching)
+|   |       |   |-- config.ts      # Checklist resolution from settings
+|   |       |   +-- context.ts     # Format checklist for agent prompts
+|   |       |-- scope/
+|   |       |   |-- types.ts       # SymbolInfo, DiffHunk, AffectedSymbol
+|   |       |   |-- extractor.ts   # tree-sitter symbol extraction (TS, JS, Python, Go)
+|   |       |   |-- diff-mapper.ts # Map diff hunks to affected symbols
+|   |       |   +-- context-builder.ts  # Build scoped context for agents
+|   |       |-- recursive/
+|   |       |   |-- types.ts       # RecursiveReviewReport, RegressionFinding
+|   |       |   |-- patch-extractor.ts  # Extract patches from suggestions
+|   |       |   +-- re-reviewer.ts # Re-review loop (max 2 iterations)
+|   |       |-- exploitability/
+|   |       |   |-- types.ts       # ExploitabilityLabel, ExploitabilityDetail
+|   |       |   +-- analyzer.ts    # CVE reachability analysis
 |   |       |-- memory/
 |   |       |   |-- search.ts      # tsvector full-text search
 |   |       |   |-- persist.ts     # Observation extraction + dedup
 |   |       |   |-- context.ts     # Format observations as markdown
 |   |       |   |-- privacy.ts     # Privacy stripping (13 patterns)
 |   |       |   |-- sqlite.ts      # SQLite memory backend (CLI/Action)
-|   |       |   +-- engram.ts      # Engram memory adapter
+|   |       |   |-- engram.ts      # Engram memory adapter
+|   |       |   |-- decay.ts       # Strength decay computation (3-phase lifecycle)
+|   |       |   +-- versioning.ts  # Git-style branch/snapshot/merge/rollback
 |   |       |-- providers/
 |   |       |   |-- index.ts       # AI SDK 6 provider factory (6 providers)
 |   |       |   +-- fallback.ts    # Fallback chain with retry logic + 60s timeout
@@ -671,7 +750,7 @@ ghagga/
 |   |       |   |-- client.ts      # GitHub API client (diff, comment, verify, JWT)
 |   |       |   +-- runner.ts      # Runner discovery, secret setup, dispatch
 |   |       +-- routes/
-|   |           |-- webhook.ts     # GitHub webhook handler
+|   |           |-- webhook.ts     # GitHub webhook handler + PR comment commands (/ghagga review|security|perf|describe|fan-out)
 |   |           |-- api/           # REST API endpoints
 |   |           |-- oauth.ts       # GitHub OAuth flow
 |   |           +-- runner-callback.ts # POST /runner/callback (HMAC verification)
@@ -856,7 +935,7 @@ Comprehensive test suite with Vitest across all packages. All passing. 4 audit r
 
 | Package | What's Covered |
 |---------|----------------|
-| `ghagga-core` | Pipeline, diff parsing, stack detection, token budget, prompts, agents (simple, workflow, consensus), fallback provider with 60s timeout, privacy, memory (search, persist, context, SQLite, Engram adapter), static analysis tools (semgrep, trivy, cpd, registry, orchestrator, execution), parsers, security audit, review calibration, circuit breaker |
+| `ghagga-core` | Pipeline, diff parsing, stack detection, token budget, prompts, agents (simple, workflow, consensus, fan-out lenses), fallback provider with 60s timeout, privacy, memory (search, persist, context, SQLite, Engram adapter, decay, versioning + contradiction detection), static analysis tools (semgrep, trivy, cpd, registry, orchestrator, execution, sonarqube MCP), parsers, security audit, review calibration, circuit breaker, checklist scoring, tree-sitter scoping, recursive review loop, CVE exploitability analysis |
 | `ghagga-db` | Queries (CRUD, effective settings, provider chain), AES-256-GCM crypto (roundtrip, tamper, edge cases), schema validation, index verification |
 | `@ghagga/server` | API routes (domain modules), webhook handlers, auth middleware + token cache, provider validation, BullMQ review queue + worker, delegated CI queue + policy, GitHub client, runner dispatch, callback verification, graceful shutdown, health checks, correlation IDs, error IDs, HTTP timeouts, env validation, Zod negative tests |
 | `ghagga` (CLI) | Config resolution, review command -- input validation, output formatting, exit codes, git hooks (install, uninstall, status), memory commands |
