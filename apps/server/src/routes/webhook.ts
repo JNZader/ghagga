@@ -90,7 +90,7 @@ const ALLOWED_ASSOCIATIONS = new Set([
 // ─── Comment Command Parsing ───────────────────────────────────
 
 /** Valid slash commands that can be triggered from PR comments */
-type CommentCommand = 'review' | 'security' | 'perf' | 'describe';
+type CommentCommand = 'review' | 'security' | 'perf' | 'describe' | 'fan-out';
 
 /** Parsed result from a comment command */
 interface ParsedCommand {
@@ -106,6 +106,7 @@ const COMMAND_MODE_MAP: Record<CommentCommand, string | null> = {
   security: 'workflow',
   perf: 'workflow',
   describe: 'simple',
+  'fan-out': 'fan-out',
 };
 
 const VALID_COMMANDS = new Set<string>(Object.keys(COMMAND_MODE_MAP));
