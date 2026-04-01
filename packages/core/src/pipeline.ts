@@ -17,6 +17,7 @@
 
 import { runConsensusReview } from './agents/consensus.js';
 import { runDiagnosticReview } from './agents/diagnostic.js';
+import { runFanOutReview } from './agents/fan-out-lenses.js';
 import { buildStackHints } from './agents/prompts.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
@@ -461,6 +462,22 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
           });
           break;
 
+        case 'fan-out':
+          result = await runFanOutReview({
+            diff: truncatedDiff,
+            provider: (primary.provider as LLMProvider) ?? 'cli-bridge',
+            model: primary.model ?? 'auto',
+            apiKey: primary.apiKey ?? '',
+            staticContext,
+            memoryContext,
+            stackHints,
+            checklistContext,
+            reviewLevel: input.settings.reviewLevel,
+            onProgress: input.onProgress,
+            generateFns,
+          });
+          break;
+
         default: {
           const _exhaustive: never = effectiveMode;
           throw new Error(`Unknown review mode: ${_exhaustive}`);
@@ -820,6 +837,7 @@ function resolveEffectiveMode(
   if (mode === 'diagnostic' && (isCliBridge || isGateway)) {
     return 'simple';
   }
+  // Fan-out works with all backends (uses generateFns like workflow/consensus)
   return mode;
 }
 
