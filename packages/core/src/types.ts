@@ -399,6 +399,34 @@ export interface ConsensusVote {
   reasoning: string;
 }
 
+// ─── Memory Decay ──────────────────────────────────────────────
+
+/**
+ * Configuration for memory strength decay.
+ * Observations not re-accessed lose strength over time:
+ *   active (strength=1.0) → dormant → decaying → cleared (strength=0.0)
+ */
+export interface DecayConfig {
+  /** Days after last access before decay begins. Default: 7 */
+  dormancyDays: number;
+
+  /** Days over which strength linearly drops from 1.0 to 0.0 (after dormancy). Default: 30 */
+  decayDays: number;
+
+  /** Days after last access at which strength reaches 0.0. Default: 90 */
+  clearanceDays: number;
+
+  /** Minimum strength to include in search results. Default: 0.1 */
+  minStrength: number;
+}
+
+export const DEFAULT_DECAY_CONFIG: DecayConfig = {
+  dormancyDays: 7,
+  decayDays: 30,
+  clearanceDays: 90,
+  minStrength: 0.1,
+};
+
 // ─── Memory Types ───────────────────────────────────────────────
 
 export type ObservationType =
@@ -491,6 +519,9 @@ export interface MemoryObservationRow {
   content: string;
   filePaths: string[] | null;
   severity: string | null;
+
+  /** Decay strength score (0.0–1.0). Present when decay is enabled, undefined otherwise. */
+  strength?: number;
 }
 
 /**
