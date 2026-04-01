@@ -77,8 +77,8 @@ export {
 
 // ─── Constants ──────────────────────────────────────────────────
 
-export type { DecayConfig } from './types.js';
-export { DEFAULT_DECAY_CONFIG, DEFAULT_MODELS, DEFAULT_SETTINGS } from './types.js';
+export type { Contradiction, DecayConfig, MemoryBranch, MemorySnapshot, MergeResult, VersioningConfig } from './types.js';
+export { DEFAULT_DECAY_CONFIG, DEFAULT_MODELS, DEFAULT_SETTINGS, DEFAULT_VERSIONING_CONFIG } from './types.js';
 
 // ─── Utilities (for advanced usage) ─────────────────────────────
 
@@ -139,10 +139,19 @@ export { createModel, createProvider } from './providers/index.js';
 // ─── Memory (for custom memory integrations) ────────────────────
 
 export { formatMemoryContext } from './memory/context.js';
+export { detectContradictions } from './memory/contradiction.js';
 export { computeStrength, decayPhase } from './memory/decay.js';
 export { EngramMemoryStorage } from './memory/engram.js';
 export { stripPrivateData } from './memory/privacy.js';
 export { SqliteMemoryStorage, type SqliteMemoryStorageOptions } from './memory/sqlite.js';
+export {
+  BranchExistsError,
+  BranchNotFoundError,
+  MemoryVersioning,
+  ProtectedBranchError,
+  SnapshotExistsError,
+  SnapshotNotFoundError,
+} from './memory/versioning.js';
 
 // ─── Formatting ─────────────────────────────────────────────────
 
