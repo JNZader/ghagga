@@ -50,6 +50,15 @@ export interface ReviewLens {
   system: string;
 }
 
+/**
+ * Result of validating and loading lenses from a directory.
+ * `valid` contains successfully loaded lenses; `errors` lists any files that failed validation.
+ */
+export interface LensValidationResult {
+  valid: ReviewLens[];
+  errors: Array<{ file: string; reason: string }>;
+}
+
 // ─── Default Lenses ────────────────────────────────────────────
 
 export const LENS_SECURITY: ReviewLens = {
@@ -243,6 +252,130 @@ export function getAllLenses(): ReviewLens[] {
 /** Reset custom registrations (for testing). */
 export function resetLensRegistry(): void {
   lensMap.clear();
+}
+
+// ─── Lens Validation & Loading ────────────────────────────────
+
+/** Maximum allowed length for a lens system prompt. */
+const MAX_SYSTEM_LENGTH = 4000;
+
+/** Pattern for valid lens names: alphanumeric, hyphens, underscores. */
+const LENS_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
+
+/**
+ * Validate raw data as a ReviewLens definition.
+ *
+ * Checks:
+ * - `name` is a non-empty string matching alphanumeric + hyphens pattern
+ * - `label` is a non-empty string
+ * - `system` is a non-empty string with max 4000 characters
+ *
+ * @param data - Unknown data to validate (typically parsed JSON)
+ * @returns The validated ReviewLens if valid, or null with reason string
+ */
+export function validateLens(data: unknown): { lens: ReviewLens; error: null } | { lens: null; error: string } {
+  if (data == null || typeof data !== 'object') {
+    return { lens: null, error: 'Lens definition must be a JSON object' };
+  }
+
+  const obj = data as Record<string, unknown>;
+
+  // Validate name
+  if (typeof obj.name !== 'string' || obj.name.trim().length === 0) {
+    return { lens: null, error: 'Missing or invalid "name" field (must be a non-empty string)' };
+  }
+  if (!LENS_NAME_PATTERN.test(obj.name)) {
+    return { lens: null, error: `Invalid "name" "${obj.name}" — must match ${LENS_NAME_PATTERN.source}` };
+  }
+
+  // Validate label
+  if (typeof obj.label !== 'string' || obj.label.trim().length === 0) {
+    return { lens: null, error: 'Missing or invalid "label" field (must be a non-empty string)' };
+  }
+
+  // Validate system
+  if (typeof obj.system !== 'string' || obj.system.trim().length === 0) {
+    return { lens: null, error: 'Missing or invalid "system" field (must be a non-empty string)' };
+  }
+  if (obj.system.length > MAX_SYSTEM_LENGTH) {
+    return { lens: null, error: `"system" prompt exceeds ${MAX_SYSTEM_LENGTH} characters (got ${obj.system.length})` };
+  }
+
+  return {
+    lens: { name: obj.name, label: obj.label, system: obj.system },
+    error: null,
+  };
+}
+
+/**
+ * Load and validate lens definitions from a directory.
+ *
+ * Reads all `*.json` files from the given directory, validates each as a ReviewLens,
+ * registers valid lenses via `registerLens()`, and collects errors for invalid files.
+ * Invalid files are skipped with a warning — they do not crash the pipeline.
+ *
+ * @param dirPath - Absolute path to the lens definitions directory
+ * @param onProgress - Optional progress callback for warnings
+ * @returns LensValidationResult with valid lenses and any errors
+ */
+export async function loadLensesFromDir(
+  dirPath: string,
+  onProgress?: ProgressCallback,
+): Promise<LensValidationResult> {
+  const { existsSync, readdirSync, readFileSync } = await import('node:fs');
+  const { join, basename } = await import('node:path');
+
+  const emit = onProgress ?? (() => {});
+  const result: LensValidationResult = { valid: [], errors: [] };
+
+  if (!existsSync(dirPath)) {
+    return result; // Directory doesn't exist — not an error, just no custom lenses
+  }
+
+  let files: string[];
+  try {
+    files = readdirSync(dirPath).filter((f) => f.endsWith('.json'));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    emit({ step: 'lens-loader', message: `Failed to read lens directory: ${msg}` });
+    return result;
+  }
+
+  for (const file of files) {
+    const filePath = join(dirPath, file);
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw) as unknown;
+      const validation = validateLens(parsed);
+
+      if (validation.lens) {
+        registerLens(validation.lens);
+        result.valid.push(validation.lens);
+      } else {
+        result.errors.push({ file: basename(file), reason: validation.error });
+        emit({
+          step: 'lens-loader',
+          message: `Skipping invalid lens "${basename(file)}": ${validation.error}`,
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.errors.push({ file: basename(file), reason: `JSON parse error: ${msg}` });
+      emit({
+        step: 'lens-loader',
+        message: `Skipping invalid lens "${basename(file)}": JSON parse error`,
+      });
+    }
+  }
+
+  if (result.valid.length > 0) {
+    emit({
+      step: 'lens-loader',
+      message: `Loaded ${result.valid.length} custom lens(es): ${result.valid.map((l) => l.name).join(', ')}`,
+    });
+  }
+
+  return result;
 }
 
 // ─── Severity Ranking ──────────────────────────────────────────

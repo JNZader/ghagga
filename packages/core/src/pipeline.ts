@@ -17,7 +17,7 @@
 
 import { runConsensusReview } from './agents/consensus.js';
 import { runDiagnosticReview } from './agents/diagnostic.js';
-import { runFanOutReview } from './agents/fan-out-lenses.js';
+import { loadLensesFromDir, runFanOutReview } from './agents/fan-out-lenses.js';
 import { buildStackHints } from './agents/prompts.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
@@ -463,6 +463,11 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
           break;
 
         case 'fan-out':
+          // Load custom lenses from directory (if configured)
+          if (input.settings.lensDir) {
+            await loadLensesFromDir(input.settings.lensDir, input.onProgress);
+          }
+
           result = await runFanOutReview({
             diff: truncatedDiff,
             provider: (primary.provider as LLMProvider) ?? 'cli-bridge',
@@ -475,6 +480,8 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
             generateFns,
+            // Forward lens selection from settings (CLI flags > config > defaults)
+            ...(input.settings.lenses ? { lenses: input.settings.lenses } : {}),
           });
           break;
 

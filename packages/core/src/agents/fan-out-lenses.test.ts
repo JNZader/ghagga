@@ -8,7 +8,10 @@
  *   - Edge cases: no lenses, all lenses fail, empty findings
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type { ReviewFinding } from '../types.js';
 import {
@@ -21,11 +24,13 @@ import {
   LENS_PERFORMANCE,
   LENS_SECURITY,
   LENS_TYPING,
+  loadLensesFromDir,
   mergeFindings,
   type ReviewLens,
   registerLens,
   resetLensRegistry,
   runFanOutReview,
+  validateLens,
 } from './fan-out-lenses.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -387,5 +392,241 @@ describe('runFanOutReview', () => {
 
     expect(result.metadata.mode).toBe('fan-out');
     expect(result.metadata.modelsUsed).toEqual(['security:anthropic/claude-sonnet-4-20250514']);
+  });
+});
+
+// ─── validateLens ──────────────────────────────────────────────
+
+describe('validateLens', () => {
+  const validLens = {
+    name: 'wcag',
+    label: 'WCAG Accessibility',
+    system: 'Review for WCAG compliance issues.',
+  };
+
+  it('accepts a valid lens definition', () => {
+    const result = validateLens(validLens);
+    expect(result.lens).toEqual(validLens);
+    expect(result.error).toBeNull();
+  });
+
+  it('rejects null input', () => {
+    const result = validateLens(null);
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('JSON object');
+  });
+
+  it('rejects non-object input', () => {
+    const result = validateLens('not an object');
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('JSON object');
+  });
+
+  it('rejects missing name', () => {
+    const result = validateLens({ label: 'Test', system: 'prompt' });
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('name');
+  });
+
+  it('rejects empty name', () => {
+    const result = validateLens({ name: '', label: 'Test', system: 'prompt' });
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('name');
+  });
+
+  it('rejects name with invalid characters', () => {
+    const result = validateLens({ name: 'bad name!', label: 'Test', system: 'prompt' });
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('name');
+  });
+
+  it('accepts name with hyphens and underscores', () => {
+    const result = validateLens({ name: 'my-lens_v2', label: 'Test', system: 'prompt' });
+    expect(result.lens).not.toBeNull();
+    expect(result.lens?.name).toBe('my-lens_v2');
+  });
+
+  it('rejects missing label', () => {
+    const result = validateLens({ name: 'test', system: 'prompt' });
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('label');
+  });
+
+  it('rejects missing system', () => {
+    const result = validateLens({ name: 'test', label: 'Test' });
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('system');
+  });
+
+  it('rejects system prompt exceeding 4000 characters', () => {
+    const result = validateLens({
+      name: 'test',
+      label: 'Test',
+      system: 'x'.repeat(4001),
+    });
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('4000');
+  });
+
+  it('accepts system prompt at exactly 4000 characters', () => {
+    const result = validateLens({
+      name: 'test',
+      label: 'Test',
+      system: 'x'.repeat(4000),
+    });
+    expect(result.lens).not.toBeNull();
+  });
+
+  it('rejects non-string fields', () => {
+    const result = validateLens({ name: 123, label: 'Test', system: 'prompt' });
+    expect(result.lens).toBeNull();
+    expect(result.error).toContain('name');
+  });
+});
+
+// ─── loadLensesFromDir ─────────────────────────────────────────
+
+describe('loadLensesFromDir', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    resetLensRegistry();
+    tmpDir = mkdtempSync(join(tmpdir(), 'ghagga-lens-test-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns empty for nonexistent directory', async () => {
+    const result = await loadLensesFromDir('/tmp/nonexistent-lens-dir-xyz');
+    expect(result.valid).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('returns empty for empty directory', async () => {
+    const result = await loadLensesFromDir(tmpDir);
+    expect(result.valid).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('loads valid lens files and registers them', async () => {
+    const lens = { name: 'wcag', label: 'WCAG', system: 'Check WCAG.' };
+    writeFileSync(join(tmpDir, 'wcag.json'), JSON.stringify(lens));
+
+    const result = await loadLensesFromDir(tmpDir);
+    expect(result.valid).toHaveLength(1);
+    expect(result.valid[0]?.name).toBe('wcag');
+    expect(result.errors).toHaveLength(0);
+
+    // Verify it was registered
+    expect(getLens('wcag')).toEqual(lens);
+  });
+
+  it('skips invalid lens files with errors', async () => {
+    // Valid lens
+    writeFileSync(
+      join(tmpDir, 'good.json'),
+      JSON.stringify({ name: 'good', label: 'Good', system: 'Good prompt.' }),
+    );
+    // Invalid lens (missing system)
+    writeFileSync(
+      join(tmpDir, 'bad.json'),
+      JSON.stringify({ name: 'bad', label: 'Bad' }),
+    );
+
+    const warnings: string[] = [];
+    const result = await loadLensesFromDir(tmpDir, (e) => warnings.push(e.message));
+
+    expect(result.valid).toHaveLength(1);
+    expect(result.valid[0]?.name).toBe('good');
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.file).toBe('bad.json');
+    expect(warnings.some((w) => w.includes('bad.json'))).toBe(true);
+  });
+
+  it('skips files with invalid JSON', async () => {
+    writeFileSync(join(tmpDir, 'broken.json'), '{ not valid json }}}');
+
+    const result = await loadLensesFromDir(tmpDir);
+    expect(result.valid).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.file).toBe('broken.json');
+    expect(result.errors[0]?.reason).toContain('JSON parse error');
+  });
+
+  it('ignores non-json files', async () => {
+    writeFileSync(join(tmpDir, 'readme.md'), '# Lenses');
+    writeFileSync(
+      join(tmpDir, 'valid.json'),
+      JSON.stringify({ name: 'valid', label: 'Valid', system: 'prompt' }),
+    );
+
+    const result = await loadLensesFromDir(tmpDir);
+    expect(result.valid).toHaveLength(1);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('allows custom lens to override a built-in', async () => {
+    const customSecurity = {
+      name: 'security',
+      label: 'Custom Security',
+      system: 'My custom security prompt.',
+    };
+    writeFileSync(join(tmpDir, 'security.json'), JSON.stringify(customSecurity));
+
+    await loadLensesFromDir(tmpDir);
+    const lens = getLens('security');
+    expect(lens?.label).toBe('Custom Security');
+    expect(lens?.system).toBe('My custom security prompt.');
+  });
+});
+
+// ─── Integration: fan-out with custom lenses ───────────────────
+
+describe('runFanOutReview with custom lenses', () => {
+  beforeEach(() => {
+    resetLensRegistry();
+  });
+
+  function makeInput(overrides: Partial<FanOutReviewInput> = {}): FanOutReviewInput {
+    return {
+      diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
+      apiKey: 'test-key',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      ...overrides,
+    };
+  }
+
+  it('uses custom-registered lenses when selected by name', async () => {
+    registerLens({
+      name: 'compliance',
+      label: 'Compliance',
+      system: 'Check for compliance issues.',
+    });
+
+    const fn = makeFakeGenerateFn(PASSED_RESPONSE);
+    const result = await runFanOutReview(
+      makeInput({ generateFns: [fn], lenses: ['compliance'] }),
+    );
+
+    expect(result.status).toBe('PASSED');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses default lenses when no lenses specified and none registered', async () => {
+    const fn = makeFakeGenerateFn(PASSED_RESPONSE);
+    const result = await runFanOutReview(
+      makeInput({ generateFns: [fn] }),
+    );
+
+    // Default: first 3 lenses
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(result.status).toBe('PASSED');
   });
 });

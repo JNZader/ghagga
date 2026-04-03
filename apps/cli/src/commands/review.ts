@@ -78,6 +78,10 @@ export interface ReviewOptions {
   enableTools: string[];
   /** Print all available tools and exit */
   listTools?: boolean;
+  /** Comma-separated lens names for fan-out mode (from --lenses flag). */
+  lenses?: string;
+  /** Path to custom lens definitions directory (from --lens-dir flag). */
+  lensDir?: string;
 }
 
 interface GhaggaConfig {
@@ -93,6 +97,8 @@ interface GhaggaConfig {
   // Extensible tool system (Phase 7)
   disabledTools?: string[];
   enabledTools?: string[];
+  // Pluggable review lenses (fan-out mode)
+  lenses?: string[];
 }
 
 // ─── Main Command ───────────────────────────────────────────────
@@ -507,6 +513,16 @@ function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): Review
     enabledTools.delete(tool);
   }
 
+  // Resolve lens configuration: CLI --lenses flag > .ghagga.json lenses > undefined (defaults)
+  const lenses: string[] | undefined = options.lenses
+    ? options.lenses.split(',').map((s) => s.trim()).filter(Boolean)
+    : fileConfig.lenses;
+
+  // Resolve lens directory: CLI --lens-dir > default .ghagga/lenses/
+  // The lensDir is resolved to an absolute path relative to the repo root later,
+  // but we set the default convention here.
+  const lensDir = options.lensDir ?? join(resolve('.'), '.ghagga', 'lenses');
+
   return {
     enableSemgrep: options.semgrep ?? fileConfig.enableSemgrep ?? DEFAULT_SETTINGS.enableSemgrep,
     enableTrivy: options.trivy ?? fileConfig.enableTrivy ?? DEFAULT_SETTINGS.enableTrivy,
@@ -518,6 +534,8 @@ function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): Review
       (fileConfig.reviewLevel as ReviewSettings['reviewLevel']) ?? DEFAULT_SETTINGS.reviewLevel,
     disabledTools: Array.from(disabledTools),
     enabledTools: Array.from(enabledTools),
+    lenses,
+    lensDir,
   };
 }
 

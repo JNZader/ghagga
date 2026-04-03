@@ -174,6 +174,11 @@ export interface ReviewSettings {
   enableRecursiveReview?: boolean;
   /** Max re-review iterations for recursive review. Default: 2. */
   maxRecursiveIterations?: number;
+
+  /** Lens names to use in fan-out mode (e.g., ["security", "wcag"]). */
+  lenses?: string[];
+  /** Path to directory containing custom lens JSON definitions. Default: .ghagga/lenses/ */
+  lensDir?: string;
 }
 
 export interface ReviewContext {

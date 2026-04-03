@@ -59,7 +59,7 @@ export { parseHypotheses, runDiagnosticReview } from './agents/diagnostic.js';
 
 // ─── Fan-Out Lenses Agent ──────────────────────────────────────
 
-export type { FanOutReviewInput, ReviewLens } from './agents/fan-out-lenses.js';
+export type { FanOutReviewInput, LensValidationResult, ReviewLens } from './agents/fan-out-lenses.js';
 export {
   DEFAULT_LENSES,
   getAllLenses,
@@ -69,10 +69,12 @@ export {
   LENS_PERFORMANCE,
   LENS_SECURITY,
   LENS_TYPING,
+  loadLensesFromDir,
   mergeFindings,
   registerLens,
   resetLensRegistry,
   runFanOutReview,
+  validateLens,
 } from './agents/fan-out-lenses.js';
 
 // ─── Constants ──────────────────────────────────────────────────

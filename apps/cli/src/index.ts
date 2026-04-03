@@ -124,6 +124,14 @@ program
     'Create/update a GitHub issue with review results (use "new" or issue number)',
   )
   .option(
+    '--lenses <names>',
+    'Comma-separated lens names for fan-out mode (e.g., "security,wcag")',
+  )
+  .option(
+    '--lens-dir <path>',
+    'Path to custom lens definitions directory (default: .ghagga/lenses/)',
+  )
+  .option(
     '--memory-backend <type>',
     'Memory backend: sqlite (default) or engram (env: GHAGGA_MEMORY_BACKEND)',
     'sqlite',
@@ -237,6 +245,8 @@ program
       disableTools: options.disableTool ?? [],
       enableTools: options.enableTool ?? [],
       listTools: options.listTools ?? false,
+      lenses: options.lenses,
+      lensDir: options.lensDir,
     });
   });
 
@@ -294,4 +304,7 @@ interface ReviewCommandOptions {
   disableTool: string[];
   enableTool: string[];
   listTools?: boolean;
+  // Pluggable review lenses (fan-out mode)
+  lenses?: string;
+  lensDir?: string;
 }
