@@ -18,7 +18,9 @@
 import { runConsensusReview } from './agents/consensus.js';
 import { runDiagnosticReview } from './agents/diagnostic.js';
 import { loadLensesFromDir, runFanOutReview } from './agents/fan-out-lenses.js';
-import { buildStackHints } from './agents/prompts.js';
+import { buildCodeIntelSection, buildStackHints } from './agents/prompts.js';
+import { buildCodeIntelContext } from './code-intel/context.js';
+import type { CodeIntelMetadata, CodeIntelResult } from './code-intel/types.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
 import { buildChecklistContext, resolveChecklistConfig, scoreFindings } from './checklist/index.js';
@@ -125,6 +127,9 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   const startTime = Date.now();
 
   const emit = input.onProgress ?? (() => {});
+
+  // Track steps that failed but were gracefully degraded
+  const failedSteps: { step: string; error: string }[] = [];
 
   // Resolve whether AI review is enabled
   const aiEnabled = resolveAiEnabled(input);
@@ -239,6 +244,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       }
     } catch (error) {
       console.warn('[ghagga] Blast-radius failed (degrading gracefully):', error);
+      failedSteps.push({ step: 'blast-radius', error: error instanceof Error ? error.message : String(error) });
       emit({ step: 'blast-radius', message: 'Blast radius: skipped (error loading graph)' });
       blastRadiusMetadata = {
         enabled: true,
@@ -277,11 +283,12 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       ? 'Using precomputed static analysis from runner...'
       : 'Running static analysis & memory search...',
   });
-  const [staticResult, rawMemoryContext] = await Promise.all([
+  const [staticResult, rawMemoryContext, codeIntelResults] = await Promise.all([
     input.precomputedStaticAnalysis
       ? Promise.resolve(input.precomputedStaticAnalysis)
-      : runStaticAnalysisSafe(fileList, input),
-    aiEnabled ? searchMemorySafe(input, fileList) : Promise.resolve(null),
+      : runStaticAnalysisSafe(fileList, input, failedSteps),
+    aiEnabled ? searchMemorySafe(input, fileList, failedSteps) : Promise.resolve(null),
+    queryCodeIntelSafe(input, fileList, emit, failedSteps),
   ]);
 
   // Build full (L2) context first, then choose fidelity level based on budget
@@ -298,17 +305,41 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   const staticContext = progressiveContext.staticContext;
   const memoryContext = progressiveContext.memoryContext;
 
+  // ── Step 5.1b: Build code intelligence context (optional) ───
+  const codeIntelContext = codeIntelResults.length > 0
+    ? buildCodeIntelSection(
+        buildCodeIntelContext(codeIntelResults, input.settings.codeIntelMaxTokens),
+      )
+    : '';
+
+  let codeIntelMetadata: CodeIntelMetadata | undefined;
+  if (input.settings.enableCodeIntel) {
+    codeIntelMetadata = {
+      enabled: true,
+      providerAvailable: !!input.codeIntelProvider,
+      filesQueried: fileList.length,
+      filesWithData: codeIntelResults.filter(
+        (r) => r.callers.length > 0 || r.callees.length > 0 || r.imports.length > 0,
+      ).length,
+      queryDurationMs: 0, // Timing captured in queryCodeIntelSafe
+    };
+  }
+
   {
     const toolsSummary = Object.entries(staticResult)
       .map(([name, result]) => `  ${name}: ${result.status} (${result.findings.length} findings)`)
       .join('\n');
     const levelDetail = `  context levels: static=${progressiveContext.staticLevel}, memory=${progressiveContext.memoryLevel}`;
+    const codeIntelDetail = codeIntelContext
+      ? `\n  code-intel: ${codeIntelResults.length} file(s) with structural data`
+      : '\n  code-intel: disabled or unavailable';
     emit({
       step: 'static-results',
       message: `Static analysis complete (context: static=${progressiveContext.staticLevel}, memory=${progressiveContext.memoryLevel})`,
       detail:
         toolsSummary +
         (rawMemoryContext ? '\n  memory: loaded' : '\n  memory: disabled') +
+        codeIntelDetail +
         '\n' +
         levelDetail,
     });
@@ -351,7 +382,8 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         });
         enhancedStaticFindings = mergeEnhanceResult(allStaticFindings, eResult);
         enhanceMetadata = eMeta;
-      } catch {
+      } catch (enhanceError) {
+        failedSteps.push({ step: 'ai-enhance', error: enhanceError instanceof Error ? enhanceError.message : String(enhanceError) });
         emit({
           step: 'static-analysis',
           message: 'AI enhance failed — continuing without enhancement',
@@ -399,6 +431,9 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       message: `Running ${effectiveMode} agent with ${primary.provider}/${primary.model}...`,
     });
 
+    // Combine stack hints with code intelligence context for agent prompts
+    const combinedStackHints = stackHints + codeIntelContext;
+
     try {
       switch (effectiveMode) {
         case 'simple':
@@ -406,7 +441,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             diff: truncatedDiff,
             staticContext,
             memoryContext,
-            stackHints,
+            stackHints: combinedStackHints,
             checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -423,7 +458,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             diff: truncatedDiff,
             staticContext,
             memoryContext,
-            stackHints,
+            stackHints: combinedStackHints,
             checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -442,7 +477,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             models: buildConsensusModels(input.providerChain, primary),
             staticContext,
             memoryContext,
-            stackHints,
+            stackHints: combinedStackHints,
             checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -459,7 +494,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             apiKey: primary.apiKey,
             staticContext,
             memoryContext,
-            stackHints,
+            stackHints: combinedStackHints,
             checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -479,7 +514,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             apiKey: primary.apiKey ?? '',
             staticContext,
             memoryContext,
-            stackHints,
+            stackHints: combinedStackHints,
             checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -500,6 +535,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         '[ghagga] AI review failed, returning static analysis only:',
         error instanceof Error ? error.message : String(error),
       );
+      failedSteps.push({ step: 'ai-review', error: error instanceof Error ? error.message : String(error) });
       emit({ step: 'agent-failed', message: 'AI review failed — returning static analysis only' });
       result = createStaticOnlyResult(staticResult, input.mode, startTime);
       result.status = 'NEEDS_HUMAN_REVIEW';
@@ -550,6 +586,11 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // Add blast-radius metadata (if applicable)
   if (blastRadiusMetadata) {
     result.metadata.blastRadius = blastRadiusMetadata;
+  }
+
+  // Add code intelligence metadata (if applicable)
+  if (codeIntelMetadata) {
+    result.codeIntelMetadata = codeIntelMetadata;
   }
 
   // ── Step 7.4: Exploitability analysis (optional) ────────────
@@ -622,6 +663,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
           '[ghagga] Exploitability analysis failed (non-fatal):',
           error instanceof Error ? error.message : String(error),
         );
+        failedSteps.push({ step: 'exploitability', error: error instanceof Error ? error.message : String(error) });
         emit({
           step: 'exploitability',
           message: 'Exploitability analysis failed — continuing without',
@@ -676,6 +718,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         '[ghagga] Recursive review failed (non-fatal):',
         error instanceof Error ? error.message : String(error),
       );
+      failedSteps.push({ step: 'recursive-review', error: error instanceof Error ? error.message : String(error) });
       emit({ step: 'recursive-review', message: 'Recursive review failed — continuing without' });
     }
   }
@@ -722,6 +765,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         '[ghagga] Doc validation failed (non-fatal):',
         error instanceof Error ? error.message : String(error),
       );
+      failedSteps.push({ step: 'doc-validation', error: error instanceof Error ? error.message : String(error) });
       emit({ step: 'doc-validation', message: 'Doc validation failed — continuing without' });
     }
   }
@@ -738,7 +782,17 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         '[ghagga] Memory persist failed (non-fatal):',
         error instanceof Error ? error.message : String(error),
       );
+      failedSteps.push({ step: 'memory-persist', error: error instanceof Error ? error.message : String(error) });
     });
+  }
+
+  // ── Step 9: Attach failed steps and mark as PARTIAL ─────────
+  if (failedSteps.length > 0) {
+    result.failedSteps = failedSteps;
+    // Only downgrade to PARTIAL if the review otherwise appeared successful
+    if (result.status === 'PASSED') {
+      result.status = 'PARTIAL';
+    }
   }
 
   return result;
@@ -933,7 +987,7 @@ function resolveEffectiveMode(
  * Run static analysis with graceful degradation.
  * Returns a result with all tools skipped if anything goes wrong.
  */
-async function runStaticAnalysisSafe(fileList: string[], input: ReviewInput) {
+async function runStaticAnalysisSafe(fileList: string[], input: ReviewInput, failedSteps: { step: string; error: string }[]) {
   try {
     // Build a file map for static analysis (paths only, content from diff)
     const files = new Map<string, string>();
@@ -954,6 +1008,7 @@ async function runStaticAnalysisSafe(fileList: string[], input: ReviewInput) {
       '[ghagga] Static analysis failed (degrading gracefully):',
       error instanceof Error ? error.message : String(error),
     );
+    failedSteps.push({ step: 'static-analysis', error: error instanceof Error ? error.message : String(error) });
 
     const errorResult = {
       status: 'error' as const,
@@ -974,7 +1029,7 @@ async function runStaticAnalysisSafe(fileList: string[], input: ReviewInput) {
  * Search memory with graceful degradation.
  * Returns null if memory is disabled or unavailable.
  */
-async function searchMemorySafe(input: ReviewInput, fileList: string[]): Promise<string | null> {
+async function searchMemorySafe(input: ReviewInput, fileList: string[], failedSteps: { step: string; error: string }[]): Promise<string | null> {
   if (!input.settings.enableMemory || !input.memoryStorage || !input.context) {
     return null;
   }
@@ -986,7 +1041,79 @@ async function searchMemorySafe(input: ReviewInput, fileList: string[]): Promise
       '[ghagga] Memory search failed (degrading gracefully):',
       error instanceof Error ? error.message : String(error),
     );
+    failedSteps.push({ step: 'memory-search', error: error instanceof Error ? error.message : String(error) });
     return null;
+  }
+}
+
+/**
+ * Query the code intelligence provider for structural context.
+ * Returns an empty array when disabled, unavailable, or on error.
+ */
+async function queryCodeIntelSafe(
+  input: ReviewInput,
+  fileList: string[],
+  emit: (event: import('./types.js').ProgressEvent) => void,
+  failedSteps: { step: string; error: string }[],
+): Promise<CodeIntelResult[]> {
+  if (!input.settings.enableCodeIntel || !input.codeIntelProvider) {
+    return [];
+  }
+
+  const startTime = Date.now();
+  emit({ step: 'code-intel', message: `Querying code intelligence for ${fileList.length} file(s)...` });
+
+  try {
+    const results: CodeIntelResult[] = [];
+    const provider = input.codeIntelProvider;
+
+    // Query each changed file for structural data (parallel)
+    const queries = fileList.map(async (file) => {
+      const [imports, exports] = await Promise.all([
+        provider.getFileImports(file),
+        provider.getFileExports(file),
+      ]);
+
+      // Query callers/callees for each exported symbol
+      const callerResults = await Promise.all(
+        exports.slice(0, 10).map((sym) => provider.getCallers(sym, file)),
+      );
+      const calleeResults = await Promise.all(
+        exports.slice(0, 10).map((sym) => provider.getCallees(sym, file)),
+      );
+
+      const callers = callerResults.flat();
+      const callees = calleeResults.flat();
+
+      return { file, callers, callees, imports, exports };
+    });
+
+    const settled = await Promise.allSettled(queries);
+    for (const outcome of settled) {
+      if (outcome.status === 'fulfilled') {
+        results.push(outcome.value);
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    const withData = results.filter(
+      (r) => r.callers.length > 0 || r.callees.length > 0 || r.imports.length > 0,
+    ).length;
+
+    emit({
+      step: 'code-intel',
+      message: `Code intelligence: ${withData}/${results.length} files with structural data (${durationMs}ms)`,
+    });
+
+    return results;
+  } catch (error) {
+    console.warn(
+      '[ghagga] Code intelligence query failed (degrading gracefully):',
+      error instanceof Error ? error.message : String(error),
+    );
+    failedSteps.push({ step: 'code-intel', error: error instanceof Error ? error.message : String(error) });
+    emit({ step: 'code-intel', message: 'Code intelligence: failed — continuing without' });
+    return [];
   }
 }
 

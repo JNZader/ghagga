@@ -324,13 +324,18 @@ index 1234567..abcdefg 100644
 
   describe('graceful degradation', () => {
     it('continues when static analysis throws', async () => {
-      (runStaticAnalysis as MockedFunction<typeof runStaticAnalysis>).mockRejectedValue(
+      (runStaticAnalysis as MockedFunction<typeof runStaticAnalysis>).mockRejectedValueOnce(
         new Error('semgrep crashed'),
       );
 
       const result = await reviewPipeline(makeInput());
-      // Pipeline should still complete via the agent
-      expect(result.status).toBe('PASSED');
+      // Pipeline should still complete via the agent, but marked as PARTIAL
+      expect(result.status).toBe('PARTIAL');
+      expect(result.failedSteps).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ step: 'static-analysis' }),
+        ]),
+      );
       expect(runSimpleReview).toHaveBeenCalledOnce();
     });
 
@@ -349,12 +354,17 @@ index 1234567..abcdefg 100644
         memoryStorage: {} as any, // Fake memoryStorage to enable memory
       });
 
-      (searchMemoryForContext as MockedFunction<typeof searchMemoryForContext>).mockRejectedValue(
+      (searchMemoryForContext as MockedFunction<typeof searchMemoryForContext>).mockRejectedValueOnce(
         new Error('database connection failed'),
       );
 
       const result = await reviewPipeline(inputWithMemory);
-      expect(result.status).toBe('PASSED');
+      expect(result.status).toBe('PARTIAL');
+      expect(result.failedSteps).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ step: 'memory-search' }),
+        ]),
+      );
       expect(runSimpleReview).toHaveBeenCalledOnce();
     });
   });
@@ -701,6 +711,57 @@ diff --git a/README.md b/README.md
         .calls[0]?.[0];
       expect(callArgs.diff).toContain('app.ts');
       expect(callArgs.diff).not.toContain('README.md');
+    });
+  });
+
+  // ── Failed Steps Tracking ──────────────────────────────────
+
+  describe('failed steps tracking', () => {
+    it('populates failedSteps and sets PARTIAL status when a step throws', async () => {
+      // Make static analysis throw — this triggers runStaticAnalysisSafe's catch
+      (runStaticAnalysis as MockedFunction<typeof runStaticAnalysis>).mockRejectedValueOnce(
+        new Error('semgrep crashed'),
+      );
+
+      const result = await reviewPipeline(makeInput());
+
+      // failedSteps should contain the static-analysis failure
+      expect(result.failedSteps).toBeDefined();
+      expect(result.failedSteps).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ step: 'static-analysis', error: 'semgrep crashed' }),
+        ]),
+      );
+
+      // Status should be PARTIAL since the review would otherwise PASS
+      expect(result.status).toBe('PARTIAL');
+    });
+
+    it('does not set failedSteps when all steps succeed', async () => {
+      const result = await reviewPipeline(makeInput());
+
+      expect(result.failedSteps).toBeUndefined();
+      expect(result.status).toBe('PASSED');
+    });
+
+    it('preserves FAILED status even when steps fail (does not downgrade to PARTIAL)', async () => {
+      // Make static analysis throw AND the agent return a FAILED result
+      (runStaticAnalysis as MockedFunction<typeof runStaticAnalysis>).mockRejectedValueOnce(
+        new Error('tool error'),
+      );
+      (runSimpleReview as MockedFunction<typeof runSimpleReview>).mockResolvedValueOnce({
+        ...SIMPLE_RESULT,
+        status: 'FAILED',
+      });
+
+      const result = await reviewPipeline(makeInput());
+
+      // failedSteps should be populated
+      expect(result.failedSteps).toBeDefined();
+      expect(result.failedSteps!.length).toBeGreaterThan(0);
+
+      // Status should remain FAILED, not downgraded to PARTIAL
+      expect(result.status).toBe('FAILED');
     });
   });
 

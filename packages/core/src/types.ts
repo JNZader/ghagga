@@ -152,6 +152,13 @@ export interface ReviewInput {
 
   /** Enable AI-powered post-analysis enhancement. Default: false. */
   enhance?: boolean;
+
+  /**
+   * Code intelligence provider for structural queries via MCP.
+   * Injected by the caller (connects to codedb, repoforge graph, etc.).
+   * When undefined, code intelligence context is skipped (graceful degradation).
+   */
+  codeIntelProvider?: import('./code-intel/types.js').CodeIntelProvider;
 }
 
 export interface ReviewSettings {
@@ -189,6 +196,13 @@ export interface ReviewSettings {
 
   /** Enable bidirectional code-doc validation. Default: false. */
   enableDocValidation?: boolean;
+
+  /** Enable code intelligence structural context via MCP. Default: false. */
+  enableCodeIntel?: boolean;
+  /** Timeout in ms for code intelligence queries. Default: 5000. */
+  codeIntelTimeout?: number;
+  /** Max tokens for code intelligence context. Default: 1500. */
+  codeIntelMaxTokens?: number;
 }
 
 export interface ReviewContext {
@@ -235,7 +249,7 @@ export interface Hypothesis {
 
 // ─── Review Output ──────────────────────────────────────────────
 
-export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED';
+export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED' | 'PARTIAL';
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type FindingSource = 'ai' | 'semgrep' | 'trivy' | 'cpd' | (string & {});
 
@@ -275,6 +289,12 @@ export interface ReviewResult {
 
   /** Doc-validation results (present when enableDocValidation is true). */
   docValidation?: import('./doc-validation/types.js').DocValidationResult;
+
+  /** Code intelligence metadata (present when enableCodeIntel is true). */
+  codeIntelMetadata?: import('./code-intel/types.js').CodeIntelMetadata;
+
+  /** Pipeline steps that failed but were gracefully degraded. Present when status is 'PARTIAL'. */
+  failedSteps?: { step: string; error: string }[];
 }
 
 export interface ReviewFinding {
