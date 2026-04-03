@@ -29,6 +29,8 @@ import {
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
   REVIEW_CALIBRATION,
+  UNTRUSTED_CONTENT_POLICY,
+  wrapUntrustedDiff,
 } from './prompts.js';
 import { parseFindingsBlock } from './simple.js';
 
@@ -514,8 +516,8 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     detail: resolvedLenses.map((l) => `  → ${l.label}`).join('\n'),
   });
 
-  // Build the user prompt (same for all lenses)
-  const userPrompt = `Review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
+  // Build the user prompt (same for all lenses, wrapped in untrusted-content delimiters)
+  const userPrompt = `Review the following code changes:\n\n${wrapUntrustedDiff(diff)}`;
 
   // ── Step 1: Run lenses with bounded concurrency ─────────────
   const lensTasks = resolvedLenses.map((lens, index) => {
@@ -533,6 +535,7 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       const isFirst = index === 0;
       const system = [
         lens.system,
+        UNTRUSTED_CONTENT_POLICY,
         isFirst ? staticContext : '',
         isFirst ? buildMemoryContext(memoryContext) : '',
         isFirst ? stackHints : '',

@@ -22,6 +22,8 @@ import {
   buildReviewLevelInstruction,
   REVIEW_CALIBRATION,
   SIMPLE_REVIEW_SYSTEM,
+  UNTRUSTED_CONTENT_POLICY,
+  wrapUntrustedDiff,
 } from './prompts.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -174,6 +176,7 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
   // Build the full system prompt with all context layers
   const system = [
     SIMPLE_REVIEW_SYSTEM,
+    UNTRUSTED_CONTENT_POLICY,
     staticContext,
     buildMemoryContext(memoryContext),
     stackHints,
@@ -184,8 +187,8 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     .filter(Boolean)
     .join('\n');
 
-  // Build the user prompt with the diff
-  const prompt = `Please review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
+  // Build the user prompt with the diff (wrapped in untrusted-content delimiters)
+  const prompt = `Please review the following code changes:\n\n${wrapUntrustedDiff(diff)}`;
 
   emit({
     step: 'simple-call',

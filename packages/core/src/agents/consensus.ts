@@ -32,6 +32,8 @@ import {
   CONSENSUS_FOR_SYSTEM,
   CONSENSUS_NEUTRAL_SYSTEM,
   REVIEW_CALIBRATION,
+  UNTRUSTED_CONTENT_POLICY,
+  wrapUntrustedDiff,
 } from './prompts.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -233,8 +235,8 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
 
   const startTime = Date.now();
 
-  // Build the user prompt (same for all models)
-  const userPrompt = `Review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
+  // Build the user prompt (same for all models, wrapped in untrusted-content delimiters)
+  const userPrompt = `Review the following code changes:\n\n${wrapUntrustedDiff(diff)}`;
 
   emit({
     step: 'consensus-start',
@@ -253,6 +255,7 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
       const isFirst = index === 0;
       const system = [
         STANCE_PROMPTS[config.stance],
+        UNTRUSTED_CONTENT_POLICY,
         isFirst ? staticContext : '',
         isFirst ? buildMemoryContext(memoryContext) : '',
         isFirst ? stackHints : '',

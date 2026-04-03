@@ -27,6 +27,8 @@ import {
   buildReviewLevelInstruction,
   DIAGNOSTIC_SYSTEM,
   REVIEW_CALIBRATION,
+  UNTRUSTED_CONTENT_POLICY,
+  wrapUntrustedDiff,
 } from './prompts.js';
 import { parseReviewResponse } from './simple.js';
 
@@ -146,6 +148,7 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
   // Build the full system prompt with all context layers
   const system = [
     DIAGNOSTIC_SYSTEM,
+    UNTRUSTED_CONTENT_POLICY,
     staticContext,
     buildMemoryContext(memoryContext),
     stackHints,
@@ -156,8 +159,8 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
     .filter(Boolean)
     .join('\n');
 
-  // Build the user prompt with the diff
-  const prompt = `Please perform a diagnostic analysis of the following code changes. Generate testable hypotheses for any potential issues:\n\n\`\`\`diff\n${diff}\n\`\`\``;
+  // Build the user prompt with the diff (wrapped in untrusted-content delimiters)
+  const prompt = `Please perform a diagnostic analysis of the following code changes. Generate testable hypotheses for any potential issues:\n\n${wrapUntrustedDiff(diff)}`;
 
   const languageModel = createModel(provider, model, apiKey);
 

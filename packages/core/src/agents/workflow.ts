@@ -32,12 +32,14 @@ import {
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
   REVIEW_CALIBRATION,
+  UNTRUSTED_CONTENT_POLICY,
   WORKFLOW_ERRORS_SYSTEM,
   WORKFLOW_PERFORMANCE_SYSTEM,
   WORKFLOW_SCOPE_SYSTEM,
   WORKFLOW_SECURITY_SYSTEM,
   WORKFLOW_STANDARDS_SYSTEM,
   WORKFLOW_SYNTHESIS_SYSTEM,
+  wrapUntrustedDiff,
 } from './prompts.js';
 import { parseReviewResponse } from './simple.js';
 
@@ -175,8 +177,8 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     detail: SPECIALISTS.map((s) => `  → ${s.label}`).join('\n'),
   });
 
-  // Build the user prompt (same for all specialists)
-  const userPrompt = `Review the following code changes:\n\n\`\`\`diff\n${diff}\n\`\`\``;
+  // Build the user prompt (same for all specialists, wrapped in untrusted-content delimiters)
+  const userPrompt = `Review the following code changes:\n\n${wrapUntrustedDiff(diff)}`;
 
   // Context sources keyed for lookup by the specialist context map
   const contextSources: Record<SpecialistContextKey, string> = {
@@ -208,6 +210,7 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
       const system = [
         specialist.system,
+        UNTRUSTED_CONTENT_POLICY,
         ...contextParts,
         input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
