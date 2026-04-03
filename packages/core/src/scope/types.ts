@@ -67,6 +67,50 @@ export interface AffectedSymbol {
   overlappingHunks: DiffHunk[];
 }
 
+// ─── Entity Change Types ──────────────────────────────────────
+
+/** Classification of how an entity was changed. */
+export const ENTITY_CHANGE_KIND = {
+  COSMETIC: 'cosmetic',
+  LOGIC: 'logic',
+  RENAMED: 'renamed',
+} as const;
+
+export type EntityChangeKind = (typeof ENTITY_CHANGE_KIND)[keyof typeof ENTITY_CHANGE_KIND];
+
+/** An entity with its classified change type and relevant diff lines. */
+export interface EntityChange {
+  /** The affected symbol */
+  symbol: SymbolInfo;
+
+  /** Classification of the change */
+  kind: EntityChangeKind;
+
+  /** Raw diff lines (+/-) within this entity's range */
+  diffLines: string[];
+}
+
+/** A detected rename: old name removed, new name added, body similar. */
+export interface RenameMatch {
+  /** Original entity name */
+  oldName: string;
+
+  /** New entity name */
+  newName: string;
+
+  /** Body similarity ratio (0.0–1.0) */
+  similarity: number;
+
+  /** The new symbol (post-rename) */
+  symbol: SymbolInfo;
+}
+
+/** Options for entity diff classification. */
+export interface EntityDiffOptions {
+  /** Minimum body similarity to consider a rename (0.0–1.0). Default: 0.9 */
+  similarityThreshold?: number;
+}
+
 // ─── Scoped Context Types ─────────────────────────────────────
 
 /** A file with its affected symbols and source content, ready for scoped review. */

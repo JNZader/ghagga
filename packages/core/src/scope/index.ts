@@ -11,11 +11,17 @@
 export type {
   AffectedSymbol,
   DiffHunk,
+  EntityChange,
+  EntityChangeKind,
+  EntityDiffOptions,
+  RenameMatch,
   ScopeLanguage,
   ScopedFile,
   SymbolInfo,
   SymbolKind,
 } from './types.js';
+
+export { ENTITY_CHANGE_KIND } from './types.js';
 
 // ─── Context Builder ───────────────────────────────────────────
 
@@ -24,6 +30,15 @@ export { buildScopedContext } from './context-builder.js';
 // ─── Diff Mapper ───────────────────────────────────────────────
 
 export { mapDiffToSymbols, parseHunks } from './diff-mapper.js';
+
+// ─── Entity Diff ──────────────────────────────────────────────
+
+export {
+  classifyEntityChanges,
+  detectRenames,
+  extractEntityDiffLines,
+  filterLogicChanges,
+} from './entity-diff.js';
 
 // ─── Symbol Extractor ──────────────────────────────────────────
 

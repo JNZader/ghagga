@@ -333,6 +333,17 @@ export {
   tracePackageImports,
 } from './exploitability/index.js';
 
+// ─── Code Intelligence (MCP) ──────────────────────────────────
+
+export type {
+  CodeIntelMetadata,
+  CodeIntelProvider,
+  CodeIntelResult,
+  SymbolReference,
+} from './code-intel/index.js';
+
+export { buildCodeIntelContext, McpCodeIntelClient } from './code-intel/index.js';
+
 // ─── Doc Validation ────────────────────────────────────────────
 
 export type { DocReference, DocValidationResult } from './doc-validation/index.js';
@@ -343,6 +354,10 @@ export { extractChangedSymbols, isDocFile, scanDocsForSymbols } from './doc-vali
 export type {
   AffectedSymbol,
   DiffHunk,
+  EntityChange,
+  EntityChangeKind,
+  EntityDiffOptions,
+  RenameMatch,
   ScopedFile,
   ScopeLanguage,
   SymbolInfo,
@@ -351,7 +366,12 @@ export type {
 
 export {
   buildScopedContext,
+  classifyEntityChanges,
+  detectRenames,
+  ENTITY_CHANGE_KIND,
+  extractEntityDiffLines,
   extractSymbolsFromTree,
+  filterLogicChanges,
   initParser,
   loadLanguage,
   mapDiffToSymbols,
