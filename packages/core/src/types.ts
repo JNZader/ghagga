@@ -143,6 +143,13 @@ export interface ReviewInput {
    */
   graphLoader?: import('./graph/schema.js').GraphLoader;
 
+  /**
+   * File content reader for usage analysis.
+   * Injected by the caller to read project source files.
+   * When undefined, function-level usage analysis is skipped.
+   */
+  fileReader?: import('./exploitability/analyzer.js').FileReader;
+
   /** Enable AI-powered post-analysis enhancement. Default: false. */
   enhance?: boolean;
 }
@@ -179,6 +186,9 @@ export interface ReviewSettings {
   lenses?: string[];
   /** Path to directory containing custom lens JSON definitions. Default: .ghagga/lenses/ */
   lensDir?: string;
+
+  /** Enable bidirectional code-doc validation. Default: false. */
+  enableDocValidation?: boolean;
 }
 
 export interface ReviewContext {
@@ -262,6 +272,9 @@ export interface ReviewResult {
 
   /** Recursive review report (present when enableRecursiveReview is true). */
   recursiveReview?: import('./recursive/types.js').RecursiveReviewReport;
+
+  /** Doc-validation results (present when enableDocValidation is true). */
+  docValidation?: import('./doc-validation/types.js').DocValidationResult;
 }
 
 export interface ReviewFinding {
@@ -303,6 +316,12 @@ export interface ReviewFinding {
 
   /** Detailed exploitability analysis (present when exploitability analysis runs). */
   exploitabilityDetail?: import('./exploitability/types.js').ExploitabilityDetail;
+
+  /** Function-level usage label for CVE findings (present when usage analysis runs). */
+  usageLabel?: import('./exploitability/types.js').UsageLabel;
+
+  /** Detailed usage analysis (present when usage analysis runs). */
+  usageDetail?: import('./exploitability/types.js').UsageDetail;
 }
 
 export interface ReviewMetadata {

@@ -333,6 +333,11 @@ export {
   tracePackageImports,
 } from './exploitability/index.js';
 
+// ─── Doc Validation ────────────────────────────────────────────
+
+export type { DocReference, DocValidationResult } from './doc-validation/index.js';
+export { extractChangedSymbols, isDocFile, scanDocsForSymbols } from './doc-validation/index.js';
+
 // ─── Scope (Tree-sitter Symbol Scoping) ────────────────────────
 
 export type {

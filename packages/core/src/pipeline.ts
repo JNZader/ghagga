@@ -22,9 +22,13 @@ import { buildStackHints } from './agents/prompts.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
 import { buildChecklistContext, resolveChecklistConfig, scoreFindings } from './checklist/index.js';
+import {
+  extractChangedSymbols as extractChangedSymbolsFromDiff,
+  scanDocsForSymbols as scanDocsForSymbolRefs,
+} from './doc-validation/index.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
-import { analyzeExploitability } from './exploitability/index.js';
+import { analyzeExploitability, analyzeUsage } from './exploitability/index.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
 import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
@@ -584,6 +588,35 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
           step: 'exploitability',
           message: `Exploitability analysis complete: ${exploitable} exploitable, ${potential} potentially, ${notExploitable} not exploitable`,
         });
+
+        // Function-level usage analysis (requires fileReader)
+        if (input.fileReader) {
+          emit({
+            step: 'usage-analysis',
+            message: 'Analyzing function-level usage of vulnerable packages...',
+          });
+          await analyzeUsage(result.findings, exploitGraph, input.fileReader);
+
+          const usageLabels = result.findings
+            .filter((f) => f.usageLabel)
+            .reduce(
+              (acc, f) => {
+                const key = f.usageLabel ?? 'unknown';
+                acc[key] = (acc[key] ?? 0) + 1;
+                return acc;
+              },
+              {} as Record<string, number>,
+            );
+
+          const inUse = usageLabels['in-use'] ?? 0;
+          const importedNotCalled = usageLabels['imported-not-called'] ?? 0;
+          const notInUse = usageLabels['not-in-use'] ?? 0;
+
+          emit({
+            step: 'usage-analysis',
+            message: `Usage analysis complete: ${inUse} in-use, ${importedNotCalled} imported-not-called, ${notInUse} not-in-use`,
+          });
+        }
       } catch (error) {
         console.warn(
           '[ghagga] Exploitability analysis failed (non-fatal):',
@@ -644,6 +677,52 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         error instanceof Error ? error.message : String(error),
       );
       emit({ step: 'recursive-review', message: 'Recursive review failed — continuing without' });
+    }
+  }
+
+  // ── Step 7.7: Code-doc validation (optional) ───────────────────
+  if (input.settings.enableDocValidation && filteredFiles.length > 0) {
+    try {
+      const changedSymbols = extractChangedSymbolsFromDiff(filteredDiff);
+      if (changedSymbols.length > 0) {
+        emit({
+          step: 'doc-validation',
+          message: `Scanning docs for ${changedSymbols.length} changed symbol(s)...`,
+        });
+
+        const docResult = scanDocsForSymbolRefs(changedSymbols, allFiles, fileList);
+        result.docValidation = docResult;
+
+        if (docResult.staleReferences.length > 0) {
+          // Convert stale references to findings
+          for (const ref of docResult.staleReferences) {
+            result.findings.push({
+              severity: 'low',
+              category: 'documentation',
+              file: ref.file,
+              line: ref.line,
+              message: `Documentation references \`${ref.symbol}\` which was changed in this PR but this doc was not updated.`,
+              suggestion: `Review and update the reference to \`${ref.symbol}\` in this file.`,
+              source: 'doc-validation',
+            });
+          }
+          emit({
+            step: 'doc-validation',
+            message: `Doc validation: ${docResult.staleReferences.length} stale reference(s) found in ${docResult.docsScanned} doc(s)`,
+          });
+        } else {
+          emit({
+            step: 'doc-validation',
+            message: `Doc validation: no stale references (${docResult.docsScanned} docs scanned)`,
+          });
+        }
+      }
+    } catch (error) {
+      console.warn(
+        '[ghagga] Doc validation failed (non-fatal):',
+        error instanceof Error ? error.message : String(error),
+      );
+      emit({ step: 'doc-validation', message: 'Doc validation failed — continuing without' });
     }
   }
 
