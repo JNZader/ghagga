@@ -65,10 +65,13 @@ export function saveConfig(config: GhaggaCliConfig): void {
   const configPath = getConfigPath();
 
   if (!existsSync(configDir)) {
-    mkdirSync(configDir, { recursive: true });
+    mkdirSync(configDir, { recursive: true, mode: 0o700 });
   }
 
-  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
 }
 
 /**
