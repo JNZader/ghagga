@@ -38,4 +38,6 @@ export type {
   Stats,
   User,
   ValidationResponse,
+  WorkflowInstallResult,
+  WorkflowStatus,
 } from '@ghagga/types';

@@ -219,9 +219,9 @@ export interface Observation {
   updatedAt: string;
 }
 
-// ─── Runner ─────────────────────────────────────────────────────
+// ─── Runner (legacy — kept for backward compat until fully removed) ──────────
 
-/** Response from GET /api/runner/status */
+/** @deprecated Use WorkflowStatus instead */
 export interface RunnerStatus {
   exists: boolean;
   repoFullName?: string;
@@ -229,7 +229,7 @@ export interface RunnerStatus {
   warning?: string;
 }
 
-/** Response from POST /api/runner/create */
+/** @deprecated Use WorkflowInstallResult instead */
 export interface RunnerCreateResult {
   created: boolean;
   repoFullName: string;
@@ -238,7 +238,7 @@ export interface RunnerCreateResult {
   warning?: string;
 }
 
-/** Response from POST /api/runner/configure-secret */
+/** @deprecated */
 export interface RunnerConfigureResult {
   configured: boolean;
 }
@@ -249,6 +249,22 @@ export interface RunnerError {
   message?: string;
   repoFullName?: string;
   retryAfter?: number;
+}
+
+// ─── Workflow Installation ────────────────────────────────────────
+
+/** Response from GET /api/runner/install-workflow/status/:owner/:repo */
+export interface WorkflowStatus {
+  installed: boolean;
+  workflowInstalledAt: string | null;
+  workflowSha: string | null;
+}
+
+/** Response from POST /api/runner/install-workflow/:owner/:repo */
+export interface WorkflowInstallResult {
+  installed: boolean;
+  sha: string;
+  created: boolean;
 }
 
 // ─── Delegated CI ───────────────────────────────────────────────

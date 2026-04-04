@@ -5,6 +5,7 @@
  * Processes code review jobs asynchronously with retry support.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Job } from 'bullmq';
 import { Queue, Worker } from 'bullmq';
 import type {
@@ -16,14 +17,9 @@ import type {
   ReviewMode,
   StaticAnalysisResult,
 } from 'ghagga-core';
-import {
-  formatReviewComment,
-  PreloadedGraphLoader,
-  REVIEW_COMMENT_MARKER,
-  reviewPipeline,
-} from 'ghagga-core';
+import { formatReviewComment, PreloadedGraphLoader, reviewPipeline } from 'ghagga-core';
 import type { Database, DbProviderChainEntry } from 'ghagga-db';
-import { createDatabaseFromEnv, decrypt, saveReview } from 'ghagga-db';
+import { createDatabaseFromEnv, decrypt, eq, repositories, saveReview } from 'ghagga-db';
 import Redis from 'ioredis';
 import {
   addCommentReaction,
@@ -35,10 +31,10 @@ import {
   getPRCommitMessages,
   getPRFileList,
   postComment,
-  updateComment,
 } from '../github/client.js';
-import { discoverRunnerRepo, dispatchWorkflow } from '../github/runner.js';
+import { deriveCallbackSecret, dispatchWorkflow, injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
+import { callbackResultKey, redis } from '../lib/redis.js';
 import { PostgresMemoryStorage } from '../memory/postgres.js';
 
 const logger = rootLogger.child({ module: 'review-queue' });
@@ -115,6 +111,46 @@ interface RunnerResult {
   callbackId: string | null;
 }
 
+// ─── Callback Poll ─────────────────────────────────────────────
+
+/**
+ * Poll Redis for a static analysis result written by the runner callback endpoint.
+ *
+ * The callback endpoint writes `ghagga:callback:{callbackId}` after verifying the
+ * HMAC signature. This function checks for that key on a fixed interval, parses
+ * the JSON payload when found, deletes the key, and returns the result.
+ *
+ * Returns null if maxAttempts is exhausted — caller should continue without
+ * static analysis (graceful degradation).
+ */
+export async function waitForCallbackResult(
+  callbackId: string,
+  pollIntervalMs = 10_000,
+  maxAttempts = 66,
+): Promise<StaticAnalysisResult | null> {
+  const key = callbackResultKey(callbackId);
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
+
+    const raw = await redis.get(key);
+    if (raw !== null) {
+      await redis.del(key);
+      try {
+        return JSON.parse(raw) as StaticAnalysisResult;
+      } catch {
+        logger.warn(
+          { callbackId },
+          'Failed to parse callback result JSON — skipping static analysis',
+        );
+        return null;
+      }
+    }
+  }
+
+  return null;
+}
+
 // ─── Queue Configuration ───────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,7 +221,7 @@ async function processReview(
   );
   await job.updateProgress(20);
 
-  // Step 2: Dispatch static analysis to runner (if available)
+  // Step 2: Inject workflow (lazy) + dispatch static analysis inline
   const runnerResult: RunnerResult = await (async (): Promise<RunnerResult> => {
     const anyToolEnabled =
       settings.enabledTools !== undefined ||
@@ -195,13 +231,7 @@ async function processReview(
       settings.enableCpd;
 
     if (!anyToolEnabled) {
-      log.info('No static analysis tools enabled — skipping runner');
-      return { dispatched: false, callbackId: null };
-    }
-
-    const runner = await discoverRunnerRepo(owner, token);
-    if (!runner) {
-      log.info('No ghagga-runner repo found — static analysis will run locally on server');
+      log.info('No static analysis tools enabled — skipping inline workflow');
       return { dispatched: false, callbackId: null };
     }
 
@@ -210,14 +240,66 @@ async function processReview(
     const serverUrl = process.env.SERVER_URL ?? `http://localhost:${process.env.PORT ?? '3000'}`;
     const callbackUrl = `${serverUrl}/runner/callback`;
 
+    // Step 2a: Lazy workflow injection — ensure ghagga.yml exists in the target repo
+    let currentWorkflowSha: string | null = null;
     try {
-      const callbackId = await dispatchWorkflow({
-        ownerLogin: owner,
+      const db = createDatabaseFromEnv();
+      const [repoRecord] = await db
+        .select({ workflowSha: repositories.workflowSha })
+        .from(repositories)
+        .where(eq(repositories.id, repositoryId))
+        .limit(1);
+      currentWorkflowSha = repoRecord?.workflowSha ?? null;
+    } catch (dbErr) {
+      log.warn({ error: String(dbErr) }, 'Failed to read workflowSha from DB — proceeding');
+    }
+
+    // If no workflow installed yet, inject it now
+    if (!currentWorkflowSha) {
+      try {
+        const injectionResult = await injectWorkflow(owner, repo, token);
+        currentWorkflowSha = injectionResult.sha;
+
+        // Persist to DB
+        try {
+          const db = createDatabaseFromEnv();
+          await db
+            .update(repositories)
+            .set({
+              workflowInstalledAt: new Date(),
+              workflowSha: injectionResult.sha,
+              updatedAt: new Date(),
+            })
+            .where(eq(repositories.id, repositoryId));
+          log.info(
+            { sha: injectionResult.sha, created: injectionResult.created },
+            'Workflow injected and DB updated',
+          );
+        } catch (dbErr) {
+          log.warn({ error: String(dbErr) }, 'Workflow injected but failed to update DB');
+        }
+      } catch (injectionErr) {
+        log.warn(
+          { error: String(injectionErr) },
+          'Workflow injection failed — skipping static analysis (graceful degradation)',
+        );
+        return { dispatched: false, callbackId: null };
+      }
+    }
+
+    // Step 2b: Generate callbackId + secret and dispatch workflow to PR's repo
+    const callbackId = `${randomUUID()}.${Date.now().toString(36)}`;
+    const callbackSecret = deriveCallbackSecret(callbackId);
+
+    try {
+      await dispatchWorkflow({
         repoFullName,
         prNumber,
         headSha,
         baseBranch,
         callbackUrl,
+        callbackSecret,
+        callbackId,
         enableSemgrep: settings.enableSemgrep,
         enableTrivy: settings.enableTrivy,
         enableCpd: settings.enableCpd,
@@ -227,12 +309,12 @@ async function processReview(
         token,
       });
 
-      log.info({ callbackId, runner: runner.fullName }, 'Runner workflow dispatched');
+      log.info({ callbackId, repoFullName }, 'Inline workflow dispatched');
       return { dispatched: true, callbackId };
     } catch (error) {
       log.warn(
         { error: String(error) },
-        'Failed to dispatch runner workflow — static analysis will run locally',
+        'Failed to dispatch inline workflow — static analysis will run locally',
       );
       return { dispatched: false, callbackId: null };
     }
@@ -243,11 +325,26 @@ async function processReview(
   // Step 3: Wait for runner callback or use local static analysis
   let precomputedStaticAnalysis: StaticAnalysisResult | undefined;
 
-  if (runnerResult.dispatched) {
+  if (runnerResult.dispatched && runnerResult.callbackId) {
     log.info(
       { callbackId: runnerResult.callbackId },
-      'Runner dispatched - proceeding without precomputed analysis',
+      'Runner dispatched — waiting for callback result (poll loop)',
     );
+
+    const callbackResult = await waitForCallbackResult(runnerResult.callbackId);
+
+    if (callbackResult !== null) {
+      precomputedStaticAnalysis = callbackResult;
+      log.info(
+        { callbackId: runnerResult.callbackId, tools: Object.keys(callbackResult) },
+        'Received static analysis results from runner callback',
+      );
+    } else {
+      log.warn(
+        { callbackId: runnerResult.callbackId },
+        'Runner callback poll timed out — continuing review without static analysis',
+      );
+    }
   }
 
   await job.updateProgress(40);

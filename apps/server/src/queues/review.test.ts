@@ -95,8 +95,9 @@ vi.mock('../github/client.js', () => ({
 }));
 
 vi.mock('../github/runner.js', () => ({
-  discoverRunnerRepo: vi.fn().mockResolvedValue(null),
+  deriveCallbackSecret: vi.fn().mockReturnValue('mock-secret'),
   dispatchWorkflow: vi.fn().mockResolvedValue('cb-123'),
+  injectWorkflow: vi.fn().mockResolvedValue({ sha: 'abc123', created: false }),
 }));
 
 vi.mock('../memory/postgres.js', () => ({

@@ -305,6 +305,21 @@ export async function getReposByInstallationId(db: Database, installationId: num
     .where(and(eq(repositories.installationId, installationId), eq(repositories.isActive, true)));
 }
 
+export async function updateWorkflowStatus(
+  db: Database,
+  repoId: number,
+  data: { workflowSha: string; workflowInstalledAt: Date },
+) {
+  await db
+    .update(repositories)
+    .set({
+      workflowSha: data.workflowSha,
+      workflowInstalledAt: data.workflowInstalledAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(repositories.id, repoId));
+}
+
 // ─── Reviews ────────────────────────────────────────────────────
 
 export async function saveReview(

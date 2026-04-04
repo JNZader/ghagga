@@ -27,3 +27,21 @@ export async function closeRedis(): Promise<void> {
 }
 
 export default redis;
+
+// ─── Inline Workflow Callback Keys ──────────────────────────────────────────
+
+/**
+ * Key that maps a callbackId to the owning BullMQ job ID.
+ * Written by the review worker after dispatching the workflow.
+ * Read by runner-callback.ts to verify the job exists before writing results.
+ *
+ * Pattern: ghagga:callback:{callbackId}
+ */
+export const callbackResultKey = (callbackId: string): string => `ghagga:callback:${callbackId}`;
+
+/**
+ * TTL for callback result keys (seconds).
+ * 720 s = 12 minutes — slightly longer than the 11-minute poll window
+ * so the key outlives the poller and can be inspected after timeout.
+ */
+export const CALLBACK_RESULT_TTL = 720;

@@ -16,6 +16,16 @@ vi.mock('../github/runner.js', () => ({
   verifyCallbackSignature: (...args: unknown[]) => mockVerifyCallbackSignature(...args),
 }));
 
+const mockRedisSet = vi.fn().mockResolvedValue('OK');
+
+vi.mock('../lib/redis.js', () => ({
+  redis: {
+    set: (...args: unknown[]) => mockRedisSet(...args),
+  },
+  callbackResultKey: (id: string) => `ghagga:callback:${id}`,
+  CALLBACK_RESULT_TTL: 720,
+}));
+
 // Shared mock logger instance so tests can assert on calls
 const { mockLoggerChild, mockChildFn } = vi.hoisted(() => {
   const mockLoggerChild = {
@@ -70,6 +80,8 @@ function postCallback(app: Hono, body: string, headers: Record<string, string> =
 
 beforeEach(() => {
   mockVerifyCallbackSignature.mockReset();
+  mockRedisSet.mockReset();
+  mockRedisSet.mockResolvedValue('OK');
   mockLoggerChild.info.mockClear();
   mockLoggerChild.warn.mockClear();
   mockLoggerChild.error.mockClear();
@@ -126,7 +138,25 @@ describe('POST /runner/callback', () => {
           prNumber: 42,
           staticAnalysisTools: expect.any(Array),
         },
-        'Runner callback accepted — feature pending BullMQ migration',
+        'Runner callback accepted — static analysis results stored in Redis',
+      );
+    });
+
+    it('writes static analysis results to Redis with correct key and TTL', async () => {
+      mockVerifyCallbackSignature.mockReturnValue(true);
+
+      const app = createApp();
+      const body = JSON.stringify(VALID_PAYLOAD);
+      await postCallback(app, body, {
+        'x-ghagga-signature': 'sha256=validhex',
+      });
+
+      expect(mockRedisSet).toHaveBeenCalledOnce();
+      expect(mockRedisSet).toHaveBeenCalledWith(
+        'ghagga:callback:cb-123',
+        JSON.stringify(VALID_PAYLOAD.staticAnalysis),
+        'EX',
+        720,
       );
     });
 
@@ -163,7 +193,7 @@ describe('POST /runner/callback', () => {
       expect(loggedContext.staticAnalysisTools).toEqual(['semgrep', 'trivy']);
     });
 
-    it('log message indicates feature pending BullMQ migration', async () => {
+    it('log message confirms results stored in Redis', async () => {
       mockVerifyCallbackSignature.mockReturnValue(true);
 
       const app = createApp();
@@ -173,10 +203,10 @@ describe('POST /runner/callback', () => {
       });
 
       const logMessage = mockLoggerChild.info.mock.calls[0][1];
-      expect(logMessage).toBe('Runner callback accepted — feature pending BullMQ migration');
+      expect(logMessage).toBe('Runner callback accepted — static analysis results stored in Redis');
     });
 
-    it('does not dispatch any external event (uses BullMQ)', async () => {
+    it('only logs info on success — no warn or error', async () => {
       mockVerifyCallbackSignature.mockReturnValue(true);
 
       const app = createApp();
@@ -185,7 +215,6 @@ describe('POST /runner/callback', () => {
         'x-ghagga-signature': 'sha256=abc',
       });
 
-      // Only info logging should occur, no external dispatch
       expect(mockLoggerChild.info).toHaveBeenCalledOnce();
       expect(mockLoggerChild.warn).not.toHaveBeenCalled();
       expect(mockLoggerChild.error).not.toHaveBeenCalled();

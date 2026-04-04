@@ -7,9 +7,11 @@ import { KNOWN_MODELS, type ProviderEntryState } from '@/components/settings/Pro
 import { ToolGrid } from '@/components/settings/ToolGrid';
 import {
   useCopySettingsToGlobal,
+  useInstallWorkflow,
   useRepositories,
   useSettings,
   useUpdateSettings,
+  useWorkflowStatus,
 } from '@/lib/api';
 import { useSelectedRepo } from '@/lib/repo-context';
 import type {
@@ -27,6 +29,16 @@ export function Settings() {
   const { data: settings, isLoading } = useSettings(selectedRepo);
   const updateSettings = useUpdateSettings();
   const copyToGlobal = useCopySettingsToGlobal();
+
+  // ── Workflow installation ───────────────────────────────────
+  const [workflowOwner, workflowRepo] = selectedRepo
+    ? (selectedRepo.split('/') as [string, string])
+    : [undefined, undefined];
+  const { data: workflowStatus, isLoading: workflowLoading } = useWorkflowStatus(
+    workflowOwner,
+    workflowRepo,
+  );
+  const installWorkflow = useInstallWorkflow(workflowOwner ?? '', workflowRepo ?? '');
 
   // ── Global vs custom toggle ─────────────────────────────────
   const [useGlobalSettings, setUseGlobalSettings] = useState(true);
@@ -657,6 +669,85 @@ export function Settings() {
               repoId={selectedRepoId}
             />
           )}
+
+          {/* ── Workflow Installation ─────────────────────────── */}
+          <Card>
+            <CardHeader
+              title="Inline Workflow"
+              description="GHAGGA injects a GitHub Actions workflow into this repository for static analysis"
+            />
+
+            {workflowLoading && (
+              <div className="flex items-center gap-3">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+                <span className="text-sm text-text-secondary">Checking workflow status...</span>
+              </div>
+            )}
+
+            {!workflowLoading && workflowStatus?.installed && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="h-5 w-5 text-green-400"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                    aria-label="Workflow installed"
+                    role="img"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span className="text-sm text-text-primary">Workflow installed</span>
+                  {workflowStatus.workflowInstalledAt && (
+                    <span className="text-xs text-text-secondary">
+                      — {new Date(workflowStatus.workflowInstalledAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => installWorkflow.mutate()}
+                  disabled={installWorkflow.isPending}
+                  className="btn-secondary text-sm"
+                >
+                  {installWorkflow.isPending ? 'Updating...' : 'Update Workflow'}
+                </button>
+                {installWorkflow.isError && (
+                  <p className="text-sm text-red-400">
+                    Failed to update workflow. Please try again.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!workflowLoading && !workflowStatus?.installed && (
+              <div className="space-y-3">
+                <p className="text-sm text-text-secondary">
+                  The GHAGGA inline workflow has not been installed in this repository yet. Install
+                  it to enable static analysis (Semgrep, Trivy, PMD/CPD) on pull requests.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => installWorkflow.mutate()}
+                  disabled={installWorkflow.isPending}
+                  className="btn-primary"
+                >
+                  {installWorkflow.isPending ? 'Installing...' : 'Install Workflow'}
+                </button>
+                {installWorkflow.isError && (
+                  <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3">
+                    <p className="text-sm text-red-300">
+                      Failed to install workflow. This may be due to branch protection rules on the
+                      default branch.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
 
           {/* ── Save Button ──────────────────────────────────── */}
           <div className="flex items-center gap-4">

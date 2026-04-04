@@ -41,6 +41,7 @@ import type { StaticAnalysisResult } from 'ghagga-core';
 import { Hono } from 'hono';
 import { verifyCallbackSignature } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
+import { CALLBACK_RESULT_TTL, callbackResultKey, redis } from '../lib/redis.js';
 
 const logger = rootLogger.child({ module: 'runner-callback' });
 
@@ -161,11 +162,17 @@ export function createRunnerCallbackRouter() {
         return c.json({ error: 'Invalid signature' }, 401);
       }
 
-      // TODO: Re-implement with BullMQ - store static analysis results for job pickup
-      // For now, log the callback but don't dispatch (feature pending migration)
+      // Write static analysis results to Redis for the BullMQ worker to pick up
+      await redis.set(
+        callbackResultKey(callbackId),
+        JSON.stringify(staticAnalysis),
+        'EX',
+        CALLBACK_RESULT_TTL,
+      );
+
       logger.info(
         { callbackId, repoFullName, prNumber, staticAnalysisTools: Object.keys(staticAnalysis) },
-        'Runner callback accepted — feature pending BullMQ migration',
+        'Runner callback accepted — static analysis results stored in Redis',
       );
     }
 

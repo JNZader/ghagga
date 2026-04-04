@@ -94,17 +94,7 @@ vi.mock('../lib/provider-models.js', () => ({
 
 // Mock runner functions
 vi.mock('../github/runner.js', () => ({
-  discoverRunnerRepo: vi.fn(),
-  createRunnerRepo: vi.fn(),
-  setRunnerSecret: vi.fn(),
-  RunnerCreationError: class extends Error {
-    constructor(
-      public code: string,
-      message: string,
-    ) {
-      super(message);
-    }
-  },
+  injectWorkflow: vi.fn().mockResolvedValue({ sha: 'mock-sha', created: false }),
 }));
 
 // ─── Test Data ──────────────────────────────────────────────────

@@ -163,6 +163,12 @@ export const repositories = pgTable(
     llmProvider: varchar('llm_provider', { length: 50 }).default('github').notNull(),
     llmModel: varchar('llm_model', { length: 100 }),
 
+    // ── Inline workflow (Phase: inline-workflow-migration) ──
+    /** ISO timestamp of when ghagga.yml was last pushed to .github/workflows/ in this repo */
+    workflowInstalledAt: timestamp('workflow_installed_at'),
+    /** SHA of the file object returned by Contents API — used for idempotent updates */
+    workflowSha: text('workflow_sha'),
+
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

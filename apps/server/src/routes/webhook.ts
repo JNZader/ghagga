@@ -19,6 +19,7 @@ import {
   getInstallationByGitHubId,
   getInstallationById,
   getRepoByGithubId,
+  updateWorkflowStatus,
   upsertInstallation,
   upsertRepository,
 } from 'ghagga-db';
@@ -31,6 +32,7 @@ import {
   getInstallationToken,
   verifyWebhookSignature,
 } from '../github/client.js';
+import { injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
 import { enqueueDelegatedCiJob } from '../queues/delegated-ci.js';
 import { enqueueReview } from '../queues/review.js';
@@ -589,13 +591,62 @@ async function handleInstallation(
     });
 
     // Upsert any repositories included in the installation event
-    if (payload.repositories) {
-      for (const repo of payload.repositories) {
-        await upsertRepository(db, {
-          githubRepoId: repo.id,
-          installationId: inst.id,
-          fullName: repo.full_name,
-        });
+    if (payload.repositories && payload.repositories.length > 0) {
+      const appId = process.env.GITHUB_APP_ID;
+      const privateKey = process.env.GITHUB_PRIVATE_KEY;
+      let installationToken: string | undefined;
+
+      if (appId && privateKey) {
+        try {
+          installationToken = await getInstallationToken(installation.id, appId, privateKey);
+        } catch (err) {
+          logger.warn(
+            { installationId: installation.id, error: String(err) },
+            'Failed to get installation token for workflow injection — skipping injection',
+          );
+        }
+      }
+
+      const results = await Promise.allSettled(
+        payload.repositories.map(async (repo) => {
+          const dbRepo = await upsertRepository(db, {
+            githubRepoId: repo.id,
+            installationId: inst.id,
+            fullName: repo.full_name,
+          });
+
+          if (installationToken) {
+            const [owner, repoName] = repo.full_name.split('/') as [string, string];
+            try {
+              const injectionResult = await injectWorkflow(owner, repoName, installationToken);
+              await updateWorkflowStatus(db, dbRepo.id, {
+                workflowSha: injectionResult.sha,
+                workflowInstalledAt: new Date(),
+              });
+              logger.info(
+                {
+                  repo: repo.full_name,
+                  sha: injectionResult.sha,
+                  created: injectionResult.created,
+                },
+                'Workflow injected on installation.created',
+              );
+            } catch (err) {
+              logger.error(
+                { repo: repo.full_name, error: String(err) },
+                'Failed to inject workflow on installation.created — continuing with other repos',
+              );
+            }
+          }
+        }),
+      );
+
+      const failed = results.filter((r) => r.status === 'rejected');
+      if (failed.length > 0) {
+        logger.warn(
+          { count: failed.length },
+          'Some repos failed during installation.created processing',
+        );
       }
     }
 
@@ -650,13 +701,58 @@ async function handleInstallationRepositories(
   });
 
   // Handle added repositories
-  if (payload.repositories_added) {
-    for (const repo of payload.repositories_added) {
-      await upsertRepository(db, {
-        githubRepoId: repo.id,
-        installationId: inst.id,
-        fullName: repo.full_name,
-      });
+  if (payload.repositories_added && payload.repositories_added.length > 0) {
+    const appId = process.env.GITHUB_APP_ID;
+    const privateKey = process.env.GITHUB_PRIVATE_KEY;
+    let installationToken: string | undefined;
+
+    if (appId && privateKey) {
+      try {
+        installationToken = await getInstallationToken(installation.id, appId, privateKey);
+      } catch (err) {
+        logger.warn(
+          { installationId: installation.id, error: String(err) },
+          'Failed to get installation token for workflow injection — skipping injection',
+        );
+      }
+    }
+
+    const results = await Promise.allSettled(
+      payload.repositories_added.map(async (repo) => {
+        const dbRepo = await upsertRepository(db, {
+          githubRepoId: repo.id,
+          installationId: inst.id,
+          fullName: repo.full_name,
+        });
+
+        if (installationToken) {
+          const [owner, repoName] = repo.full_name.split('/') as [string, string];
+          try {
+            const injectionResult = await injectWorkflow(owner, repoName, installationToken);
+            await updateWorkflowStatus(db, dbRepo.id, {
+              workflowSha: injectionResult.sha,
+              workflowInstalledAt: new Date(),
+            });
+            logger.info(
+              { repo: repo.full_name, sha: injectionResult.sha, created: injectionResult.created },
+              'Workflow injected on installation_repositories.added',
+            );
+          } catch (err) {
+            logger.error(
+              { repo: repo.full_name, error: String(err) },
+              'Failed to inject workflow on repo add — continuing with other repos',
+            );
+          }
+        }
+      }),
+    );
+
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length > 0) {
+      logger.warn(
+        { count: failed.length },
+        'Some repos failed during installation_repositories processing',
+      );
     }
 
     logger.info(

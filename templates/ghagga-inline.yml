@@ -1,0 +1,912 @@
+# =============================================================================
+# GHAGGA Inline Static Analysis
+# =============================================================================
+# This workflow runs static analysis tools (Semgrep, Trivy, PMD/CPD) directly
+# inside the target repository. It is injected into .github/workflows/ghagga.yml
+# by the GHAGGA server and triggered via workflow_dispatch.
+#
+# Unlike ghagga-analysis.yml (runner repo variant), this workflow:
+#   - Runs IN the target repo — no separate clone needed
+#   - Uses github.token for checkout — no GHAGGA_TOKEN required
+#   - Does NOT delete logs (the repo owner can see logs; no privacy concern)
+# =============================================================================
+
+name: GHAGGA Static Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      callbackId:
+        description: 'Unique correlation ID (UUID v4)'
+        required: true
+        type: string
+      prNumber:
+        description: 'Pull request number'
+        required: true
+        type: string
+      headSha:
+        description: 'HEAD commit SHA to analyze'
+        required: true
+        type: string
+      callbackUrl:
+        description: 'Server URL to POST results to'
+        required: true
+        type: string
+      callbackSecret:
+        description: 'HMAC secret for computing callback signatures'
+        required: true
+        type: string
+      enableSemgrep:
+        description: 'Run Semgrep static analysis'
+        required: false
+        type: string
+        default: 'true'
+      enableTrivy:
+        description: 'Run Trivy vulnerability scanner'
+        required: false
+        type: string
+        default: 'true'
+      enableCpd:
+        description: 'Run PMD/CPD copy-paste detector'
+        required: false
+        type: string
+        default: 'true'
+      enabledTools:
+        description: 'JSON array of tool names to force-enable (e.g., ["ruff","bandit"])'
+        required: false
+        type: string
+        default: '[]'
+      disabledTools:
+        description: 'JSON array of tool names to force-disable (e.g., ["semgrep","cpd"])'
+        required: false
+        type: string
+        default: '[]'
+
+# Cancel in-progress runs for the same callback (safety net)
+concurrency:
+  group: ghagga-${{ github.event.inputs.callbackId }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── Mask sensitive values ─────────────────────────────────
+      - name: Mask sensitive data
+        run: |
+          echo "::add-mask::${{ github.event.inputs.callbackSecret }}"
+          echo "::add-mask::${{ github.event.inputs.callbackUrl }}"
+
+      # ── Checkout PR head commit ───────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.headSha }}
+          token: ${{ github.token }}
+
+      # ── Resolve which tools to run ────────────────────────────
+      - name: Resolve tools
+        id: resolve
+        run: |
+          # Start with always-on tools
+          TOOLS='["semgrep","trivy","cpd","gitleaks","shellcheck","markdownlint","lizard"]'
+
+          # Auto-detect based on files in the repo
+          if find . -name '*.py' -o -name '*.pyi' | head -1 | grep -q .; then
+            TOOLS=$(echo "$TOOLS" | jq '. + ["ruff","bandit"] | unique')
+          fi
+          if find . -name 'go.mod' -o -name '*.go' | head -1 | grep -q .; then
+            TOOLS=$(echo "$TOOLS" | jq '. + ["golangci-lint"] | unique')
+          fi
+          if find . -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mts' -o -name '*.mjs' | head -1 | grep -q .; then
+            TOOLS=$(echo "$TOOLS" | jq '. + ["biome"] | unique')
+          fi
+          if find . -name '*.java' -o -name '*.kt' | head -1 | grep -q .; then
+            TOOLS=$(echo "$TOOLS" | jq '. + ["pmd"] | unique')
+          fi
+          if find . -name '*.php' -o -name 'composer.json' | head -1 | grep -q .; then
+            TOOLS=$(echo "$TOOLS" | jq '. + ["psalm"] | unique')
+          fi
+          if find . -name 'Cargo.toml' -o -name '*.rs' | head -1 | grep -q .; then
+            TOOLS=$(echo "$TOOLS" | jq '. + ["clippy"] | unique')
+          fi
+          if find . -name 'Dockerfile*' | head -1 | grep -q .; then
+            TOOLS=$(echo "$TOOLS" | jq '. + ["hadolint"] | unique')
+          fi
+
+          # Apply enabledTools (force-add)
+          ENABLED='${{ github.event.inputs.enabledTools }}'
+          if [ "$ENABLED" != "[]" ] && [ -n "$ENABLED" ]; then
+            TOOLS=$(echo "$TOOLS" | jq --argjson enabled "$ENABLED" '. + $enabled | unique')
+          fi
+
+          # Apply disabledTools (force-remove)
+          DISABLED='${{ github.event.inputs.disabledTools }}'
+          if [ "$DISABLED" != "[]" ] && [ -n "$DISABLED" ]; then
+            TOOLS=$(echo "$TOOLS" | jq --argjson disabled "$DISABLED" '. - $disabled')
+          else
+            # Legacy boolean fallback (only when disabledTools is empty)
+            if [ "${{ github.event.inputs.enableSemgrep }}" = "false" ]; then
+              TOOLS=$(echo "$TOOLS" | jq '. - ["semgrep"]')
+            fi
+            if [ "${{ github.event.inputs.enableTrivy }}" = "false" ]; then
+              TOOLS=$(echo "$TOOLS" | jq '. - ["trivy"]')
+            fi
+            if [ "${{ github.event.inputs.enableCpd }}" = "false" ]; then
+              TOOLS=$(echo "$TOOLS" | jq '. - ["cpd"]')
+            fi
+          fi
+
+          echo "tools=$TOOLS" >> "$GITHUB_OUTPUT"
+
+      # ── Cache: Semgrep pip packages ───────────────────────────
+      - name: Cache Semgrep
+        if: contains(steps.resolve.outputs.tools, '"semgrep"')
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: semgrep-1.90.0-${{ runner.os }}
+
+      # ── Cache: Trivy DB ──────────────────────────────────────
+      - name: Cache Trivy DB
+        if: contains(steps.resolve.outputs.tools, '"trivy"')
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ hashFiles('**/package-lock.json', '**/go.sum', '**/requirements.txt') }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      # ── Cache: PMD binary ────────────────────────────────────
+      - name: Cache PMD
+        if: contains(steps.resolve.outputs.tools, '"cpd"')
+        uses: actions/cache@v4
+        with:
+          path: /opt/pmd
+          key: pmd-7.8.0-${{ runner.os }}
+
+      # ── Install Semgrep ──────────────────────────────────────
+      - name: Install Semgrep
+        if: contains(steps.resolve.outputs.tools, '"semgrep"')
+        continue-on-error: true
+        run: |
+          if ! command -v semgrep &>/dev/null; then
+            pip install --quiet semgrep==1.90.0 2>/dev/null
+          fi
+
+      # ── Install Trivy ───────────────────────────────────────
+      - name: Install Trivy
+        if: contains(steps.resolve.outputs.tools, '"trivy"')
+        continue-on-error: true
+        run: |
+          if ! command -v trivy &>/dev/null; then
+            TRIVY_VERSION="0.69.3"
+            curl -sL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -o /tmp/trivy.tar.gz
+            tar -xzf /tmp/trivy.tar.gz -C /tmp
+            mv /tmp/trivy /usr/local/bin/trivy
+            chmod +x /usr/local/bin/trivy
+            rm -f /tmp/trivy.tar.gz /tmp/LICENSE /tmp/README.md
+          fi
+
+      # ── Install PMD/CPD ─────────────────────────────────────
+      - name: Install PMD
+        if: contains(steps.resolve.outputs.tools, '"cpd"')
+        continue-on-error: true
+        run: |
+          if [ ! -f /opt/pmd/bin/pmd ]; then
+            curl -sL "https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.8.0/pmd-dist-7.8.0-bin.zip" \
+              -o /tmp/pmd.zip 2>/dev/null
+            unzip -q /tmp/pmd.zip -d /opt 2>/dev/null
+            mv /opt/pmd-bin-7.8.0 /opt/pmd 2>/dev/null || true
+            rm -f /tmp/pmd.zip
+          fi
+
+      # ── Run Semgrep ──────────────────────────────────────────
+      - name: Run Semgrep
+        if: contains(steps.resolve.outputs.tools, '"semgrep"')
+        id: semgrep
+        continue-on-error: true
+        run: |
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          semgrep --json --config auto --quiet . > /tmp/semgrep-raw.json 2>/dev/null
+          SEMGREP_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $SEMGREP_EXIT -ne 0 ] && [ ! -s /tmp/semgrep-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"semgrep: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/semgrep-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [.results[] | {
+                severity: (if .extra.severity == "ERROR" then "high"
+                          elif .extra.severity == "WARNING" then "medium"
+                          elif .extra.severity == "INFO" then "info"
+                          else "low" end),
+                category: "security",
+                file: .path,
+                line: .start.line,
+                message: .extra.message,
+                source: "semgrep"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/semgrep-raw.json > /tmp/semgrep-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"semgrep: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/semgrep-result.json
+          fi
+
+      # ── Run Trivy ────────────────────────────────────────────
+      - name: Run Trivy
+        if: contains(steps.resolve.outputs.tools, '"trivy"')
+        id: trivy
+        continue-on-error: true
+        run: |
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          trivy fs --format json --scanners vuln --quiet . > /tmp/trivy-raw.json 2>/dev/null
+          TRIVY_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $TRIVY_EXIT -ne 0 ] && [ ! -s /tmp/trivy-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"trivy: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/trivy-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [(.Results // [])[] | (.Vulnerabilities // [])[] | {
+                severity: (if .Severity == "CRITICAL" then "critical"
+                          elif .Severity == "HIGH" then "high"
+                          elif .Severity == "MEDIUM" then "medium"
+                          elif .Severity == "LOW" then "low"
+                          else "info" end),
+                category: "dependency-vulnerability",
+                file: (input_filename // "unknown"),
+                message: (.VulnerabilityID + ": " + .PkgName + "@" + .InstalledVersion + " - " + (.Title // .Description // "Known vulnerability") + (if .FixedVersion then " (fix: upgrade to " + .FixedVersion + ")" else " (no fix available)" end)),
+                source: "trivy"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/trivy-raw.json > /tmp/trivy-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"trivy: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/trivy-result.json
+          fi
+
+      # ── Run CPD ──────────────────────────────────────────────
+      - name: Run CPD
+        if: contains(steps.resolve.outputs.tools, '"cpd"')
+        id: cpd
+        continue-on-error: true
+        run: |
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          /opt/pmd/bin/pmd cpd --format xml --minimum-tokens 100 \
+            --dir . --skip-lexical-errors > /tmp/cpd-raw.xml 2>/dev/null
+          CPD_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          # CPD exits 4 when duplications found (not an error)
+          if [ $CPD_EXIT -ne 0 ] && [ $CPD_EXIT -ne 4 ] && [ ! -s /tmp/cpd-raw.xml ]; then
+            echo '{"status":"error","findings":[],"error":"cpd: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/cpd-result.json
+          else
+            python3 -c "
+          import xml.etree.ElementTree as ET, json, sys
+          findings = []
+          try:
+              tree = ET.parse('/tmp/cpd-raw.xml')
+              for dup in tree.findall('.//duplication'):
+                  lines = dup.get('lines', '0')
+                  tokens = dup.get('tokens', '0')
+                  files = []
+                  for f in dup.findall('file'):
+                      path = f.get('path', '')
+                      line = f.get('line', '0')
+                      files.append({'path': path, 'line': int(line)})
+                  if len(files) >= 2:
+                      locations = ', '.join(f\"{f['path']}:{f['line']}\" for f in files)
+                      findings.append({
+                          'severity': 'medium',
+                          'category': 'duplication',
+                          'file': files[0]['path'],
+                          'line': files[0]['line'],
+                          'message': f'Duplicated code block ({lines} lines, {tokens} tokens) found in: {locations}',
+                          'source': 'cpd'
+                      })
+          except Exception:
+              pass
+          json.dump({'status': 'success', 'findings': findings, 'executionTimeMs': int(sys.argv[1])}, sys.stdout)
+          " "$ELAPSED" > /tmp/cpd-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"cpd: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/cpd-result.json
+          fi
+
+      # ═══════════════════════════════════════════════════════════
+      # Phase 2: Always-On Tools
+      # ═══════════════════════════════════════════════════════════
+
+      # ── Cache: Gitleaks binary ───────────────────────────────
+      - name: Cache Gitleaks
+        if: contains(steps.resolve.outputs.tools, '"gitleaks"')
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/gitleaks
+          key: gitleaks-8.21.2-${{ runner.os }}
+
+      # ── Install + Run Gitleaks ───────────────────────────────
+      - name: Run Gitleaks
+        if: contains(steps.resolve.outputs.tools, '"gitleaks"')
+        id: gitleaks
+        continue-on-error: true
+        run: |
+          if ! command -v gitleaks &>/dev/null; then
+            curl -sL "https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz" \
+              | tar xz -C /usr/local/bin gitleaks 2>/dev/null
+          fi
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          gitleaks detect --source . --report-format json --report-path /tmp/gitleaks-raw.json --no-git --exit-code 0 2>/dev/null
+          GITLEAKS_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $GITLEAKS_EXIT -ne 0 ] && [ ! -s /tmp/gitleaks-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"gitleaks: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/gitleaks-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [(.// [])[] | {
+                severity: "critical",
+                category: "secrets",
+                file: (.File // "unknown"),
+                line: (.StartLine // 0),
+                message: ((.RuleID // "secret") + ": " + (.Description // "Potential secret detected")),
+                source: "gitleaks"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/gitleaks-raw.json > /tmp/gitleaks-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"gitleaks: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/gitleaks-result.json
+          fi
+
+      # ── Run ShellCheck ───────────────────────────────────────
+      - name: Run ShellCheck
+        if: contains(steps.resolve.outputs.tools, '"shellcheck"')
+        id: shellcheck
+        continue-on-error: true
+        run: |
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          SHELL_FILES=$(find . -name '*.sh' -o -name '*.bash' -o -name '*.zsh' 2>/dev/null)
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ -z "$SHELL_FILES" ]; then
+            echo '{"status":"success","findings":[],"executionTimeMs":'"$ELAPSED"'}' > /tmp/shellcheck-result.json
+          else
+            START_MS=$(($(date +%s%N)/1000000))
+            echo "$SHELL_FILES" | xargs shellcheck --format=json > /tmp/shellcheck-raw.json 2>/dev/null
+            SC_EXIT=$?
+            END_MS=$(($(date +%s%N)/1000000))
+            ELAPSED=$((END_MS - START_MS))
+
+            if [ $SC_EXIT -ne 0 ] && [ $SC_EXIT -ne 1 ] && [ ! -s /tmp/shellcheck-raw.json ]; then
+              echo '{"status":"error","findings":[],"error":"shellcheck: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/shellcheck-result.json
+            else
+              jq --arg elapsed "$ELAPSED" '{
+                status: "success",
+                findings: [.[] | {
+                  severity: (if .level == "error" then "high"
+                            elif .level == "warning" then "medium"
+                            elif .level == "info" then "info"
+                            else "low" end),
+                  category: "quality",
+                  file: .file,
+                  line: .line,
+                  message: ("SC" + (.code | tostring) + ": " + .message),
+                  source: "shellcheck"
+                }],
+                executionTimeMs: ($elapsed | tonumber)
+              }' /tmp/shellcheck-raw.json > /tmp/shellcheck-result.json 2>/dev/null || \
+              echo '{"status":"error","findings":[],"error":"shellcheck: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/shellcheck-result.json
+            fi
+          fi
+
+      # ── Run markdownlint ─────────────────────────────────────
+      - name: Run markdownlint
+        if: contains(steps.resolve.outputs.tools, '"markdownlint"')
+        id: markdownlint
+        continue-on-error: true
+        run: |
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          MD_FILES=$(find . -name '*.md' 2>/dev/null | head -1)
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ -z "$MD_FILES" ]; then
+            echo '{"status":"success","findings":[],"executionTimeMs":'"$ELAPSED"'}' > /tmp/markdownlint-result.json
+          else
+            npm install -g markdownlint-cli2@0.17.1 2>/dev/null
+            START_MS=$(($(date +%s%N)/1000000))
+            markdownlint-cli2 "**/*.md" 2>/tmp/markdownlint-raw.txt
+            ML_EXIT=$?
+            END_MS=$(($(date +%s%N)/1000000))
+            ELAPSED=$((END_MS - START_MS))
+
+            python3 -c "
+          import json, sys, re
+          findings = []
+          try:
+              with open('/tmp/markdownlint-raw.txt') as f:
+                  for line in f:
+                      m = re.match(r'(.+?):(\d+)(?::\d+)?\s+(MD\d+/\S+)\s+(.*)', line.strip())
+                      if m:
+                          findings.append({
+                              'severity': 'info',
+                              'category': 'docs',
+                              'file': m.group(1),
+                              'line': int(m.group(2)),
+                              'message': m.group(3) + ': ' + m.group(4),
+                              'source': 'markdownlint'
+                          })
+          except Exception:
+              pass
+          json.dump({'status': 'success', 'findings': findings, 'executionTimeMs': int(sys.argv[1])}, sys.stdout)
+          " "$ELAPSED" > /tmp/markdownlint-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"markdownlint: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/markdownlint-result.json
+          fi
+
+      # ── Cache: Lizard pip ────────────────────────────────────
+      - name: Cache Lizard
+        if: contains(steps.resolve.outputs.tools, '"lizard"')
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: lizard-1.17.13-${{ runner.os }}
+
+      # ── Run Lizard ───────────────────────────────────────────
+      - name: Run Lizard
+        if: contains(steps.resolve.outputs.tools, '"lizard"')
+        id: lizard
+        continue-on-error: true
+        run: |
+          pip install --quiet lizard==1.17.13 2>/dev/null
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          lizard . --json > /tmp/lizard-raw.json 2>/dev/null
+          LIZARD_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $LIZARD_EXIT -ne 0 ] && [ ! -s /tmp/lizard-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"lizard: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/lizard-result.json
+          else
+            python3 -c "
+          import json, sys
+          findings = []
+          try:
+              with open('/tmp/lizard-raw.json') as f:
+                  data = json.load(f)
+              for func in data:
+                  cc = func.get('cyclomatic_complexity', 0)
+                  if cc <= 10:
+                      continue
+                  if cc > 20:
+                      sev = 'high'
+                  elif cc > 15:
+                      sev = 'medium'
+                  else:
+                      sev = 'low'
+                  findings.append({
+                      'severity': sev,
+                      'category': 'complexity',
+                      'file': func.get('filename', ''),
+                      'line': func.get('start_line', 0),
+                      'message': f\"Cyclomatic complexity {cc} in {func.get('name', 'unknown')} ({func.get('nloc', 0)} NLOC, {func.get('token_count', 0)} tokens)\",
+                      'source': 'lizard'
+                  })
+          except Exception:
+              pass
+          json.dump({'status': 'success', 'findings': findings, 'executionTimeMs': int(sys.argv[1])}, sys.stdout)
+          " "$ELAPSED" > /tmp/lizard-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"lizard: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/lizard-result.json
+          fi
+
+      # ═══════════════════════════════════════════════════════════
+      # Phase 3: Auto-Detect Tools
+      # ═══════════════════════════════════════════════════════════
+
+      # ── Run Ruff ─────────────────────────────────────────────
+      - name: Run Ruff
+        if: contains(steps.resolve.outputs.tools, '"ruff"')
+        id: ruff
+        continue-on-error: true
+        run: |
+          pip install --quiet ruff==0.9.7 2>/dev/null
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          ruff check --output-format json . > /tmp/ruff-raw.json 2>/dev/null
+          RUFF_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $RUFF_EXIT -ne 0 ] && [ $RUFF_EXIT -ne 1 ] && [ ! -s /tmp/ruff-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"ruff: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/ruff-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [.[] | {
+                severity: (if (.code // "" | test("^F")) then "high"
+                          elif (.code // "" | test("^E")) then "medium"
+                          else "low" end),
+                category: "quality",
+                file: .filename,
+                line: .location.row,
+                message: ((.code // "RULE") + ": " + .message),
+                source: "ruff"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/ruff-raw.json > /tmp/ruff-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"ruff: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/ruff-result.json
+          fi
+
+      # ── Run Bandit ───────────────────────────────────────────
+      - name: Run Bandit
+        if: contains(steps.resolve.outputs.tools, '"bandit"')
+        id: bandit
+        continue-on-error: true
+        run: |
+          pip install --quiet bandit==1.8.3 2>/dev/null
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          bandit -r . -f json --quiet > /tmp/bandit-raw.json 2>/dev/null
+          BANDIT_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $BANDIT_EXIT -ne 0 ] && [ $BANDIT_EXIT -ne 1 ] && [ ! -s /tmp/bandit-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"bandit: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/bandit-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [.results[] | {
+                severity: (if .issue_severity == "HIGH" then "high"
+                          elif .issue_severity == "MEDIUM" then "medium"
+                          else "low" end),
+                category: "security",
+                file: .filename,
+                line: .line_number,
+                message: (.test_id + ": " + .issue_text + " (confidence: " + .issue_confidence + ")"),
+                source: "bandit"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/bandit-raw.json > /tmp/bandit-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"bandit: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/bandit-result.json
+          fi
+
+      # ── Cache: golangci-lint ─────────────────────────────────
+      - name: Cache golangci-lint
+        if: contains(steps.resolve.outputs.tools, '"golangci-lint"')
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/golangci-lint
+          key: golangci-lint-1.63.4-${{ runner.os }}
+
+      # ── Run golangci-lint ────────────────────────────────────
+      - name: Run golangci-lint
+        if: contains(steps.resolve.outputs.tools, '"golangci-lint"')
+        id: golangci-lint
+        continue-on-error: true
+        run: |
+          if ! command -v golangci-lint &>/dev/null; then
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+              | sh -s -- -b /usr/local/bin v1.63.4 2>/dev/null
+          fi
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          golangci-lint run --out-format json --timeout 300s > /tmp/golangci-lint-raw.json 2>/dev/null
+          GL_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $GL_EXIT -ne 0 ] && [ $GL_EXIT -ne 1 ] && [ ! -s /tmp/golangci-lint-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"golangci-lint: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/golangci-lint-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [(.Issues // [])[] | {
+                severity: (if .FromLinter == "gosec" then "high"
+                          elif .FromLinter == "govet" then "high"
+                          else "medium" end),
+                category: (if .FromLinter == "gosec" then "security" else "quality" end),
+                file: .Pos.Filename,
+                line: .Pos.Line,
+                message: ("[" + .FromLinter + "] " + .Text),
+                source: "golangci-lint"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/golangci-lint-raw.json > /tmp/golangci-lint-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"golangci-lint: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/golangci-lint-result.json
+          fi
+
+      # ── Run Biome ────────────────────────────────────────────
+      - name: Run Biome
+        if: contains(steps.resolve.outputs.tools, '"biome"')
+        id: biome
+        continue-on-error: true
+        run: |
+          npm install -g @biomejs/biome@1.9.4 2>/dev/null
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          biome lint --reporter json . > /tmp/biome-raw.json 2>/dev/null
+          BIOME_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ $BIOME_EXIT -ne 0 ] && [ $BIOME_EXIT -ne 1 ] && [ ! -s /tmp/biome-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"biome: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/biome-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [(.diagnostics // [])[] | {
+                severity: (if .severity == "error" then "high"
+                          elif .severity == "warning" then "medium"
+                          elif .severity == "information" then "low"
+                          else "info" end),
+                category: "quality",
+                file: (.file_path // "unknown"),
+                line: (.location.span[0] // 0),
+                message: ((.category // "lint") + ": " + (.description // .message // "lint issue")),
+                source: "biome"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/biome-raw.json > /tmp/biome-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"biome: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/biome-result.json
+          fi
+
+      # ── Run PMD ──────────────────────────────────────────────
+      - name: Run PMD
+        if: contains(steps.resolve.outputs.tools, '"pmd"')
+        id: pmd
+        continue-on-error: true
+        run: |
+          # PMD binary shared with CPD — install if not already present
+          if [ ! -f /opt/pmd/bin/pmd ]; then
+            curl -sL "https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.8.0/pmd-dist-7.8.0-bin.zip" \
+              -o /tmp/pmd.zip 2>/dev/null
+            unzip -q /tmp/pmd.zip -d /opt 2>/dev/null
+            mv /opt/pmd-bin-7.8.0 /opt/pmd 2>/dev/null || true
+            rm -f /tmp/pmd.zip
+          fi
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          /opt/pmd/bin/pmd check --format json --dir . \
+            --rulesets rulesets/java/quickstart.xml > /tmp/pmd-raw.json 2>/dev/null
+          PMD_EXIT=$?
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          # PMD exits 4 when violations found (not an error)
+          if [ $PMD_EXIT -ne 0 ] && [ $PMD_EXIT -ne 4 ] && [ ! -s /tmp/pmd-raw.json ]; then
+            echo '{"status":"error","findings":[],"error":"pmd: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/pmd-result.json
+          else
+            jq --arg elapsed "$ELAPSED" '{
+              status: "success",
+              findings: [(.files // [])[] | .violations[] as $v | {
+                severity: (if $v.priority == 1 then "critical"
+                          elif $v.priority == 2 then "high"
+                          elif $v.priority == 3 then "medium"
+                          elif $v.priority == 4 then "low"
+                          else "info" end),
+                category: "quality",
+                file: .filename,
+                line: $v.beginline,
+                message: ($v.rule + ": " + $v.description),
+                source: "pmd"
+              }],
+              executionTimeMs: ($elapsed | tonumber)
+            }' /tmp/pmd-raw.json > /tmp/pmd-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"pmd: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/pmd-result.json
+          fi
+
+      # ── Run Psalm ────────────────────────────────────────────
+      - name: Run Psalm
+        if: contains(steps.resolve.outputs.tools, '"psalm"')
+        id: psalm
+        continue-on-error: true
+        run: |
+          START_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=0
+          if ! command -v php &>/dev/null; then
+            END_MS=$(($(date +%s%N)/1000000))
+            ELAPSED=$((END_MS - START_MS))
+            echo '{"status":"error","findings":[],"error":"psalm: PHP not available on runner","executionTimeMs":'"$ELAPSED"'}' > /tmp/psalm-result.json
+          else
+            composer global require vimeo/psalm:^6.0 --quiet 2>/dev/null || true
+            PSALM_BIN="$(composer global config home 2>/dev/null)/vendor/bin/psalm"
+            set +e
+            $PSALM_BIN --output-format=json --no-cache > /tmp/psalm-raw.json 2>/dev/null
+            PSALM_EXIT=$?
+            END_MS=$(($(date +%s%N)/1000000))
+            ELAPSED=$((END_MS - START_MS))
+
+            if [ $PSALM_EXIT -ne 0 ] && [ $PSALM_EXIT -ne 1 ] && [ $PSALM_EXIT -ne 2 ] && [ ! -s /tmp/psalm-raw.json ]; then
+              echo '{"status":"error","findings":[],"error":"psalm: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/psalm-result.json
+            else
+              jq --arg elapsed "$ELAPSED" '{
+                status: "success",
+                findings: [(.// [])[] | {
+                  severity: (if .severity == "error" then "high"
+                            elif (.type // "" | test("Tainted")) then "critical"
+                            else "low" end),
+                  category: "quality",
+                  file: (.file_path // "unknown"),
+                  line: (.line_from // 0),
+                  message: ((.type // "issue") + ": " + (.message // "Psalm finding")),
+                  source: "psalm"
+                }],
+                executionTimeMs: ($elapsed | tonumber)
+              }' /tmp/psalm-raw.json > /tmp/psalm-result.json 2>/dev/null || \
+              echo '{"status":"error","findings":[],"error":"psalm: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/psalm-result.json
+            fi
+          fi
+
+      # ── Run Clippy ───────────────────────────────────────────
+      - name: Run Clippy
+        if: contains(steps.resolve.outputs.tools, '"clippy"')
+        id: clippy
+        continue-on-error: true
+        run: |
+          START_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=0
+          if ! command -v cargo &>/dev/null; then
+            END_MS=$(($(date +%s%N)/1000000))
+            ELAPSED=$((END_MS - START_MS))
+            echo '{"status":"error","findings":[],"error":"clippy: Rust toolchain not available","executionTimeMs":'"$ELAPSED"'}' > /tmp/clippy-result.json
+          else
+            set +e
+            cargo clippy --message-format=json -- -W clippy::all > /tmp/clippy-raw.json 2>/dev/null
+            CLIPPY_EXIT=$?
+            END_MS=$(($(date +%s%N)/1000000))
+            ELAPSED=$((END_MS - START_MS))
+
+            python3 -c "
+          import json, sys
+          findings = []
+          try:
+              with open('/tmp/clippy-raw.json') as f:
+                  for line in f:
+                      try:
+                          msg = json.loads(line.strip())
+                      except json.JSONDecodeError:
+                          continue
+                      if msg.get('reason') != 'compiler-message':
+                          continue
+                      m = msg.get('message', {})
+                      level = m.get('level', 'warning')
+                      if level == 'error':
+                          sev = 'high'
+                      elif level == 'warning':
+                          sev = 'medium'
+                      else:
+                          sev = 'low'
+                      spans = m.get('spans', [{}])
+                      span = spans[0] if spans else {}
+                      findings.append({
+                          'severity': sev,
+                          'category': 'quality',
+                          'file': span.get('file_name', 'unknown'),
+                          'line': span.get('line_start', 0),
+                          'message': m.get('message', 'clippy finding'),
+                          'source': 'clippy'
+                      })
+          except Exception:
+              pass
+          json.dump({'status': 'success', 'findings': findings, 'executionTimeMs': int(sys.argv[1])}, sys.stdout)
+          " "$ELAPSED" > /tmp/clippy-result.json 2>/dev/null || \
+            echo '{"status":"error","findings":[],"error":"clippy: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/clippy-result.json
+          fi
+
+      # ── Cache: Hadolint ──────────────────────────────────────
+      - name: Cache Hadolint
+        if: contains(steps.resolve.outputs.tools, '"hadolint"')
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/hadolint
+          key: hadolint-2.12.0-${{ runner.os }}
+
+      # ── Run Hadolint ─────────────────────────────────────────
+      - name: Run Hadolint
+        if: contains(steps.resolve.outputs.tools, '"hadolint"')
+        id: hadolint
+        continue-on-error: true
+        run: |
+          if ! command -v hadolint &>/dev/null; then
+            curl -sL "https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64" \
+              -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint 2>/dev/null
+          fi
+          START_MS=$(($(date +%s%N)/1000000))
+          set +e
+          DOCKER_FILES=$(find . -name 'Dockerfile*' 2>/dev/null)
+          END_MS=$(($(date +%s%N)/1000000))
+          ELAPSED=$((END_MS - START_MS))
+
+          if [ -z "$DOCKER_FILES" ]; then
+            echo '{"status":"success","findings":[],"executionTimeMs":'"$ELAPSED"'}' > /tmp/hadolint-result.json
+          else
+            START_MS=$(($(date +%s%N)/1000000))
+            echo "$DOCKER_FILES" | xargs hadolint --format json > /tmp/hadolint-raw.json 2>/dev/null
+            HL_EXIT=$?
+            END_MS=$(($(date +%s%N)/1000000))
+            ELAPSED=$((END_MS - START_MS))
+
+            if [ $HL_EXIT -ne 0 ] && [ $HL_EXIT -ne 1 ] && [ ! -s /tmp/hadolint-raw.json ]; then
+              echo '{"status":"error","findings":[],"error":"hadolint: execution failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/hadolint-result.json
+            else
+              jq --arg elapsed "$ELAPSED" '{
+                status: "success",
+                findings: [.[] | {
+                  severity: (if .level == "error" then "high"
+                            elif .level == "warning" then "medium"
+                            elif .level == "info" then "info"
+                            else "low" end),
+                  category: "quality",
+                  file: .file,
+                  line: .line,
+                  message: (.code + ": " + .message),
+                  source: "hadolint"
+                }],
+                executionTimeMs: ($elapsed | tonumber)
+              }' /tmp/hadolint-raw.json > /tmp/hadolint-result.json 2>/dev/null || \
+              echo '{"status":"error","findings":[],"error":"hadolint: parse failed","executionTimeMs":'"$ELAPSED"'}' > /tmp/hadolint-result.json
+            fi
+          fi
+
+      # ── Construct and send callback payload ──────────────────
+      - name: Post results to callback
+        run: |
+          SKIPPED='{"status":"skipped","findings":[],"executionTimeMs":0}'
+          RESOLVED='${{ steps.resolve.outputs.tools }}'
+
+          # All 15 possible tool names
+          ALL_TOOLS="semgrep trivy cpd gitleaks shellcheck markdownlint lizard ruff bandit golangci-lint biome pmd psalm clippy hadolint"
+
+          # Build staticAnalysis object dynamically
+          SA_JSON='{}'
+          for TOOL in $ALL_TOOLS; do
+            if echo "$RESOLVED" | jq -e --arg t "$TOOL" 'index($t) != null' >/dev/null 2>&1; then
+              RESULT=$(cat "/tmp/${TOOL}-result.json" 2>/dev/null || echo "$SKIPPED")
+            elif [ "$TOOL" = "semgrep" ] || [ "$TOOL" = "trivy" ] || [ "$TOOL" = "cpd" ]; then
+              # Legacy keys always present — mark as skipped if not resolved
+              RESULT="$SKIPPED"
+            else
+              continue
+            fi
+            SA_JSON=$(echo "$SA_JSON" | jq --arg tool "$TOOL" --argjson result "$RESULT" '. + {($tool): $result}')
+          done
+
+          PAYLOAD=$(jq -n \
+            --arg cid "${{ github.event.inputs.callbackId }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg pr "${{ github.event.inputs.prNumber }}" \
+            --arg sha "${{ github.event.inputs.headSha }}" \
+            --argjson sa "$SA_JSON" \
+            '{
+              callbackId: $cid,
+              repoFullName: $repo,
+              prNumber: ($pr | tonumber),
+              headSha: $sha,
+              staticAnalysis: $sa
+            }')
+
+          SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ github.event.inputs.callbackSecret }}" | awk '{print $NF}')
+          curl -s -X POST "${{ github.event.inputs.callbackUrl }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Ghagga-Signature: sha256=${SIGNATURE}" \
+            -d "$PAYLOAD" 2>/dev/null || echo "::warning::Callback POST failed"
+
+      # ── Cleanup temp files ────────────────────────────────────
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/*-raw.* /tmp/*-result.*

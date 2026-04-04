@@ -4,15 +4,10 @@ import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
 import { KNOWN_MODELS, type ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { ToolGrid } from '@/components/settings/ToolGrid';
 import {
-  ApiError,
-  useConfigureRunnerSecret,
-  useCreateRunner,
   useInstallationSettings,
   useInstallations,
-  useRunnerStatus,
   useUpdateInstallationSettings,
 } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
 import type {
   ProviderChainUpdate,
   ProviderChainView,
@@ -36,31 +31,6 @@ export function GlobalSettings() {
   const { data: settings, isLoading: settingsLoading } =
     useInstallationSettings(selectedInstallation);
   const updateSettings = useUpdateInstallationSettings();
-
-  // ── Runner ─────────────────────────────────────────────
-  const { user, reAuthenticate } = useAuth();
-  const runnerStatus = useRunnerStatus(user?.githubLogin);
-  const createRunner = useCreateRunner();
-  const configureSecret = useConfigureRunnerSecret();
-  const [needsReauth, setNeedsReauth] = useState(false);
-
-  useEffect(() => {
-    if (createRunner.isError) {
-      const err = createRunner.error;
-      if (err instanceof ApiError && err.status === 403) {
-        try {
-          const body = JSON.parse(err.message);
-          if (body.error === 'insufficient_scope') {
-            setNeedsReauth(true);
-            return;
-          }
-        } catch {
-          /* not JSON */
-        }
-      }
-      setNeedsReauth(false);
-    }
-  }, [createRunner.isError, createRunner.error]);
 
   // ── Form state ──────────────────────────────────────────────
   const [enableSemgrep, setEnableSemgrep] = useState(true);
@@ -195,128 +165,19 @@ export function GlobalSettings() {
             </p>
           </div>
 
-          {/* ── Runner ────────────────────────────────────── */}
+          {/* ── Workflow Installation ────────────────────────── */}
           <Card>
             <CardHeader
-              title="Static Analysis Runner"
-              description="GitHub Actions runner for Semgrep, Trivy, and PMD/CPD"
+              title="Inline Workflow Installation"
+              description="GHAGGA injects a GitHub Actions workflow directly into each repository for static analysis"
             />
-
-            {/* State: checking */}
-            {runnerStatus.isLoading && (
-              <div className="flex items-center gap-3">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
-                <span className="text-sm text-text-secondary">Checking runner status...</span>
-              </div>
-            )}
-
-            {/* State: ready */}
-            {runnerStatus.data?.exists && !createRunner.isPending && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  <span className="text-sm text-text-primary">Runner enabled</span>
-                  <a
-                    href={`https://github.com/${runnerStatus.data.repoFullName}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary-400 hover:underline"
-                  >
-                    {runnerStatus.data.repoFullName}
-                  </a>
-                </div>
-
-                {runnerStatus.data.isPrivate && (
-                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
-                    <p className="text-sm text-yellow-300">{runnerStatus.data.warning}</p>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => configureSecret.mutate()}
-                  disabled={configureSecret.isPending}
-                  className="btn-secondary text-sm"
-                >
-                  {configureSecret.isPending ? 'Configuring...' : 'Reconfigure Secret'}
-                </button>
-              </div>
-            )}
-
-            {/* State: not_configured */}
-            {!runnerStatus.isLoading &&
-              !runnerStatus.data?.exists &&
-              !createRunner.isPending &&
-              !needsReauth && (
-                <div className="space-y-3">
-                  <p className="text-sm text-text-secondary">
-                    GHAGGA uses a GitHub Actions runner in your account for static analysis
-                    (Semgrep, Trivy, PMD/CPD). This creates a public repository named
-                    <code className="mx-1 rounded-sm bg-surface-bg px-1 text-xs">
-                      ghagga-runner
-                    </code>
-                    in your GitHub account.
-                  </p>
-                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
-                    <p className="text-xs text-yellow-300">
-                      This requires the <code>public_repo</code> OAuth scope, which grants write
-                      access to your public repositories. The token is only used server-side to
-                      create the runner repo and configure its secrets.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => createRunner.mutate()}
-                    className="btn-primary"
-                  >
-                    Enable Runner
-                  </button>
-                </div>
-              )}
-
-            {/* State: creating */}
-            {createRunner.isPending && (
-              <div className="flex items-center gap-3">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
-                <span className="text-sm text-text-secondary">Creating runner repository...</span>
-              </div>
-            )}
-
-            {/* State: needs_reauth */}
-            {needsReauth && (
-              <div className="space-y-3">
-                <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
-                  <p className="text-sm text-yellow-300">
-                    Your session needs to be refreshed to enable the runner. The
-                    <code className="mx-1">public_repo</code> scope is required to create the runner
-                    repository.
-                  </p>
-                </div>
-                <button type="button" onClick={() => reAuthenticate()} className="btn-primary">
-                  Re-authenticate
-                </button>
-              </div>
-            )}
-
-            {/* State: error (non-scope errors) */}
-            {createRunner.isError && !needsReauth && (
-              <div className="space-y-3">
-                <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3">
-                  <p className="text-sm text-red-300">
-                    Failed to create runner repository. Please try again.
-                  </p>
-                </div>
-                <button type="button" onClick={() => createRunner.mutate()} className="btn-primary">
-                  Retry
-                </button>
-              </div>
-            )}
+            <div className="rounded-md border border-primary-600/30 bg-primary-600/10 p-3">
+              <p className="text-sm text-primary-300">
+                Workflows are automatically injected when repositories are added to the GitHub App
+                installation. To manually install or check status for a specific repository, go to{' '}
+                <strong>Repository Settings</strong> and select the repository.
+              </p>
+            </div>
           </Card>
 
           {/* ── Static Analysis ──────────────────────────────── */}

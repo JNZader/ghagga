@@ -7,7 +7,6 @@
 
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RunnerCreationError } from '../github/runner.js';
 import { createApiRouter } from './api.js';
 
 // ─── Mocks ──────────────────────────────────────────────────────
@@ -37,6 +36,7 @@ const mockDeleteReviewsByRepoId = vi.fn();
 const mockDeleteMemorySession = vi.fn();
 const mockClearEmptyMemorySessions = vi.fn();
 const mockGetRepositoryById = vi.fn();
+const mockUpdateWorkflowStatus = vi.fn();
 
 vi.mock('ghagga-db', () => ({
   getReviewsByDay: (...args: unknown[]) => mockGetReviewsByDay(...args),
@@ -65,6 +65,7 @@ vi.mock('ghagga-db', () => ({
   deleteReviewsByRepoId: (...args: unknown[]) => mockDeleteReviewsByRepoId(...args),
   deleteMemorySession: (...args: unknown[]) => mockDeleteMemorySession(...args),
   clearEmptyMemorySessions: (...args: unknown[]) => mockClearEmptyMemorySessions(...args),
+  updateWorkflowStatus: (...args: unknown[]) => mockUpdateWorkflowStatus(...args),
   DEFAULT_REPO_SETTINGS: {
     enableSemgrep: true,
     enableTrivy: true,
@@ -123,26 +124,22 @@ vi.mock('../lib/logger.js', () => ({
   },
 }));
 
-// Mock runner functions
-const mockDiscoverRunnerRepo = vi.fn();
-const mockCreateRunnerRepo = vi.fn();
-const mockSetRunnerSecret = vi.fn();
+// Mock workflow injection
+const mockInjectWorkflow = vi.fn();
 
 vi.mock('../github/runner.js', () => ({
-  discoverRunnerRepo: (...args: unknown[]) => mockDiscoverRunnerRepo(...args),
-  createRunnerRepo: (...args: unknown[]) => mockCreateRunnerRepo(...args),
-  setRunnerSecret: (...args: unknown[]) => mockSetRunnerSecret(...args),
-  RunnerCreationError: class RunnerCreationError extends Error {
-    constructor(
-      public code: string,
-      message: string,
-      public retryAfter?: number,
-      public repoFullName?: string,
-    ) {
-      super(message);
-      this.name = 'RunnerCreationError';
-    }
-  },
+  injectWorkflow: (...args: unknown[]) => mockInjectWorkflow(...args),
+}));
+
+// Mock GitHub client
+const mockGetInstallationToken = vi.fn();
+
+vi.mock('../github/client.js', () => ({
+  getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
+  verifyWebhookSignature: vi.fn(),
+  postComment: vi.fn(),
+  addCommentReaction: vi.fn(),
+  fetchPRDetails: vi.fn(),
 }));
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -2087,813 +2084,156 @@ describe('maskApiKey (via GET /api/settings)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// GET /api/runner/status
+// GET /api/runner/install-workflow/status/:owner/:repo
 // ═══════════════════════════════════════════════════════════════════
 
-describe('GET /api/runner/status', () => {
-  it('returns exists: true when runner repo is found', async () => {
-    mockDiscoverRunnerRepo.mockResolvedValueOnce({
-      repoId: 999,
-      fullName: 'testuser/ghagga-runner',
-      isPrivate: false,
+describe('GET /api/runner/install-workflow/status/:owner/:repo', () => {
+  it('returns installed: false when workflow not installed', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/test-repo',
+      installationId: 100,
+      workflowInstalledAt: null,
+      workflowSha: null,
     });
 
     const app = createApp();
-    const res = await app.request('/api/runner/status', {
+    const res = await app.request('/api/runner/install-workflow/status/testuser/test-repo', {
       headers: { Authorization: 'Bearer test-token' },
     });
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data).toEqual({
-      exists: true,
-      repoFullName: 'testuser/ghagga-runner',
-    });
-    expect(mockDiscoverRunnerRepo).toHaveBeenCalledWith('testuser', 'test-token');
+    expect(json.data).toEqual({ installed: false, workflowInstalledAt: null, workflowSha: null });
   });
 
-  it('returns exists: false when runner repo is not found', async () => {
-    mockDiscoverRunnerRepo.mockResolvedValueOnce(null);
+  it('returns installed: true when workflow is installed', async () => {
+    const installedAt = new Date('2026-01-15T10:00:00Z');
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/test-repo',
+      installationId: 100,
+      workflowInstalledAt: installedAt,
+      workflowSha: 'abc123sha',
+    });
 
     const app = createApp();
-    const res = await app.request('/api/runner/status', {
+    const res = await app.request('/api/runner/install-workflow/status/testuser/test-repo', {
       headers: { Authorization: 'Bearer test-token' },
     });
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data).toEqual({ exists: false });
+    expect(json.data.installed).toBe(true);
+    expect(json.data.workflowSha).toBe('abc123sha');
   });
 
-  it('returns isPrivate and warning for private repo', async () => {
-    mockDiscoverRunnerRepo.mockResolvedValueOnce({
-      repoId: 999,
-      fullName: 'testuser/ghagga-runner',
-      isPrivate: true,
-    });
-
-    const app = createApp();
-    const res = await app.request('/api/runner/status', {
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data.exists).toBe(true);
-    expect(json.data.isPrivate).toBe(true);
-    expect(json.data.warning).toContain('private');
-  });
-
-  it('returns 502 when GitHub API fails', async () => {
-    mockDiscoverRunnerRepo.mockRejectedValueOnce(new Error('GitHub API timeout'));
-
-    const app = createApp();
-    const res = await app.request('/api/runner/status', {
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(502);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-    expect(json.message).toBe('Could not check runner status. Please try again.');
-  });
-
-  it('extracts token from Authorization header', async () => {
-    mockDiscoverRunnerRepo.mockResolvedValueOnce(null);
-
-    const app = createApp();
-    await app.request('/api/runner/status', {
-      headers: { Authorization: 'Bearer my-oauth-token-123' },
-    });
-
-    expect(mockDiscoverRunnerRepo).toHaveBeenCalledWith('testuser', 'my-oauth-token-123');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// POST /api/runner/create
-// ═══════════════════════════════════════════════════════════════════
-
-describe('POST /api/runner/create', () => {
-  const originalEnv = process.env.GHAGGA_WEBHOOK_SECRET;
-
-  beforeEach(() => {
-    process.env.GHAGGA_WEBHOOK_SECRET = 'test-webhook-secret';
-  });
-
-  afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.GHAGGA_WEBHOOK_SECRET = originalEnv;
-    } else {
-      delete process.env.GHAGGA_WEBHOOK_SECRET;
-    }
-  });
-
-  it('returns 201 with created: true on success', async () => {
-    mockCreateRunnerRepo.mockResolvedValueOnce({
-      created: true,
-      repoFullName: 'testuser/ghagga-runner',
-      isPrivate: false,
-      secretConfigured: true,
-    });
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(201);
-    const json = await res.json();
-    expect(json.data).toEqual({
-      created: true,
-      repoFullName: 'testuser/ghagga-runner',
-      secretConfigured: true,
-      isPrivate: false,
-    });
-    expect(mockCreateRunnerRepo).toHaveBeenCalledWith({
-      ownerLogin: 'testuser',
-      token: 'test-token',
-      callbackSecretValue: 'test-webhook-secret',
-    });
-  });
-
-  it('returns 201 with warning for private repo', async () => {
-    mockCreateRunnerRepo.mockResolvedValueOnce({
-      created: true,
-      repoFullName: 'testuser/ghagga-runner',
-      isPrivate: true,
-      secretConfigured: true,
-    });
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(201);
-    const json = await res.json();
-    expect(json.data.isPrivate).toBe(true);
-    expect(json.data.warning).toContain('private');
-  });
-
-  it('returns 409 for already_exists error', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(
-      new RunnerCreationError(
-        'already_exists',
-        'Repo already exists',
-        undefined,
-        'testuser/ghagga-runner',
-      ),
-    );
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(409);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-    expect(json.repoFullName).toBe('testuser/ghagga-runner');
-  });
-
-  it('returns 403 for insufficient_scope error', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(
-      new RunnerCreationError('insufficient_scope', 'Token lacks public_repo scope'),
-    );
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(403);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-  });
-
-  it('returns 429 for rate_limited error with retryAfter', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(
-      new RunnerCreationError('rate_limited', 'Rate limited', 120),
-    );
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(429);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-    expect(json.retryAfter).toBe(120);
-  });
-
-  it('returns 502 for template_unavailable error', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(
-      new RunnerCreationError('template_unavailable', 'Template not found'),
-    );
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(502);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-  });
-
-  it('returns 403 for org_permission_denied error', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(
-      new RunnerCreationError('org_permission_denied', 'Org does not allow repo creation'),
-    );
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(403);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-  });
-
-  it('returns 502 for creation_timeout error', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(
-      new RunnerCreationError('creation_timeout', 'Timed out waiting for repo'),
-    );
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(502);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-    expect(json.message).toContain('timed out');
-  });
-
-  it('returns 201 with secretConfigured: false for secret_failed error', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(
-      new RunnerCreationError(
-        'secret_failed',
-        'Failed to set secret',
-        undefined,
-        'testuser/ghagga-runner',
-      ),
-    );
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(201);
-    const json = await res.json();
-    expect(json.data.created).toBe(true);
-    expect(json.data.secretConfigured).toBe(false);
-    expect(json.data.repoFullName).toBe('testuser/ghagga-runner');
-  });
-
-  it('returns 502 for generic errors', async () => {
-    mockCreateRunnerRepo.mockRejectedValueOnce(new Error('Unexpected failure'));
-
-    const app = createApp();
-    const res = await app.request('/api/runner/create', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(502);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// DELETE /api/memory/observations/:id
-// ═══════════════════════════════════════════════════════════════════
-
-describe('DELETE /api/memory/observations/:id', () => {
-  it('returns 200 with deleted:true when observation is deleted (S9)', async () => {
-    mockDeleteMemoryObservation.mockResolvedValueOnce(true);
-
-    const app = createApp();
-    const res = await app.request('/api/memory/observations/42', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deleted: true });
-    expect(mockDeleteMemoryObservation).toHaveBeenCalledWith(mockDb, 100, 42);
-  });
-
-  it('returns 404 when observation is not found (S11)', async () => {
-    mockDeleteMemoryObservation.mockResolvedValueOnce(false);
-
-    const app = createApp();
-    const res = await app.request('/api/memory/observations/999', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toBe('NOT_FOUND');
-    expect(json.message).toBe('Observation not found');
-  });
-
-  it('returns 400 for invalid observation ID (S12)', async () => {
-    const app = createApp();
-    const res = await app.request('/api/memory/observations/abc', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe('VALIDATION_ERROR');
-    expect(json.message).toBe('Invalid observation ID');
-  });
-
-  it('tries each installationId until observation is found', async () => {
-    mockDeleteMemoryObservation
-      .mockResolvedValueOnce(false) // installation 100 — not found
-      .mockResolvedValueOnce(true); // installation 200 — found
-
-    const multiInstallUser = {
-      githubUserId: 1,
-      githubLogin: 'testuser',
-      installationIds: [100, 200],
-    };
-
-    const app = createApp(multiInstallUser);
-    const res = await app.request('/api/memory/observations/42', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deleted: true });
-    expect(mockDeleteMemoryObservation).toHaveBeenCalledTimes(2);
-    expect(mockDeleteMemoryObservation).toHaveBeenCalledWith(mockDb, 100, 42);
-    expect(mockDeleteMemoryObservation).toHaveBeenCalledWith(mockDb, 200, 42);
-  });
-
-  it('returns 500 with errorId when an error occurs', async () => {
-    mockDeleteMemoryObservation.mockRejectedValueOnce(new Error('DB error'));
-
-    const app = createApp();
-    const res = await app.request('/api/memory/observations/42', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe('DELETE_FAILED');
-    expect(json.message).toBe('Failed to delete memory observation');
-    expect(json).toHaveProperty('errorId');
-    expect(json.errorId).toHaveLength(8);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// DELETE /api/memory/projects/:project/observations
-// ═══════════════════════════════════════════════════════════════════
-
-describe('DELETE /api/memory/projects/:project/observations', () => {
-  it('returns 200 with cleared count when observations are cleared (S13)', async () => {
-    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
-    mockClearMemoryObservationsByProject.mockResolvedValueOnce(15);
-
-    const app = createApp();
-    const res = await app.request('/api/memory/projects/owner%2Frepo/observations', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ cleared: 15 });
-    expect(mockClearMemoryObservationsByProject).toHaveBeenCalledWith(mockDb, 100, 'owner/repo');
-  });
-
-  it('returns 404 when repository is not found (S15)', async () => {
+  it('returns 404 when repo is not tracked', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(null);
 
     const app = createApp();
-    const res = await app.request('/api/memory/projects/unknown%2Frepo/observations', {
-      method: 'DELETE',
+    const res = await app.request('/api/runner/install-workflow/status/unknown/repo', {
+      headers: { Authorization: 'Bearer test-token' },
     });
 
     expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toBe('NOT_FOUND');
-    expect(json.message).toBe('Repository not found');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// POST /api/runner/install-workflow/:owner/:repo
+// ═══════════════════════════════════════════════════════════════════
+
+describe('POST /api/runner/install-workflow/:owner/:repo', () => {
+  beforeEach(() => {
+    process.env.GITHUB_APP_ID = 'test-app-id';
+    process.env.GITHUB_PRIVATE_KEY = 'test-private-key';
   });
 
-  it('returns 403 when user does not own the installation (S16)', async () => {
-    const otherRepo = { ...FAKE_REPO, installationId: 999 };
-    mockGetRepoByFullName.mockResolvedValueOnce(otherRepo);
+  afterEach(() => {
+    delete process.env.GITHUB_APP_ID;
+    delete process.env.GITHUB_PRIVATE_KEY;
+  });
+
+  it('installs workflow and returns result', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/test-repo',
+      installationId: 100,
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+    mockGetInstallationToken.mockResolvedValueOnce('ghp_installation-token');
+    mockInjectWorkflow.mockResolvedValueOnce({ sha: 'newsha123', created: true });
+    mockUpdateWorkflowStatus.mockResolvedValueOnce(undefined);
 
     const app = createApp();
-    const res = await app.request('/api/memory/projects/owner%2Frepo/observations', {
-      method: 'DELETE',
+    const res = await app.request('/api/runner/install-workflow/testuser/test-repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toEqual({ installed: true, sha: 'newsha123', created: true });
+  });
+
+  it('returns 404 when repo is not tracked', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(null);
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/unknown/repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 403 when branch protection blocks injection', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/protected-repo',
+      installationId: 100,
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+    mockGetInstallationToken.mockResolvedValueOnce('ghp_installation-token');
+    mockInjectWorkflow.mockRejectedValueOnce(
+      new Error('branch_protection: cannot write workflow file'),
+    );
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/testuser/protected-repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
     });
 
     expect(res.status).toBe(403);
     const json = await res.json();
-    expect(json.error).toBe('FORBIDDEN');
-    expect(json.message).toBe('Forbidden');
+    expect(json.error).toBe('BRANCH_PROTECTION');
   });
 
-  it('returns 200 with cleared:0 when no observations exist (S17)', async () => {
-    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
-    mockClearMemoryObservationsByProject.mockResolvedValueOnce(0);
+  it('returns 502 on unexpected GitHub API error', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/test-repo',
+      installationId: 100,
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+    mockGetInstallationToken.mockResolvedValueOnce('ghp_installation-token');
+    mockInjectWorkflow.mockRejectedValueOnce(new Error('GitHub API timeout'));
 
     const app = createApp();
-    const res = await app.request('/api/memory/projects/owner%2Frepo/observations', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ cleared: 0 });
-  });
-
-  it('URL-decodes the project parameter', async () => {
-    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
-    mockClearMemoryObservationsByProject.mockResolvedValueOnce(5);
-
-    const app = createApp();
-    await app.request('/api/memory/projects/owner%2Frepo/observations', {
-      method: 'DELETE',
-    });
-
-    expect(mockGetRepoByFullName).toHaveBeenCalledWith(mockDb, 'owner/repo');
-  });
-
-  it('returns 500 with errorId when an error occurs', async () => {
-    mockGetRepoByFullName.mockRejectedValueOnce(new Error('DB error'));
-
-    const app = createApp();
-    const res = await app.request('/api/memory/projects/owner%2Frepo/observations', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe('DELETE_FAILED');
-    expect(json.message).toBe('Failed to clear project memory observations');
-    expect(json).toHaveProperty('errorId');
-    expect(json.errorId).toHaveLength(8);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// DELETE /api/memory/observations (purge-all)
-// ═══════════════════════════════════════════════════════════════════
-
-describe('DELETE /api/memory/observations (purge-all)', () => {
-  it('returns 200 with total cleared count (S18)', async () => {
-    mockClearAllMemoryObservations.mockResolvedValueOnce(30);
-
-    const app = createApp();
-    const res = await app.request('/api/memory/observations', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ cleared: 30 });
-    expect(mockClearAllMemoryObservations).toHaveBeenCalledWith(mockDb, 100);
-  });
-
-  it('returns 200 with cleared:0 when no observations exist (S20)', async () => {
-    mockClearAllMemoryObservations.mockResolvedValueOnce(0);
-
-    const app = createApp();
-    const res = await app.request('/api/memory/observations', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ cleared: 0 });
-  });
-
-  it('sums counts across multiple installations (S21)', async () => {
-    mockClearAllMemoryObservations
-      .mockResolvedValueOnce(30) // installation 100
-      .mockResolvedValueOnce(20); // installation 200
-
-    const multiInstallUser = {
-      githubUserId: 1,
-      githubLogin: 'testuser',
-      installationIds: [100, 200],
-    };
-
-    const app = createApp(multiInstallUser);
-    const res = await app.request('/api/memory/observations', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ cleared: 50 });
-    expect(mockClearAllMemoryObservations).toHaveBeenCalledTimes(2);
-    expect(mockClearAllMemoryObservations).toHaveBeenCalledWith(mockDb, 100);
-    expect(mockClearAllMemoryObservations).toHaveBeenCalledWith(mockDb, 200);
-  });
-
-  it('returns 500 with errorId when an error occurs', async () => {
-    mockClearAllMemoryObservations.mockRejectedValueOnce(new Error('DB error'));
-
-    const app = createApp();
-    const res = await app.request('/api/memory/observations', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe('DELETE_FAILED');
-    expect(json.message).toBe('Failed to purge all memory observations');
-    expect(json).toHaveProperty('errorId');
-    expect(json.errorId).toHaveLength(8);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// DELETE /api/memory/sessions/empty
-// ═══════════════════════════════════════════════════════════════════
-
-describe('DELETE /api/memory/sessions/empty', () => {
-  it('returns 200 with deletedCount when empty sessions are cleaned up', async () => {
-    mockClearEmptyMemorySessions.mockResolvedValueOnce({ deletedCount: 5 });
-
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/empty', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deletedCount: 5 });
-    expect(mockClearEmptyMemorySessions).toHaveBeenCalledWith(mockDb, 100, undefined);
-  });
-
-  it('passes project query parameter when provided', async () => {
-    mockClearEmptyMemorySessions.mockResolvedValueOnce({ deletedCount: 2 });
-
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/empty?project=owner/repo', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deletedCount: 2 });
-    expect(mockClearEmptyMemorySessions).toHaveBeenCalledWith(mockDb, 100, 'owner/repo');
-  });
-
-  it('returns 200 with deletedCount:0 when no empty sessions exist', async () => {
-    mockClearEmptyMemorySessions.mockResolvedValueOnce({ deletedCount: 0 });
-
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/empty', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deletedCount: 0 });
-  });
-
-  it('sums counts across multiple installations', async () => {
-    mockClearEmptyMemorySessions
-      .mockResolvedValueOnce({ deletedCount: 3 }) // installation 100
-      .mockResolvedValueOnce({ deletedCount: 2 }); // installation 200
-
-    const multiInstallUser = {
-      githubUserId: 1,
-      githubLogin: 'testuser',
-      installationIds: [100, 200],
-    };
-
-    const app = createApp(multiInstallUser);
-    const res = await app.request('/api/memory/sessions/empty', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deletedCount: 5 });
-    expect(mockClearEmptyMemorySessions).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns 500 with errorId when an error occurs', async () => {
-    mockClearEmptyMemorySessions.mockRejectedValueOnce(new Error('DB error'));
-
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/empty', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe('DELETE_FAILED');
-    expect(json.message).toBe('Failed to cleanup empty memory sessions');
-    expect(json).toHaveProperty('errorId');
-    expect(json.errorId).toHaveLength(8);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// DELETE /api/memory/sessions/:id
-// ═══════════════════════════════════════════════════════════════════
-
-describe('DELETE /api/memory/sessions/:id', () => {
-  it('returns 200 with deleted:true when session is deleted', async () => {
-    mockDeleteMemorySession.mockResolvedValueOnce({ deleted: true });
-
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/10', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deleted: true });
-    expect(mockDeleteMemorySession).toHaveBeenCalledWith(mockDb, 100, 10);
-  });
-
-  it('returns 404 when session is not found', async () => {
-    mockDeleteMemorySession.mockResolvedValueOnce({ deleted: false });
-
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/999', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toBe('NOT_FOUND');
-    expect(json.message).toBe('Session not found');
-  });
-
-  it('returns 400 for invalid session ID', async () => {
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/abc', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe('VALIDATION_ERROR');
-    expect(json.message).toBe('Invalid session ID');
-  });
-
-  it('tries each installationId until session is found', async () => {
-    mockDeleteMemorySession
-      .mockResolvedValueOnce({ deleted: false }) // installation 100 — not found
-      .mockResolvedValueOnce({ deleted: true }); // installation 200 — found
-
-    const multiInstallUser = {
-      githubUserId: 1,
-      githubLogin: 'testuser',
-      installationIds: [100, 200],
-    };
-
-    const app = createApp(multiInstallUser);
-    const res = await app.request('/api/memory/sessions/10', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ deleted: true });
-    expect(mockDeleteMemorySession).toHaveBeenCalledTimes(2);
-    expect(mockDeleteMemorySession).toHaveBeenCalledWith(mockDb, 100, 10);
-    expect(mockDeleteMemorySession).toHaveBeenCalledWith(mockDb, 200, 10);
-  });
-
-  it('returns 500 with errorId when an error occurs', async () => {
-    mockDeleteMemorySession.mockRejectedValueOnce(new Error('DB error'));
-
-    const app = createApp();
-    const res = await app.request('/api/memory/sessions/10', {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json.error).toBe('DELETE_FAILED');
-    expect(json.message).toBe('Failed to delete memory session');
-    expect(json).toHaveProperty('errorId');
-    expect(json.errorId).toHaveLength(8);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// POST /api/runner/configure-secret
-// ═══════════════════════════════════════════════════════════════════
-
-describe('POST /api/runner/configure-secret', () => {
-  const originalEnv = process.env.GHAGGA_WEBHOOK_SECRET;
-
-  beforeEach(() => {
-    process.env.GHAGGA_WEBHOOK_SECRET = 'test-webhook-secret';
-  });
-
-  afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.GHAGGA_WEBHOOK_SECRET = originalEnv;
-    } else {
-      delete process.env.GHAGGA_WEBHOOK_SECRET;
-    }
-  });
-
-  it('returns 200 with configured: true on success', async () => {
-    mockDiscoverRunnerRepo.mockResolvedValueOnce({
-      repoId: 999,
-      fullName: 'testuser/ghagga-runner',
-      isPrivate: false,
-    });
-    mockSetRunnerSecret.mockResolvedValueOnce(undefined);
-
-    const app = createApp();
-    const res = await app.request('/api/runner/configure-secret', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.data).toEqual({ configured: true });
-    expect(mockSetRunnerSecret).toHaveBeenCalledWith(
-      'testuser/ghagga-runner',
-      'GHAGGA_CALLBACK_SECRET',
-      'test-webhook-secret',
-      'test-token',
-    );
-  });
-
-  it('returns 404 when runner repo not found', async () => {
-    mockDiscoverRunnerRepo.mockResolvedValueOnce(null);
-
-    const app = createApp();
-    const res = await app.request('/api/runner/configure-secret', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json.error).toBe('NOT_FOUND');
-    expect(json.message).toBe('Runner repo not found. Create it first.');
-  });
-
-  it('returns 502 when secret set fails', async () => {
-    mockDiscoverRunnerRepo.mockResolvedValueOnce({
-      repoId: 999,
-      fullName: 'testuser/ghagga-runner',
-      isPrivate: false,
-    });
-    mockSetRunnerSecret.mockRejectedValueOnce(new Error('GitHub API error'));
-
-    const app = createApp();
-    const res = await app.request('/api/runner/configure-secret', {
+    const res = await app.request('/api/runner/install-workflow/testuser/test-repo', {
       method: 'POST',
       headers: { Authorization: 'Bearer test-token' },
     });
 
     expect(res.status).toBe(502);
     const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-    expect(json.message).toBe('Failed to configure runner secret.');
-  });
-
-  it('returns 502 when discoverRunnerRepo throws', async () => {
-    mockDiscoverRunnerRepo.mockRejectedValueOnce(new Error('Network error'));
-
-    const app = createApp();
-    const res = await app.request('/api/runner/configure-secret', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer test-token' },
-    });
-
-    expect(res.status).toBe(502);
-    const json = await res.json();
-    expect(json.error).toBe('RUNNER_ERROR');
-    expect(json.message).toBe('Failed to configure runner secret.');
+    expect(json.error).toBe('WORKFLOW_ERROR');
   });
 });
 

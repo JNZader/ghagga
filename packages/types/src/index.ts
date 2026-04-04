@@ -26,6 +26,8 @@ export type {
   Stats,
   User,
   ValidationResponse,
+  WorkflowInstallResult,
+  WorkflowStatus,
 } from './api.js';
 
 export type {

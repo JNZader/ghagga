@@ -17,6 +17,8 @@ import type {
   SaaSProvider,
   Stats,
   ValidationResponse,
+  WorkflowInstallResult,
+  WorkflowStatus,
 } from './types';
 
 const API_URL =
@@ -442,6 +444,32 @@ export function useConfigureRunnerSecret() {
       fetchApi<{ data: RunnerConfigureResult }>('/api/runner/configure-secret', {
         method: 'POST',
       }).then((res) => res.data),
+  });
+}
+
+// ─── Workflow Installation ─────────────────────────────────
+
+export function useWorkflowStatus(owner?: string, repo?: string) {
+  return useQuery<WorkflowStatus>({
+    queryKey: ['workflow', 'status', owner, repo],
+    queryFn: () =>
+      fetchData<WorkflowStatus>(`/api/runner/install-workflow/status/${owner}/${repo}`),
+    enabled: !!owner && !!repo,
+    staleTime: 30_000,
+  });
+}
+
+export function useInstallWorkflow(owner: string, repo: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      fetchApi<{ data: WorkflowInstallResult }>(`/api/runner/install-workflow/${owner}/${repo}`, {
+        method: 'POST',
+      }).then((res) => res.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workflow', 'status', owner, repo] });
+    },
   });
 }
 
