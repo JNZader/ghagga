@@ -31,14 +31,14 @@ const ALGORITHM = 'aes-256-gcm';
 const V2_PREFIX = 'v2:';
 
 function getEncryptionKey(): Buffer {
-	const key = process.env.ENCRYPTION_KEY;
-	if (!key) {
-		throw new Error('ENCRYPTION_KEY environment variable is not set');
-	}
-	if (key.length !== 64 || !/^[0-9a-fA-F]+$/.test(key)) {
-		throw new Error('ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)');
-	}
-	return Buffer.from(key, 'hex');
+  const key = process.env.ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error('ENCRYPTION_KEY environment variable is not set');
+  }
+  if (key.length !== 64 || !/^[0-9a-fA-F]+$/.test(key)) {
+    throw new Error('ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)');
+  }
+  return Buffer.from(key, 'hex');
 }
 
 /**
@@ -46,14 +46,14 @@ function getEncryptionKey(): Buffer {
  * @returns v2 format: "v2:<base64iv>:<base64cipher>:<base64authtag>"
  */
 export function encrypt(plaintext: string): string {
-	const key = getEncryptionKey();
-	const iv = randomBytes(IV_LENGTH);
+  const key = getEncryptionKey();
+  const iv = randomBytes(IV_LENGTH);
 
-	const cipher = createCipheriv(ALGORITHM, key, iv);
-	const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-	const authTag = cipher.getAuthTag();
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
 
-	return `${V2_PREFIX}${iv.toString('base64')}:${encrypted.toString('base64')}:${authTag.toString('base64')}`;
+  return `${V2_PREFIX}${iv.toString('base64')}:${encrypted.toString('base64')}:${authTag.toString('base64')}`;
 }
 
 /**
@@ -63,46 +63,46 @@ export function encrypt(plaintext: string): string {
  * v2: "v2:<base64iv>:<base64cipher>:<base64authtag>"
  */
 export function decrypt(value: string): string {
-	const key = getEncryptionKey();
+  const key = getEncryptionKey();
 
-	if (value.startsWith(V2_PREFIX)) {
-		return decryptV2(value.slice(V2_PREFIX.length), key);
-	}
+  if (value.startsWith(V2_PREFIX)) {
+    return decryptV2(value.slice(V2_PREFIX.length), key);
+  }
 
-	return decryptV1(value, key);
+  return decryptV1(value, key);
 }
 
 function decryptV1(base64str: string, key: Buffer): string {
-	const combined = Buffer.from(base64str, 'base64');
+  const combined = Buffer.from(base64str, 'base64');
 
-	if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH) {
-		throw new Error('Invalid encrypted data: too short');
-	}
+  if (combined.length < IV_LENGTH + AUTH_TAG_LENGTH) {
+    throw new Error('Invalid encrypted data: too short');
+  }
 
-	const iv = combined.subarray(0, IV_LENGTH);
-	const authTag = combined.subarray(combined.length - AUTH_TAG_LENGTH);
-	const ciphertext = combined.subarray(IV_LENGTH, combined.length - AUTH_TAG_LENGTH);
+  const iv = combined.subarray(0, IV_LENGTH);
+  const authTag = combined.subarray(combined.length - AUTH_TAG_LENGTH);
+  const ciphertext = combined.subarray(IV_LENGTH, combined.length - AUTH_TAG_LENGTH);
 
-	const decipher = createDecipheriv(ALGORITHM, key, iv);
-	decipher.setAuthTag(authTag);
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
 
-	return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
 }
 
 function decryptV2(payload: string, key: Buffer): string {
-	const parts = payload.split(':');
-	if (parts.length !== 3) {
-		throw new Error('Invalid v2 encrypted data: expected "iv:cipher:authTag"');
-	}
+  const parts = payload.split(':');
+  if (parts.length !== 3) {
+    throw new Error('Invalid v2 encrypted data: expected "iv:cipher:authTag"');
+  }
 
-	const iv = Buffer.from(parts[0]!, 'base64');
-	const ciphertext = Buffer.from(parts[1]!, 'base64');
-	const authTag = Buffer.from(parts[2]!, 'base64');
+  const iv = Buffer.from(parts[0]!, 'base64');
+  const ciphertext = Buffer.from(parts[1]!, 'base64');
+  const authTag = Buffer.from(parts[2]!, 'base64');
 
-	const decipher = createDecipheriv(ALGORITHM, key, iv);
-	decipher.setAuthTag(authTag);
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
 
-	return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
 }
 
 /**
@@ -110,7 +110,7 @@ function decryptV2(payload: string, key: Buffer): string {
  * Returns the value unchanged if it's already v2.
  */
 export function migrateToV2(value: string): string {
-	if (value.startsWith(V2_PREFIX)) return value;
-	const plaintext = decrypt(value);
-	return encrypt(plaintext);
+  if (value.startsWith(V2_PREFIX)) return value;
+  const plaintext = decrypt(value);
+  return encrypt(plaintext);
 }
