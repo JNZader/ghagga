@@ -2,7 +2,7 @@ name: 'GHAGGA Code Review'
 description: >-
   AI-powered multi-agent code review for PRs with built-in static analysis.
   Runs 16 static analysis tools directly on the GitHub Actions runner (cached).
-  Free via GitHub Models. 6 providers, 3 review modes.
+  3 provider modes: gateway (mcp-llm-bridge), cli-bridge (local CLIs), ollama.
 
 branding:
   icon: 'eye'
@@ -11,15 +11,17 @@ branding:
 inputs:
   provider:
     description: >-
-      LLM provider to use. Use "github" for free reviews via GitHub Models
-      (no API key needed). Options: github, openai, anthropic, google, ollama, qwen, groq, cerebras, deepseek, openrouter.
+      LLM provider to use. Options: gateway (default — route via mcp-llm-bridge),
+      cli-bridge (local CLI tools: Claude Code, OpenCode, Copilot), ollama (local).
+      Legacy values (github, anthropic, openai, google, etc.) are automatically
+      remapped to "gateway" for backward compatibility.
     required: false
-    default: 'github'
+    default: 'gateway'
 
   model:
     description: >-
-      LLM model identifier (e.g. gpt-4o-mini, claude-sonnet-4-20250514).
-      Defaults to best model for chosen provider.
+      LLM model identifier. For gateway/cli-bridge, use "auto" to let the
+      provider select the best available model.
     required: false
 
   mode:
@@ -31,8 +33,8 @@ inputs:
 
   api-key:
     description: >-
-      LLM provider API key. NOT required when using "github" provider
-      (uses GITHUB_TOKEN automatically). Required for openai, anthropic, google, qwen, groq, cerebras, deepseek, openrouter.
+      LLM provider credential. For gateway: bearer token. For cli-bridge: tool
+      API key (optional). For ollama: not required.
     required: false
 
   github-token:

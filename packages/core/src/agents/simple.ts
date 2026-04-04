@@ -6,7 +6,7 @@
  * would be overkill.
  */
 
-import { createAISDKGenerateFn, type GenerateTextFn } from '../providers/generate-fn.js';
+import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type {
   FindingSeverity,
   FindingSource,
@@ -168,8 +168,14 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     input;
   const emit = input.onProgress ?? (() => {});
 
-  // Resolve the generation function: use injected or create from provider/model/apiKey
-  const generateFn = input.generateFn ?? createAISDKGenerateFn(provider, model, apiKey);
+  // Resolve the generation function (required — must be injected by pipeline)
+  const generateFn = input.generateFn;
+  if (!generateFn) {
+    throw new Error(
+      'runSimpleReview requires generateFn to be provided in SimpleReviewInput. ' +
+        'The pipeline must resolve the backend and pass a GenerateTextFn instance.',
+    );
+  }
 
   const startTime = Date.now();
 

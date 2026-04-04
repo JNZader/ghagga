@@ -16,7 +16,7 @@
  * deduplicates findings into the final STATUS/SUMMARY/FINDINGS.
  */
 
-import { createAISDKGenerateFn, type GenerateTextFn } from '../providers/generate-fn.js';
+import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type {
   LLMProvider,
   ProgressCallback,
@@ -149,13 +149,13 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // Otherwise, build them from providerChain or flat provider/model/apiKey.
   const chain = input.providerChain && input.providerChain.length > 0 ? input.providerChain : null;
 
-  const resolvedGenerateFns: GenerateTextFn[] =
-    input.generateFns ??
-    (chain
-      ? chain.map((entry) =>
-          createAISDKGenerateFn(entry.provider as LLMProvider, entry.model, entry.apiKey),
-        )
-      : [createAISDKGenerateFn(provider, model, apiKey)]);
+  if (!input.generateFns || input.generateFns.length === 0) {
+    throw new Error(
+      'runWorkflowReview requires generateFns to be provided. ' +
+        'The pipeline must resolve the backend and pass GenerateTextFn instances.',
+    );
+  }
+  const resolvedGenerateFns: GenerateTextFn[] = input.generateFns;
 
   // Auto-calculate concurrency and delay based on the primary model's TPM.
   // Free-tier models (Groq 8K TPM) → serialize with 60s delays (~5min total).

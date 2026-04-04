@@ -14,9 +14,9 @@
  *
  * Environment variables (override stored config):
  *   GHAGGA_API_KEY          API key for the LLM provider
- *   GHAGGA_PROVIDER         LLM provider: anthropic, openai, google, github, ollama, qwen, groq, cerebras, deepseek, openrouter
+ *   GHAGGA_PROVIDER         LLM provider: gateway, cli-bridge, ollama
  *   GHAGGA_MODEL            Model identifier
- *   GITHUB_TOKEN            GitHub token (fallback for github provider)
+ *   GITHUB_TOKEN            GitHub token (fallback auth for gateway / cli-bridge)
  *   GHAGGA_MEMORY_BACKEND   Memory backend: sqlite (default) or engram
  */
 
@@ -142,17 +142,17 @@ program
 
     // Priority: CLI flag > env var > stored config
     if (!options.provider) {
-      options.provider = config.defaultProvider ?? 'github';
+      options.provider = config.defaultProvider ?? 'gateway';
     }
 
     if (!options.model) {
       options.model = config.defaultModel ?? undefined;
     }
 
-    // Auto-resolve API key: CLI flag > env var > GITHUB_TOKEN > stored token
+    // Auto-resolve API key: CLI flag > env var > stored token (gateway/cli-bridge)
     if (!options.apiKey) {
-      if (options.provider === 'github') {
-        options.apiKey = process.env.GITHUB_TOKEN ?? storedToken ?? undefined;
+      if (options.provider === 'gateway' || options.provider === 'cli-bridge') {
+        options.apiKey = storedToken ?? undefined;
       }
     }
 
@@ -163,18 +163,34 @@ program
       process.exit(1);
     }
 
-    // ── Validate provider ─────────────────────────────────────
-    const validProviders: LLMProvider[] = [
+    // ── Validate / migrate provider ───────────────────────────
+    const currentProviders: LLMProvider[] = ['gateway', 'cli-bridge', 'ollama'];
+    const legacyCLIProviders = new Set([
       'anthropic',
       'openai',
       'google',
       'github',
-      'ollama',
+      'groq',
+      'openrouter',
+      'azure',
+      'deepseek',
       'qwen',
-    ];
-    if (!validProviders.includes(options.provider as LLMProvider)) {
+      'cerebras',
+    ]);
+
+    if (legacyCLIProviders.has(options.provider as string)) {
       tui.log.error(
-        `❌ Invalid provider "${options.provider}". Choose from: ${validProviders.join(', ')}`,
+        `\n❌ Provider '${options.provider}' is no longer supported directly.\n` +
+          `  → Set --provider gateway and configure credentials in mcp-llm-bridge.\n` +
+          `  → See: https://github.com/JNZader/mcp-llm-bridge\n\n` +
+          `  Or use --provider cli-bridge for local CLI tools (Claude Code, OpenCode, Copilot).\n`,
+      );
+      process.exit(1);
+    }
+
+    if (!currentProviders.includes(options.provider as LLMProvider)) {
+      tui.log.error(
+        `❌ Invalid provider "${options.provider}". Choose from: ${currentProviders.join(', ')}`,
       );
       process.exit(1);
     }
@@ -203,16 +219,22 @@ program
       outputFormat = options.format as 'json' | 'markdown';
     }
 
-    // ── Validate API key (not required for ollama or --quick mode) ──
-    if (!options.apiKey && options.provider !== 'ollama' && !options.quick) {
+    // ── Validate API key ──────────────────────────────────────
+    // ollama, cli-bridge, and gateway (when self-hosted) don't require a key.
+    const noKeyRequired =
+      options.provider === 'ollama' ||
+      options.provider === 'cli-bridge' ||
+      options.provider === 'gateway';
+
+    if (!options.apiKey && !noKeyRequired && !options.quick) {
       tui.log.error('❌ No API key available.\n');
-      tui.log.error('   Quick fix: run "ghagga login" to authenticate with GitHub (free!)');
+      tui.log.error('   Quick fix: run "ghagga login" to authenticate.');
       tui.log.error('   Or pass --api-key <key> or set GHAGGA_API_KEY.');
-      tui.log.error('   Or use --provider ollama for local models (no key needed).\n');
+      tui.log.error('   Or use --provider ollama / --provider cli-bridge for key-free review.\n');
       process.exit(1);
     }
 
-    // Ollama doesn't need an API key — use a placeholder
+    // Ollama doesn't need an API key — use a placeholder so the pipeline doesn't error
     if (options.provider === 'ollama' && !options.apiKey) {
       options.apiKey = 'ollama';
     }

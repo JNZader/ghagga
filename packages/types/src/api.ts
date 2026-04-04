@@ -6,33 +6,19 @@ export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'fan-out';
 
-export type LLMProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'github'
-  | 'ollama'
-  | 'qwen'
-  | 'groq'
-  | 'cerebras'
-  | 'deepseek'
-  | 'openrouter'
-  | 'cli-bridge'
-  | 'gateway';
+/**
+ * Supported LLM provider modes.
+ * - gateway: delegates to mcp-llm-bridge (recommended for server/action)
+ * - cli-bridge: calls local CLIs directly (Claude, OpenCode, Gemini, Copilot) — CLI only
+ * - ollama: calls local Ollama instance directly (no subprocess, OpenAI-compatible)
+ *
+ * Migration: 'anthropic', 'openai', 'google', etc. → set provider: 'gateway' and
+ * configure credentials in mcp-llm-bridge vault.
+ */
+export type LLMProvider = 'gateway' | 'cli-bridge' | 'ollama';
 
-/** Providers available in the SaaS dashboard (excludes Ollama) */
-export type SaaSProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'github'
-  | 'qwen'
-  | 'groq'
-  | 'cerebras'
-  | 'deepseek'
-  | 'openrouter'
-  | 'cli-bridge'
-  | 'gateway';
+/** Providers available in the SaaS dashboard */
+export type SaaSProvider = 'gateway' | 'cli-bridge' | 'ollama';
 
 // ─── User ───────────────────────────────────────────────────────
 

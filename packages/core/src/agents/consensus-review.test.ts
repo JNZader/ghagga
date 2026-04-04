@@ -1,22 +1,14 @@
 /**
- * Consensus review integration tests — reviewLevel + calibration injection.
+ * Consensus review tests — reviewLevel + calibration injection.
  *
- * Mirrors the pattern in workflow.test.ts: mock `ai` and `../providers`,
- * then verify that runConsensusReview assembles stance system prompts
- * containing the review-level instruction and REVIEW_CALIBRATION block.
+ * Tests use mock generateFns to verify that runConsensusReview assembles
+ * stance system prompts containing the review-level instruction and
+ * REVIEW_CALIBRATION block, without depending on deleted AI SDK providers.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── Mocks ──────────────────────────────────────────────────────
-
-vi.mock('ai', () => ({
-  generateText: vi.fn(),
-}));
-
-vi.mock('../providers/index.js', () => ({
-  createModel: vi.fn(() => 'mock-language-model'),
-}));
 
 vi.mock('./prompts.js', () => ({
   CONSENSUS_FOR_SYSTEM: 'CONSENSUS_FOR_SYSTEM',
@@ -32,51 +24,49 @@ vi.mock('./prompts.js', () => ({
   ),
 }));
 
-import { generateText } from 'ai';
-import { createModel } from '../providers/index.js';
+import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type { ConsensusReviewInput } from './consensus.js';
 import { runConsensusReview } from './consensus.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-const mockGenerateText = vi.mocked(generateText);
-const mockCreateModel = vi.mocked(createModel);
+function makeVoteText(decision = 'approve') {
+  return `DECISION: ${decision}\nCONFIDENCE: 0.8\nREASONING: Looks good.`;
+}
+
+/** Create a mock generateFn that tracks (system, prompt) calls */
+function makeMockGenerateFn(
+  providerName = 'gateway',
+  modelName = 'auto',
+): { fn: GenerateTextFn; calls: Array<{ system: string; prompt: string }> } {
+  const calls: Array<{ system: string; prompt: string }> = [];
+  const fn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+    calls.push({ system, prompt });
+    return {
+      text: makeVoteText(),
+      tokensUsed: 150,
+      provider: providerName,
+      model: modelName,
+    };
+  });
+  return { fn, calls };
+}
 
 function makeInput(overrides: Partial<ConsensusReviewInput> = {}): ConsensusReviewInput {
+  const { fn } = makeMockGenerateFn();
   return {
     diff: '--- a/file.ts\n+++ b/file.ts\n@@ -1,3 +1,3 @@\n-old\n+new',
     models: [
-      {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-20250514',
-        apiKey: 'sk-test',
-        stance: 'for',
-      },
-      {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-20250514',
-        apiKey: 'sk-test',
-        stance: 'against',
-      },
-      {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-20250514',
-        apiKey: 'sk-test',
-        stance: 'neutral',
-      },
+      { provider: 'gateway', model: 'auto', apiKey: 'token', stance: 'for' },
+      { provider: 'gateway', model: 'auto', apiKey: 'token', stance: 'against' },
+      { provider: 'gateway', model: 'auto', apiKey: 'token', stance: 'neutral' },
     ],
     staticContext: '',
     memoryContext: null,
     stackHints: '',
     reviewLevel: 'normal',
+    generateFns: [fn],
     ...overrides,
-  };
-}
-
-function makeVoteResponse(decision = 'approve', confidence = '0.8') {
-  return {
-    text: `DECISION: ${decision}\nCONFIDENCE: ${confidence}\nREASONING: Looks good.`,
-    usage: { inputTokens: 100, outputTokens: 50 },
   };
 }
 
@@ -85,138 +75,129 @@ function makeVoteResponse(decision = 'approve', confidence = '0.8') {
 describe('runConsensusReview reviewLevel injection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // biome-ignore lint/suspicious/noExplicitAny: mock cast
-    mockGenerateText.mockResolvedValue(makeVoteResponse() as any);
+  });
+
+  it('throws when generateFns is not provided', async () => {
+    const input = makeInput({ generateFns: undefined });
+    await expect(runConsensusReview(input)).rejects.toThrow('requires generateFns');
+  });
+
+  it('throws when generateFns is empty', async () => {
+    const input = makeInput({ generateFns: [] });
+    await expect(runConsensusReview(input)).rejects.toThrow('requires generateFns');
   });
 
   it('includes soft review-level instruction in all 3 stance prompts', async () => {
-    await runConsensusReview(makeInput({ reviewLevel: 'soft' }));
+    const { fn, calls } = makeMockGenerateFn();
+    await runConsensusReview(makeInput({ reviewLevel: 'soft', generateFns: [fn] }));
 
-    expect(mockGenerateText).toHaveBeenCalledTimes(3);
-    for (let i = 0; i < 3; i++) {
-      // biome-ignore lint/suspicious/noExplicitAny: mock cast
-      const call = mockGenerateText.mock.calls[i]?.[0] as any;
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
       expect(call.system).toContain('REVIEW_LEVEL:soft');
     }
   });
 
   it('includes normal review-level instruction in all 3 stance prompts', async () => {
-    await runConsensusReview(makeInput({ reviewLevel: 'normal' }));
+    const { fn, calls } = makeMockGenerateFn();
+    await runConsensusReview(makeInput({ reviewLevel: 'normal', generateFns: [fn] }));
 
-    expect(mockGenerateText).toHaveBeenCalledTimes(3);
-    for (let i = 0; i < 3; i++) {
-      // biome-ignore lint/suspicious/noExplicitAny: mock cast
-      const call = mockGenerateText.mock.calls[i]?.[0] as any;
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
       expect(call.system).toContain('REVIEW_LEVEL:normal');
     }
   });
 
   it('includes strict review-level instruction in all 3 stance prompts', async () => {
-    await runConsensusReview(makeInput({ reviewLevel: 'strict' }));
+    const { fn, calls } = makeMockGenerateFn();
+    await runConsensusReview(makeInput({ reviewLevel: 'strict', generateFns: [fn] }));
 
-    expect(mockGenerateText).toHaveBeenCalledTimes(3);
-    for (let i = 0; i < 3; i++) {
-      // biome-ignore lint/suspicious/noExplicitAny: mock cast
-      const call = mockGenerateText.mock.calls[i]?.[0] as any;
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
       expect(call.system).toContain('REVIEW_LEVEL:strict');
     }
   });
 
   it('includes full REVIEW_CALIBRATION for the first vote, compact for the rest', async () => {
-    await runConsensusReview(makeInput());
+    const { fn, calls } = makeMockGenerateFn();
+    await runConsensusReview(makeInput({ generateFns: [fn] }));
 
     // First vote gets full calibration
-    // biome-ignore lint/suspicious/noExplicitAny: mock cast
-    const firstCall = mockGenerateText.mock.calls[0]?.[0] as any;
-    expect(firstCall.system).toContain('REVIEW_CALIBRATION_BLOCK');
+    expect(calls[0]?.system).toContain('REVIEW_CALIBRATION_BLOCK');
 
     // Subsequent votes get compact calibration
     for (let i = 1; i < 3; i++) {
-      // biome-ignore lint/suspicious/noExplicitAny: mock cast
-      const call = mockGenerateText.mock.calls[i]?.[0] as any;
-      expect(call.system).toContain('COMPACT_CALIBRATION_BLOCK');
-      expect(call.system).not.toContain('REVIEW_CALIBRATION_BLOCK');
+      expect(calls[i]?.system).toContain('COMPACT_CALIBRATION_BLOCK');
+      expect(calls[i]?.system).not.toContain('REVIEW_CALIBRATION_BLOCK');
     }
   });
 });
 
-// ─── Multi-provider chain distribution (via pipeline.buildConsensusModels) ───
+// ─── Multi-provider distribution via generateFns array ───────────────────────
 
-describe('runConsensusReview — multi-provider distribution via models array', () => {
+describe('runConsensusReview — multi-provider distribution via generateFns array', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // biome-ignore lint/suspicious/noExplicitAny: mock cast
-    mockGenerateText.mockResolvedValue(makeVoteResponse() as any);
   });
 
-  it('uses distinct providers for each stance when models array has 3 different entries', async () => {
-    const input = makeInput({
-      models: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'ka', stance: 'for' },
-        { provider: 'openai', model: 'gpt-4o', apiKey: 'kb', stance: 'against' },
-        { provider: 'google', model: 'gemini-2.0-flash', apiKey: 'kc', stance: 'neutral' },
-      ],
+  it('uses distinct generateFns for each stance when 3 fns are provided', async () => {
+    const fn0 = vi.fn().mockResolvedValue({
+      text: makeVoteText(),
+      tokensUsed: 100,
+      provider: 'gateway',
+      model: 'p0',
     });
-    await runConsensusReview(input);
+    const fn1 = vi.fn().mockResolvedValue({
+      text: makeVoteText(),
+      tokensUsed: 100,
+      provider: 'gateway',
+      model: 'p1',
+    });
+    const fn2 = vi.fn().mockResolvedValue({
+      text: makeVoteText(),
+      tokensUsed: 100,
+      provider: 'gateway',
+      model: 'p2',
+    });
 
-    expect(mockCreateModel).toHaveBeenCalledTimes(3);
-    expect(mockCreateModel).toHaveBeenNthCalledWith(
-      1,
-      'anthropic',
-      'claude-sonnet-4-20250514',
-      'ka',
-    );
-    expect(mockCreateModel).toHaveBeenNthCalledWith(2, 'openai', 'gpt-4o', 'kb');
-    expect(mockCreateModel).toHaveBeenNthCalledWith(3, 'google', 'gemini-2.0-flash', 'kc');
+    await runConsensusReview(makeInput({ generateFns: [fn0, fn1, fn2] }));
+
+    // Each stance gets a different generateFn (round-robin)
+    expect(fn0).toHaveBeenCalledTimes(1); // for-vote (index 0)
+    expect(fn1).toHaveBeenCalledTimes(1); // against-vote (index 1)
+    expect(fn2).toHaveBeenCalledTimes(1); // neutral-vote (index 2)
   });
 
-  it('uses chain[0] for for-vote and chain[1] for against-vote when 2 entries provided', async () => {
-    const input = makeInput({
-      models: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'ka', stance: 'for' },
-        { provider: 'openai', model: 'gpt-4o', apiKey: 'kb', stance: 'against' },
-        // neutral wraps back to index 0 — this is set by buildConsensusModels in pipeline
-        {
-          provider: 'anthropic',
-          model: 'claude-sonnet-4-20250514',
-          apiKey: 'ka',
-          stance: 'neutral',
-        },
-      ],
+  it('wraps back to fn0 for neutral when only 2 fns provided', async () => {
+    const fn0 = vi.fn().mockResolvedValue({
+      text: makeVoteText(),
+      tokensUsed: 100,
+      provider: 'gateway',
+      model: 'p0',
     });
-    await runConsensusReview(input);
+    const fn1 = vi.fn().mockResolvedValue({
+      text: makeVoteText(),
+      tokensUsed: 100,
+      provider: 'gateway',
+      model: 'p1',
+    });
 
-    expect(mockCreateModel).toHaveBeenCalledTimes(3);
-    expect(mockCreateModel).toHaveBeenNthCalledWith(
-      1,
-      'anthropic',
-      'claude-sonnet-4-20250514',
-      'ka',
-    );
-    expect(mockCreateModel).toHaveBeenNthCalledWith(2, 'openai', 'gpt-4o', 'kb');
-    // neutral uses ka (same as for-vote) — the pipeline wraps i%2 = 2%2 = 0
-    expect(mockCreateModel).toHaveBeenNthCalledWith(
-      3,
-      'anthropic',
-      'claude-sonnet-4-20250514',
-      'ka',
-    );
+    await runConsensusReview(makeInput({ generateFns: [fn0, fn1] }));
+
+    // 3 votes, 2 fns: vote 0 → fn0, vote 1 → fn1, vote 2 → fn0 (wraps)
+    expect(fn0).toHaveBeenCalledTimes(2); // for + neutral
+    expect(fn1).toHaveBeenCalledTimes(1); // against
   });
 
-  it('all 3 votes use same provider when models array has a single provider repeated', async () => {
-    // Equivalent to no chain configured — all use primary
-    const input = makeInput({
-      models: [
-        { provider: 'openai', model: 'gpt-4o', apiKey: 'k', stance: 'for' },
-        { provider: 'openai', model: 'gpt-4o', apiKey: 'k', stance: 'against' },
-        { provider: 'openai', model: 'gpt-4o', apiKey: 'k', stance: 'neutral' },
-      ],
+  it('all 3 votes use same fn when only 1 fn is provided', async () => {
+    const fn0 = vi.fn().mockResolvedValue({
+      text: makeVoteText(),
+      tokensUsed: 100,
+      provider: 'gateway',
+      model: 'p0',
     });
-    await runConsensusReview(input);
 
-    expect(mockCreateModel).toHaveBeenCalledTimes(3);
-    for (let i = 1; i <= 3; i++) {
-      expect(mockCreateModel).toHaveBeenNthCalledWith(i, 'openai', 'gpt-4o', 'k');
-    }
+    await runConsensusReview(makeInput({ generateFns: [fn0] }));
+
+    expect(fn0).toHaveBeenCalledTimes(3);
   });
 });

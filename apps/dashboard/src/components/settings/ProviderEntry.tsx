@@ -38,59 +38,24 @@ interface ProviderEntryProps {
 // ─── Known Models per Provider (for instant model selection without re-validation) ──
 
 export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
-  groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
-  cerebras: ['llama3.1-8b', 'gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  openrouter: [
-    // ── Free models (no credits needed) ──
-    'openai/gpt-oss-120b:free',
-    'nvidia/nemotron-3-super-120b-a12b:free',
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'nousresearch/hermes-3-llama-3.1-405b:free',
-    'google/gemma-3-27b-it:free',
-    'mistralai/mistral-small-3.1-24b-instruct:free',
-    'qwen/qwen3-coder:free',
-    'stepfun/step-3.5-flash:free',
-    'minimax/minimax-m2.5:free',
-    // ── Paid models (requires credits) ──
-    'anthropic/claude-sonnet-4',
-    'openai/gpt-4o',
-    'google/gemini-2.5-flash',
-    'deepseek/deepseek-chat',
-  ],
-  anthropic: [
-    'claude-sonnet-4-20250514',
-    'claude-opus-4-20250514',
-    'claude-haiku-4-20250414',
-    'claude-3-5-haiku-20241022',
-    'claude-3-5-sonnet-20241022',
-  ],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o3-mini'],
-  google: [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-3-flash',
-    'gemini-2.5-pro',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-  ],
-  github: ['gpt-4o-mini', 'gpt-4o', 'o3-mini', 'Phi-4', 'Mistral-Large-2411', 'DeepSeek-R1'],
-  qwen: ['qwen-coder-plus', 'qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-coder-turbo', 'qwen-long'],
   'cli-bridge': ['auto', 'opencode', 'copilot', 'gemini'],
   gateway: ['auto'],
+  ollama: ['llama3', 'llama3.1', 'codellama', 'mistral', 'gemma3', 'qwen2.5-coder'],
 };
 
 // ─── Provider Labels ────────────────────────────────────────────
 
-const API_PROVIDER_OPTIONS: { value: SaaSProvider; label: string }[] = [
-  { value: 'groq', label: 'Groq (Free)' },
-  { value: 'cerebras', label: 'Cerebras (Free)' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'openrouter', label: 'OpenRouter (Multi-Model)' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'google', label: 'Google' },
-  { value: 'qwen', label: 'Qwen (Alibaba Cloud)' },
+// Ollama local-models suggestions for the model input datalist
+const OLLAMA_MODEL_SUGGESTIONS = [
+  'llama3',
+  'llama3.1',
+  'llama3.2',
+  'codellama',
+  'mistral',
+  'gemma3',
+  'qwen2.5-coder',
+  'deepseek-coder-v2',
+  'phi3',
 ];
 
 const CLI_OPTIONS: { value: string; label: string }[] = [
@@ -192,14 +157,14 @@ export function ProviderEntry({
   // 'new' means the user wants to type a new key; 'reuse' means picking a saved one
   const [keyMode, setKeyMode] = useState<'reuse' | 'new'>('reuse');
 
-  const isGitHub = entry.provider === 'github';
   const isCLIBridge = entry.provider === 'cli-bridge';
   const isGateway = entry.provider === 'gateway';
-  // CLI bridge entries CAN have API keys now (opencode, gemini, copilot all accept credentials)
-  // Gateway uses apiKey for the bearer token (configured in dashboard, not env vars)
-  const needsApiKey = !isGitHub;
-  // Can validate if: GitHub (no key needed), has a new key typed, OR has an existing saved key
-  const canValidate = isGitHub || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
+  const isOllama = entry.provider === 'ollama';
+  // All 3 providers may optionally accept an API key / bearer token
+  const needsApiKey = !isOllama;
+  // Can validate if: key typed, existing key saved, ollama (keyless), or cli-bridge (keyless flow)
+  const canValidate =
+    isOllama || isCLIBridge || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
   // For opencode: cliModel is required — disable save/validate if missing
   const isOpencode = isCLIBridge && entry.model === 'opencode';
   const cliModelMissing = isOpencode && !entry.cliModel?.trim();
@@ -337,47 +302,10 @@ export function ProviderEntry({
         </div>
       </div>
 
-      {/* Provider Mode: API vs CLI Bridge */}
+      {/* Provider Mode: Gateway | CLI Bridge | Ollama */}
       <div className="mb-3">
         <label className="mb-1 block text-xs font-medium text-text-secondary">Provider</label>
         <div className="mb-2 flex flex-wrap items-center gap-4 text-sm">
-          <label className="flex cursor-pointer items-center gap-1.5">
-            <input
-              type="radio"
-              name={`mode-${index}`}
-              checked={entry.provider !== 'cli-bridge' && entry.provider !== 'gateway'}
-              onChange={() => {
-                if (entry.provider === 'cli-bridge' || entry.provider === 'gateway') {
-                  handleProviderChange('groq' as SaaSProvider);
-                }
-              }}
-              className="accent-primary-500"
-            />
-            <span className="text-text-secondary">API Provider</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-1.5">
-            <input
-              type="radio"
-              name={`mode-${index}`}
-              checked={entry.provider === 'cli-bridge'}
-              onChange={() => {
-                onChange({
-                  ...entry,
-                  provider: 'cli-bridge' as SaaSProvider,
-                  model: 'auto',
-                  apiKey: '',
-                  validated: true,
-                  hasExistingKey: false,
-                  maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS['cli-bridge'] ?? [],
-                  cliModel: undefined,
-                });
-              }}
-              className="accent-primary-500"
-            />
-            <span className="text-text-secondary">CLI Bridge</span>
-            <span className="text-[10px] text-yellow-400/70">(uses server CLIs — $0)</span>
-          </label>
           <label className="flex cursor-pointer items-center gap-1.5">
             <input
               type="radio"
@@ -400,7 +328,54 @@ export function ProviderEntry({
               className="accent-primary-500"
             />
             <span className="text-text-secondary">LLM Gateway</span>
-            <span className="text-[10px] text-blue-400/70">(centralized — your own gateway)</span>
+            <span className="text-[10px] text-blue-400/70">(mcp-llm-bridge)</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              name={`mode-${index}`}
+              checked={entry.provider === 'cli-bridge'}
+              onChange={() => {
+                onChange({
+                  ...entry,
+                  provider: 'cli-bridge' as SaaSProvider,
+                  model: 'auto',
+                  apiKey: '',
+                  validated: true,
+                  hasExistingKey: false,
+                  maskedApiKey: undefined,
+                  availableModels: KNOWN_MODELS['cli-bridge'] ?? [],
+                  cliModel: undefined,
+                });
+              }}
+              className="accent-primary-500"
+            />
+            <span className="text-text-secondary">Local CLI</span>
+            <span className="text-[10px] text-yellow-400/70">(Claude/OpenCode/Copilot — $0)</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              name={`mode-${index}`}
+              checked={entry.provider === 'ollama'}
+              onChange={() => {
+                onChange({
+                  ...entry,
+                  provider: 'ollama' as SaaSProvider,
+                  model: '',
+                  apiKey: '',
+                  validated: false,
+                  hasExistingKey: false,
+                  maskedApiKey: undefined,
+                  availableModels: KNOWN_MODELS.ollama ?? [],
+                  cliModel: undefined,
+                  gatewayUrl: undefined,
+                });
+              }}
+              className="accent-primary-500"
+            />
+            <span className="text-text-secondary">Ollama</span>
+            <span className="text-[10px] text-green-400/70">(local — $0)</span>
           </label>
         </div>
 
@@ -435,18 +410,22 @@ export function ProviderEntry({
             ))}
           </select>
         ) : (
-          /* API provider dropdown */
-          <select
-            value={entry.provider}
-            onChange={(e) => handleProviderChange(e.target.value as SaaSProvider)}
-            className="select-field"
-          >
-            {API_PROVIDER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          /* Ollama: free-text model input with suggestions */
+          <div>
+            <input
+              type="text"
+              list={`ollama-models-${index}`}
+              value={entry.model}
+              onChange={(e) => onChange({ ...entry, model: e.target.value })}
+              placeholder="e.g., llama3, codellama, qwen2.5-coder"
+              className="input-field w-full"
+            />
+            <datalist id={`ollama-models-${index}`}>
+              {OLLAMA_MODEL_SUGGESTIONS.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </div>
         )}
       </div>
 
@@ -612,7 +591,8 @@ export function ProviderEntry({
       )}
 
       {/* API Key / Credential Input + Validate Button */}
-      <div className={`mb-3 ${isGitHub || isFreeModel ? 'hidden' : ''}`}>
+      {/* Hidden for ollama (no key needed) and free opencode models */}
+      <div className={`mb-3 ${isOllama || isFreeModel ? 'hidden' : ''}`}>
         <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-medium text-text-secondary">
             {isGateway
@@ -633,15 +613,7 @@ export function ProviderEntry({
           )}
         </div>
 
-        {isGitHub ? (
-          <div>
-            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-300">
-              GitHub Models is not available in SaaS mode (webhook reviews use installation tokens
-              which lack the required <code className="font-mono">models</code> permission). Use a
-              provider with an API key instead (Anthropic, OpenAI, Google, or Qwen).
-            </div>
-          </div>
-        ) : showReuseSelector && effectiveMode === 'reuse' ? (
+        {showReuseSelector && effectiveMode === 'reuse' ? (
           /* ── Key Selector: reuse a saved key ── */
           <div className="flex items-center gap-3">
             <button
@@ -694,7 +666,8 @@ export function ProviderEntry({
               }
               className="input-field flex-1"
             />
-            {!isCLIBridge && !isGateway && (
+            {/* Only show validate button for gateway (bearer token validation) */}
+            {isGateway && (
               <button
                 type="button"
                 onClick={handleValidate}
@@ -713,8 +686,8 @@ export function ProviderEntry({
 
         {/* Validation status */}
         {validationError && <p className="mt-1 text-xs text-red-400">{validationError}</p>}
-        {!isCLIBridge && !isGateway && entry.validated && !validationError && (
-          <p className="mt-1 text-xs text-green-400">API key validated successfully</p>
+        {isGateway && entry.validated && !validationError && (
+          <p className="mt-1 text-xs text-green-400">Gateway token validated successfully</p>
         )}
         {entry.hasExistingKey && !entry.apiKey && !entry.validated && (
           <p className="mt-1 text-xs text-text-secondary">
@@ -723,8 +696,7 @@ export function ProviderEntry({
         )}
       </div>
 
-      {/* Model Selector — combo input with datalist for type-ahead + free text */}
-      {/* Hidden for CLI Bridge (model is selected in the CLI dropdown above) and Gateway (always 'auto') */}
+      {/* Model Selector — hidden for CLI Bridge (uses CLI dropdown) and Gateway (always 'auto') */}
       <div className={isCLIBridge || isGateway ? 'hidden' : ''}>
         <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
         {effectiveModels.length > 0 || entry.model ? (

@@ -12,7 +12,7 @@
  *   - If thresholds not met → NEEDS_HUMAN_REVIEW
  */
 
-import { createAISDKGenerateFn, type GenerateTextFn } from '../providers/generate-fn.js';
+import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type {
   ConsensusStance,
   ConsensusVote,
@@ -217,11 +217,14 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
   const emit = input.onProgress ?? (() => {});
 
   // ── Resolve GenerateTextFn array ──────────────────────────
-  // When generateFns is provided, use them directly.
-  // Otherwise, build them from models config (backward compat).
-  const resolvedGenerateFns: GenerateTextFn[] =
-    input.generateFns ??
-    models.map((config) => createAISDKGenerateFn(config.provider, config.model, config.apiKey));
+  // generateFns must be provided by the pipeline (required).
+  if (!input.generateFns || input.generateFns.length === 0) {
+    throw new Error(
+      'runConsensusReview requires generateFns to be provided. ' +
+        'The pipeline must resolve the backend and pass GenerateTextFn instances.',
+    );
+  }
+  const resolvedGenerateFns: GenerateTextFn[] = input.generateFns;
 
   // Auto-calculate scheduling from primary model's TPM.
   // For CLI bridge/gateway (single generateFn), force concurrency=1.

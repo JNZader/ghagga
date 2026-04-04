@@ -12,7 +12,7 @@
  *   - Standard FINDINGS block for compatibility with parseReviewResponse()
  */
 
-import { createModel } from '../providers/index.js';
+import { createOllamaGenerateFn } from '../providers/ollama.js';
 import type {
   Hypothesis,
   HypothesisConfidence,
@@ -21,7 +21,6 @@ import type {
   ReviewLevel,
   ReviewResult,
 } from '../types.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import {
   buildMemoryContext,
   buildReviewLevelInstruction,
@@ -162,34 +161,31 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
   // Build the user prompt with the diff (wrapped in untrusted-content delimiters)
   const prompt = `Please perform a diagnostic analysis of the following code changes. Generate testable hypotheses for any potential issues:\n\n${wrapUntrustedDiff(diff)}`;
 
-  const languageModel = createModel(provider, model, apiKey);
+  // Only Ollama reaches diagnostic mode (gateway/cli-bridge are redirected to simple).
+  // Use createOllamaGenerateFn for the single AI SDK path still available.
+  const generateFn = createOllamaGenerateFn(model);
 
   emit({
     step: 'diagnostic-call',
     message: `Calling ${provider}/${model} for diagnostic hypothesis analysis...`,
   });
 
-  const result = await generateTextWithTimeout(
-    {
-      model: languageModel,
-      system,
-      prompt,
-      temperature: 0.3,
-    },
-    { provider, model },
-  );
+  let responseText: string;
+  let tokensUsed: number;
 
-  const executionTimeMs = Date.now() - startTime;
-
-  // Timeout: fall back to empty AI result (static analysis still applies)
-  if (result === null) {
+  try {
+    const callResult = await generateFn(system, prompt);
+    responseText = callResult.text;
+    tokensUsed = callResult.tokensUsed;
+  } catch (err) {
+    const executionTimeMs = Date.now() - startTime;
     emit({
       step: 'diagnostic-done',
-      message: `LLM timed out — falling back to static-analysis-only results`,
+      message: `LLM call failed — falling back to static-analysis-only results`,
     });
 
     const reviewResult = parseReviewResponse(
-      'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: LLM call timed out. Only static analysis results are available.\nFINDINGS:\n',
+      'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: LLM call failed. Only static analysis results are available.\nFINDINGS:\n',
       provider,
       model,
       0,
@@ -201,7 +197,7 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
     return reviewResult;
   }
 
-  const tokensUsed = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+  const executionTimeMs = Date.now() - startTime;
 
   emit({
     step: 'diagnostic-done',
@@ -210,7 +206,7 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
 
   // Parse the standard review response (STATUS, SUMMARY, FINDINGS)
   const reviewResult = parseReviewResponse(
-    result.text,
+    responseText,
     provider,
     model,
     tokensUsed,
@@ -222,7 +218,7 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
   reviewResult.metadata.mode = 'diagnostic';
 
   // Parse hypotheses from the response and attach to result
-  reviewResult.hypotheses = parseHypotheses(result.text);
+  reviewResult.hypotheses = parseHypotheses(responseText);
 
   return reviewResult;
 }

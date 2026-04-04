@@ -10,8 +10,8 @@ interface ProviderChainEditorProps {
 }
 
 const DEFAULT_ENTRY: ProviderEntryState = {
-  provider: 'github' as SaaSProvider,
-  model: '',
+  provider: 'gateway' as SaaSProvider,
+  model: 'auto',
   apiKey: '',
   availableModels: [],
   hasExistingKey: false,
@@ -72,10 +72,9 @@ export function ProviderChainEditor({
   };
 
   const handleAdd = () => {
-    // Always allow adding a new entry — same provider with different model is valid
-    // (e.g., two Groq entries with different models for multi-provider distribution).
-    // Default to groq as a sensible starting point; user can change provider/model.
-    const defaultProvider: SaaSProvider = 'groq';
+    // Always allow adding a new entry — same provider with different model is valid.
+    // Default to gateway as the standard starting point; user can change to cli-bridge or ollama.
+    const defaultProvider: SaaSProvider = 'gateway';
     onChange([...chain, { ...DEFAULT_ENTRY, provider: defaultProvider }]);
   };
 

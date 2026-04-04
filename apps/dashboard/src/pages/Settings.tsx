@@ -109,8 +109,8 @@ export function Settings() {
           maskedApiKey: entry.maskedApiKey,
           validated:
             entry.hasApiKey ||
-            entry.provider === 'github' ||
             entry.provider === 'cli-bridge' ||
+            entry.provider === 'ollama' ||
             entry.provider === 'gateway',
           cliModel: entry.cliModel,
           gatewayUrl: entry.gatewayUrl,
@@ -136,8 +136,8 @@ export function Settings() {
           maskedApiKey: entry.maskedApiKey,
           validated:
             entry.hasApiKey ||
-            entry.provider === 'github' ||
             entry.provider === 'cli-bridge' ||
+            entry.provider === 'ollama' ||
             entry.provider === 'gateway',
           cliModel: entry.cliModel,
           gatewayUrl: entry.gatewayUrl,

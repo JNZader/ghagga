@@ -6,16 +6,13 @@
  * CLI bridge, or gateway functions.
  *
  * Three factory functions create GenerateTextFn instances for each backend:
- *   - createAISDKGenerateFn    — wraps AI SDK's createModel + generateTextWithTimeout
  *   - createCLIBridgeGenerateFn — wraps generateViaCLI (child_process)
  *   - createGatewayGenerateFn   — wraps generateViaGateway (HTTP)
+ *   - createOllamaGenerateFn    — wraps Ollama via OpenAI-compatible API
  */
 
-import type { LLMProvider } from '../types.js';
-import { generateTextWithTimeout } from '../utils/llm-timeout.js';
 import { generateViaCLI } from './cli-bridge.js';
 import { generateViaGateway } from './gateway.js';
-import { createModel } from './index.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -27,44 +24,8 @@ export interface GenerateResult {
   model: string;
 }
 
-/** Generic text generation function — abstracts AI SDK, CLI bridge, and gateway */
+/** Generic text generation function — abstracts CLI bridge, gateway, and Ollama */
 export type GenerateTextFn = (system: string, prompt: string) => Promise<GenerateResult>;
-
-// ─── Factory: AI SDK ────────────────────────────────────────────
-
-/**
- * Create a GenerateTextFn backed by the Vercel AI SDK.
- *
- * Wraps `createModel` + `generateTextWithTimeout`. Converts the
- * `null` timeout sentinel into a thrown Error so agents get a
- * clean exception (caught by `allSettled`).
- *
- * @param provider - LLM provider name (e.g., 'anthropic', 'openai')
- * @param model - Model identifier (e.g., 'claude-sonnet-4-20250514')
- * @param apiKey - Decrypted API key
- */
-export function createAISDKGenerateFn(
-  provider: LLMProvider,
-  model: string,
-  apiKey: string,
-): GenerateTextFn {
-  return async (system, prompt) => {
-    const languageModel = createModel(provider, model, apiKey);
-    const result = await generateTextWithTimeout(
-      { model: languageModel, system, prompt, temperature: 0.3 },
-      { provider, model },
-    );
-    if (result === null) {
-      throw new Error(`LLM call timed out (${provider}/${model})`);
-    }
-    return {
-      text: result.text,
-      tokensUsed: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
-      provider,
-      model,
-    };
-  };
-}
 
 // ─── Factory: CLI Bridge ────────────────────────────────────────
 
@@ -118,3 +79,6 @@ export function createGatewayGenerateFn(options: {
     };
   };
 }
+
+// ─── Factory: Ollama — re-exported from ollama.ts ───────────────
+export { createOllamaGenerateFn } from './ollama.js';

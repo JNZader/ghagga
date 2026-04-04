@@ -11,6 +11,12 @@ export interface EnhanceInput {
   provider: string;
   model: string;
   apiKey: string;
+
+  /**
+   * Optional backend-agnostic generation function.
+   * When provided, used instead of creating one from provider/model/apiKey.
+   */
+  generateFn?: import('../providers/generate-fn.js').GenerateTextFn;
 }
 
 /** Compact finding representation for the AI prompt (token-efficient). */

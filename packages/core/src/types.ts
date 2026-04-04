@@ -12,33 +12,20 @@ export type { EmbeddingProvider, EmbeddingProviderFactory } from './embed.js';
 // ─── Review Input ───────────────────────────────────────────────
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'diagnostic' | 'fan-out';
-export type LLMProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'github'
-  | 'ollama'
-  | 'qwen'
-  | 'groq'
-  | 'cerebras'
-  | 'deepseek'
-  | 'openrouter'
-  | 'cli-bridge'
-  | 'gateway';
 
-/** Providers available in the SaaS dashboard (excludes Ollama) */
-export type SaaSProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'github'
-  | 'qwen'
-  | 'groq'
-  | 'cerebras'
-  | 'deepseek'
-  | 'openrouter'
-  | 'cli-bridge'
-  | 'gateway';
+/**
+ * Supported LLM provider modes.
+ * - gateway: delegates to mcp-llm-bridge (recommended for server/action)
+ * - cli-bridge: calls local CLIs directly (Claude, OpenCode, Gemini, Copilot) — CLI only
+ * - ollama: calls local Ollama instance directly (no subprocess, OpenAI-compatible)
+ *
+ * Migration: 'anthropic', 'openai', 'google', etc. → set provider: 'gateway' and
+ * configure credentials in mcp-llm-bridge vault.
+ */
+export type LLMProvider = 'gateway' | 'cli-bridge' | 'ollama';
+
+/** Providers available in the SaaS dashboard */
+export type SaaSProvider = 'gateway' | 'cli-bridge' | 'ollama';
 
 export type ReviewLevel = 'soft' | 'normal' | 'strict';
 
@@ -126,6 +113,12 @@ export interface ReviewInput {
    * Undefined when memory is disabled or unavailable — pipeline degrades gracefully.
    */
   memoryStorage?: MemoryStorage;
+
+  /**
+   * Base URL for the local Ollama instance.
+   * Only meaningful when provider === 'ollama'. Defaults to 'http://localhost:11434/v1'.
+   */
+  ollamaBaseURL?: string;
 
   /**
    * Optional progress callback for verbose/debug output.
@@ -811,16 +804,7 @@ export const DEFAULT_SETTINGS: ReviewSettings = {
 };
 
 export const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  anthropic: 'claude-sonnet-4-20250514',
-  openai: 'gpt-4o',
-  google: 'gemini-2.5-flash',
-  github: 'gpt-4o-mini',
-  ollama: 'qwen2.5-coder:7b',
-  qwen: 'qwen-coder-plus',
-  groq: 'llama-3.3-70b-versatile',
-  cerebras: 'llama-3.3-70b',
-  deepseek: 'deepseek-chat',
-  openrouter: 'deepseek/deepseek-chat',
-  'cli-bridge': 'auto',
   gateway: 'auto',
+  'cli-bridge': 'auto',
+  ollama: 'llama3',
 };

@@ -147,17 +147,14 @@ export {
   OPENCODE_ENV_BY_PREFIX,
   sanitizeErrorMessage,
 } from './providers/cli-bridge.js';
-export type { FallbackOptions, FallbackProvider, FallbackResult } from './providers/fallback.js';
-export { generateWithFallback } from './providers/fallback.js';
 export type { GatewayOptions, GatewayResponse } from './providers/gateway.js';
 export { generateViaGateway } from './providers/gateway.js';
 export type { GenerateResult, GenerateTextFn } from './providers/generate-fn.js';
 export {
-  createAISDKGenerateFn,
   createCLIBridgeGenerateFn,
   createGatewayGenerateFn,
+  createOllamaGenerateFn,
 } from './providers/generate-fn.js';
-export { createModel, createProvider } from './providers/index.js';
 
 // ─── Negative Examples ──────────────────────────────────────────
 

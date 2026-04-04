@@ -51,8 +51,6 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.0",
-    "@ai-sdk/google": "^3.0.0",
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/openai-compatible": "^2.0.35",
     "@cursorless/tree-sitter-wasms": "^0.8.1",

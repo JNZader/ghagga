@@ -40,9 +40,9 @@ import { SqliteMemoryStorage } from './memory/sqlite.js';
 import { formatNegativeExamplesPrompt } from './negative.js';
 import { resolveCredentialEnvVar } from './providers/cli-bridge.js';
 import {
-  createAISDKGenerateFn,
   createCLIBridgeGenerateFn,
   createGatewayGenerateFn,
+  createOllamaGenerateFn,
   type GenerateTextFn,
 } from './providers/generate-fn.js';
 import { rankFindings } from './ranking/index.js';
@@ -100,8 +100,24 @@ function validateInput(input: ReviewInput): void {
     return;
   }
 
-  // Single provider mode (CLI/Action backward compat)
-  if (!input.apiKey) {
+  // Ollama mode: no API key required (local instance)
+  if (input.provider === 'ollama') {
+    return;
+  }
+
+  // Single provider mode — must be one of the 3 supported providers
+  if (input.provider) {
+    const supported: LLMProvider[] = ['gateway', 'cli-bridge', 'ollama'];
+    if (!supported.includes(input.provider)) {
+      throw new Error(
+        `Provider '${input.provider}' is no longer supported directly. ` +
+          `Set provider: 'gateway' and configure credentials in mcp-llm-bridge. ` +
+          `See docs/configuration.md#gateway-mode-mcp-llm-bridge`,
+      );
+    }
+  }
+
+  if (!input.apiKey && input.provider !== 'cli-bridge' && input.provider !== 'ollama') {
     throw new Error('Review input must include an API key');
   }
 
@@ -407,6 +423,12 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   }
 
   // ── Step 5.5: AI Enhance (optional) ─────────────────────────
+  // Resolve active provider early — needed by enhance block below and by Step 6
+  const activeProvider = input.providerChain?.[0]?.provider ?? input.provider ?? 'gateway';
+  const isCliBridge = activeProvider === 'cli-bridge';
+  const isGateway = activeProvider === 'gateway';
+  const isOllama = activeProvider === 'ollama';
+
   let enhancedStaticFindings: ReviewFinding[] | undefined;
   let enhanceMetadata: import('./enhance/types.js').EnhanceMetadata | undefined;
 
@@ -421,12 +443,19 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       emit({ step: 'static-analysis', message: 'Enhancing findings with AI...' });
       try {
         const primary = resolvePrimaryProvider(input);
+        const enhanceGenerateFn = resolveGenerateTextFns(
+          input,
+          isCliBridge,
+          isGateway,
+          isOllama,
+        )[0];
         const serialized = serializeFindings(allStaticFindings);
         const { result: eResult, metadata: eMeta } = await enhanceFindings({
           findings: serialized,
           provider: primary.provider,
           model: primary.model,
           apiKey: primary.apiKey,
+          generateFn: enhanceGenerateFn,
         });
         enhancedStaticFindings = mergeEnhanceResult(allStaticFindings, eResult);
         enhanceMetadata = eMeta;
@@ -495,15 +524,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // ── Step 6: Execute agent mode (or skip if AI disabled) ────
   let result: ReviewResult;
 
-  // Check if CLI bridge should be used (intercept before normal provider flow)
-  const isCliBridge =
-    input.provider === 'cli-bridge' ||
-    input.providerChain?.[0]?.provider === ('cli-bridge' as ProviderChainEntry['provider']);
-
-  // Check if LLM Gateway should be used (intercept before normal provider flow)
-  const isGateway =
-    input.provider === 'gateway' ||
-    input.providerChain?.[0]?.provider === ('gateway' as ProviderChainEntry['provider']);
+  // activeProvider / isCliBridge / isGateway / isOllama are resolved above (Step 5.5)
 
   if (!aiEnabled) {
     // Static-only mode: no LLM calls
@@ -512,15 +533,15 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   } else {
     // ── Unified dispatch: all backends, all modes ──────────────
     // Step 1: Build GenerateTextFn(s) for the detected backend
-    const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway);
+    const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway, isOllama);
 
     // Step 2: Resolve effective mode (diagnostic → simple for non-SDK backends)
-    const effectiveMode = resolveEffectiveMode(resolvedInputMode, isCliBridge, isGateway);
+    const effectiveMode = resolveEffectiveMode(resolvedInputMode, isCliBridge, isGateway, isOllama);
 
     if (effectiveMode !== resolvedInputMode) {
       emit({
         step: 'mode-fallback',
-        message: `Diagnostic mode not supported with ${isCliBridge ? 'CLI bridge' : 'gateway'} — falling back to simple mode`,
+        message: `Diagnostic mode not supported with ${isCliBridge ? 'CLI bridge' : isOllama ? 'Ollama' : 'gateway'} — falling back to simple mode`,
       });
     }
 
@@ -795,7 +816,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   if (input.settings.enableRecursiveReview && aiEnabled && result.findings.length > 0) {
     emit({ step: 'recursive-review', message: 'Running recursive review on suggested fixes...' });
     try {
-      const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway);
+      const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway, isOllama);
       const report = await recursiveReview({
         originalDiff: truncatedDiff,
         findings: result.findings,
@@ -1025,14 +1046,18 @@ function resolvePrimaryModel(input: ReviewInput): string {
 /**
  * Create the appropriate GenerateTextFn(s) based on the provider type.
  *
- * - CLI Bridge: single fn wrapping generateViaCLI
- * - Gateway: single fn wrapping generateViaGateway
- * - AI SDK: one fn per provider chain entry (for round-robin distribution)
+ * - cli-bridge: single fn wrapping generateViaCLI
+ * - gateway: one fn per gateway chain entry (for round-robin distribution)
+ * - ollama: single fn wrapping local Ollama OpenAI-compatible API
+ *
+ * Providers that are no longer supported directly (anthropic, openai, etc.)
+ * throw a migration error pointing users to gateway mode.
  */
 function resolveGenerateTextFns(
   input: ReviewInput,
   isCliBridge: boolean,
   isGateway: boolean,
+  isOllama: boolean,
 ): GenerateTextFn[] {
   if (isCliBridge) {
     // Resolve CLI bridge options from provider chain or flat input fields
@@ -1093,31 +1118,34 @@ function resolveGenerateTextFns(
     ];
   }
 
-  // AI SDK: one function per chain entry (for round-robin distribution)
-  const chain = input.providerChain && input.providerChain.length > 0 ? input.providerChain : null;
-  if (chain) {
-    return chain.map((entry) =>
-      createAISDKGenerateFn(entry.provider as LLMProvider, entry.model, entry.apiKey),
-    );
+  if (isOllama) {
+    const model = input.model && input.model !== 'auto' ? input.model : 'llama3';
+    return [createOllamaGenerateFn(model, input.ollamaBaseURL)];
   }
 
-  // Single provider from flat fields (backward compat)
-  const primary = resolvePrimaryProvider(input);
-  return [createAISDKGenerateFn(primary.provider as LLMProvider, primary.model, primary.apiKey)];
+  // Legacy provider migration guard — should never reach here with the narrowed type,
+  // but protects against runtime strings from older configs.
+  const legacyProvider = input.providerChain?.[0]?.provider ?? input.provider ?? 'unknown';
+  throw new Error(
+    `Provider '${legacyProvider}' is no longer supported directly. ` +
+      `Set provider: 'gateway' and configure credentials in mcp-llm-bridge. ` +
+      `See docs/configuration.md#gateway-mode-mcp-llm-bridge`,
+  );
 }
 
 /**
  * Resolve the effective review mode.
  *
- * Diagnostic mode only works with AI SDK (it needs direct model access).
- * For CLI bridge and gateway, fall back to simple mode.
+ * Diagnostic mode requires direct model access (not available in non-SDK backends).
+ * For CLI bridge, gateway, and Ollama, fall back to simple mode.
  */
 function resolveEffectiveMode(
   mode: ReviewMode,
   isCliBridge: boolean,
   isGateway: boolean,
+  isOllama: boolean,
 ): ReviewMode {
-  if (mode === 'diagnostic' && (isCliBridge || isGateway)) {
+  if (mode === 'diagnostic' && (isCliBridge || isGateway || isOllama)) {
     return 'simple';
   }
   // Fan-out works with all backends (uses generateFns like workflow/consensus)

@@ -5,7 +5,7 @@
  * to produce an executive security and code-quality report.
  */
 
-import { createAISDKGenerateFn, type GenerateTextFn } from '../providers/generate-fn.js';
+import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type { AuditInput, AuditResult, StaticAnalysisResult } from '../types.js';
 import { AUDIT_SYSTEM } from './prompts.js';
 
@@ -47,9 +47,14 @@ export async function runAuditReport(input: AuditInput): Promise<AuditResult> {
     };
   }
 
-  // Resolve the generation function: use injected or create from provider/model/apiKey
-  const generateFn: GenerateTextFn =
-    input.generateFn ?? createAISDKGenerateFn(provider, model, apiKey);
+  // Resolve the generation function (required — must be injected by caller)
+  const generateFn: GenerateTextFn = input.generateFn;
+  if (!generateFn) {
+    throw new Error(
+      'runAuditReport requires generateFn to be provided in AuditInput. ' +
+        'The caller must resolve the backend and pass a GenerateTextFn instance.',
+    );
+  }
 
   emit({
     step: 'audit-call',

@@ -167,6 +167,57 @@ export const reviewQueue = new Queue<ReviewJobData, unknown, string>('review', {
   },
 });
 
+// ─── Legacy Provider Migration ────────────────────────────────
+
+/**
+ * Legacy provider names stored in DB before the v3 refactor.
+ * These are remapped silently to 'gateway' at runtime so existing
+ * installations never crash when the stored value is stale.
+ */
+const LEGACY_PROVIDER_TO_GATEWAY = new Set([
+  'anthropic',
+  'openai',
+  'google',
+  'groq',
+  'openrouter',
+  'github',
+  'azure',
+  'deepseek',
+  'qwen',
+  'cerebras',
+]);
+
+const VALID_PROVIDERS = new Set(['gateway', 'cli-bridge', 'ollama']);
+
+/**
+ * Normalise a provider string read from the DB (or any untrusted source) to
+ * the 3-variant LLMProvider type used in the v3 pipeline.
+ *
+ * - Legacy providers ('anthropic', 'openai', etc.) → 'gateway' + console.warn
+ * - 'cli-bridge' | 'ollama' | 'gateway' → pass through unchanged
+ * - Unknown/empty → 'gateway' (safe fallback, never crashes)
+ */
+function normalizeLegacyProvider(
+  raw: string | undefined | null,
+): 'gateway' | 'cli-bridge' | 'ollama' {
+  if (!raw) return 'gateway';
+
+  if (VALID_PROVIDERS.has(raw)) {
+    return raw as 'gateway' | 'cli-bridge' | 'ollama';
+  }
+
+  if (LEGACY_PROVIDER_TO_GATEWAY.has(raw)) {
+    console.warn(
+      `[ghagga] Legacy provider "${raw}" remapped to "gateway". ` +
+        'Update this repository\'s settings to use "gateway" with mcp-llm-bridge.',
+    );
+    return 'gateway';
+  }
+
+  console.warn(`[ghagga] Unknown provider "${raw}" — defaulting to "gateway".`);
+  return 'gateway';
+}
+
 // ─── Job Processor ──────────────────────────────────────────────
 
 async function processReview(
@@ -358,27 +409,18 @@ async function processReview(
     let providerChain: ProviderChainEntry[] | undefined;
 
     if (dbChain.length > 0) {
-      providerChain = dbChain
-        .filter((entry) => {
-          if (entry.provider === 'github' && !entry.encryptedApiKey) {
-            log.warn(
-              { provider: 'github' },
-              'Skipping "github" provider — requires explicit API key',
-            );
-            return false;
-          }
-          return true;
-        })
-        .map((entry) => {
-          const mapped: ProviderChainEntry = {
-            provider: entry.provider,
-            model: entry.model,
-            apiKey: entry.encryptedApiKey ? decrypt(entry.encryptedApiKey) : '',
-          };
-          if (entry.cliModel) mapped.cliModel = entry.cliModel;
-          if (entry.gatewayUrl) mapped.gatewayUrl = entry.gatewayUrl;
-          return mapped;
-        });
+      providerChain = dbChain.map((entry) => {
+        // Normalise any legacy provider value stored in the DB chain.
+        const normalizedProvider = normalizeLegacyProvider(entry.provider);
+        const mapped: ProviderChainEntry = {
+          provider: normalizedProvider,
+          model: entry.model,
+          apiKey: entry.encryptedApiKey ? decrypt(entry.encryptedApiKey) : '',
+        };
+        if (entry.cliModel) mapped.cliModel = entry.cliModel;
+        if (entry.gatewayUrl) mapped.gatewayUrl = entry.gatewayUrl;
+        return mapped;
+      });
 
       if (providerChain.length === 0) {
         providerChain = undefined;
@@ -391,17 +433,11 @@ async function processReview(
     let legacyModel: string | undefined;
 
     if (!providerChain || providerChain.length === 0) {
-      legacyProvider = llmProvider as LLMProvider;
+      // Normalize legacy provider values stored in the DB before the v3 refactor.
+      legacyProvider = normalizeLegacyProvider(llmProvider);
       legacyModel = llmModel;
 
-      if (legacyProvider === 'github' && !encryptedApiKey) {
-        log.warn(
-          { provider: 'github' },
-          'Provider "github" (GitHub Models) not available without explicit API key',
-        );
-        legacyProvider = undefined;
-        legacyApiKey = undefined;
-      } else if (encryptedApiKey) {
+      if (encryptedApiKey) {
         legacyApiKey = decrypt(encryptedApiKey);
       } else {
         const envKey = process.env[`${llmProvider?.toUpperCase()}_API_KEY`];

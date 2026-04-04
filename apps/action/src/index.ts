@@ -36,10 +36,50 @@ import { runLocalAnalysis } from './tools/index.js';
 
 // ─── Main ───────────────────────────────────────────────────────
 
+// ─── Legacy Provider Mapping ────────────────────────────────────
+
+/**
+ * Providers that existed before the v3 refactor and must be silently
+ * remapped to 'gateway' when passed via the action.yml `provider` input.
+ * 'github' is the most common case (it was the default in v1/v2).
+ */
+const ACTION_LEGACY_PROVIDERS = new Set([
+  'github',
+  'anthropic',
+  'openai',
+  'google',
+  'groq',
+  'openrouter',
+  'azure',
+  'deepseek',
+  'qwen',
+  'cerebras',
+]);
+
+function resolveActionProvider(raw: string): LLMProvider {
+  if (raw === 'cli-bridge' || raw === 'ollama' || raw === 'gateway') {
+    return raw as LLMProvider;
+  }
+  if (ACTION_LEGACY_PROVIDERS.has(raw)) {
+    core.warning(
+      `[ghagga] Provider "${raw}" is no longer supported directly. ` +
+        'Remapping to "gateway". Update your workflow to use provider: gateway ' +
+        'and configure credentials in mcp-llm-bridge. ' +
+        'See: https://github.com/JNZader/mcp-llm-bridge',
+    );
+    return 'gateway';
+  }
+  core.warning(`[ghagga] Unknown provider "${raw}" — defaulting to "gateway".`);
+  return 'gateway';
+}
+
+// ─── Main ───────────────────────────────────────────────────────
+
 async function run(): Promise<void> {
   try {
     // Step 1: Read action inputs
-    const provider = (core.getInput('provider') || 'github') as LLMProvider;
+    const rawProvider = core.getInput('provider') || 'github';
+    const provider = resolveActionProvider(rawProvider);
     const modelInput = core.getInput('model');
     const mode = (core.getInput('mode') || 'simple') as ReviewMode;
     const apiKeyInput = core.getInput('api-key');
@@ -77,22 +117,19 @@ async function run(): Promise<void> {
       return;
     }
 
-    // Step 3: Resolve API key — for "github" provider, use GitHub token
+    // Step 3: Resolve API key
     let apiKey: string;
-    if (provider === 'github') {
-      apiKey = apiKeyInput || githubToken;
-      core.info('🆓 Using GitHub Models (free tier) — no API key needed');
-    } else if (provider === 'ollama') {
+    if (provider === 'ollama') {
       apiKey = apiKeyInput || 'ollama';
+    } else if (provider === 'gateway') {
+      // Gateway token is optional — the gateway itself may handle auth
+      apiKey = apiKeyInput || '';
+    } else if (provider === 'cli-bridge') {
+      // CLI bridge uses whatever credential the tool accepts (optional)
+      apiKey = apiKeyInput || '';
     } else {
-      apiKey = apiKeyInput;
-      if (!apiKey) {
-        core.setFailed(
-          `API key is required for provider "${provider}". ` +
-            `Set the "api-key" input, or use provider "github" for free reviews.`,
-        );
-        return;
-      }
+      // Should not be reached after resolveActionProvider, but guard defensively
+      apiKey = apiKeyInput || '';
     }
 
     // Resolve model: use input, or default based on provider

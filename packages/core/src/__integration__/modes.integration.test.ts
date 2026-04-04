@@ -40,13 +40,18 @@ vi.mock('../memory/persist.js', () => ({
 
 // Mock the generate-fn factory to return our fake generator
 vi.mock('../providers/generate-fn.js', () => ({
-  createAISDKGenerateFn: vi.fn(),
   createCLIBridgeGenerateFn: vi.fn(),
   createGatewayGenerateFn: vi.fn(),
+  createOllamaGenerateFn: vi.fn(),
+}));
+
+// Ollama module mock (for diagnostic mode tests)
+vi.mock('../providers/ollama.js', () => ({
+  createOllamaGenerateFn: vi.fn(),
 }));
 
 import { reviewPipeline } from '../pipeline.js';
-import { createAISDKGenerateFn } from '../providers/generate-fn.js';
+import { createGatewayGenerateFn } from '../providers/generate-fn.js';
 import type { ReviewInput } from '../types.js';
 
 const SIMPLE_DIFF = `diff --git a/src/app.ts b/src/app.ts
@@ -65,8 +70,8 @@ function fakeGenerateFn(responseText: string) {
   return vi.fn().mockResolvedValue({
     text: responseText,
     tokensUsed: 500,
-    provider: 'anthropic',
-    model: 'claude-sonnet-4-20250514',
+    provider: 'gateway',
+    model: 'auto',
   });
 }
 
@@ -74,9 +79,9 @@ function makeInput(overrides: Partial<ReviewInput> = {}): ReviewInput {
   return {
     diff: SIMPLE_DIFF,
     mode: 'simple',
-    provider: 'anthropic',
-    model: 'claude-sonnet-4-20250514',
-    apiKey: 'test-key',
+    provider: 'gateway',
+    model: 'auto',
+    apiKey: 'test-token',
     settings: {
       enableSemgrep: false,
       enableTrivy: false,
@@ -130,7 +135,7 @@ beforeEach(() => {
 describe('integration: review modes through pipeline', () => {
   it('simple mode: agent parses response and returns result', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(makeInput({ mode: 'simple' }));
 
@@ -144,7 +149,7 @@ describe('integration: review modes through pipeline', () => {
   it('workflow mode: runs specialists and synthesizes', async () => {
     // Workflow calls generateFn multiple times (5 specialists + 1 synthesis)
     const gen = fakeGenerateFn(WORKFLOW_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(makeInput({ mode: 'workflow' }));
 
@@ -156,7 +161,7 @@ describe('integration: review modes through pipeline', () => {
 
   it('consensus mode: runs voting and produces decision', async () => {
     const gen = fakeGenerateFn(CONSENSUS_RESPONSE_APPROVE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(makeInput({ mode: 'consensus' }));
 
@@ -168,7 +173,7 @@ describe('integration: review modes through pipeline', () => {
 
   it('diagnostic mode: runs and returns result (may fallback if not AI SDK)', async () => {
     const gen = fakeGenerateFn(DIAGNOSTIC_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(makeInput({ mode: 'diagnostic' }));
 
@@ -180,7 +185,7 @@ describe('integration: review modes through pipeline', () => {
 
   it('agent failure: returns result with error indication', async () => {
     const gen = vi.fn().mockRejectedValue(new Error('LLM API timeout'));
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(makeInput({ mode: 'simple' }));
 
@@ -193,7 +198,7 @@ describe('integration: review modes through pipeline', () => {
 
   it('empty diff after filtering: returns SKIPPED without calling agent', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(
       makeInput({
@@ -219,15 +224,18 @@ describe('integration: review modes through pipeline', () => {
     expect(gen).not.toHaveBeenCalled();
   });
 
-  it('missing API key: pipeline throws validation error', async () => {
+  it('legacy provider: pipeline throws migration error', async () => {
+    // Providers like 'anthropic' are no longer supported directly
     await expect(
-      reviewPipeline(makeInput({ apiKey: '', providerChain: undefined })),
-    ).rejects.toThrow('API key');
+      reviewPipeline(
+        makeInput({ provider: 'anthropic' as any, apiKey: 'sk-test', providerChain: undefined }),
+      ),
+    ).rejects.toThrow('no longer supported directly');
   });
 
   it('precomputed static analysis: uses provided results instead of running tools', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const precomputed = {
       semgrep: {
@@ -259,7 +267,7 @@ describe('integration: review modes through pipeline', () => {
   it('AI disabled (no API key but valid providerChain empty): returns static-only', async () => {
     // When provider is 'none' or AI is explicitly disabled, skip agent
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(
       makeInput({
@@ -281,31 +289,31 @@ describe('integration: review modes through pipeline', () => {
     expect(result.status).toBeDefined();
   });
 
-  it('providerChain with multiple entries: creates multiple generate functions', async () => {
+  it('providerChain with multiple gateway entries: creates multiple generate functions', async () => {
     const gen = fakeGenerateFn(WORKFLOW_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(
       makeInput({
         mode: 'workflow',
         providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'key1' },
-          { provider: 'openai', model: 'gpt-4o', apiKey: 'key2' },
+          { provider: 'gateway', model: 'model-a', apiKey: 'key1', gatewayUrl: 'http://gw.test' },
+          { provider: 'gateway', model: 'model-b', apiKey: 'key2', gatewayUrl: 'http://gw.test' },
         ],
       }),
     );
 
     expect(result.status).toBeDefined();
     expect(result.metadata.mode).toBe('workflow');
-    // createAISDKGenerateFn should have been called for each chain entry
-    expect(vi.mocked(createAISDKGenerateFn).mock.calls.length).toBeGreaterThanOrEqual(2);
+    // createGatewayGenerateFn should have been called for each chain entry
+    expect(vi.mocked(createGatewayGenerateFn).mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   // ── Validation branches ────────────────────────────────────────
 
   it('validation: aiReviewEnabled=false skips provider requirements', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(
       makeInput({
@@ -403,7 +411,7 @@ describe('integration: review modes through pipeline', () => {
 
   it('aiReviewEnabled=false with valid key still skips AI', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(makeInput({ aiReviewEnabled: false }));
 
@@ -417,7 +425,7 @@ describe('integration: review modes through pipeline', () => {
 
   it('reports blocked sensitive files and continues review', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const diffWithSecrets = `diff --git a/src/app.ts b/src/app.ts
 --- a/src/app.ts
@@ -462,7 +470,7 @@ diff --git a/.env b/.env
 
   it('enhance=true: runs AI enhancement on static findings', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     // Need static analysis to return findings for enhance to work
     const { runStaticAnalysis } = await import('../tools/runner.js');
@@ -509,7 +517,7 @@ diff --git a/.env b/.env
 
   it('blast radius with graphLoader: filters files by dependency graph', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const mockGraph = {
       nodes: new Map([['src/app.ts', { id: 'src/app.ts', type: 'module' as const, imports: [] }]]),
@@ -550,7 +558,7 @@ diff --git a/.env b/.env
 
   it('blast radius with null graph: falls back to full diff', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(
       makeInput({
@@ -579,7 +587,7 @@ diff --git a/.env b/.env
 
   it('blast radius with loader error: degrades gracefully', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(
       makeInput({
@@ -610,7 +618,7 @@ diff --git a/.env b/.env
 
   it('redacted files are reported in progress events', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     // .env.local should be redacted (path visible, content hidden)
     const diffWithRedacted = `diff --git a/src/app.ts b/src/app.ts
@@ -651,7 +659,7 @@ diff --git a/.env.local b/.env.local
 
   it('onProgress: emits validate, parse-diff, detect-stacks, token-budget, static, agent steps', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const steps: Array<{ step: string; message: string; detail?: string }> = [];
     await reviewPipeline(makeInput({ onProgress: (e) => steps.push(e) }));
@@ -689,7 +697,7 @@ diff --git a/.env.local b/.env.local
 
   it('onProgress: blocked files emit path-protection step', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     // .env files are blocked by default path protection
     const diffWithBlocked = `diff --git a/src/app.ts b/src/app.ts
@@ -728,7 +736,7 @@ diff --git a/.env b/.env
 
   it('blast radius: stale graph emits warning', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const staleDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days ago
     const mockGraph = {
@@ -770,7 +778,7 @@ diff --git a/.env b/.env
 
   it('blast radius: exceeded cap uses full diff and reports', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     // Create a graph where blast radius would exceed cap
     const nodes = new Map();
@@ -817,7 +825,7 @@ diff --git a/.env b/.env
 
   it('static-results: emits tool summary with context levels', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const steps: Array<{ step: string; message: string; detail?: string }> = [];
     await reviewPipeline(makeInput({ onProgress: (e) => steps.push(e) }));
@@ -831,7 +839,7 @@ diff --git a/.env b/.env
 
   it('result metadata: includes fileList, totalAdditions, totalDeletions', async () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
-    vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
+    vi.mocked(createGatewayGenerateFn).mockReturnValue(gen);
 
     const result = await reviewPipeline(makeInput());
     expect(result.metadata.fileList).toBeDefined();
