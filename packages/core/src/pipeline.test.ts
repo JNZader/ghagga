@@ -14,6 +14,10 @@ vi.mock('./agents/simple.js', () => ({
   runSimpleReview: vi.fn(),
 }));
 
+vi.mock('./graph/blast-radius.js', () => ({
+  computeBlastRadius: vi.fn(),
+}));
+
 vi.mock('./agents/workflow.js', () => ({
   runWorkflowReview: vi.fn(),
 }));
@@ -50,6 +54,9 @@ vi.mock('./memory/persist.js', () => ({
 import { runConsensusReview } from './agents/consensus.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
+import type { BlastRadiusResult } from './graph/blast-radius.js';
+import { computeBlastRadius } from './graph/blast-radius.js';
+import type { DependencyGraph, GraphLoader } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { reviewPipeline } from './pipeline.js';
@@ -838,5 +845,275 @@ diff --git a/README.md b/README.md
         expect.objectContaining({ reviewLevel: 'normal' }),
       );
     });
+  });
+});
+
+// ─── Blast-Radius Tests ──────────────────────────────────────────
+
+// Minimal valid DependencyGraph fixture
+const MINIMAL_GRAPH: DependencyGraph = {
+  version: 1,
+  rootDir: '/repo',
+  nodes: {
+    'src/index.ts': {
+      hash: 'abc123',
+      language: 'typescript',
+      imports: [],
+      exports: ['default'],
+      calls: [],
+      isTest: false,
+    },
+    'src/utils.ts': {
+      hash: 'def456',
+      language: 'typescript',
+      imports: ['src/index.ts'],
+      exports: ['helper'],
+      calls: [],
+      isTest: false,
+    },
+    'src/index.test.ts': {
+      hash: 'ghi789',
+      language: 'typescript',
+      imports: ['src/index.ts'],
+      exports: [],
+      calls: [],
+      isTest: true,
+    },
+  },
+};
+
+// Minimal blast-radius result when files are under cap
+const BLAST_RESULT_NORMAL: BlastRadiusResult = {
+  files: new Set(['src/index.ts', 'src/utils.ts', 'src/index.test.ts']),
+  changedFiles: ['src/index.ts'],
+  dependents: ['src/utils.ts'],
+  testFiles: ['src/index.test.ts'],
+  depth: 1,
+  exceededCap: false,
+};
+
+// Blast-radius result that exceeds cap
+const BLAST_RESULT_EXCEEDED: BlastRadiusResult = {
+  files: new Set(Array.from({ length: 55 }, (_, i) => `src/file${i}.ts`)),
+  changedFiles: ['src/index.ts'],
+  dependents: Array.from({ length: 54 }, (_, i) => `src/file${i}.ts`),
+  testFiles: [],
+  depth: 3,
+  exceededCap: true,
+};
+
+function makeGraphLoader(overrides: Partial<GraphLoader> = {}): GraphLoader {
+  return {
+    load: vi.fn().mockResolvedValue(null),
+    loadMetadata: vi.fn().mockResolvedValue(null),
+    ...overrides,
+  };
+}
+
+describe('blast-radius', () => {
+  it('skips blast-radius when enableBlastRadius is false', async () => {
+    const graphLoader = makeGraphLoader({
+      load: vi.fn().mockResolvedValue(MINIMAL_GRAPH),
+    });
+
+    const result = await reviewPipeline(
+      makeInput({
+        graphLoader,
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: false,
+        },
+      }),
+    );
+
+    expect(graphLoader.load).not.toHaveBeenCalled();
+    expect(result.status).toBe('PASSED');
+  });
+
+  it('skips blast-radius when no graphLoader provided', async () => {
+    const result = await reviewPipeline(
+      makeInput({
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+        },
+        // No graphLoader
+      }),
+    );
+
+    expect(result.status).toBe('PASSED');
+    expect(runSimpleReview).toHaveBeenCalledOnce();
+  });
+
+  it('filters diff to blast-radius files when graph is available', async () => {
+    const graphLoader = makeGraphLoader({
+      load: vi.fn().mockResolvedValue(MINIMAL_GRAPH),
+      loadMetadata: vi.fn().mockResolvedValue(null),
+    });
+
+    (computeBlastRadius as MockedFunction<typeof computeBlastRadius>).mockReturnValueOnce(
+      BLAST_RESULT_NORMAL,
+    );
+
+    await reviewPipeline(
+      makeInput({
+        graphLoader,
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+        },
+      }),
+    );
+
+    expect(computeBlastRadius).toHaveBeenCalledOnce();
+    // The diff passed to the agent should only include blast-radius files
+    const callArgs = (runSimpleReview as MockedFunction<typeof runSimpleReview>).mock.calls[0]?.[0];
+    expect(callArgs).toBeDefined();
+    expect(callArgs.diff).toBeDefined();
+  });
+
+  it('falls back to full diff when graph loader returns null', async () => {
+    const graphLoader = makeGraphLoader({
+      load: vi.fn().mockResolvedValue(null),
+    });
+
+    const result = await reviewPipeline(
+      makeInput({
+        graphLoader,
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+        },
+      }),
+    );
+
+    expect(graphLoader.load).toHaveBeenCalledOnce();
+    expect(result.status).toBe('PASSED');
+    // Agent should still be called with the original diff files
+    expect(runSimpleReview).toHaveBeenCalledOnce();
+    const callArgs = (runSimpleReview as MockedFunction<typeof runSimpleReview>).mock.calls[0]?.[0];
+    expect(callArgs.diff).toContain('src/index.ts');
+  });
+
+  it('falls back to full diff when blast-radius cap is exceeded', async () => {
+    const graphLoader = makeGraphLoader({
+      load: vi.fn().mockResolvedValue(MINIMAL_GRAPH),
+      loadMetadata: vi.fn().mockResolvedValue(null),
+    });
+
+    (computeBlastRadius as MockedFunction<typeof computeBlastRadius>).mockReturnValueOnce(
+      BLAST_RESULT_EXCEEDED,
+    );
+
+    const result = await reviewPipeline(
+      makeInput({
+        graphLoader,
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+          maxBlastRadiusFiles: 50,
+        },
+      }),
+    );
+
+    expect(result.status).toBe('PASSED');
+    // Pipeline should complete normally with the full diff
+    expect(runSimpleReview).toHaveBeenCalledOnce();
+    // blastRadius metadata should indicate fallback
+    expect(result.metadata.blastRadius?.fallbackReason).toContain('blast radius exceeds');
+  });
+
+  it('handles graph loader errors gracefully', async () => {
+    const graphLoader = makeGraphLoader({
+      load: vi.fn().mockRejectedValue(new Error('graph file not found')),
+    });
+
+    const result = await reviewPipeline(
+      makeInput({
+        graphLoader,
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+        },
+      }),
+    );
+
+    // Pipeline should complete — no crash
+    expect(runSimpleReview).toHaveBeenCalledOnce();
+    // The error should be recorded in failedSteps
+    expect(result.failedSteps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ step: 'blast-radius', error: 'graph file not found' }),
+      ]),
+    );
+    expect(result.status).toBe('PARTIAL');
+  });
+
+  it('populates blastRadius metadata when graph is available', async () => {
+    const graphLoader = makeGraphLoader({
+      load: vi.fn().mockResolvedValue(MINIMAL_GRAPH),
+      loadMetadata: vi.fn().mockResolvedValue(null),
+    });
+
+    (computeBlastRadius as MockedFunction<typeof computeBlastRadius>).mockReturnValueOnce(
+      BLAST_RESULT_NORMAL,
+    );
+
+    const result = await reviewPipeline(
+      makeInput({
+        graphLoader,
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+        },
+      }),
+    );
+
+    expect(result.metadata.blastRadius).toBeDefined();
+    expect(result.metadata.blastRadius?.enabled).toBe(true);
+    expect(result.metadata.blastRadius?.graphAvailable).toBe(true);
+    expect(result.metadata.blastRadius?.blastRadiusFiles).toBe(BLAST_RESULT_NORMAL.files.size);
   });
 });
