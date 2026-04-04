@@ -144,6 +144,57 @@ In **SaaS/server mode**, GitHub Models needs a PAT with `models:read` on that pr
 
 Provider chains are configured per-repo or globally (see Global Settings).
 
+## Gateway Mode (mcp-llm-bridge)
+
+For server deployments, you can delegate all LLM calls to a running [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge) instance instead of managing provider credentials directly in GHAGGA.
+
+**Why use gateway mode?**
+- Centralized credential management — one vault for all projects
+- Advanced routing — epsilon-greedy latency-based provider selection, circuit breakers, group balancing
+- Built-in OTel tracing and RBAC per API key
+- Free model fallback (GitHub Models, OpenCode free tier) handled automatically
+
+**Configuration:**
+
+```json
+{
+  "provider": "gateway",
+  "gatewayUrl": "http://localhost:3001",
+  "gatewayToken": "your-bridge-api-key"
+}
+```
+
+Or via environment variables:
+
+```bash
+GHAGGA_PROVIDER=gateway
+GHAGGA_GATEWAY_URL=http://localhost:3001
+GHAGGA_GATEWAY_TOKEN=your-bridge-api-key
+```
+
+**Docker Compose (ghagga + mcp-llm-bridge together):**
+
+```yaml
+services:
+  bridge:
+    image: ghcr.io/jnzader/mcp-llm-bridge:latest
+    ports:
+      - "3001:3001"
+    environment:
+      VAULT_KEY: ${VAULT_KEY}
+
+  ghagga:
+    image: ghcr.io/jnzader/ghagga:latest
+    environment:
+      GHAGGA_PROVIDER: gateway
+      GHAGGA_GATEWAY_URL: http://bridge:3001
+      GHAGGA_GATEWAY_TOKEN: ${BRIDGE_API_KEY}
+    depends_on:
+      - bridge
+```
+
+> **Note**: In gateway mode, GHAGGA's own provider chain and credential vault are bypassed entirely. All routing decisions (fallback, model selection, rate limiting) are handled by the bridge.
+
 ## Comment Trigger (SaaS)
 
 In SaaS mode, you can re-trigger a review on any open PR by commenting:

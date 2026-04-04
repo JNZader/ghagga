@@ -237,6 +237,10 @@ type OpenCodeEvent = OpenCodeTextEvent | OpenCodeStepFinishEvent | { type: strin
  * Returns the concatenated text and optional token usage.
  *
  * @internal Exported for testing only.
+ *
+ * @deprecated Duplicate of mcp-llm-bridge `src/adapters/cli-opencode.ts#parseOpenCodeOutput`.
+ * When ghagga fully delegates to mcp-llm-bridge (Fase 2 refactor), this function
+ * and the entire cli-bridge provider can be removed.
  */
 export function parseOpenCodeOutput(raw: string): {
   text: string;
