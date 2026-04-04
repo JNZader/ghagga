@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import type { LLMProvider, ReviewMode } from 'ghagga-core';
 import { DEFAULT_MODELS } from 'ghagga-core';
+import { auditCommand } from './commands/audit.js';
 import { healthCommand } from './commands/health.js';
 import { hooksCommand } from './commands/hooks/index.js';
 import { loginCommand } from './commands/login.js';
@@ -263,6 +264,33 @@ program
     });
   });
 
+// ─── Audit ──────────────────────────────────────────────────────
+
+program
+  .command('audit')
+  .description('Full-project security and code-quality audit')
+  .argument('[path]', 'Path to the repository', '.')
+  .option('--quick', 'Static analysis only — skip LLM audit')
+  .option(
+    '-p, --provider <provider>',
+    'LLM provider (auto-detected from login)',
+    process.env.GHAGGA_PROVIDER,
+  )
+  .option('--model <model>', 'LLM model identifier', process.env.GHAGGA_MODEL)
+  .option('--api-key <key>', 'LLM provider API key', process.env.GHAGGA_API_KEY)
+  .option('-o, --output <format>', 'Output format: text | json')
+  .option('--save', 'Persist audit result to history file')
+  .action(async (path: string, options: AuditCommandOptions) => {
+    await auditCommand(path, {
+      quick: options.quick ?? false,
+      provider: options.provider,
+      model: options.model,
+      apiKey: options.apiKey,
+      output: options.output,
+      save: options.save ?? false,
+    });
+  });
+
 // ─── Memory ─────────────────────────────────────────────────────
 
 program.addCommand(memoryCommand);
@@ -304,4 +332,13 @@ interface ReviewCommandOptions {
   // Pluggable review lenses (fan-out mode)
   lenses?: string;
   lensDir?: string;
+}
+
+interface AuditCommandOptions {
+  quick?: boolean;
+  provider?: string;
+  model?: string;
+  apiKey?: string;
+  output?: string;
+  save?: boolean;
 }

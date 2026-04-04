@@ -677,6 +677,53 @@ export const DEFAULT_VERSIONING_CONFIG: VersioningConfig = {
   contradictionThreshold: 0.5,
 };
 
+// ─── Audit Types ────────────────────────────────────────────────
+
+export interface AuditInput {
+  /** Path to the repository to audit */
+  repoPath: string;
+
+  /** Pre-formatted static analysis context (findings as string) */
+  staticContext: string;
+
+  /** LLM provider identifier */
+  provider: string;
+
+  /** Model identifier */
+  model: string;
+
+  /** Decrypted API key */
+  apiKey: string;
+
+  /**
+   * Optional backend-agnostic generation function.
+   * When provided, used instead of creating one from provider/model/apiKey.
+   */
+  generateFn?: import('./providers/generate-fn.js').GenerateTextFn;
+
+  /** Optional progress callback for verbose/debug output. */
+  onProgress?: (event: ProgressEvent) => void;
+}
+
+export type AuditStatus = 'completed' | 'no-findings' | 'error';
+
+export interface AuditResult {
+  /** Audit outcome */
+  status: AuditStatus;
+
+  /** Executive report from the LLM auditor */
+  report: string;
+
+  /** Raw static analysis findings passed to the auditor */
+  findings: StaticAnalysisResult;
+
+  /** ISO 8601 timestamp of when the audit ran */
+  timestamp: string;
+
+  /** Error message when status === 'error' */
+  error?: string;
+}
+
 // ─── Configuration Defaults ─────────────────────────────────────
 
 export const DEFAULT_SETTINGS: ReviewSettings = {

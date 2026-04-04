@@ -56,6 +56,10 @@ Scale your review depth to the diff size: small changes need brief reviews, larg
 Only report ACTIONABLE findings — skip nitpicks and formatting preferences.
 FAILED if: Any critical issues, or 3+ high issues. PASSED otherwise.`;
 
+// ─── Audit Agent ────────────────────────────────────────────────
+
+export const AUDIT_SYSTEM = `You are a security and code quality auditor. Analyze the static analysis findings below and produce an executive report with: 1) Critical issues requiring immediate attention, 2) High-priority remediations, 3) Patterns and trends across findings, 4) Overall project health assessment. Be specific about file paths and finding types. Prioritize actionable recommendations.`;
+
 // ─── Workflow Specialists ───────────────────────────────────────
 
 export const WORKFLOW_SCOPE_SYSTEM = `You analyze code scope. Identify what files are changed, affected modules, and dependencies.

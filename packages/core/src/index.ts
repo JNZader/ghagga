@@ -52,6 +52,11 @@ export type {
   WorkflowSpecialist,
 } from './types.js';
 
+// ─── Audit Agent ────────────────────────────────────────────────
+
+export { runAuditReport } from './agents/audit.js';
+export type { AuditInput, AuditResult, AuditStatus } from './types.js';
+
 // ─── Diagnostic Agent ───────────────────────────────────────────
 
 export type { DiagnosticReviewInput } from './agents/diagnostic.js';
@@ -203,6 +208,7 @@ export type {
 export {
   allocateTimeBudget,
   createNodeExecutionContext,
+  formatStaticAnalysisContext,
   getEffectiveBudget,
   initializeDefaultTools,
   isToolRegistryEnabled,
