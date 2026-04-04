@@ -11,8 +11,8 @@ import {
   extractEntityDiffLines,
   filterLogicChanges,
 } from './entity-diff.js';
-import { ENTITY_CHANGE_KIND } from './types.js';
 import type { AffectedSymbol, SymbolInfo } from './types.js';
+import { ENTITY_CHANGE_KIND } from './types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -130,11 +130,7 @@ describe('classifyEntityChanges', () => {
     ].join('\n');
 
     // The diff lines are indentation changes only
-    const whitespaceOnlyDiff = [
-      '@@ -10,2 +10,2 @@ function foo()',
-      '-',
-      '+   ',
-    ].join('\n');
+    const whitespaceOnlyDiff = ['@@ -10,2 +10,2 @@ function foo()', '-', '+   '].join('\n');
 
     const symbol = makeSymbol('foo', 10, 15);
     const affected = [makeAffected(symbol)];
@@ -211,12 +207,7 @@ describe('classifyEntityChanges', () => {
   });
 
   it('defaults to logic when no diff lines found in range', () => {
-    const diff = [
-      '@@ -1,2 +1,3 @@ imports',
-      ' import a;',
-      '+import b;',
-      ' import c;',
-    ].join('\n');
+    const diff = ['@@ -1,2 +1,3 @@ imports', ' import a;', '+import b;', ' import c;'].join('\n');
 
     // Symbol is far from the change
     const symbol = makeSymbol('distant', 50, 60);
@@ -269,19 +260,9 @@ describe('classifyEntityChanges', () => {
 
 describe('detectRenames', () => {
   it('detects a function rename with identical body', () => {
-    const oldSource = [
-      'function foo() {',
-      '  const x = 1;',
-      '  return x + 2;',
-      '}',
-    ].join('\n');
+    const oldSource = ['function foo() {', '  const x = 1;', '  return x + 2;', '}'].join('\n');
 
-    const newSource = [
-      'function bar() {',
-      '  const x = 1;',
-      '  return x + 2;',
-      '}',
-    ].join('\n');
+    const newSource = ['function bar() {', '  const x = 1;', '  return x + 2;', '}'].join('\n');
 
     const removed = [makeSymbol('foo', 1, 4)];
     const added = [makeSymbol('bar', 1, 4)];
@@ -295,11 +276,7 @@ describe('detectRenames', () => {
   });
 
   it('does not match rename when body is different', () => {
-    const oldSource = [
-      'function foo() {',
-      '  return 1;',
-      '}',
-    ].join('\n');
+    const oldSource = ['function foo() {', '  return 1;', '}'].join('\n');
 
     const newSource = [
       'function bar() {',
@@ -378,7 +355,11 @@ describe('filterLogicChanges', () => {
   it('returns only logic changes', () => {
     const changes = [
       { symbol: makeSymbol('a', 1, 5), kind: ENTITY_CHANGE_KIND.COSMETIC as const, diffLines: [] },
-      { symbol: makeSymbol('b', 10, 20), kind: ENTITY_CHANGE_KIND.LOGIC as const, diffLines: ['+new code'] },
+      {
+        symbol: makeSymbol('b', 10, 20),
+        kind: ENTITY_CHANGE_KIND.LOGIC as const,
+        diffLines: ['+new code'],
+      },
       { symbol: makeSymbol('c', 25, 30), kind: ENTITY_CHANGE_KIND.RENAMED as const, diffLines: [] },
     ];
 
@@ -399,7 +380,11 @@ describe('filterLogicChanges', () => {
   it('returns all when all are logic changes', () => {
     const changes = [
       { symbol: makeSymbol('a', 1, 5), kind: ENTITY_CHANGE_KIND.LOGIC as const, diffLines: ['+x'] },
-      { symbol: makeSymbol('b', 10, 20), kind: ENTITY_CHANGE_KIND.LOGIC as const, diffLines: ['+y'] },
+      {
+        symbol: makeSymbol('b', 10, 20),
+        kind: ENTITY_CHANGE_KIND.LOGIC as const,
+        diffLines: ['+y'],
+      },
     ];
 
     expect(filterLogicChanges(changes)).toHaveLength(2);

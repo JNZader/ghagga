@@ -132,13 +132,15 @@ describe('parseReviewResponse', () => {
   });
 
   it('summary fallback: strips FINDINGS block from raw text', () => {
-    const text = 'Raw text here.\nFINDINGS:\n- SEVERITY: low\n  CATEGORY: style\n  FILE: a.ts\n  LINE: 1\n  MESSAGE: minor\n  SUGGESTION: fix';
+    const text =
+      'Raw text here.\nFINDINGS:\n- SEVERITY: low\n  CATEGORY: style\n  FILE: a.ts\n  LINE: 1\n  MESSAGE: minor\n  SUGGESTION: fix';
     const result = callParse(text);
     expect(result.summary).toBe('Raw text here.');
   });
 
   it('summary fallback: generic message when completely empty', () => {
-    const text = 'FINDINGS:\n- SEVERITY: low\n  CATEGORY: style\n  FILE: a.ts\n  LINE: 1\n  MESSAGE: m\n  SUGGESTION: s';
+    const text =
+      'FINDINGS:\n- SEVERITY: low\n  CATEGORY: style\n  FILE: a.ts\n  LINE: 1\n  MESSAGE: m\n  SUGGESTION: s';
     const result = callParse(text);
     expect(result.summary).toContain('could not be parsed');
   });

@@ -43,9 +43,7 @@ describe('resolveChecklistConfig', () => {
   it('merges user dimension enabled toggle with defaults', () => {
     const config: ChecklistConfig = {
       enabled: true,
-      dimensions: [
-        { id: 'solid', name: 'SOLID Principles', enabled: false, checks: [] },
-      ],
+      dimensions: [{ id: 'solid', name: 'SOLID Principles', enabled: false, checks: [] }],
     };
     const result = resolveChecklistConfig(config)!;
     const solid = result.dimensions.find((d) => d.id === 'solid');
@@ -58,9 +56,7 @@ describe('resolveChecklistConfig', () => {
   it('preserves default checks when user dimension has no checks', () => {
     const config: ChecklistConfig = {
       enabled: true,
-      dimensions: [
-        { id: 'security', name: 'Security', enabled: true, checks: [] },
-      ],
+      dimensions: [{ id: 'security', name: 'Security', enabled: true, checks: [] }],
     };
     const result = resolveChecklistConfig(config)!;
     const sec = result.dimensions.find((d) => d.id === 'security');
@@ -77,9 +73,7 @@ describe('resolveChecklistConfig', () => {
           id: 'solid',
           name: 'SOLID Principles',
           enabled: true,
-          checks: [
-            { id: 'single-responsibility', description: '', weight: 3, enabled: true },
-          ],
+          checks: [{ id: 'single-responsibility', description: '', weight: 3, enabled: true }],
         },
       ],
     };
@@ -97,9 +91,7 @@ describe('resolveChecklistConfig', () => {
           id: 'solid',
           name: 'SOLID Principles',
           enabled: true,
-          checks: [
-            { id: 'liskov-substitution', description: '', weight: 7, enabled: false },
-          ],
+          checks: [{ id: 'liskov-substitution', description: '', weight: 7, enabled: false }],
         },
       ],
     };
@@ -118,7 +110,12 @@ describe('resolveChecklistConfig', () => {
           name: 'SOLID Principles',
           enabled: true,
           checks: [
-            { id: 'single-responsibility', description: 'Custom question', weight: 8, enabled: true },
+            {
+              id: 'single-responsibility',
+              description: 'Custom question',
+              weight: 8,
+              enabled: true,
+            },
           ],
         },
       ],
@@ -136,9 +133,7 @@ describe('resolveChecklistConfig', () => {
       id: 'performance',
       name: 'Performance',
       enabled: true,
-      checks: [
-        { id: 'n-plus-one', description: 'No N+1 queries', weight: 8, enabled: true },
-      ],
+      checks: [{ id: 'n-plus-one', description: 'No N+1 queries', weight: 8, enabled: true }],
     };
     const config: ChecklistConfig = {
       enabled: true,
@@ -180,9 +175,7 @@ describe('resolveChecklistConfig', () => {
   it('overrides dimension name', () => {
     const config: ChecklistConfig = {
       enabled: true,
-      dimensions: [
-        { id: 'solid', name: 'SOLID (Custom)', enabled: true, checks: [] },
-      ],
+      dimensions: [{ id: 'solid', name: 'SOLID (Custom)', enabled: true, checks: [] }],
     };
     const result = resolveChecklistConfig(config)!;
     const solid = result.dimensions.find((d) => d.id === 'solid');

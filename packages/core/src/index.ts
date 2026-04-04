@@ -59,7 +59,11 @@ export { parseHypotheses, runDiagnosticReview } from './agents/diagnostic.js';
 
 // ─── Fan-Out Lenses Agent ──────────────────────────────────────
 
-export type { FanOutReviewInput, LensValidationResult, ReviewLens } from './agents/fan-out-lenses.js';
+export type {
+  FanOutReviewInput,
+  LensValidationResult,
+  ReviewLens,
+} from './agents/fan-out-lenses.js';
 export {
   DEFAULT_LENSES,
   getAllLenses,
@@ -79,8 +83,20 @@ export {
 
 // ─── Constants ──────────────────────────────────────────────────
 
-export type { Contradiction, DecayConfig, MemoryBranch, MemorySnapshot, MergeResult, VersioningConfig } from './types.js';
-export { DEFAULT_DECAY_CONFIG, DEFAULT_MODELS, DEFAULT_SETTINGS, DEFAULT_VERSIONING_CONFIG } from './types.js';
+export type {
+  Contradiction,
+  DecayConfig,
+  MemoryBranch,
+  MemorySnapshot,
+  MergeResult,
+  VersioningConfig,
+} from './types.js';
+export {
+  DEFAULT_DECAY_CONFIG,
+  DEFAULT_MODELS,
+  DEFAULT_SETTINGS,
+  DEFAULT_VERSIONING_CONFIG,
+} from './types.js';
 
 // ─── Utilities (for advanced usage) ─────────────────────────────
 

@@ -79,7 +79,9 @@ export function createProvider(provider: LLMProvider, apiKey: string) {
         name: 'github-models',
       });
       // Return a callable that matches createOpenAI's interface
-      return ((modelId: string) => ghProvider.chatModel(modelId)) as ReturnType<typeof createOpenAI>;
+      return ((modelId: string) => ghProvider.chatModel(modelId)) as ReturnType<
+        typeof createOpenAI
+      >;
     }
     case 'ollama':
       return createOpenAI({

@@ -45,8 +45,8 @@ vi.mock('../providers/generate-fn.js', () => ({
   createGatewayGenerateFn: vi.fn(),
 }));
 
-import { createAISDKGenerateFn } from '../providers/generate-fn.js';
 import { reviewPipeline } from '../pipeline.js';
+import { createAISDKGenerateFn } from '../providers/generate-fn.js';
 import type { ReviewInput } from '../types.js';
 
 const SIMPLE_DIFF = `diff --git a/src/app.ts b/src/app.ts
@@ -232,27 +232,27 @@ describe('integration: review modes through pipeline', () => {
     const precomputed = {
       semgrep: {
         status: 'success' as const,
-        findings: [{
-          severity: 'high' as const,
-          category: 'security',
-          file: 'src/app.ts',
-          line: 3,
-          message: 'Precomputed finding',
-          source: 'semgrep' as const,
-        }],
+        findings: [
+          {
+            severity: 'high' as const,
+            category: 'security',
+            file: 'src/app.ts',
+            line: 3,
+            message: 'Precomputed finding',
+            source: 'semgrep' as const,
+          },
+        ],
         executionTimeMs: 100,
       },
       trivy: { status: 'skipped' as const, findings: [] as any[], executionTimeMs: 0 },
       cpd: { status: 'skipped' as const, findings: [] as any[], executionTimeMs: 0 },
     };
 
-    const result = await reviewPipeline(
-      makeInput({ precomputedStaticAnalysis: precomputed }),
-    );
+    const result = await reviewPipeline(makeInput({ precomputedStaticAnalysis: precomputed }));
 
     expect(result.status).toBeDefined();
     // Static findings should include the precomputed one
-    const semgrepFinding = result.findings.find(f => f.message === 'Precomputed finding');
+    const semgrepFinding = result.findings.find((f) => f.message === 'Precomputed finding');
     expect(semgrepFinding).toBeDefined();
   });
 
@@ -265,8 +265,12 @@ describe('integration: review modes through pipeline', () => {
       makeInput({
         apiKey: 'skip-ai',
         settings: {
-          enableSemgrep: false, enableTrivy: false, enableCpd: false,
-          enableMemory: false, customRules: [], ignorePatterns: [],
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
           reviewLevel: 'normal',
         },
       }),
@@ -345,7 +349,14 @@ describe('integration: review modes through pipeline', () => {
         provider: 'gateway' as any,
         model: 'auto',
         apiKey: '',
-        providerChain: [{ provider: 'gateway' as any, model: 'auto', apiKey: '', gatewayUrl: 'http://localhost:3000' }],
+        providerChain: [
+          {
+            provider: 'gateway' as any,
+            model: 'auto',
+            apiKey: '',
+            gatewayUrl: 'http://localhost:3000',
+          },
+        ],
       }),
     );
 
@@ -385,7 +396,7 @@ describe('integration: review modes through pipeline', () => {
 
     // Should fall back to simple mode
     expect(result.metadata.mode).toBe('simple');
-    expect(steps.some(s => s.step === 'mode-fallback')).toBe(true);
+    expect(steps.some((s) => s.step === 'mode-fallback')).toBe(true);
   });
 
   // ── resolveAiEnabled edge case ──────────────────────────────────
@@ -394,9 +405,7 @@ describe('integration: review modes through pipeline', () => {
     const gen = fakeGenerateFn(SIMPLE_RESPONSE);
     vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
 
-    const result = await reviewPipeline(
-      makeInput({ aiReviewEnabled: false }),
-    );
+    const result = await reviewPipeline(makeInput({ aiReviewEnabled: false }));
 
     // AI should be disabled even with valid key
     expect(gen).not.toHaveBeenCalled();
@@ -441,7 +450,7 @@ diff --git a/.env b/.env
 
     expect(result.status).toBeDefined();
     // .env should be blocked or redacted
-    const protectionStep = steps.find(s => s.step === 'path-protection');
+    const protectionStep = steps.find((s) => s.step === 'path-protection');
     if (protectionStep) {
       expect(protectionStep.message).toMatch(/blocked|redacted/i);
     }
@@ -460,14 +469,16 @@ diff --git a/.env b/.env
     vi.mocked(runStaticAnalysis).mockResolvedValueOnce({
       semgrep: {
         status: 'success',
-        findings: [{
-          severity: 'medium' as const,
-          category: 'security',
-          file: 'src/app.ts',
-          line: 3,
-          message: 'Possible XSS',
-          source: 'semgrep' as const,
-        }],
+        findings: [
+          {
+            severity: 'medium' as const,
+            category: 'security',
+            file: 'src/app.ts',
+            line: 3,
+            message: 'Possible XSS',
+            source: 'semgrep' as const,
+          },
+        ],
         executionTimeMs: 100,
       },
       trivy: { status: 'skipped', findings: [], executionTimeMs: 0 },
@@ -478,8 +489,12 @@ diff --git a/.env b/.env
       makeInput({
         enhance: true,
         settings: {
-          enableSemgrep: true, enableTrivy: false, enableCpd: false,
-          enableMemory: false, customRules: [], ignorePatterns: [],
+          enableSemgrep: true,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
           reviewLevel: 'normal',
         },
       }),
@@ -497,17 +512,19 @@ diff --git a/.env b/.env
     vi.mocked(createAISDKGenerateFn).mockReturnValue(gen);
 
     const mockGraph = {
-      nodes: new Map([
-        ['src/app.ts', { id: 'src/app.ts', type: 'module' as const, imports: [] }],
-      ]),
+      nodes: new Map([['src/app.ts', { id: 'src/app.ts', type: 'module' as const, imports: [] }]]),
       edges: [],
     };
 
     const result = await reviewPipeline(
       makeInput({
         settings: {
-          enableSemgrep: false, enableTrivy: false, enableCpd: false,
-          enableMemory: false, customRules: [], ignorePatterns: [],
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
           reviewLevel: 'normal',
           enableBlastRadius: true,
           traversalDepth: 3,
@@ -538,8 +555,12 @@ diff --git a/.env b/.env
     const result = await reviewPipeline(
       makeInput({
         settings: {
-          enableSemgrep: false, enableTrivy: false, enableCpd: false,
-          enableMemory: false, customRules: [], ignorePatterns: [],
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
           reviewLevel: 'normal',
           enableBlastRadius: true,
         },
@@ -563,8 +584,12 @@ diff --git a/.env b/.env
     const result = await reviewPipeline(
       makeInput({
         settings: {
-          enableSemgrep: false, enableTrivy: false, enableCpd: false,
-          enableMemory: false, customRules: [], ignorePatterns: [],
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
           reviewLevel: 'normal',
           enableBlastRadius: true,
         },
@@ -618,7 +643,7 @@ diff --git a/.env.local b/.env.local
     );
 
     // parse-diff step should mention filtering
-    const parseStep = steps.find(s => s.step === 'parse-diff');
+    const parseStep = steps.find((s) => s.step === 'parse-diff');
     expect(parseStep).toBeDefined();
   });
 
@@ -631,7 +656,7 @@ diff --git a/.env.local b/.env.local
     const steps: Array<{ step: string; message: string; detail?: string }> = [];
     await reviewPipeline(makeInput({ onProgress: (e) => steps.push(e) }));
 
-    const stepNames = steps.map(s => s.step);
+    const stepNames = steps.map((s) => s.step);
     expect(stepNames).toContain('validate');
     expect(stepNames).toContain('parse-diff');
     expect(stepNames).toContain('detect-stacks');
@@ -646,19 +671,19 @@ diff --git a/.env.local b/.env.local
     }
 
     // parse-diff should mention file count
-    const parseDiff = steps.find(s => s.step === 'parse-diff');
+    const parseDiff = steps.find((s) => s.step === 'parse-diff');
     expect(parseDiff?.message).toMatch(/\d+ file/);
 
     // detect-stacks should mention stack count
-    const detectStacks = steps.find(s => s.step === 'detect-stacks');
+    const detectStacks = steps.find((s) => s.step === 'detect-stacks');
     expect(detectStacks?.message).toMatch(/\d+ tech stack/);
 
     // token-budget should mention tokens
-    const tokenBudget = steps.find(s => s.step === 'token-budget');
+    const tokenBudget = steps.find((s) => s.step === 'token-budget');
     expect(tokenBudget?.message).toContain('tokens');
 
     // agent-start should mention provider and model
-    const agentStart = steps.find(s => s.step === 'agent-start');
+    const agentStart = steps.find((s) => s.step === 'agent-start');
     expect(agentStart?.message).toContain('simple');
   });
 
@@ -683,17 +708,21 @@ diff --git a/.env b/.env
 `;
 
     const steps: Array<{ step: string; message: string }> = [];
-    await reviewPipeline(makeInput({
-      diff: diffWithBlocked,
-      onProgress: (e) => steps.push(e),
-      context: {
-        repoFullName: 'test/repo', prNumber: 1,
-        commitMessages: ['test'], fileList: ['src/app.ts', '.env'],
-      },
-    }));
+    await reviewPipeline(
+      makeInput({
+        diff: diffWithBlocked,
+        onProgress: (e) => steps.push(e),
+        context: {
+          repoFullName: 'test/repo',
+          prNumber: 1,
+          commitMessages: ['test'],
+          fileList: ['src/app.ts', '.env'],
+        },
+      }),
+    );
 
     // parse-diff should show blocked or redacted info
-    const parseDiff = steps.find(s => s.step === 'parse-diff');
+    const parseDiff = steps.find((s) => s.step === 'parse-diff');
     expect(parseDiff?.message).toMatch(/\d+ after filtering/);
   });
 
@@ -708,24 +737,34 @@ diff --git a/.env b/.env
     };
 
     const steps: Array<{ step: string; message: string }> = [];
-    await reviewPipeline(makeInput({
-      onProgress: (e) => steps.push(e),
-      settings: {
-        enableSemgrep: false, enableTrivy: false, enableCpd: false,
-        enableMemory: false, customRules: [], ignorePatterns: [],
-        reviewLevel: 'normal',
-        enableBlastRadius: true, traversalDepth: 3, maxBlastRadiusFiles: 50,
-      },
-      graphLoader: {
-        load: vi.fn().mockResolvedValue(mockGraph),
-        loadMetadata: vi.fn().mockResolvedValue({
-          lastIndexedAt: staleDate, nodeCount: 1, edgeCount: 0,
-        }),
-      },
-    }));
+    await reviewPipeline(
+      makeInput({
+        onProgress: (e) => steps.push(e),
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+          traversalDepth: 3,
+          maxBlastRadiusFiles: 50,
+        },
+        graphLoader: {
+          load: vi.fn().mockResolvedValue(mockGraph),
+          loadMetadata: vi.fn().mockResolvedValue({
+            lastIndexedAt: staleDate,
+            nodeCount: 1,
+            edgeCount: 0,
+          }),
+        },
+      }),
+    );
 
     // Should have blast-radius step
-    const brSteps = steps.filter(s => s.step === 'blast-radius');
+    const brSteps = steps.filter((s) => s.step === 'blast-radius');
     expect(brSteps.length).toBeGreaterThan(0);
   });
 
@@ -737,28 +776,38 @@ diff --git a/.env b/.env
     const nodes = new Map();
     for (let i = 0; i < 100; i++) {
       nodes.set(`src/file${i}.ts`, {
-        id: `src/file${i}.ts`, type: 'module' as const,
+        id: `src/file${i}.ts`,
+        type: 'module' as const,
         imports: i > 0 ? [`src/file${i - 1}.ts`] : [],
       });
     }
 
     const steps: Array<{ step: string; message: string }> = [];
-    const result = await reviewPipeline(makeInput({
-      onProgress: (e) => steps.push(e),
-      settings: {
-        enableSemgrep: false, enableTrivy: false, enableCpd: false,
-        enableMemory: false, customRules: [], ignorePatterns: [],
-        reviewLevel: 'normal',
-        enableBlastRadius: true, traversalDepth: 10,
-        maxBlastRadiusFiles: 1, // Very low cap to trigger exceeded
-      },
-      graphLoader: {
-        load: vi.fn().mockResolvedValue({ nodes, edges: [] }),
-        loadMetadata: vi.fn().mockResolvedValue({
-          lastIndexedAt: new Date().toISOString(), nodeCount: 100, edgeCount: 99,
-        }),
-      },
-    }));
+    const result = await reviewPipeline(
+      makeInput({
+        onProgress: (e) => steps.push(e),
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: false,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'normal',
+          enableBlastRadius: true,
+          traversalDepth: 10,
+          maxBlastRadiusFiles: 1, // Very low cap to trigger exceeded
+        },
+        graphLoader: {
+          load: vi.fn().mockResolvedValue({ nodes, edges: [] }),
+          loadMetadata: vi.fn().mockResolvedValue({
+            lastIndexedAt: new Date().toISOString(),
+            nodeCount: 100,
+            edgeCount: 99,
+          }),
+        },
+      }),
+    );
 
     expect(result.status).toBeDefined();
     if (result.metadata.blastRadius) {
@@ -773,7 +822,7 @@ diff --git a/.env b/.env
     const steps: Array<{ step: string; message: string; detail?: string }> = [];
     await reviewPipeline(makeInput({ onProgress: (e) => steps.push(e) }));
 
-    const staticResults = steps.find(s => s.step === 'static-results');
+    const staticResults = steps.find((s) => s.step === 'static-results');
     expect(staticResults).toBeDefined();
     expect(staticResults?.message).toContain('Static analysis complete');
     expect(staticResults?.message).toContain('static=');

@@ -84,10 +84,7 @@ const NODE_CONFIGS: Record<ScopeLanguage, SymbolNodeConfig> = {
  * @param language - The scope language
  * @returns Array of extracted symbols
  */
-export function extractSymbolsFromTree(
-  tree: Tree,
-  language: ScopeLanguage,
-): SymbolInfo[] {
+export function extractSymbolsFromTree(tree: Tree, language: ScopeLanguage): SymbolInfo[] {
   const config = NODE_CONFIGS[language];
   if (!config) return [];
 
@@ -235,11 +232,7 @@ function extractArrowFunctionVariable(node: Node, symbols: SymbolInfo[]): void {
 
 // ─── Go Extraction ─────────────────────────────────────────────
 
-function extractGoSymbols(
-  node: Node,
-  config: SymbolNodeConfig,
-  symbols: SymbolInfo[],
-): void {
+function extractGoSymbols(node: Node, config: SymbolNodeConfig, symbols: SymbolInfo[]): void {
   const nodeType = node.type;
 
   if (nodeType === 'function_declaration') {
@@ -268,8 +261,7 @@ function extractGoSymbols(
         const nameNode = child.childForFieldName('name');
         const typeNode = child.childForFieldName('type');
         if (nameNode && typeNode) {
-          const kind: SymbolKind =
-            typeNode.type === 'interface_type' ? 'interface' : 'class';
+          const kind: SymbolKind = typeNode.type === 'interface_type' ? 'interface' : 'class';
           symbols.push(buildSymbol(nameNode.text, kind, node));
         }
       }
@@ -315,21 +307,12 @@ function extractGoReceiverType(receiver: Node): string | undefined {
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-function extractName(
-  node: Node,
-  fieldName: string,
-  _language: ScopeLanguage,
-): string | undefined {
+function extractName(node: Node, fieldName: string, _language: ScopeLanguage): string | undefined {
   const nameNode = node.childForFieldName(fieldName);
   return nameNode?.text;
 }
 
-function buildSymbol(
-  name: string,
-  kind: SymbolKind,
-  node: Node,
-  parent?: string,
-): SymbolInfo {
+function buildSymbol(name: string, kind: SymbolKind, node: Node, parent?: string): SymbolInfo {
   return {
     name,
     kind,

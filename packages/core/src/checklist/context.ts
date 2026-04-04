@@ -23,10 +23,7 @@ export function buildChecklistContext(config: ChecklistConfig): string {
   const activeDimensions = config.dimensions.filter((d) => d.enabled);
   if (activeDimensions.length === 0) return '';
 
-  const lines: string[] = [
-    '## Review Checklist (evaluate each applicable check)',
-    '',
-  ];
+  const lines: string[] = ['## Review Checklist (evaluate each applicable check)', ''];
 
   for (const dim of activeDimensions) {
     const activeChecks = dim.checks.filter((c) => c.enabled);
@@ -58,10 +55,7 @@ export function buildChecklistContext(config: ChecklistConfig): string {
  * This reduces context while keeping the most important checks.
  */
 function truncateContext(dimensions: ChecklistDimension[]): string {
-  const lines: string[] = [
-    '## Review Checklist (high-priority checks only)',
-    '',
-  ];
+  const lines: string[] = ['## Review Checklist (high-priority checks only)', ''];
 
   for (const dim of dimensions) {
     const highWeightChecks = dim.checks.filter((c) => c.enabled && c.weight >= 7);
@@ -74,7 +68,9 @@ function truncateContext(dimensions: ChecklistDimension[]): string {
     lines.push('');
   }
 
-  lines.push('> Truncated to high-priority checks (weight >= 7). Flag violations with their check weight.');
+  lines.push(
+    '> Truncated to high-priority checks (weight >= 7). Flag violations with their check weight.',
+  );
 
   return lines.join('\n');
 }
@@ -85,8 +81,5 @@ function truncateContext(dimensions: ChecklistDimension[]): string {
 export function countActiveChecks(config: ChecklistConfig): number {
   return config.dimensions
     .filter((d) => d.enabled)
-    .reduce(
-      (sum, dim) => sum + dim.checks.filter((c) => c.enabled).length,
-      0,
-    );
+    .reduce((sum, dim) => sum + dim.checks.filter((c) => c.enabled).length, 0);
 }

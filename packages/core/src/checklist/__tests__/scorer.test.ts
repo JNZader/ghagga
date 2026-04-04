@@ -7,10 +7,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CHECKLIST } from '../defaults.js';
-import { scoreFindings } from '../scorer.js';
 import type { ScorableFinding } from '../scorer.js';
-import { SEVERITY_MULTIPLIER } from '../types.js';
+import { scoreFindings } from '../scorer.js';
 import type { ChecklistConfig } from '../types.js';
+import { SEVERITY_MULTIPLIER } from '../types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -46,28 +46,39 @@ describe('scoreFindings', () => {
   // ─── Dimension Matching ───────────────────────────────────
 
   it('matches security findings to security dimension', () => {
-    const findings = [makeFinding({ category: 'security', message: 'SQL injection vulnerability' })];
+    const findings = [
+      makeFinding({ category: 'security', message: 'SQL injection vulnerability' }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]!.dimensionId).toBe('security');
   });
 
   it('matches error handling findings', () => {
-    const findings = [makeFinding({ category: 'bug', message: 'empty catch block swallows errors' })];
+    const findings = [
+      makeFinding({ category: 'bug', message: 'empty catch block swallows errors' }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]!.dimensionId).toBe('error-handling');
   });
 
   it('matches boundary condition findings', () => {
-    const findings = [makeFinding({ category: 'bug', message: 'null pointer dereference when input is undefined' })];
+    const findings = [
+      makeFinding({ category: 'bug', message: 'null pointer dereference when input is undefined' }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]!.dimensionId).toBe('boundary-conditions');
   });
 
   it('matches SOLID findings', () => {
-    const findings = [makeFinding({ category: 'design', message: 'god class with too many responsibilities (SRP violation)' })];
+    const findings = [
+      makeFinding({
+        category: 'design',
+        message: 'god class with too many responsibilities (SRP violation)',
+      }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]!.dimensionId).toBe('solid');
@@ -76,13 +87,20 @@ describe('scoreFindings', () => {
   // ─── Check-Level Matching ─────────────────────────────────
 
   it('matches specific check IDs when keywords match', () => {
-    const findings = [makeFinding({ category: 'security', message: 'SQL injection vulnerability detected in query builder' })];
+    const findings = [
+      makeFinding({
+        category: 'security',
+        message: 'SQL injection vulnerability detected in query builder',
+      }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings[0]!.checkId).toBe('injection-prevention');
   });
 
   it('uses check weight when matched to specific check', () => {
-    const findings = [makeFinding({ severity: 'critical', category: 'security', message: 'SQL injection found' })];
+    const findings = [
+      makeFinding({ severity: 'critical', category: 'security', message: 'SQL injection found' }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     // injection-prevention weight = 10, critical multiplier = 5
     expect(result.findings[0]!.checkWeight).toBe(10);
@@ -90,7 +108,12 @@ describe('scoreFindings', () => {
   });
 
   it('falls back to dimension-level match when no check matches', () => {
-    const findings = [makeFinding({ category: 'security', message: 'a general security concern about the codebase' })];
+    const findings = [
+      makeFinding({
+        category: 'security',
+        message: 'a general security concern about the codebase',
+      }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]!.dimensionId).toBe('security');
@@ -114,9 +137,21 @@ describe('scoreFindings', () => {
 
   it('sorts findings by score descending', () => {
     const findings: ScorableFinding[] = [
-      makeFinding({ severity: 'low', category: 'security', message: 'minor credential issue with sensitive data' }),
-      makeFinding({ severity: 'critical', category: 'security', message: 'SQL injection vulnerability' }),
-      makeFinding({ severity: 'medium', category: 'bug', message: 'empty catch block swallows error' }),
+      makeFinding({
+        severity: 'low',
+        category: 'security',
+        message: 'minor credential issue with sensitive data',
+      }),
+      makeFinding({
+        severity: 'critical',
+        category: 'security',
+        message: 'SQL injection vulnerability',
+      }),
+      makeFinding({
+        severity: 'medium',
+        category: 'bug',
+        message: 'empty catch block swallows error',
+      }),
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     for (let i = 1; i < result.findings.length; i++) {
@@ -129,7 +164,11 @@ describe('scoreFindings', () => {
   it('aggregates dimension scores correctly', () => {
     const findings: ScorableFinding[] = [
       makeFinding({ severity: 'high', category: 'security', message: 'SQL injection' }),
-      makeFinding({ severity: 'medium', category: 'security', message: 'XSS injection in template' }),
+      makeFinding({
+        severity: 'medium',
+        category: 'security',
+        message: 'XSS injection in template',
+      }),
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     const secDim = result.dimensionScores.find((d) => d.dimensionId === 'security');
@@ -143,7 +182,9 @@ describe('scoreFindings', () => {
   });
 
   it('only includes dimensions with findings in dimensionScores', () => {
-    const findings = [makeFinding({ severity: 'high', category: 'security', message: 'SQL injection' })];
+    const findings = [
+      makeFinding({ severity: 'high', category: 'security', message: 'SQL injection' }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.dimensionScores).toHaveLength(1);
     expect(result.dimensionScores[0]!.dimensionId).toBe('security');
@@ -166,8 +207,16 @@ describe('scoreFindings', () => {
 
   it('total score equals sum of all finding scores', () => {
     const findings: ScorableFinding[] = [
-      makeFinding({ severity: 'critical', category: 'security', message: 'injection vulnerability' }),
-      makeFinding({ severity: 'high', category: 'bug', message: 'null reference crash when undefined' }),
+      makeFinding({
+        severity: 'critical',
+        category: 'security',
+        message: 'injection vulnerability',
+      }),
+      makeFinding({
+        severity: 'high',
+        category: 'bug',
+        message: 'null reference crash when undefined',
+      }),
       makeFinding({ severity: 'medium', category: 'design', message: 'SRP violation in module' }),
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
@@ -178,7 +227,9 @@ describe('scoreFindings', () => {
   // ─── Unmatched Findings ───────────────────────────────────
 
   it('excludes findings that match no dimension', () => {
-    const findings = [makeFinding({ category: 'style', message: 'trailing whitespace on line 42' })];
+    const findings = [
+      makeFinding({ category: 'style', message: 'trailing whitespace on line 42' }),
+    ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(0);
     expect(result.totalScore).toBe(0);

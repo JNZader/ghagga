@@ -213,10 +213,7 @@ export class MemoryVersioning {
     if (exclusiveResult.length > 0 && exclusiveResult[0]?.values.length > 0) {
       const ids = exclusiveResult[0].values.map((r) => r[0] as number);
       const placeholders = ids.map(() => '?').join(',');
-      this.db.run(
-        `DELETE FROM memory_observations WHERE id IN (${placeholders})`,
-        ids,
-      );
+      this.db.run(`DELETE FROM memory_observations WHERE id IN (${placeholders})`, ids);
     }
 
     // Delete branch (CASCADE removes branch_observations links and snapshots)
@@ -286,9 +283,7 @@ export class MemoryVersioning {
    */
   createSnapshot(name: string, branchName = 'main'): MemorySnapshot {
     // Check if name is taken
-    const existingStmt = this.db.prepare(
-      'SELECT id FROM memory_snapshots WHERE name = ?',
-    );
+    const existingStmt = this.db.prepare('SELECT id FROM memory_snapshots WHERE name = ?');
     existingStmt.bind([name]);
     const exists = existingStmt.step();
     existingStmt.free();

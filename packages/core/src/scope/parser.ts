@@ -11,8 +11,8 @@
 
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import { Language, Parser } from 'web-tree-sitter';
 import type { Tree } from 'web-tree-sitter';
+import { Language, Parser } from 'web-tree-sitter';
 import type { ScopeLanguage } from './types.js';
 
 const require = createRequire(import.meta.url);

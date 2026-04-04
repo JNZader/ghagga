@@ -214,9 +214,7 @@ export function detectRenames(
   for (const removed of removedSymbols) {
     // Skip the first line (declaration/signature contains the name) to compare body only
     const oldBodyStart = Math.min(removed.startLine, removed.endLine);
-    const oldBody = normalizeBody(
-      oldLines.slice(oldBodyStart, removed.endLine).join('\n'),
-    );
+    const oldBody = normalizeBody(oldLines.slice(oldBodyStart, removed.endLine).join('\n'));
 
     if (oldBody.length === 0) continue;
 
@@ -231,9 +229,7 @@ export function detectRenames(
 
       // Skip the first line (declaration/signature contains the name) to compare body only
       const newBodyStart = Math.min(added.startLine, added.endLine);
-      const newBody = normalizeBody(
-        newLines.slice(newBodyStart, added.endLine).join('\n'),
-      );
+      const newBody = normalizeBody(newLines.slice(newBodyStart, added.endLine).join('\n'));
 
       if (newBody.length === 0) continue;
 

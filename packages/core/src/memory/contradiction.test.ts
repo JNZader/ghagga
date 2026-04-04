@@ -102,7 +102,9 @@ describe('computeSimilarity', () => {
 describe('detectContradictions', () => {
   it('returns empty array when no observations overlap', () => {
     const source = [makeObs({ filePaths: ['a.ts'] })];
-    const target = [makeObs({ id: 2, filePaths: ['b.ts'], content: '[HIGH] performance\nFile: b.ts' })];
+    const target = [
+      makeObs({ id: 2, filePaths: ['b.ts'], content: '[HIGH] performance\nFile: b.ts' }),
+    ];
     expect(detectContradictions(source, target)).toEqual([]);
   });
 
@@ -117,8 +119,17 @@ describe('detectContradictions', () => {
   });
 
   it('detects contradiction for same area with different content', () => {
-    const source = [makeObs({ content: '[CRITICAL] security\nFile: src/auth.ts\nIssue: Use prepared statements' })];
-    const target = [makeObs({ id: 2, content: '[CRITICAL] security\nFile: src/auth.ts\nIssue: Raw SQL is fine here' })];
+    const source = [
+      makeObs({
+        content: '[CRITICAL] security\nFile: src/auth.ts\nIssue: Use prepared statements',
+      }),
+    ];
+    const target = [
+      makeObs({
+        id: 2,
+        content: '[CRITICAL] security\nFile: src/auth.ts\nIssue: Raw SQL is fine here',
+      }),
+    ];
     const result = detectContradictions(source, target);
     expect(result).toHaveLength(1);
     expect(result[0]?.reason).toContain('different findings');
@@ -126,8 +137,21 @@ describe('detectContradictions', () => {
 
   it('respects configurable threshold', () => {
     // These share the same file but different categories → similarity = 0.6
-    const source = [makeObs({ filePaths: ['src/auth.ts'], content: '[HIGH] security\nFile: src/auth.ts\nIssue: A', severity: 'high' })];
-    const target = [makeObs({ id: 2, filePaths: ['src/auth.ts'], content: '[LOW] performance\nFile: src/auth.ts\nIssue: B', severity: 'low' })];
+    const source = [
+      makeObs({
+        filePaths: ['src/auth.ts'],
+        content: '[HIGH] security\nFile: src/auth.ts\nIssue: A',
+        severity: 'high',
+      }),
+    ];
+    const target = [
+      makeObs({
+        id: 2,
+        filePaths: ['src/auth.ts'],
+        content: '[LOW] performance\nFile: src/auth.ts\nIssue: B',
+        severity: 'low',
+      }),
+    ];
 
     // High threshold (0.99) — similarity 0.6 is below → no contradictions
     const strict: VersioningConfig = { contradictionThreshold: 0.99 };
@@ -147,11 +171,21 @@ describe('detectContradictions', () => {
   it('finds multiple contradictions across observations', () => {
     const source = [
       makeObs({ id: 1, filePaths: ['a.ts'], severity: 'critical' }),
-      makeObs({ id: 2, filePaths: ['b.ts'], severity: 'high', content: '[HIGH] security\nFile: b.ts\nIssue: problem' }),
+      makeObs({
+        id: 2,
+        filePaths: ['b.ts'],
+        severity: 'high',
+        content: '[HIGH] security\nFile: b.ts\nIssue: problem',
+      }),
     ];
     const target = [
       makeObs({ id: 3, filePaths: ['a.ts'], severity: 'low' }),
-      makeObs({ id: 4, filePaths: ['b.ts'], severity: 'low', content: '[LOW] security\nFile: b.ts\nIssue: no problem' }),
+      makeObs({
+        id: 4,
+        filePaths: ['b.ts'],
+        severity: 'low',
+        content: '[LOW] security\nFile: b.ts\nIssue: no problem',
+      }),
     ];
     const result = detectContradictions(source, target);
     expect(result).toHaveLength(2);

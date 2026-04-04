@@ -8,7 +8,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Language, Tree } from 'web-tree-sitter';
 import { extractSymbolsFromTree } from './extractor.js';
-import { initParser, loadLanguage, parseSource, resetParser, resolveGrammarPath } from './parser.js';
+import {
+  initParser,
+  loadLanguage,
+  parseSource,
+  resetParser,
+  resolveGrammarPath,
+} from './parser.js';
 import type { ScopeLanguage } from './types.js';
 
 // ─── Helpers ───────────────────────────────────────────────────
@@ -43,7 +49,10 @@ afterAll(() => {
 
 describe('TypeScript symbol extraction', () => {
   it('extracts a function declaration', () => {
-    const tree = parse('function foo(x: number): string {\n  return x.toString();\n}', languages.typescript!);
+    const tree = parse(
+      'function foo(x: number): string {\n  return x.toString();\n}',
+      languages.typescript!,
+    );
     const symbols = extractSymbolsFromTree(tree, 'typescript');
     tree.delete();
 

@@ -668,8 +668,18 @@ describe('parseVote (mutant killers)', () => {
       diff: '--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new',
       models: [
         { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'for' },
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'against' },
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'neutral' },
+        {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-20250514',
+          apiKey: 'k',
+          stance: 'against',
+        },
+        {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-20250514',
+          apiKey: 'k',
+          stance: 'neutral',
+        },
       ],
       staticContext: '',
       memoryContext: null,

@@ -15,8 +15,8 @@ export type {
   EntityChangeKind,
   EntityDiffOptions,
   RenameMatch,
-  ScopeLanguage,
   ScopedFile,
+  ScopeLanguage,
   SymbolInfo,
   SymbolKind,
 } from './types.js';

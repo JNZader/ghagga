@@ -156,11 +156,10 @@ describe('saveConfig', () => {
 
     saveConfig({});
 
-    expect(mockWriteFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('config.json'),
-      '{}\n',
-      { encoding: 'utf-8', mode: 0o600 },
-    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(expect.stringContaining('config.json'), '{}\n', {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
   });
 
   it('should save all optional fields when provided', () => {
@@ -208,11 +207,10 @@ describe('clearConfig', () => {
 
     clearConfig();
 
-    expect(mockWriteFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('config.json'),
-      '{}\n',
-      { encoding: 'utf-8', mode: 0o600 },
-    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(expect.stringContaining('config.json'), '{}\n', {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
   });
 });
 

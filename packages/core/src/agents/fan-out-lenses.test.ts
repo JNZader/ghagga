@@ -530,10 +530,7 @@ describe('loadLensesFromDir', () => {
       JSON.stringify({ name: 'good', label: 'Good', system: 'Good prompt.' }),
     );
     // Invalid lens (missing system)
-    writeFileSync(
-      join(tmpDir, 'bad.json'),
-      JSON.stringify({ name: 'bad', label: 'Bad' }),
-    );
+    writeFileSync(join(tmpDir, 'bad.json'), JSON.stringify({ name: 'bad', label: 'Bad' }));
 
     const warnings: string[] = [];
     const result = await loadLensesFromDir(tmpDir, (e) => warnings.push(e.message));
@@ -611,9 +608,7 @@ describe('runFanOutReview with custom lenses', () => {
     });
 
     const fn = makeFakeGenerateFn(PASSED_RESPONSE);
-    const result = await runFanOutReview(
-      makeInput({ generateFns: [fn], lenses: ['compliance'] }),
-    );
+    const result = await runFanOutReview(makeInput({ generateFns: [fn], lenses: ['compliance'] }));
 
     expect(result.status).toBe('PASSED');
     expect(fn).toHaveBeenCalledTimes(1);
@@ -621,9 +616,7 @@ describe('runFanOutReview with custom lenses', () => {
 
   it('uses default lenses when no lenses specified and none registered', async () => {
     const fn = makeFakeGenerateFn(PASSED_RESPONSE);
-    const result = await runFanOutReview(
-      makeInput({ generateFns: [fn] }),
-    );
+    const result = await runFanOutReview(makeInput({ generateFns: [fn] }));
 
     // Default: first 3 lenses
     expect(fn).toHaveBeenCalledTimes(3);

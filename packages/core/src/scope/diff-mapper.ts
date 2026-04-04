@@ -91,11 +91,6 @@ export function mapDiffToSymbols(hunks: DiffHunk[], symbols: SymbolInfo[]): Affe
  * Two ranges [a1, a2] and [b1, b2] overlap when:
  *   a1 <= b2 AND b1 <= a2
  */
-function rangesOverlap(
-  aStart: number,
-  aEnd: number,
-  bStart: number,
-  bEnd: number,
-): boolean {
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
   return aStart <= bEnd && bStart <= aEnd;
 }

@@ -40,7 +40,8 @@ const SOLID_DIMENSION: ChecklistDimension = {
     },
     {
       id: 'dependency-inversion',
-      description: 'Do high-level modules depend on abstractions rather than concrete implementations?',
+      description:
+        'Do high-level modules depend on abstractions rather than concrete implementations?',
       weight: 7,
       enabled: true,
     },

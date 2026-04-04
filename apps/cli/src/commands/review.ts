@@ -515,7 +515,10 @@ function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): Review
 
   // Resolve lens configuration: CLI --lenses flag > .ghagga.json lenses > undefined (defaults)
   const lenses: string[] | undefined = options.lenses
-    ? options.lenses.split(',').map((s) => s.trim()).filter(Boolean)
+    ? options.lenses
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
     : fileConfig.lenses;
 
   // Resolve lens directory: CLI --lens-dir > default .ghagga/lenses/

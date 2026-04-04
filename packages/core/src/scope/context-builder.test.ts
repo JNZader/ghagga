@@ -33,7 +33,10 @@ const makeHunk = (newStart: number, newCount: number): DiffHunk => ({
   newCount,
 });
 
-const makeAffected = (symbol: SymbolInfo, hunks: DiffHunk[] = [makeHunk(symbol.startLine, 1)]): AffectedSymbol => ({
+const makeAffected = (
+  symbol: SymbolInfo,
+  hunks: DiffHunk[] = [makeHunk(symbol.startLine, 1)],
+): AffectedSymbol => ({
   symbol,
   overlappingHunks: hunks,
 });

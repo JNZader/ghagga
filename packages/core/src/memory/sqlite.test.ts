@@ -1077,9 +1077,7 @@ describe('SqliteMemoryStorage', () => {
       // Manually backdate the last_accessed_at to 15 days ago
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
       const db = (storage as any).db;
-      db.run(
-        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-15 days')",
-      );
+      db.run("UPDATE memory_observations SET last_accessed_at = datetime('now', '-15 days')");
 
       const results = await storage.searchObservations('owner/repo', 'authentication');
       expect(results).toHaveLength(0);
@@ -1107,9 +1105,7 @@ describe('SqliteMemoryStorage', () => {
       // Backdate to 5 days ago — should be ~0.5 strength
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
       const db = (storage as any).db;
-      db.run(
-        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-5 days')",
-      );
+      db.run("UPDATE memory_observations SET last_accessed_at = datetime('now', '-5 days')");
 
       const results = await storage.searchObservations('owner/repo', 'zeppelin');
       expect(results).toHaveLength(1);
@@ -1132,9 +1128,7 @@ describe('SqliteMemoryStorage', () => {
       // Backdate last_accessed_at
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
       const db = (storage as any).db;
-      db.run(
-        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-2 days')",
-      );
+      db.run("UPDATE memory_observations SET last_accessed_at = datetime('now', '-2 days')");
 
       // Capture the old value
       const before = db.exec('SELECT last_accessed_at FROM memory_observations LIMIT 1');
@@ -1165,9 +1159,7 @@ describe('SqliteMemoryStorage', () => {
       // Backdate
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
       const db = (storage as any).db;
-      db.run(
-        "UPDATE memory_observations SET last_accessed_at = datetime('now', '-30 days')",
-      );
+      db.run("UPDATE memory_observations SET last_accessed_at = datetime('now', '-30 days')");
 
       // Capture the old value
       const before = db.exec('SELECT last_accessed_at FROM memory_observations LIMIT 1');

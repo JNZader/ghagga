@@ -140,12 +140,7 @@ describe('installTrivy', () => {
     expect(result).toBe(true);
     expect(mockExec).toHaveBeenCalledWith(
       'bash',
-      [
-        '-c',
-        expect.stringContaining(
-          `https://github.com/aquasecurity/trivy/releases/download/`,
-        ),
-      ],
+      ['-c', expect.stringContaining(`https://github.com/aquasecurity/trivy/releases/download/`)],
       expect.any(Object),
     );
   });

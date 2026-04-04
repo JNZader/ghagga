@@ -52,9 +52,7 @@ describe('buildChecklistContext', () => {
           id: 'solid',
           name: 'SOLID',
           enabled: true,
-          checks: [
-            { id: 'srp', description: 'test', weight: 5, enabled: false },
-          ],
+          checks: [{ id: 'srp', description: 'test', weight: 5, enabled: false }],
         },
       ],
     };

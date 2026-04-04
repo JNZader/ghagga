@@ -123,10 +123,7 @@ program
     '--issue <target>',
     'Create/update a GitHub issue with review results (use "new" or issue number)',
   )
-  .option(
-    '--lenses <names>',
-    'Comma-separated lens names for fan-out mode (e.g., "security,wcag")',
-  )
+  .option('--lenses <names>', 'Comma-separated lens names for fan-out mode (e.g., "security,wcag")')
   .option(
     '--lens-dir <path>',
     'Path to custom lens definitions directory (default: .ghagga/lenses/)',

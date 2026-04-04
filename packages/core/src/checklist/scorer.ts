@@ -6,8 +6,8 @@
  */
 
 import type { FindingSeverity } from '../types.js';
-import { SEVERITY_MULTIPLIER } from './types.js';
 import type { ChecklistCheck, ChecklistConfig, ChecklistDimension } from './types.js';
+import { SEVERITY_MULTIPLIER } from './types.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -59,10 +59,79 @@ export interface DimensionScore {
  * Checked in order: first match wins.
  */
 const DIMENSION_KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
-  ['solid', ['solid', 'single responsibility', 'srp', 'open closed', 'ocp', 'liskov', 'lsp', 'interface segregation', 'isp', 'dependency inversion', 'dip', 'coupling', 'cohesion', 'god class', 'fat interface']],
-  ['error-handling', ['error', 'exception', 'catch', 'throw', 'try', 'finally', 'unhandled', 'silent failure', 'swallow', 'propagat']],
-  ['boundary-conditions', ['boundary', 'null', 'undefined', 'empty', 'overflow', 'underflow', 'division by zero', 'nan', 'unicode', 'encoding', 'race condition', 'concurrent', 'off-by-one']],
-  ['security', ['security', 'injection', 'xss', 'csrf', 'auth', 'token', 'password', 'secret', 'credential', 'sensitive', 'sanitiz', 'validat', 'vulnerab', 'cve', 'exploit']],
+  [
+    'solid',
+    [
+      'solid',
+      'single responsibility',
+      'srp',
+      'open closed',
+      'ocp',
+      'liskov',
+      'lsp',
+      'interface segregation',
+      'isp',
+      'dependency inversion',
+      'dip',
+      'coupling',
+      'cohesion',
+      'god class',
+      'fat interface',
+    ],
+  ],
+  [
+    'error-handling',
+    [
+      'error',
+      'exception',
+      'catch',
+      'throw',
+      'try',
+      'finally',
+      'unhandled',
+      'silent failure',
+      'swallow',
+      'propagat',
+    ],
+  ],
+  [
+    'boundary-conditions',
+    [
+      'boundary',
+      'null',
+      'undefined',
+      'empty',
+      'overflow',
+      'underflow',
+      'division by zero',
+      'nan',
+      'unicode',
+      'encoding',
+      'race condition',
+      'concurrent',
+      'off-by-one',
+    ],
+  ],
+  [
+    'security',
+    [
+      'security',
+      'injection',
+      'xss',
+      'csrf',
+      'auth',
+      'token',
+      'password',
+      'secret',
+      'credential',
+      'sensitive',
+      'sanitiz',
+      'validat',
+      'vulnerab',
+      'cve',
+      'exploit',
+    ],
+  ],
 ]);
 
 /**
@@ -70,11 +139,23 @@ const DIMENSION_KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
  */
 const CHECK_KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   // SOLID
-  ['single-responsibility', ['single responsibility', 'srp', 'one reason to change', 'god class', 'too many responsibilities']],
+  [
+    'single-responsibility',
+    [
+      'single responsibility',
+      'srp',
+      'one reason to change',
+      'god class',
+      'too many responsibilities',
+    ],
+  ],
   ['open-closed', ['open closed', 'ocp', 'open for extension', 'closed for modification']],
   ['liskov-substitution', ['liskov', 'lsp', 'substitut', 'subtype', 'base type']],
   ['interface-segregation', ['interface segregation', 'isp', 'fat interface', 'too many methods']],
-  ['dependency-inversion', ['dependency inversion', 'dip', 'depend on abstraction', 'concrete dependency', 'coupling']],
+  [
+    'dependency-inversion',
+    ['dependency inversion', 'dip', 'depend on abstraction', 'concrete dependency', 'coupling'],
+  ],
   // Error handling
   ['error-propagation', ['error propagat', 'error context', 'wrap error', 'error chain']],
   ['error-recovery', ['error recovery', 'graceful', 'fallback', 'retry', 'degrad']],
@@ -83,14 +164,26 @@ const CHECK_KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ['async-error-handling', ['async error', 'promise', 'unhandled rejection', 'await', '.catch']],
   // Boundary conditions
   ['null-undefined', ['null', 'undefined', 'nil', 'optional', 'nullable', 'nullish']],
-  ['empty-collections', ['empty array', 'empty list', 'empty map', 'empty string', 'length 0', 'size 0']],
-  ['numeric-limits', ['overflow', 'underflow', 'division by zero', 'nan', 'infinity', 'max safe integer']],
+  [
+    'empty-collections',
+    ['empty array', 'empty list', 'empty map', 'empty string', 'length 0', 'size 0'],
+  ],
+  [
+    'numeric-limits',
+    ['overflow', 'underflow', 'division by zero', 'nan', 'infinity', 'max safe integer'],
+  ],
   ['string-encoding', ['unicode', 'utf', 'encoding', 'multi-byte', 'special character']],
-  ['concurrency-bounds', ['race condition', 'concurrent', 'mutex', 'lock', 'deadlock', 'thread safe']],
+  [
+    'concurrency-bounds',
+    ['race condition', 'concurrent', 'mutex', 'lock', 'deadlock', 'thread safe'],
+  ],
   // Security
   ['input-validation', ['input validat', 'sanitiz', 'untrusted input', 'user input']],
   ['auth-checks', ['auth', 'authentication', 'authorization', 'permission', 'access control']],
-  ['sensitive-data', ['sensitive data', 'password', 'token', 'secret', 'pii', 'credential', 'api key']],
+  [
+    'sensitive-data',
+    ['sensitive data', 'password', 'token', 'secret', 'pii', 'credential', 'api key'],
+  ],
   ['injection-prevention', ['injection', 'xss', 'sql inject', 'command inject', 'path traversal']],
   ['dependency-safety', ['dependency', 'vulnerab', 'cve', 'outdated', 'known vulnerab']],
 ]);
@@ -217,9 +310,10 @@ function matchFinding(
     if (keywords && keywords.some((kw) => text.includes(kw))) {
       // Use average weight of active checks in this dimension
       const activeChecks = dim.checks.filter((c) => c.enabled);
-      const avgWeight = activeChecks.length > 0
-        ? Math.round(activeChecks.reduce((s, c) => s + c.weight, 0) / activeChecks.length)
-        : DEFAULT_DIMENSION_WEIGHT;
+      const avgWeight =
+        activeChecks.length > 0
+          ? Math.round(activeChecks.reduce((s, c) => s + c.weight, 0) / activeChecks.length)
+          : DEFAULT_DIMENSION_WEIGHT;
       return { dimensionId: dim.id, checkId: null, weight: avgWeight };
     }
   }

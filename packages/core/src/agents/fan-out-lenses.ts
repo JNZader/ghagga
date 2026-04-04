@@ -275,7 +275,9 @@ const LENS_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
  * @param data - Unknown data to validate (typically parsed JSON)
  * @returns The validated ReviewLens if valid, or null with reason string
  */
-export function validateLens(data: unknown): { lens: ReviewLens; error: null } | { lens: null; error: string } {
+export function validateLens(
+  data: unknown,
+): { lens: ReviewLens; error: null } | { lens: null; error: string } {
   if (data == null || typeof data !== 'object') {
     return { lens: null, error: 'Lens definition must be a JSON object' };
   }
@@ -287,7 +289,10 @@ export function validateLens(data: unknown): { lens: ReviewLens; error: null } |
     return { lens: null, error: 'Missing or invalid "name" field (must be a non-empty string)' };
   }
   if (!LENS_NAME_PATTERN.test(obj.name)) {
-    return { lens: null, error: `Invalid "name" "${obj.name}" — must match ${LENS_NAME_PATTERN.source}` };
+    return {
+      lens: null,
+      error: `Invalid "name" "${obj.name}" — must match ${LENS_NAME_PATTERN.source}`,
+    };
   }
 
   // Validate label
@@ -300,7 +305,10 @@ export function validateLens(data: unknown): { lens: ReviewLens; error: null } |
     return { lens: null, error: 'Missing or invalid "system" field (must be a non-empty string)' };
   }
   if (obj.system.length > MAX_SYSTEM_LENGTH) {
-    return { lens: null, error: `"system" prompt exceeds ${MAX_SYSTEM_LENGTH} characters (got ${obj.system.length})` };
+    return {
+      lens: null,
+      error: `"system" prompt exceeds ${MAX_SYSTEM_LENGTH} characters (got ${obj.system.length})`,
+    };
   }
 
   return {

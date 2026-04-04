@@ -21,87 +21,65 @@ describe('extractChangedSymbols', () => {
   });
 
   it('extracts async function declarations', () => {
-    const diff = [
-      '+async function fetchData(url: string) {',
-    ].join('\n');
+    const diff = ['+async function fetchData(url: string) {'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('fetchData');
   });
 
   it('extracts class declarations', () => {
-    const diff = [
-      '+export class AuthService {',
-      '+  constructor() {}',
-      '+}',
-    ].join('\n');
+    const diff = ['+export class AuthService {', '+  constructor() {}', '+}'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('AuthService');
   });
 
   it('extracts interface declarations', () => {
-    const diff = [
-      '+export interface ReviewInput {',
-      '+  diff: string;',
-      '+}',
-    ].join('\n');
+    const diff = ['+export interface ReviewInput {', '+  diff: string;', '+}'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('ReviewInput');
   });
 
   it('extracts type alias declarations', () => {
-    const diff = [
-      '+export type ReviewMode = "simple" | "workflow";',
-    ].join('\n');
+    const diff = ['+export type ReviewMode = "simple" | "workflow";'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('ReviewMode');
   });
 
   it('extracts arrow function variables', () => {
-    const diff = [
-      '+export const validateInput = (input: ReviewInput) => {',
-    ].join('\n');
+    const diff = ['+export const validateInput = (input: ReviewInput) => {'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('validateInput');
   });
 
   it('extracts Python function definitions', () => {
-    const diff = [
-      '+def process_review(data):',
-      '+    return data',
-    ].join('\n');
+    const diff = ['+def process_review(data):', '+    return data'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('process_review');
   });
 
   it('extracts Go function declarations', () => {
-    const diff = [
-      '+func HandleRequest(w http.ResponseWriter, r *http.Request) {',
-    ].join('\n');
+    const diff = ['+func HandleRequest(w http.ResponseWriter, r *http.Request) {'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('HandleRequest');
   });
 
   it('extracts Go method declarations', () => {
-    const diff = [
-      '+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {',
-    ].join('\n');
+    const diff = ['+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {'].join(
+      '\n',
+    );
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toContain('ServeHTTP');
   });
 
   it('filters symbols shorter than 3 characters', () => {
-    const diff = [
-      '+func go() {',
-      '+def fn():',
-    ].join('\n');
+    const diff = ['+func go() {', '+def fn():'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).not.toContain('go');
@@ -109,20 +87,14 @@ describe('extractChangedSymbols', () => {
   });
 
   it('deduplicates symbols', () => {
-    const diff = [
-      '+function validate() {',
-      '+function validate() {',
-    ].join('\n');
+    const diff = ['+function validate() {', '+function validate() {'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols.filter((s) => s === 'validate')).toHaveLength(1);
   });
 
   it('ignores removed lines (starting with -)', () => {
-    const diff = [
-      '-function oldFunction() {',
-      '+function newFunction() {',
-    ].join('\n');
+    const diff = ['-function oldFunction() {', '+function newFunction() {'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).not.toContain('oldFunction');
@@ -130,9 +102,7 @@ describe('extractChangedSymbols', () => {
   });
 
   it('ignores +++ header lines', () => {
-    const diff = [
-      '+++ b/src/function.ts',
-    ].join('\n');
+    const diff = ['+++ b/src/function.ts'].join('\n');
 
     const symbols = extractChangedSymbols(diff);
     expect(symbols).toHaveLength(0);
@@ -143,10 +113,7 @@ describe('extractChangedSymbols', () => {
   });
 
   it('returns empty array for diff with no symbol declarations', () => {
-    const diff = [
-      '+  console.log("hello");',
-      '+  const x = 42;',
-    ].join('\n');
+    const diff = ['+  console.log("hello");', '+  const x = 42;'].join('\n');
 
     // x is only 1 char, filtered out
     const symbols = extractChangedSymbols(diff);
@@ -204,9 +171,7 @@ describe('scanDocsForSymbols', () => {
 
   it('detects backtick references with parentheses', () => {
     const symbols = ['reviewPipeline'];
-    const allFiles: DiffFile[] = [
-      makeDocFile('docs/api.md', 'Call `reviewPipeline()` to start.'),
-    ];
+    const allFiles: DiffFile[] = [makeDocFile('docs/api.md', 'Call `reviewPipeline()` to start.')];
 
     const result = scanDocsForSymbols(symbols, allFiles, []);
     expect(result.staleReferences).toHaveLength(1);
@@ -236,9 +201,7 @@ describe('scanDocsForSymbols', () => {
 
   it('skips non-doc files', () => {
     const symbols = ['reviewPipeline'];
-    const allFiles: DiffFile[] = [
-      makeDocFile('src/pipeline.ts', 'function reviewPipeline() {}'),
-    ];
+    const allFiles: DiffFile[] = [makeDocFile('src/pipeline.ts', 'function reviewPipeline() {}')];
 
     const result = scanDocsForSymbols(symbols, allFiles, []);
     expect(result.docsScanned).toBe(0);
@@ -269,9 +232,7 @@ describe('scanDocsForSymbols', () => {
   it('scans external doc contents not in diff', () => {
     const symbols = ['handleAuth'];
     const allFiles: DiffFile[] = []; // no docs in the diff
-    const docContents = new Map([
-      ['docs/auth.md', 'Use `handleAuth` for authentication.'],
-    ]);
+    const docContents = new Map([['docs/auth.md', 'Use `handleAuth` for authentication.']]);
 
     const result = scanDocsForSymbols(symbols, allFiles, [], docContents);
     expect(result.staleReferences).toHaveLength(1);
