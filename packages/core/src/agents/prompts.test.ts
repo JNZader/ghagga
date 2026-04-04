@@ -4,6 +4,7 @@ import {
   buildReviewLevelInstruction,
   buildStackHints,
   buildStaticAnalysisContext,
+  COMPACT_CALIBRATION,
   CONSENSUS_FOR_SYSTEM,
   REVIEW_CALIBRATION,
   SIMPLE_REVIEW_SYSTEM,
@@ -225,6 +226,18 @@ describe('REVIEW_CALIBRATION', () => {
 
   it('permits STATUS: PASSED with zero findings', () => {
     expect(REVIEW_CALIBRATION).toContain('STATUS: PASSED with zero findings');
+  });
+});
+
+// ─── COMPACT_CALIBRATION ─────────────────────────────────────────
+
+describe('COMPACT_CALIBRATION', () => {
+  it('contains 80%+ confidence threshold', () => {
+    expect(COMPACT_CALIBRATION).toContain('80%');
+  });
+
+  it('is shorter than REVIEW_CALIBRATION', () => {
+    expect(COMPACT_CALIBRATION.length).toBeLessThan(REVIEW_CALIBRATION.length);
   });
 });
 

@@ -203,6 +203,10 @@ export interface ReviewSettings {
   codeIntelTimeout?: number;
   /** Max tokens for code intelligence context. Default: 1500. */
   codeIntelMaxTokens?: number;
+  /** Max concurrent LLM calls in workflow/consensus modes. Default: 2. */
+  reviewConcurrency?: number;
+  /** Delay in ms between sequential LLM call batches. Default: 0. */
+  reviewDelayMs?: number;
 }
 
 export interface ReviewContext {

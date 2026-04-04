@@ -146,6 +146,43 @@ describe('generateWithFallback', () => {
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back to second provider on 413 status code', async () => {
+    mockGenerateText.mockRejectedValueOnce(new Error('status: 413 Request Entity Too Large'));
+    mockGenerateText.mockResolvedValueOnce(successResult('413 fallback result'));
+
+    const options = makeOptions();
+    const result = await generateWithFallback(options);
+
+    expect(result.text).toBe('413 fallback result');
+    expect(result.provider).toBe('openai');
+    expect(result.model).toBe('gpt-4o');
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back on "request too large" error message', async () => {
+    mockGenerateText.mockRejectedValueOnce(new Error('Request too large for model context'));
+    mockGenerateText.mockResolvedValueOnce(successResult('request too large fallback'));
+
+    const options = makeOptions();
+    const result = await generateWithFallback(options);
+
+    expect(result.text).toBe('request too large fallback');
+    expect(result.provider).toBe('openai');
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back on "413" in error message', async () => {
+    mockGenerateText.mockRejectedValueOnce(new Error('Groq error: 413 payload exceeded'));
+    mockGenerateText.mockResolvedValueOnce(successResult('groq 413 fallback'));
+
+    const options = makeOptions();
+    const result = await generateWithFallback(options);
+
+    expect(result.text).toBe('groq 413 fallback');
+    expect(result.provider).toBe('openai');
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+  });
+
   it('throws the last error when all providers fail with retryable errors', async () => {
     mockGenerateText.mockRejectedValueOnce(new Error('status: 500 Internal Server Error'));
     mockGenerateText.mockRejectedValueOnce(new Error('status: 503 Service Unavailable'));

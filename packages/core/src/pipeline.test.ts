@@ -332,9 +332,7 @@ index 1234567..abcdefg 100644
       // Pipeline should still complete via the agent, but marked as PARTIAL
       expect(result.status).toBe('PARTIAL');
       expect(result.failedSteps).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ step: 'static-analysis' }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ step: 'static-analysis' })]),
       );
       expect(runSimpleReview).toHaveBeenCalledOnce();
     });
@@ -354,16 +352,14 @@ index 1234567..abcdefg 100644
         memoryStorage: {} as any, // Fake memoryStorage to enable memory
       });
 
-      (searchMemoryForContext as MockedFunction<typeof searchMemoryForContext>).mockRejectedValueOnce(
-        new Error('database connection failed'),
-      );
+      (
+        searchMemoryForContext as MockedFunction<typeof searchMemoryForContext>
+      ).mockRejectedValueOnce(new Error('database connection failed'));
 
       const result = await reviewPipeline(inputWithMemory);
       expect(result.status).toBe('PARTIAL');
       expect(result.failedSteps).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ step: 'memory-search' }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ step: 'memory-search' })]),
       );
       expect(runSimpleReview).toHaveBeenCalledOnce();
     });
@@ -532,6 +528,61 @@ index 1234567..abcdefg 100644
       expect(runConsensusReview).toHaveBeenCalledWith(
         expect.objectContaining({ reviewLevel: 'normal' }),
       );
+    });
+
+    it('passes providerChain to workflow agent', async () => {
+      await reviewPipeline(
+        makeInput({
+          mode: 'workflow',
+          providerChain: [{ provider: 'groq', model: 'test', apiKey: 'key' }],
+        }),
+      );
+
+      expect(runWorkflowReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerChain: [{ provider: 'groq', model: 'test', apiKey: 'key' }],
+        }),
+      );
+    });
+
+    it('passes reviewConcurrency from settings to workflow agent', async () => {
+      await reviewPipeline(
+        makeInput({
+          mode: 'workflow',
+          settings: {
+            enableSemgrep: false,
+            enableTrivy: false,
+            enableCpd: false,
+            enableMemory: false,
+            customRules: [],
+            ignorePatterns: [],
+            reviewLevel: 'normal',
+            reviewConcurrency: 3,
+          },
+        }),
+      );
+
+      expect(runWorkflowReview).toHaveBeenCalledWith(expect.objectContaining({ concurrency: 3 }));
+    });
+
+    it('passes reviewDelayMs from settings to consensus agent', async () => {
+      await reviewPipeline(
+        makeInput({
+          mode: 'consensus',
+          settings: {
+            enableSemgrep: false,
+            enableTrivy: false,
+            enableCpd: false,
+            enableMemory: false,
+            customRules: [],
+            ignorePatterns: [],
+            reviewLevel: 'normal',
+            reviewDelayMs: 500,
+          },
+        }),
+      );
+
+      expect(runConsensusReview).toHaveBeenCalledWith(expect.objectContaining({ delayMs: 500 }));
     });
   });
 

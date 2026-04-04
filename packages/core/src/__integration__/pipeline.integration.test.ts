@@ -310,8 +310,8 @@ describe('integration: core review pipeline', () => {
 
     const result = await reviewPipeline(makeInput());
 
-    // Pipeline should still complete via AI agent
-    expect(result.status).toBe('PASSED');
+    // Pipeline completes but marks as PARTIAL due to failed static analysis step
+    expect(result.status).toBe('PARTIAL');
     expect(runSimpleReview).toHaveBeenCalledOnce();
 
     // Static analysis should be in error state
