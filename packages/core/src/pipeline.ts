@@ -464,6 +464,10 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         sqliteStorage?.upsertTrustScore(trustScore);
       }
 
+      if (!trustScore) {
+        throw new Error('Trust score unavailable');
+      }
+
       const recommendedMode = getReviewModeForTier(trustScore.tier, input.mode);
       if (recommendedMode !== input.mode) {
         trustOverrideMode = recommendedMode as ReviewMode;
