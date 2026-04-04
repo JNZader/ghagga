@@ -29,6 +29,7 @@ import { Command } from 'commander';
 import type { LLMProvider, ReviewMode } from 'ghagga-core';
 import { DEFAULT_MODELS } from 'ghagga-core';
 import { auditCommand } from './commands/audit.js';
+import { dismissCommand } from './commands/dismiss.js';
 import { healthCommand } from './commands/health.js';
 import { hooksCommand } from './commands/hooks/index.js';
 import { loginCommand } from './commands/login.js';
@@ -294,6 +295,10 @@ program
 // ─── Memory ─────────────────────────────────────────────────────
 
 program.addCommand(memoryCommand);
+
+// ─── Dismiss ─────────────────────────────────────────────────────
+
+program.addCommand(dismissCommand);
 
 // ─── Hooks ──────────────────────────────────────────────────────
 

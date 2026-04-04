@@ -1,5 +1,6 @@
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -239,6 +240,12 @@ export const memoryObservations = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     lastAccessedAt: timestamp('last_accessed_at').defaultNow().notNull(),
+    /**
+     * Embedding stored as REAL[] (PostgreSQL float4 array).
+     * NULL when no embedding provider was available at insertion time.
+     * Used for hybrid BM25 + semantic search (feature #4).
+     */
+    embedding: doublePrecision('embedding').array(),
   },
   (t) => [
     index('idx_observations_project').on(t.project),

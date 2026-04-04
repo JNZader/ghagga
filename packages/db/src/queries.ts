@@ -475,6 +475,8 @@ export async function saveObservation(
     topicKey?: string;
     filePaths?: string[];
     severity?: string;
+    /** Pre-computed embedding vector. NULL when no embedding provider was available. */
+    embedding?: number[] | null;
   },
 ) {
   const contentHash = computeContentHash(data.content, data.type, data.title);
@@ -529,6 +531,8 @@ export async function saveObservation(
           contentHash,
           filePaths: data.filePaths ?? [],
           severity: data.severity ?? null,
+          // Only update embedding when a new one is provided (preserve existing otherwise)
+          ...(data.embedding !== undefined ? { embedding: data.embedding } : {}),
           revisionCount: sql`${memoryObservations.revisionCount} + 1`,
           updatedAt: new Date(),
           lastAccessedAt: new Date(),
@@ -547,6 +551,7 @@ export async function saveObservation(
       ...data,
       contentHash,
       filePaths: data.filePaths ?? [],
+      embedding: data.embedding ?? null,
     })
     .returning();
   // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert/update
@@ -556,14 +561,27 @@ export async function saveObservation(
 /**
  * Full-text search observations using PostgreSQL tsvector.
  * The search_observations SQL column is maintained by a trigger.
+ *
+ * When `embedFn` is provided, performs hybrid search:
+ *   final_score = 0.7 * cosine_similarity + 0.3 * ts_rank
+ * Otherwise falls back to keyword-only tsvector search (original behavior).
  */
 export async function searchObservations(
   db: Database,
   project: string,
   query: string,
-  options: { limit?: number; type?: string } = {},
+  options: {
+    limit?: number;
+    type?: string;
+    /**
+     * Optional embedding function for hybrid search.
+     * When provided, semantic re-ranking is applied on top of keyword results.
+     * When undefined, falls back to keyword-only tsvector search.
+     */
+    embedFn?: (text: string) => Promise<number[]>;
+  } = {},
 ) {
-  const { limit = 10, type } = options;
+  const { limit = 10, type, embedFn } = options;
 
   // Sanitize query: wrap each word in quotes for tsquery
   const sanitizedQuery = query
@@ -584,23 +602,74 @@ export async function searchObservations(
     conditions.push(eq(memoryObservations.type, type));
   }
 
+  // Fetch a larger candidate set when doing hybrid re-ranking
+  const fetchLimit = embedFn ? limit * 5 : limit;
+
   const results = await db
     .select()
     .from(memoryObservations)
     .where(and(...conditions))
     .orderBy(sql`ts_rank(search_observations, to_tsquery('english', ${sanitizedQuery})) DESC`)
-    .limit(limit);
+    .limit(fetchLimit);
+
+  if (results.length === 0) return [];
+
+  // ── Hybrid re-ranking ──────────────────────────────────────────
+  let finalResults = results;
+
+  if (embedFn) {
+    try {
+      const queryVec = await embedFn(query);
+
+      // Results are already sorted by ts_rank DESC.
+      // Use positional rank as a proxy: index 0 = best keyword match.
+      // Normalize to [0, 1]: position 0 → 1.0, last position → 0.0.
+      const n = results.length;
+
+      const scored = results.map((r, i) => {
+        const normalizedRank = n === 1 ? 1 : 1 - i / (n - 1);
+
+        // Cosine similarity from stored embedding array (0 if NULL)
+        let cosineSim = 0;
+        if (r.embedding && r.embedding.length === queryVec.length) {
+          let dot = 0;
+          let normA = 0;
+          let normB = 0;
+          for (let j = 0; j < queryVec.length; j++) {
+            const a = queryVec[j] ?? 0;
+            const b = r.embedding[j] ?? 0;
+            dot += a * b;
+            normA += a * a;
+            normB += b * b;
+          }
+          const denom = Math.sqrt(normA) * Math.sqrt(normB);
+          cosineSim = denom === 0 ? 0 : dot / denom;
+        }
+
+        // 70/30 weighted combination
+        const finalScore = 0.7 * cosineSim + 0.3 * normalizedRank;
+        return { row: r, finalScore };
+      });
+
+      // Sort by final score descending and take top-k
+      scored.sort((a, b) => b.finalScore - a.finalScore);
+      finalResults = scored.slice(0, limit).map((s) => s.row);
+    } catch {
+      // Embedding failure is non-fatal — fall back to keyword-only ordering
+      finalResults = results.slice(0, limit);
+    }
+  }
 
   // Update last_accessed_at for returned observations (decay tracking)
-  if (results.length > 0) {
-    const ids = results.map((r) => r.id);
+  if (finalResults.length > 0) {
+    const ids = finalResults.map((r) => r.id);
     await db
       .update(memoryObservations)
       .set({ lastAccessedAt: new Date() })
       .where(inArray(memoryObservations.id, ids));
   }
 
-  return results;
+  return finalResults;
 }
 
 export async function getObservationsBySession(db: Database, sessionId: number) {

@@ -36,6 +36,8 @@ import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
+import { SqliteMemoryStorage } from './memory/sqlite.js';
+import { formatNegativeExamplesPrompt } from './negative.js';
 import { resolveCredentialEnvVar } from './providers/cli-bridge.js';
 import {
   createAISDKGenerateFn,
@@ -43,6 +45,7 @@ import {
   createGatewayGenerateFn,
   type GenerateTextFn,
 } from './providers/generate-fn.js';
+import { rankFindings } from './ranking/index.js';
 import { recursiveReview } from './recursive/index.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
@@ -51,6 +54,7 @@ import {
   isToolRegistryEnabled,
   runStaticAnalysis,
 } from './tools/runner.js';
+import { computeAuthorTrustScore, getReviewModeForTier } from './trust/index.js';
 import type {
   LLMProvider,
   ProviderChainEntry,
@@ -294,12 +298,52 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     queryCodeIntelSafe(input, fileList, emit, failedSteps),
   ]);
 
+  // ── Step 5.0: Negative examples (optional) ────────────────────
+  // Load dismissed findings for the files in this diff and prepend them
+  // to the memory context so agents suppress known false positives.
+  let negativeExamplesPrompt = '';
+  if (
+    input.features?.negativeExamples !== false &&
+    input.memoryStorage instanceof SqliteMemoryStorage
+  ) {
+    try {
+      const allNegativeExamples = fileList.flatMap((filePath) =>
+        (input.memoryStorage as SqliteMemoryStorage).getNegativeExamplesForFile(filePath),
+      );
+      // De-duplicate by findingHash
+      const seen = new Set<string>();
+      const uniqueExamples = allNegativeExamples.filter((e) => {
+        if (seen.has(e.findingHash)) return false;
+        seen.add(e.findingHash);
+        return true;
+      });
+      negativeExamplesPrompt = formatNegativeExamplesPrompt(uniqueExamples);
+      if (negativeExamplesPrompt) {
+        emit({
+          step: 'negative-examples',
+          message: `Loaded ${uniqueExamples.length} dismissed finding(s) — injecting suppression context`,
+        });
+      }
+    } catch (error) {
+      // Non-fatal — degraded gracefully
+      console.warn(
+        '[ghagga] Negative examples load failed (degrading gracefully):',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   // Build full (L2) context first, then choose fidelity level based on budget
   const fullStaticContext = formatStaticAnalysisContext(staticResult);
 
+  // Prepend negative examples to memory context so agents see suppression hints
+  const rawMemoryContextWithNegatives = negativeExamplesPrompt
+    ? [negativeExamplesPrompt, rawMemoryContext].filter(Boolean).join('\n')
+    : rawMemoryContext;
+
   const progressiveContext = buildProgressiveContext({
     staticResult,
-    memoryContext: rawMemoryContext,
+    memoryContext: rawMemoryContextWithNegatives,
     stackHints,
     contextBudget,
     fullStaticContext,
@@ -399,6 +443,51 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     }
   }
 
+  // ── Step 5.6: Author trust scoring (optional) ──────────────
+  // When features.authorTrust is enabled and input.author is set, compute a
+  // trust score from git history and potentially override the review mode.
+  let trustOverrideMode: ReviewMode | undefined;
+
+  if (input.features?.authorTrust && input.author) {
+    try {
+      const author = input.author;
+      const sqliteStorage =
+        input.memoryStorage instanceof SqliteMemoryStorage ? input.memoryStorage : null;
+
+      // Check for a cached (fresh) score — recompute if older than 1 day
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      let trustScore = sqliteStorage?.getTrustScore(author) ?? null;
+      const isStale = !trustScore || Date.now() - trustScore.lastUpdated.getTime() > ONE_DAY_MS;
+
+      if (isStale) {
+        trustScore = await computeAuthorTrustScore(author, { cwd: process.cwd() });
+        sqliteStorage?.upsertTrustScore(trustScore);
+      }
+
+      const recommendedMode = getReviewModeForTier(trustScore.tier, input.mode);
+      if (recommendedMode !== input.mode) {
+        trustOverrideMode = recommendedMode as ReviewMode;
+      }
+
+      emit({
+        step: 'author-trust',
+        message: `[trust] author=${author} score=${trustScore.score} tier=${trustScore.tier} → mode=${recommendedMode}`,
+      });
+    } catch (error) {
+      console.warn(
+        '[ghagga] Author trust scoring failed (non-fatal):',
+        error instanceof Error ? error.message : String(error),
+      );
+      failedSteps.push({
+        step: 'author-trust',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Effective input mode — may be overridden by trust scoring
+  const resolvedInputMode: ReviewMode = trustOverrideMode ?? input.mode;
+
   // ── Step 6: Execute agent mode (or skip if AI disabled) ────
   let result: ReviewResult;
 
@@ -415,16 +504,16 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   if (!aiEnabled) {
     // Static-only mode: no LLM calls
     emit({ step: 'agent-start', message: 'AI review disabled — returning static analysis only' });
-    result = createStaticOnlyResult(staticResult, input.mode, startTime);
+    result = createStaticOnlyResult(staticResult, resolvedInputMode, startTime);
   } else {
     // ── Unified dispatch: all backends, all modes ──────────────
     // Step 1: Build GenerateTextFn(s) for the detected backend
     const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway);
 
     // Step 2: Resolve effective mode (diagnostic → simple for non-SDK backends)
-    const effectiveMode = resolveEffectiveMode(input.mode, isCliBridge, isGateway);
+    const effectiveMode = resolveEffectiveMode(resolvedInputMode, isCliBridge, isGateway);
 
-    if (effectiveMode !== input.mode) {
+    if (effectiveMode !== resolvedInputMode) {
       emit({
         step: 'mode-fallback',
         message: `Diagnostic mode not supported with ${isCliBridge ? 'CLI bridge' : 'gateway'} — falling back to simple mode`,
@@ -551,7 +640,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         error: error instanceof Error ? error.message : String(error),
       });
       emit({ step: 'agent-failed', message: 'AI review failed — returning static analysis only' });
-      result = createStaticOnlyResult(staticResult, input.mode, startTime);
+      result = createStaticOnlyResult(staticResult, resolvedInputMode, startTime);
       result.status = 'NEEDS_HUMAN_REVIEW';
       result.summary = `AI review failed (${error instanceof Error ? error.message : 'unknown error'}). Static analysis results are shown below.`;
     }
@@ -790,6 +879,30 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         error: error instanceof Error ? error.message : String(error),
       });
       emit({ step: 'doc-validation', message: 'Doc validation failed — continuing without' });
+    }
+  }
+
+  // ── Step 7.8: Semantic ranking of findings (optional) ─────────
+  const semanticRankingEnabled =
+    input.features?.semanticRanking !== false && !!input.embeddingProvider;
+  if (semanticRankingEnabled && result.findings.length > 1) {
+    emit({ step: 'semantic-ranking', message: 'Reranking findings by semantic relevance...' });
+    try {
+      result.findings = await rankFindings(result.findings, input.embeddingProvider);
+      emit({
+        step: 'semantic-ranking',
+        message: `Semantic ranking complete (${result.findings.length} findings reranked)`,
+      });
+    } catch (error) {
+      console.warn(
+        '[ghagga] Semantic ranking failed (non-fatal):',
+        error instanceof Error ? error.message : String(error),
+      );
+      failedSteps.push({
+        step: 'semantic-ranking',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      emit({ step: 'semantic-ranking', message: 'Semantic ranking failed — continuing without' });
     }
   }
 

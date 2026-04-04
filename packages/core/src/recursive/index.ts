@@ -14,6 +14,11 @@
 
 import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type { ReviewFinding } from '../types.js';
+import {
+  checkCircuitBreaker,
+  createCircuitBreakerState,
+  updateCircuitBreakerState,
+} from './circuit-breaker.js';
 import { applyVirtualPatches, buildPatchContext, extractPatches } from './patch-extractor.js';
 import { runReReview } from './re-reviewer.js';
 import type {
@@ -41,6 +46,9 @@ export interface RecursiveReviewInput {
 
   /** Optional progress callback */
   onProgress?: (message: string) => void;
+
+  /** Feature flags forwarded from ReviewInput.features */
+  features?: { circuitBreaker?: boolean };
 }
 
 /**
@@ -77,6 +85,9 @@ export async function recursiveReview(
   let totalNewIssues = 0;
   const allRegressions: RegressionFinding[] = [];
 
+  const circuitBreakerEnabled = input.features?.circuitBreaker !== false;
+  let cbState = createCircuitBreakerState(config.circuitBreakerThreshold ?? 2);
+
   for (let iteration = 1; iteration <= config.maxIterations; iteration++) {
     emit(`Recursive review: iteration ${iteration}/${config.maxIterations}`);
 
@@ -94,7 +105,22 @@ export async function recursiveReview(
     const newFindings = reReviewResult.findings;
     totalNewIssues += newFindings.length;
 
-    // Step 4: Check convergence
+    // Step 4a: Circuit breaker — detect semantic loops before convergence check
+    if (circuitBreakerEnabled) {
+      const cbResult = checkCircuitBreaker(newFindings, cbState);
+      if (cbResult.shouldBreak) {
+        emit(`Recursive review: ${cbResult.reason}`);
+        return {
+          iterations: iteration,
+          converged: false,
+          regressions: allRegressions,
+          totalNewIssues,
+        };
+      }
+      cbState = updateCircuitBreakerState(newFindings, cbState);
+    }
+
+    // Step 4b: Check convergence
     if (newFindings.length === 0) {
       emit(`Recursive review: converged after ${iteration} iteration(s) — no new issues`);
       return {

@@ -77,9 +77,12 @@ export interface RecursiveReviewReport {
 export interface RecursiveReviewConfig {
   /** Maximum number of re-review iterations. Default: 2 */
   maxIterations: number;
+  /** Number of consecutive identical-fingerprint iterations before circuit breaks. Default: 2 */
+  circuitBreakerThreshold?: number;
 }
 
 /** Default configuration values */
 export const DEFAULT_RECURSIVE_CONFIG: RecursiveReviewConfig = {
   maxIterations: 2,
+  circuitBreakerThreshold: 2,
 };

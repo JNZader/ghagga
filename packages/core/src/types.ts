@@ -5,6 +5,10 @@
  * and all distribution adapters (server, CLI, action).
  */
 
+// ─── Re-exports from embed module ──────────────────────────────
+
+export type { EmbeddingProvider, EmbeddingProviderFactory } from './embed.js';
+
 // ─── Review Input ───────────────────────────────────────────────
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'diagnostic' | 'fan-out';
@@ -159,6 +163,36 @@ export interface ReviewInput {
    * When undefined, code intelligence context is skipped (graceful degradation).
    */
   codeIntelProvider?: import('./code-intel/types.js').CodeIntelProvider;
+
+  /**
+   * Embedding provider for semantic features (hybrid search, semantic ranking, negative examples).
+   * When undefined, all embedding-dependent features are skipped (graceful degradation).
+   */
+  embeddingProvider?: import('./embed.js').EmbeddingProvider;
+
+  /**
+   * PR author identifier (e.g. GitHub login or git author string).
+   * Used by the author trust scoring feature when features.authorTrust is enabled.
+   * When absent, trust scoring is skipped gracefully.
+   */
+  author?: string;
+
+  /**
+   * Feature flags for intelligence v2 capabilities.
+   * Defaults: hybridSearch/semanticRanking auto-enable when embeddingProvider is set.
+   */
+  features?: {
+    /** Enable hybrid BM25 + semantic vector search. Default: false (auto-enabled when embeddingProvider present). */
+    hybridSearch?: boolean;
+    /** Enable author trust-based finding prioritization. Default: false. */
+    authorTrust?: boolean;
+    /** Enable circuit breaker for LLM cascading failures. Default: true. */
+    circuitBreaker?: boolean;
+    /** Enable semantic re-ranking of findings. Default: false (auto-enabled when embeddingProvider present). */
+    semanticRanking?: boolean;
+    /** Enable negative example filtering (suppress known false positives). Default: false. */
+    negativeExamples?: boolean;
+  };
 }
 
 export interface ReviewSettings {
@@ -676,6 +710,30 @@ export interface VersioningConfig {
 export const DEFAULT_VERSIONING_CONFIG: VersioningConfig = {
   contradictionThreshold: 0.5,
 };
+
+// ─── Intelligence v2 Types ──────────────────────────────────────
+
+export type AuthorTrustTier = 'trusted' | 'standard' | 'new';
+
+export interface AuthorTrustScore {
+  author: string;
+  /** Normalized trust score in the range [0, 1]. */
+  score: number;
+  tier: AuthorTrustTier;
+  commitCount: number;
+  firstSeenDaysAgo: number;
+  lastUpdated: Date;
+}
+
+export interface NegativeExample {
+  /** SHA256(filePath + lineRange + category) — uniquely identifies a suppressed finding location. */
+  findingHash: string;
+  /** SHA256(filePath) — identifies the file context for the suppression. */
+  contextHash: string;
+  category: string;
+  reason?: string;
+  createdAt: Date;
+}
 
 // ─── Audit Types ────────────────────────────────────────────────
 

@@ -159,6 +159,14 @@ export {
 } from './providers/generate-fn.js';
 export { createModel, createProvider } from './providers/index.js';
 
+// ─── Negative Examples ──────────────────────────────────────────
+
+export {
+  fingerprintContext,
+  fingerprintFinding,
+  formatNegativeExamplesPrompt,
+} from './negative.js';
+
 // ─── Memory (for custom memory integrations) ────────────────────
 
 export { formatMemoryContext } from './memory/context.js';
@@ -365,6 +373,21 @@ export type {
 } from './code-intel/index.js';
 
 export { buildCodeIntelContext, McpCodeIntelClient } from './code-intel/index.js';
+
+// ─── Embeddings (Intelligence v2) ─────────────────────────────
+
+export type { EmbeddingProvider, EmbeddingProviderFactory } from './embed.js';
+export { cosineSimilarity, deserializeEmbedding, serializeEmbedding } from './embed.js';
+export type { AuthorTrustScore, AuthorTrustTier, NegativeExample } from './types.js';
+
+// ─── Author Trust Scoring (Intelligence v2) ───────────────────
+
+export type { TrustScoringOptions } from './trust/index.js';
+export { computeAuthorTrustScore, getReviewModeForTier } from './trust/index.js';
+
+// ─── Semantic Ranking (Intelligence v2 — Feature #12) ──────────
+
+export { rankFindings } from './ranking/index.js';
 
 // ─── Doc Validation ────────────────────────────────────────────
 

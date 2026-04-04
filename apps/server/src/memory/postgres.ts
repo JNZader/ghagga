@@ -1,4 +1,5 @@
 import type {
+  EmbeddingProvider,
   ListObservationsOptions,
   MemoryObservationDetail,
   MemoryObservationRow,
@@ -36,6 +37,13 @@ export class PostgresMemoryStorage implements MemoryStorage {
   constructor(
     private db: Database,
     private installationId: number,
+    /**
+     * Optional embedding provider for hybrid search.
+     * When provided, embeddings are stored on save and hybrid BM25+semantic
+     * scoring (70/30) is used for search. When undefined, falls back to
+     * keyword-only tsvector search (original behavior).
+     */
+    private embeddingProvider?: EmbeddingProvider,
   ) {}
 
   async searchObservations(
@@ -43,7 +51,13 @@ export class PostgresMemoryStorage implements MemoryStorage {
     query: string,
     options?: { limit?: number; type?: string },
   ): Promise<MemoryObservationRow[]> {
-    const rows = await searchObservations(this.db, project, query, options);
+    const rows = await searchObservations(this.db, project, query, {
+      ...options,
+      // Pass the embed function for hybrid search when provider is available
+      embedFn: this.embeddingProvider
+        ? (text: string) => this.embeddingProvider!.embed(text)
+        : undefined,
+    });
     return rows.map((row: ObservationRow) => ({
       id: row.id,
       type: row.type,
@@ -64,7 +78,17 @@ export class PostgresMemoryStorage implements MemoryStorage {
     filePaths?: string[];
     severity?: string;
   }): Promise<MemoryObservationRow> {
-    const row = await saveObservation(this.db, data);
+    // Compute embedding when provider is available — NULL otherwise (graceful degradation)
+    let embedding: number[] | null = null;
+    if (this.embeddingProvider) {
+      try {
+        embedding = await this.embeddingProvider.embed(`${data.title} ${data.content}`);
+      } catch {
+        // Embedding failure is non-fatal — store NULL and continue
+      }
+    }
+
+    const row = await saveObservation(this.db, { ...data, embedding });
     return {
       id: row.id,
       type: row.type,

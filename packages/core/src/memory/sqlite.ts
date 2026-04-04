@@ -17,12 +17,20 @@ const initSqlJs =
     ? initSqlJsModule
     : (initSqlJsModule as unknown as { initSqlJs: typeof initSqlJsModule }).initSqlJs;
 
+import {
+  cosineSimilarity,
+  deserializeEmbedding,
+  type EmbeddingProvider,
+  serializeEmbedding,
+} from '../embed.js';
 import type {
+  AuthorTrustScore,
   ListObservationsOptions,
   MemoryObservationDetail,
   MemoryObservationRow,
   MemoryStats,
   MemoryStorage,
+  NegativeExample,
 } from '../types.js';
 import { DEFAULT_DECAY_CONFIG, type DecayConfig } from '../types.js';
 import { computeStrength } from './decay.js';
@@ -34,7 +42,7 @@ import { computeStrength } from './decay.js';
 interface DatabaseWithParams extends Database {
   exec(
     sql: string,
-    params?: (string | number | null)[],
+    params?: (string | number | Buffer | null)[],
   ): Array<{ columns: string[]; values: unknown[][] }>;
 }
 
@@ -115,6 +123,28 @@ const SCHEMA_SQL = `
 
   -- Seed the default "main" branch (idempotent via INSERT OR IGNORE)
   INSERT OR IGNORE INTO memory_branches (id, name, parent_id) VALUES (1, 'main', NULL);
+
+  -- ── Author trust cache ──────────────────────────────────────────
+  CREATE TABLE IF NOT EXISTS author_trust (
+    author TEXT PRIMARY KEY,
+    score REAL NOT NULL,
+    tier TEXT NOT NULL,
+    commit_count INTEGER NOT NULL DEFAULT 0,
+    first_seen_days_ago INTEGER NOT NULL DEFAULT 0,
+    last_updated TEXT NOT NULL
+  );
+
+  -- ── Negative examples (dismissed findings) ──────────────────────
+  CREATE TABLE IF NOT EXISTS negative_examples (
+    finding_hash TEXT PRIMARY KEY,
+    context_hash TEXT NOT NULL,
+    category TEXT NOT NULL,
+    reason TEXT,
+    file_path TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_neg_context_hash ON negative_examples(context_hash);
 `;
 
 const DEFAULT_DEDUP_WINDOW_MINUTES = 15;
@@ -125,11 +155,19 @@ export interface SqliteMemoryStorageOptions {
 
   /** Decay configuration for memory strength. Uses defaults when not provided. */
   decayConfig?: DecayConfig;
+
+  /**
+   * Optional embedding provider for hybrid search.
+   * When provided, embeddings are stored on save and hybrid BM25+semantic scoring
+   * is used for search. When undefined, falls back to keyword-only search.
+   */
+  embeddingProvider?: EmbeddingProvider;
 }
 
 export class SqliteMemoryStorage implements MemoryStorage {
   private dedupWindowMinutes: number;
   private decayConfig: DecayConfig;
+  private embeddingProvider: EmbeddingProvider | undefined;
 
   private constructor(
     private db: DatabaseWithParams,
@@ -138,6 +176,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
   ) {
     this.dedupWindowMinutes = options.dedupWindowMinutes ?? DEFAULT_DEDUP_WINDOW_MINUTES;
     this.decayConfig = options.decayConfig ?? DEFAULT_DECAY_CONFIG;
+    this.embeddingProvider = options.embeddingProvider;
   }
 
   /**
@@ -188,6 +227,13 @@ export class SqliteMemoryStorage implements MemoryStorage {
       // Column already exists — idempotent migration
     }
 
+    // Migration: add embedding column for hybrid search (NULL when no embedding provider)
+    try {
+      db.run('ALTER TABLE memory_observations ADD COLUMN embedding BLOB');
+    } catch {
+      // Column already exists — idempotent migration
+    }
+
     return new SqliteMemoryStorage(db, filePath, options);
   }
 
@@ -198,6 +244,12 @@ export class SqliteMemoryStorage implements MemoryStorage {
   ): Promise<MemoryObservationRow[]> {
     const { limit = 10, type } = options;
 
+    // ── Hybrid search (BM25 + semantic) ──────────────────────────
+    if (this.embeddingProvider) {
+      return this._hybridSearch(project, query, { limit, type });
+    }
+
+    // ── Keyword-only fallback (original behavior) ─────────────────
     // Convert space-separated keywords to FTS5 OR query
     const ftsQuery = query
       .trim()
@@ -272,6 +324,159 @@ export class SqliteMemoryStorage implements MemoryStorage {
     return rows;
   }
 
+  /**
+   * Hybrid BM25 + semantic search (70% semantic, 30% keyword).
+   * Only called when embeddingProvider is set.
+   *
+   * Strategy:
+   *   1. Run FTS5 to get keyword candidates (up to limit * 5 to have enough for re-ranking)
+   *   2. Embed the query
+   *   3. For each candidate, deserialize its stored embedding and compute cosine similarity
+   *   4. Candidates without embeddings get cosine_sim = 0 (keyword-only score still applies)
+   *   5. Combine: final_score = 0.7 * cosine_sim + 0.3 * normalized_bm25
+   *   6. Sort descending, apply decay filter, return top-k
+   */
+  private async _hybridSearch(
+    project: string,
+    query: string,
+    options: { limit: number; type?: string },
+  ): Promise<MemoryObservationRow[]> {
+    const { limit, type } = options;
+
+    const ftsQuery = query
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length > 0)
+      .map((w) => `"${w.replace(/"/g, '""')}"`)
+      .join(' OR ');
+
+    if (!ftsQuery) return [];
+
+    // Fetch a larger candidate set for re-ranking
+    const fetchLimit = limit * 5;
+
+    let sql = `
+      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity,
+             o.last_accessed_at, o.embedding,
+             bm25(memory_observations_fts) AS bm25_score
+      FROM memory_observations o
+      JOIN memory_observations_fts fts ON fts.rowid = o.id
+      WHERE memory_observations_fts MATCH ?
+        AND o.project = ?
+    `;
+    const params: (string | number)[] = [ftsQuery, project];
+
+    if (type) {
+      sql += ' AND o.type = ?';
+      params.push(type);
+    }
+
+    sql += ' ORDER BY bm25(memory_observations_fts) LIMIT ?';
+    params.push(fetchLimit);
+
+    const stmt = this.db.prepare(sql);
+    stmt.bind(params);
+
+    interface CandidateRow {
+      id: number;
+      type: string;
+      title: string;
+      content: string;
+      filePaths: string[] | null;
+      severity: string | null;
+      lastAccessed: Date;
+      embedding: Buffer | null;
+      bm25Score: number;
+    }
+
+    const candidates: CandidateRow[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      candidates.push({
+        id: row.id as number,
+        type: row.type as string,
+        title: row.title as string,
+        content: row.content as string,
+        filePaths: row.file_paths ? JSON.parse(row.file_paths as string) : null,
+        severity: (row.severity as string) ?? null,
+        lastAccessed: row.last_accessed_at ? new Date(row.last_accessed_at as string) : new Date(),
+        embedding: row.embedding ? (row.embedding as Buffer) : null,
+        bm25Score: row.bm25_score as number,
+      });
+    }
+    stmt.free();
+
+    if (candidates.length === 0) return [];
+
+    // Compute query embedding
+    // biome-ignore lint/style/noNonNullAssertion: embeddingProvider is checked by the caller (_hybridSearch is only called when it's set)
+    const queryVec = await this.embeddingProvider!.embed(query);
+
+    // BM25 scores from FTS5 are negative (lower = better match).
+    // Normalize to [0, 1]: higher is better.
+    const bm25Scores = candidates.map((c) => c.bm25Score);
+    const minBm25 = Math.min(...bm25Scores);
+    const maxBm25 = Math.max(...bm25Scores);
+    const bm25Range = maxBm25 - minBm25;
+
+    const now = new Date();
+    const scored: Array<{ candidate: CandidateRow; finalScore: number; strength: number }> = [];
+
+    for (const candidate of candidates) {
+      const strength = computeStrength(candidate.lastAccessed, now, this.decayConfig);
+      if (strength < this.decayConfig.minStrength) continue;
+
+      // Normalize BM25: invert (less negative = better) → [0, 1]
+      const normalizedBm25 = bm25Range === 0 ? 1 : (candidate.bm25Score - minBm25) / bm25Range;
+
+      // Cosine similarity from stored embedding (0 if not present)
+      let cosineSim = 0;
+      if (candidate.embedding) {
+        try {
+          const storedVec = deserializeEmbedding(candidate.embedding);
+          cosineSim = cosineSimilarity(queryVec, storedVec);
+        } catch {
+          // Malformed embedding — treat as 0
+        }
+      }
+
+      // 70/30 weighted combination
+      const finalScore = 0.7 * cosineSim + 0.3 * normalizedBm25;
+      scored.push({ candidate, finalScore, strength });
+    }
+
+    // Sort by final score descending
+    scored.sort((a, b) => b.finalScore - a.finalScore);
+
+    const results: MemoryObservationRow[] = [];
+    const accessedIds: number[] = [];
+
+    for (const { candidate, strength } of scored) {
+      if (results.length >= limit) break;
+      accessedIds.push(candidate.id);
+      results.push({
+        id: candidate.id,
+        type: candidate.type,
+        title: candidate.title,
+        content: candidate.content,
+        filePaths: candidate.filePaths,
+        severity: candidate.severity,
+        strength,
+      });
+    }
+
+    // Update last_accessed_at for returned observations
+    if (accessedIds.length > 0) {
+      const placeholders = accessedIds.map(() => '?').join(',');
+      this.db.run(
+        `UPDATE memory_observations SET last_accessed_at = datetime('now') WHERE id IN (${placeholders})`,
+        accessedIds,
+      );
+    }
+
+    return results;
+  }
+
   async saveObservation(data: {
     sessionId?: number;
     project: string;
@@ -342,18 +547,29 @@ export class SqliteMemoryStorage implements MemoryStorage {
         const existingId = existingByTopic[0]?.values[0]?.[0] as number;
         const filePathsJson = JSON.stringify(data.filePaths ?? []);
 
+        // Compute and store embedding if provider available
+        const embeddingBuf = await this._computeEmbeddingBuffer(`${data.title} ${data.content}`);
+
         const updated = this.db.exec(
           `
           UPDATE memory_observations
           SET content = ?, title = ?, content_hash = ?, file_paths = ?,
-              severity = ?,
+              severity = ?, embedding = ?,
               revision_count = revision_count + 1,
               updated_at = datetime('now'),
               last_accessed_at = datetime('now')
           WHERE id = ?
           RETURNING id, type, title, content, file_paths, severity
         `,
-          [data.content, data.title, contentHash, filePathsJson, data.severity ?? null, existingId],
+          [
+            data.content,
+            data.title,
+            contentHash,
+            filePathsJson,
+            data.severity ?? null,
+            embeddingBuf,
+            existingId,
+          ],
         );
 
         const row = updated[0]?.values[0];
@@ -369,13 +585,14 @@ export class SqliteMemoryStorage implements MemoryStorage {
       }
     }
 
-    // New observation
+    // New observation — compute embedding if provider available
+    const embeddingBuf = await this._computeEmbeddingBuffer(`${data.title} ${data.content}`);
     const filePathsJson = JSON.stringify(data.filePaths ?? []);
     const inserted = this.db.exec(
       `
       INSERT INTO memory_observations
-        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash, embedding)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id, type, title, content, file_paths, severity
     `,
       [
@@ -388,6 +605,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
         data.topicKey ?? null,
         filePathsJson,
         contentHash,
+        embeddingBuf,
       ],
     );
 
@@ -410,6 +628,22 @@ export class SqliteMemoryStorage implements MemoryStorage {
       filePaths: row[4] ? JSON.parse(row[4] as string) : null,
       severity: (row[5] as string) ?? null,
     };
+  }
+
+  /**
+   * Compute embedding buffer for storage.
+   * Returns the serialized float32 Buffer when embeddingProvider is available,
+   * or null (no-op) when it is not — enabling graceful degradation.
+   */
+  private async _computeEmbeddingBuffer(text: string): Promise<Buffer | null> {
+    if (!this.embeddingProvider) return null;
+    try {
+      const vec = await this.embeddingProvider.embed(text);
+      return serializeEmbedding(vec);
+    } catch {
+      // Embedding failure is non-fatal — store NULL and continue
+      return null;
+    }
   }
 
   async createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }> {
@@ -557,6 +791,145 @@ export class SqliteMemoryStorage implements MemoryStorage {
       this.db.run('DELETE FROM memory_observations');
     }
     return this.db.getRowsModified();
+  }
+
+  // ── Author Trust Cache ──────────────────────────────────────────
+
+  /**
+   * Retrieve a cached author trust score.
+   * Returns null when the author has no entry in the cache.
+   */
+  getTrustScore(author: string): AuthorTrustScore | null {
+    const stmt = this.db.prepare(
+      'SELECT author, score, tier, commit_count, first_seen_days_ago, last_updated FROM author_trust WHERE author = ?',
+    );
+    stmt.bind([author]);
+
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+
+    const row = stmt.getAsObject();
+    stmt.free();
+
+    return {
+      author: row.author as string,
+      score: row.score as number,
+      tier: row.tier as AuthorTrustScore['tier'],
+      commitCount: row.commit_count as number,
+      firstSeenDaysAgo: row.first_seen_days_ago as number,
+      lastUpdated: new Date(row.last_updated as string),
+    };
+  }
+
+  /**
+   * Insert or replace an author trust score in the cache.
+   */
+  upsertTrustScore(score: AuthorTrustScore): void {
+    this.db.run(
+      `INSERT INTO author_trust (author, score, tier, commit_count, first_seen_days_ago, last_updated)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(author) DO UPDATE SET
+         score = excluded.score,
+         tier = excluded.tier,
+         commit_count = excluded.commit_count,
+         first_seen_days_ago = excluded.first_seen_days_ago,
+         last_updated = excluded.last_updated`,
+      [
+        score.author,
+        score.score,
+        score.tier,
+        score.commitCount,
+        score.firstSeenDaysAgo,
+        score.lastUpdated.toISOString(),
+      ],
+    );
+  }
+
+  // ── Negative Examples ───────────────────────────────────────────
+
+  /**
+   * Persist a dismissed finding as a negative example.
+   * Uses INSERT OR REPLACE to make saves idempotent.
+   */
+  saveNegativeExample(example: NegativeExample & { filePath?: string }): void {
+    this.db.run(
+      `INSERT OR REPLACE INTO negative_examples
+         (finding_hash, context_hash, category, reason, file_path, created_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      [
+        example.findingHash,
+        example.contextHash,
+        example.category,
+        example.reason ?? null,
+        example.filePath ?? null,
+      ],
+    );
+  }
+
+  /**
+   * Retrieve all negative examples scoped to a file path.
+   * Uses context_hash (SHA256 of filePath) as the lookup key.
+   */
+  getNegativeExamplesForFile(filePath: string): NegativeExample[] {
+    const contextHash = createHash('sha256').update(filePath).digest('hex').slice(0, 16);
+
+    const stmt = this.db.prepare(
+      `SELECT finding_hash, context_hash, category, reason, created_at
+       FROM negative_examples
+       WHERE context_hash = ?`,
+    );
+    stmt.bind([contextHash]);
+
+    const rows: NegativeExample[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      rows.push({
+        findingHash: row.finding_hash as string,
+        contextHash: row.context_hash as string,
+        category: row.category as string,
+        reason: (row.reason as string) ?? undefined,
+        createdAt: new Date(row.created_at as string),
+      });
+    }
+    stmt.free();
+    return rows;
+  }
+
+  /**
+   * Retrieve all stored negative examples (for listing/management).
+   */
+  getAllNegativeExamples(): (NegativeExample & { filePath?: string })[] {
+    const stmt = this.db.prepare(
+      `SELECT finding_hash, context_hash, category, reason, file_path, created_at
+       FROM negative_examples
+       ORDER BY created_at DESC`,
+    );
+
+    const rows: (NegativeExample & { filePath?: string })[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      rows.push({
+        findingHash: row.finding_hash as string,
+        contextHash: row.context_hash as string,
+        category: row.category as string,
+        reason: (row.reason as string) ?? undefined,
+        filePath: (row.file_path as string) ?? undefined,
+        createdAt: new Date(row.created_at as string),
+      });
+    }
+    stmt.free();
+    return rows;
+  }
+
+  /**
+   * Delete a negative example by its finding hash.
+   * Returns true if a row was deleted, false otherwise.
+   */
+  deleteNegativeExample(findingHash: string): boolean {
+    this.db.run('DELETE FROM negative_examples WHERE finding_hash = ?', [findingHash]);
+    return this.db.getRowsModified() > 0;
   }
 
   async close(): Promise<void> {
