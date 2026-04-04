@@ -15,7 +15,7 @@ updates:
       day: "monday"
       time: "08:00"
       timezone: "America/Argentina/Buenos_Aires"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     reviewers:
       - "JNZader"
     labels:
@@ -43,7 +43,7 @@ updates:
       day: "monday"
       time: "08:00"
       timezone: "America/Argentina/Buenos_Aires"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     reviewers:
       - "JNZader"
     labels:
