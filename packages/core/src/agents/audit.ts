@@ -48,13 +48,13 @@ export async function runAuditReport(input: AuditInput): Promise<AuditResult> {
   }
 
   // Resolve the generation function (required — must be injected by caller)
-  const generateFn: GenerateTextFn = input.generateFn;
-  if (!generateFn) {
+  if (!input.generateFn) {
     throw new Error(
       'runAuditReport requires generateFn to be provided in AuditInput. ' +
         'The caller must resolve the backend and pass a GenerateTextFn instance.',
     );
   }
+  const generateFn: GenerateTextFn = input.generateFn;
 
   emit({
     step: 'audit-call',

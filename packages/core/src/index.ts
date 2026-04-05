@@ -391,6 +391,25 @@ export { rankFindings } from './ranking/index.js';
 export type { DocReference, DocValidationResult } from './doc-validation/index.js';
 export { extractChangedSymbols, isDocFile, scanDocsForSymbols } from './doc-validation/index.js';
 
+// ─── Tracing (OTel-compatible abstraction) ──────────────────────
+
+export type { Span, Tracer } from './tracing/index.js';
+export { configureTracer, getTracer, withSpan } from './tracing/index.js';
+
+// ─── Context Compression ────────────────────────────────────────
+
+export type { CompressionResult, ToolFinding as CompressToolFinding } from './compress/index.js';
+export { compressStaticAnalysisBlock, compressToolFindings } from './compress/index.js';
+
+// ─── Semantic Diff ──────────────────────────────────────────────
+
+export type {
+  EntityChange as SemanticEntityChange,
+  EntityChangeKind as SemanticEntityChangeKind,
+  SemanticDiff,
+} from './semantic-diff/index.js';
+export { extractSemanticDiff } from './semantic-diff/index.js';
+
 // ─── Scope (Tree-sitter Symbol Scoping) ────────────────────────
 
 export type {
@@ -422,3 +441,47 @@ export {
   resetParser,
   resolveGrammarPath,
 } from './scope/index.js';
+
+// ─── Flood Detection (Feature #16) ─────────────────────────────
+
+export type { FloodResult, FloodSignal } from './flood/index.js';
+export { detectFlood } from './flood/index.js';
+
+// ─── Regression Testing Framework (Feature #10) ────────────────
+
+export type { ReviewTrace, TraceAssertion } from './testing/index.js';
+export { assertTrace, loadTrace, recordTrace } from './testing/index.js';
+
+// ─── Memory Taxonomy (Feature #5) ──────────────────────────────
+
+export type { MemoryCategory, TaxonomyTag } from './memory/taxonomy.js';
+export { classifyObservation, formatTaxonomyPrompt } from './memory/taxonomy.js';
+
+// ─── Self-Improving Review Loop (Feature #6) ───────────────────
+
+export type {
+  FindingFeedback,
+  FindingOutcome,
+  ImprovementRule,
+} from './self-improve/index.js';
+export {
+  deriveRules,
+  formatRulesForPrompt,
+  loadFeedback,
+  recordFeedback,
+} from './self-improve/index.js';
+
+// ─── Call-Chain Blast-Radius (Feature #1) ──────────────────────
+
+export type {
+  CallChainBlastRadius,
+  CallChainEdge,
+  CallChainGraph,
+  CallChainNode,
+} from './graph/call-chain.js';
+export { buildCallChainFromDiff } from './graph/call-chain.js';
+
+// ─── Reverse Dependency Graph (Feature #11) ────────────────────
+
+export type { ReverseDependencyMap, ReverseDepsResult } from './graph/reverse-deps.js';
+export { buildReverseDependencyMap, findDependents } from './graph/reverse-deps.js';

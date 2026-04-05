@@ -31,9 +31,13 @@ import {
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
 import { analyzeExploitability, analyzeUsage } from './exploitability/index.js';
+import { detectFlood } from './flood/index.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
+import { buildCallChainFromDiff } from './graph/call-chain.js';
+import { buildReverseDependencyMap, findDependents } from './graph/reverse-deps.js';
 import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
+import { deriveRules, formatRulesForPrompt, loadFeedback } from './self-improve/index.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { SqliteMemoryStorage } from './memory/sqlite.js';
@@ -187,6 +191,33 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     detail: filteredFiles.map((f) => `  ${f.path}`).join('\n'),
   });
 
+  // ── Step 2.1: Flood / spam detection ──────────────────────
+  // Runs before any expensive operation (static analysis, LLM).
+  const linesChanged = allFiles.reduce((sum, f) => sum + f.additions + f.deletions, 0);
+  const floodResult = detectFlood({
+    authorLogin: input.author ?? '',
+    prTitle: input.context?.commitMessages[0] ?? '',
+    prBody: input.context?.commitMessages.slice(1).join('\n') ?? null,
+    linesChanged,
+    recentPrCount: undefined,
+  });
+
+  if (floodResult.isFlood) {
+    emit({
+      step: 'flood-detection',
+      message: `Flood detected: ${floodResult.recommendation}`,
+      detail: floodResult.signals.map((s) => `  [${s.type}] ${s.detail}`).join('\n'),
+    });
+  }
+
+  if (floodResult.recommendation === 'skip') {
+    const skipped = createSkippedResult(input, startTime);
+    return {
+      ...skipped,
+      summary: 'Flood detection: PR skipped (bot author or spam signal).',
+    };
+  }
+
   // If all files were filtered out, skip the review
   if (filteredFiles.length === 0) {
     return createSkippedResult(input, startTime);
@@ -279,6 +310,58 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     }
   }
 
+  // ── Step 2.6: Call-chain + reverse-deps (optional, runs when blast-radius enabled) ──
+  let callChainContext = '';
+  if (input.settings.enableBlastRadius) {
+    try {
+      if (input.fileReader) {
+        const fileContentsMap = new Map<string, string>();
+        for (const fp of fileList) {
+          try {
+            const content = await input.fileReader(fp);
+            if (content) fileContentsMap.set(fp, content);
+          } catch {
+            // non-fatal — skip unreadable files
+          }
+        }
+
+        if (fileContentsMap.size > 0) {
+          const callChain = buildCallChainFromDiff(filteredDiff, fileContentsMap);
+          if (callChain.affectedSymbols.length > 0) {
+            const affectedFiles = [...new Set(callChain.affectedSymbols.map((s) => s.filePath))];
+            callChainContext = `\n## Call-Chain Impact\n${callChain.affectedSymbols.length} symbol(s) across ${affectedFiles.length} file(s) may be affected by these changes (depth: ${callChain.depth}).\n`;
+            emit({
+              step: 'call-chain',
+              message: `Call-chain: ${callChain.changedSymbols.length} changed symbol(s), ${callChain.affectedSymbols.length} affected symbol(s)`,
+            });
+          }
+
+          const reverseDepMap = buildReverseDependencyMap([...fileContentsMap.keys()], fileContentsMap);
+          const highRiskFiles: string[] = [];
+          for (const fp of fileList) {
+            const result = findDependents(fp, reverseDepMap, 2);
+            if (result.transitiveCount >= 3) {
+              highRiskFiles.push(`${fp} (${result.transitiveCount} dependents)`);
+            }
+          }
+          if (highRiskFiles.length > 0) {
+            callChainContext +=
+              `\n## High-Risk Files (many dependents)\nThese changed files have many transitive dependents — review carefully:\n${highRiskFiles.map((f) => `- ${f}`).join('\n')}\n`;
+            emit({
+              step: 'reverse-deps',
+              message: `Reverse deps: ${highRiskFiles.length} high-risk file(s) detected`,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(
+        '[ghagga] Call-chain/reverse-deps failed (degrading gracefully):',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   // ── Step 3: Detect tech stacks ─────────────────────────────
   const stacks = detectStacks(fileList);
   const stackHints = buildStackHints(stacks);
@@ -349,13 +432,36 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     }
   }
 
+  // ── Step 5.0a: Self-improve rules (optional) ─────────────────
+  let selfImproveRulesPrompt = '';
+  if (input.settings.selfImprovePath) {
+    try {
+      const feedback = await loadFeedback(input.settings.selfImprovePath);
+      if (feedback.length > 0) {
+        const rules = deriveRules(feedback);
+        selfImproveRulesPrompt = formatRulesForPrompt(rules);
+        if (selfImproveRulesPrompt) {
+          emit({
+            step: 'self-improve',
+            message: `Self-improve: loaded ${feedback.length} feedback record(s), derived ${rules.length} rule(s)`,
+          });
+        }
+      }
+    } catch (error) {
+      console.warn(
+        '[ghagga] Self-improve rules load failed (degrading gracefully):',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   // Build full (L2) context first, then choose fidelity level based on budget
   const fullStaticContext = formatStaticAnalysisContext(staticResult);
 
-  // Prepend negative examples to memory context so agents see suppression hints
-  const rawMemoryContextWithNegatives = negativeExamplesPrompt
-    ? [negativeExamplesPrompt, rawMemoryContext].filter(Boolean).join('\n')
-    : rawMemoryContext;
+  // Prepend self-improve rules + negative examples to memory context
+  const rawMemoryContextWithNegatives =
+    [selfImproveRulesPrompt, negativeExamplesPrompt, rawMemoryContext].filter(Boolean).join('\n') ||
+    null;
 
   const progressiveContext = buildProgressiveContext({
     staticResult,
@@ -552,8 +658,8 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
       message: `Running ${effectiveMode} agent with ${primary.provider}/${primary.model}...`,
     });
 
-    // Combine stack hints with code intelligence context for agent prompts
-    const combinedStackHints = stackHints + codeIntelContext;
+    // Combine stack hints, code intelligence context, and call-chain context for agent prompts
+    const combinedStackHints = stackHints + codeIntelContext + callChainContext;
 
     try {
       switch (effectiveMode) {

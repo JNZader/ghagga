@@ -104,6 +104,7 @@ export const STATUS_EMOJI: Record<ReviewStatus, string> = {
   FAILED: '\u274c FAILED',
   NEEDS_HUMAN_REVIEW: '\u26a0\ufe0f NEEDS_HUMAN_REVIEW',
   SKIPPED: '\u23ed\ufe0f SKIPPED',
+  PARTIAL: '\u26a1 PARTIAL',
 };
 
 export const SEVERITY_EMOJI: Record<string, string> = {

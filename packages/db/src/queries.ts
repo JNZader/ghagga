@@ -389,6 +389,61 @@ export async function getReviewsByDay(db: Database, repositoryId: number) {
     .orderBy(sql`date(${reviews.createdAt}) asc`);
 }
 
+// ─── Cost Statistics ────────────────────────────────────────────
+
+export interface ReviewCostRow {
+  repositoryId: number;
+  fullName: string;
+  mode: string;
+  model: string | null;
+  tokens: number;
+  count: number;
+}
+
+/**
+ * Aggregate token / review counts across all repositories accessible to the
+ * given installation IDs, for the specified number of days back.
+ *
+ * Returns one row per (repositoryId, mode, model) combination so the caller
+ * can pivot into any desired shape (byModel, byMode, byRepo).
+ */
+export async function getReviewCostStats(
+  db: Database,
+  installationIds: number[],
+  days: number,
+): Promise<ReviewCostRow[]> {
+  if (installationIds.length === 0) return [];
+
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const rows = await db
+    .select({
+      repositoryId: reviews.repositoryId,
+      fullName: repositories.fullName,
+      mode: reviews.mode,
+      model: sql<string | null>`${reviews.metadata}->>'model'`,
+      tokens: sql<number>`coalesce(sum(${reviews.tokensUsed}), 0)::int`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(reviews)
+    .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+    .where(
+      and(
+        inArray(repositories.installationId, installationIds),
+        sql`${reviews.createdAt} >= ${since}`,
+      ),
+    )
+    .groupBy(
+      reviews.repositoryId,
+      repositories.fullName,
+      reviews.mode,
+      sql`${reviews.metadata}->>'model'`,
+    );
+
+  return rows;
+}
+
 /**
  * Delete all reviews for a specific repository by its ID.
  * Returns the count of deleted rows.

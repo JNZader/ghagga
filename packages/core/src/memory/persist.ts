@@ -8,6 +8,7 @@
 
 import type { MemoryStorage, ObservationType, ReviewFinding, ReviewResult } from '../types.js';
 import { stripPrivateData } from './privacy.js';
+import { classifyObservation } from './taxonomy.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -79,8 +80,11 @@ export async function persistReviewObservations(
         ? stripPrivateData(finding.suggestion)
         : undefined;
 
+      const observationTitle = `${finding.category}: ${sanitizedMessage.slice(0, 80)}`;
+      const taxonomyTag = classifyObservation(sanitizedMessage, observationTitle);
+      const categoryLabel = taxonomyTag.category.toUpperCase().replace('_', ' ');
       const content = [
-        `[${finding.severity.toUpperCase()}] ${finding.category}`,
+        `[${categoryLabel}] [${finding.severity.toUpperCase()}] ${finding.category}`,
         `File: ${finding.file}${finding.line ? `:${finding.line}` : ''}`,
         `Issue: ${sanitizedMessage}`,
         sanitizedSuggestion ? `Fix: ${sanitizedSuggestion}` : '',
@@ -92,7 +96,7 @@ export async function persistReviewObservations(
         sessionId: session.id,
         project,
         type: findingToObservationType(finding),
-        title: `${finding.category}: ${sanitizedMessage.slice(0, 80)}`,
+        title: `[${categoryLabel}] ${observationTitle}`,
         content,
         filePaths: [finding.file],
         severity: finding.severity,

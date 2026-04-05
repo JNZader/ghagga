@@ -48,3 +48,18 @@ export { getExtractor } from './extractors/index.js';
 // ─── Graph Builder ──────────────────────────────────────────────
 
 export { buildGraph, buildGraphIncremental, detectLanguage, resolveImportPath } from './builder.js';
+
+// ─── Call-Chain Blast-Radius ─────────────────────────────────────
+
+export type {
+  CallChainBlastRadius,
+  CallChainEdge,
+  CallChainGraph,
+  CallChainNode,
+} from './call-chain.js';
+export { buildCallChainFromDiff } from './call-chain.js';
+
+// ─── Reverse Dependency Graph ─────────────────────────────────────
+
+export type { ReverseDependencyMap, ReverseDepsResult } from './reverse-deps.js';
+export { buildReverseDependencyMap, findDependents } from './reverse-deps.js';

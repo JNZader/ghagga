@@ -234,6 +234,13 @@ export interface ReviewSettings {
   reviewConcurrency?: number;
   /** Delay in ms between sequential LLM call batches. Default: 0. */
   reviewDelayMs?: number;
+
+  /**
+   * Path to the JSONL file for the self-improving review loop.
+   * When set, past feedback is loaded and improvement rules are injected into agent prompts.
+   * Default: undefined (feature disabled).
+   */
+  selfImprovePath?: string;
 }
 
 export interface ReviewContext {

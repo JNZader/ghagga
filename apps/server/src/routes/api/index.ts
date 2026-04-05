@@ -18,6 +18,7 @@ import { createRepositoriesRouter } from './repositories.js';
 import { createReviewsRouter } from './reviews.js';
 import { createRunnerRouter } from './runner.js';
 import { createSettingsRouter } from './settings.js';
+import { createStatsCostRouter } from './stats-cost.js';
 
 export { buildProviderChainView } from './utils.js';
 
@@ -32,6 +33,7 @@ export function createApiRouter(db: Database) {
   router.route('/', createRunnerRouter(db));
   router.route('/', createDelegatedCiRouter(db));
   router.route('/', createDiscoverCiRouter(db));
+  router.route('/', createStatsCostRouter(db));
 
   return router;
 }
