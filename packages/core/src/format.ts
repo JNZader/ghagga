@@ -5,6 +5,7 @@
  * suitable for posting to a PR via the GitHub API.
  */
 
+import { calculateReviewCost, formatCostFooter } from './cost-footer.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import { isToolRegistryEnabled } from './tools/runner.js';
@@ -332,6 +333,10 @@ export function formatReviewComment(
   if (options?.fileList && options.fileList.length > 0) {
     comment += formatFileCategorySummary(options.fileList);
   }
+
+  // Cost footer
+  const cost = calculateReviewCost(result.metadata.tokensUsed, result.metadata.model);
+  comment += formatCostFooter(cost);
 
   comment += `---\n*Powered by [GHAGGA](https://github.com/JNZader/ghagga) \u2014 AI Code Review*`;
 
