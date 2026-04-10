@@ -199,7 +199,7 @@ export function ProviderEntry({
     setValidationError(null);
   }, []);
 
-  const handleProviderChange = (provider: SaaSProvider) => {
+  const _handleProviderChange = (provider: SaaSProvider) => {
     setKeyMode('reuse'); // reset to default so the selector shows if a saved key exists
     onChange({
       ...entry,

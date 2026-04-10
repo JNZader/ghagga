@@ -430,7 +430,7 @@ describe('buildProgressiveContext', () => {
       fullStaticContext: bigStaticContext,
     });
 
-    const withoutHints = buildProgressiveContext({
+    const _withoutHints = buildProgressiveContext({
       staticResult: makeStaticResult([makeFinding()]),
       memoryContext: null,
       stackHints: '',

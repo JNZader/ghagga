@@ -28,14 +28,14 @@ describe('resolveChecklistConfig', () => {
     const config: ChecklistConfig = { enabled: true, dimensions: [] };
     const result = resolveChecklistConfig(config);
     expect(result).not.toBeNull();
-    expect(result!.dimensions).toHaveLength(DEFAULT_CHECKLIST.dimensions.length);
+    expect(result?.dimensions).toHaveLength(DEFAULT_CHECKLIST.dimensions.length);
   });
 
   it('returns all defaults when enabled with undefined dimensions', () => {
     const config = { enabled: true } as ChecklistConfig;
     const result = resolveChecklistConfig(config);
     expect(result).not.toBeNull();
-    expect(result!.dimensions).toHaveLength(DEFAULT_CHECKLIST.dimensions.length);
+    expect(result?.dimensions).toHaveLength(DEFAULT_CHECKLIST.dimensions.length);
   });
 
   // ─── Dimension Merging ────────────────────────────────────
@@ -60,7 +60,7 @@ describe('resolveChecklistConfig', () => {
     };
     const result = resolveChecklistConfig(config)!;
     const sec = result.dimensions.find((d) => d.id === 'security');
-    expect(sec!.checks.length).toBeGreaterThanOrEqual(4);
+    expect(sec?.checks.length).toBeGreaterThanOrEqual(4);
   });
 
   // ─── Check Merging ────────────────────────────────────────
@@ -79,8 +79,8 @@ describe('resolveChecklistConfig', () => {
     };
     const result = resolveChecklistConfig(config)!;
     const solid = result.dimensions.find((d) => d.id === 'solid');
-    const srp = solid!.checks.find((c) => c.id === 'single-responsibility');
-    expect(srp!.weight).toBe(3);
+    const srp = solid?.checks.find((c) => c.id === 'single-responsibility');
+    expect(srp?.weight).toBe(3);
   });
 
   it('disables individual check via override', () => {
@@ -97,8 +97,8 @@ describe('resolveChecklistConfig', () => {
     };
     const result = resolveChecklistConfig(config)!;
     const solid = result.dimensions.find((d) => d.id === 'solid');
-    const lsp = solid!.checks.find((c) => c.id === 'liskov-substitution');
-    expect(lsp!.enabled).toBe(false);
+    const lsp = solid?.checks.find((c) => c.id === 'liskov-substitution');
+    expect(lsp?.enabled).toBe(false);
   });
 
   it('overrides check description', () => {
@@ -122,8 +122,8 @@ describe('resolveChecklistConfig', () => {
     };
     const result = resolveChecklistConfig(config)!;
     const solid = result.dimensions.find((d) => d.id === 'solid');
-    const srp = solid!.checks.find((c) => c.id === 'single-responsibility');
-    expect(srp!.description).toBe('Custom question');
+    const srp = solid?.checks.find((c) => c.id === 'single-responsibility');
+    expect(srp?.description).toBe('Custom question');
   });
 
   // ─── Custom Dimensions ────────────────────────────────────
@@ -142,7 +142,7 @@ describe('resolveChecklistConfig', () => {
     const result = resolveChecklistConfig(config)!;
     const perf = result.dimensions.find((d) => d.id === 'performance');
     expect(perf).toBeDefined();
-    expect(perf!.checks).toHaveLength(1);
+    expect(perf?.checks).toHaveLength(1);
     // Default dimensions should also be present
     expect(result.dimensions.length).toBe(DEFAULT_CHECKLIST.dimensions.length + 1);
   });
@@ -165,10 +165,10 @@ describe('resolveChecklistConfig', () => {
     };
     const result = resolveChecklistConfig(config)!;
     const sec = result.dimensions.find((d) => d.id === 'security');
-    const rateLimiting = sec!.checks.find((c) => c.id === 'rate-limiting');
+    const rateLimiting = sec?.checks.find((c) => c.id === 'rate-limiting');
     expect(rateLimiting).toBeDefined();
     // Default checks should also be present
-    const injection = sec!.checks.find((c) => c.id === 'injection-prevention');
+    const injection = sec?.checks.find((c) => c.id === 'injection-prevention');
     expect(injection).toBeDefined();
   });
 
@@ -179,6 +179,6 @@ describe('resolveChecklistConfig', () => {
     };
     const result = resolveChecklistConfig(config)!;
     const solid = result.dimensions.find((d) => d.id === 'solid');
-    expect(solid!.name).toBe('SOLID (Custom)');
+    expect(solid?.name).toBe('SOLID (Custom)');
   });
 });

@@ -122,7 +122,7 @@ describe('extractEntityDiffLines', () => {
 
 describe('classifyEntityChanges', () => {
   it('classifies whitespace-only changes as cosmetic', () => {
-    const diff = [
+    const _diff = [
       '@@ -10,3 +10,3 @@ function foo()',
       '-  const x = 1;',
       '+    const x = 1;',
@@ -137,7 +137,7 @@ describe('classifyEntityChanges', () => {
     const result = classifyEntityChanges(affected, whitespaceOnlyDiff);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
+    expect(result[0]?.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
   });
 
   it('classifies comment-only changes as cosmetic', () => {
@@ -153,7 +153,7 @@ describe('classifyEntityChanges', () => {
     const result = classifyEntityChanges(affected, diff);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
+    expect(result[0]?.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
   });
 
   it('classifies python comment changes as cosmetic', () => {
@@ -169,7 +169,7 @@ describe('classifyEntityChanges', () => {
     const result = classifyEntityChanges(affected, diff);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
+    expect(result[0]?.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
   });
 
   it('classifies logic changes as logic', () => {
@@ -185,7 +185,7 @@ describe('classifyEntityChanges', () => {
     const result = classifyEntityChanges(affected, diff);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
+    expect(result[0]?.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
   });
 
   it('classifies mixed cosmetic+logic as logic', () => {
@@ -203,7 +203,7 @@ describe('classifyEntityChanges', () => {
     const result = classifyEntityChanges(affected, diff);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
+    expect(result[0]?.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
   });
 
   it('defaults to logic when no diff lines found in range', () => {
@@ -215,7 +215,7 @@ describe('classifyEntityChanges', () => {
     const result = classifyEntityChanges(affected, diff);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
+    expect(result[0]?.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
   });
 
   it('classifies multiple symbols independently', () => {
@@ -235,8 +235,8 @@ describe('classifyEntityChanges', () => {
     const result = classifyEntityChanges(affected, diff);
 
     expect(result).toHaveLength(2);
-    expect(result[0]!.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
-    expect(result[1]!.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
+    expect(result[0]?.kind).toBe(ENTITY_CHANGE_KIND.COSMETIC);
+    expect(result[1]?.kind).toBe(ENTITY_CHANGE_KIND.LOGIC);
   });
 
   it('includes diff lines in the result', () => {
@@ -251,8 +251,8 @@ describe('classifyEntityChanges', () => {
     const affected = [makeAffected(symbol)];
     const result = classifyEntityChanges(affected, diff);
 
-    expect(result[0]!.diffLines).toHaveLength(1);
-    expect(result[0]!.diffLines[0]).toBe('+const y = 2;');
+    expect(result[0]?.diffLines).toHaveLength(1);
+    expect(result[0]?.diffLines[0]).toBe('+const y = 2;');
   });
 });
 
@@ -270,9 +270,9 @@ describe('detectRenames', () => {
     const renames = detectRenames(removed, added, oldSource, newSource);
 
     expect(renames).toHaveLength(1);
-    expect(renames[0]!.oldName).toBe('foo');
-    expect(renames[0]!.newName).toBe('bar');
-    expect(renames[0]!.similarity).toBeGreaterThanOrEqual(0.9);
+    expect(renames[0]?.oldName).toBe('foo');
+    expect(renames[0]?.newName).toBe('bar');
+    expect(renames[0]?.similarity).toBeGreaterThanOrEqual(0.9);
   });
 
   it('does not match rename when body is different', () => {
@@ -366,7 +366,7 @@ describe('filterLogicChanges', () => {
     const result = filterLogicChanges(changes);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.symbol.name).toBe('b');
+    expect(result[0]?.symbol.name).toBe('b');
   });
 
   it('returns empty array when no logic changes', () => {

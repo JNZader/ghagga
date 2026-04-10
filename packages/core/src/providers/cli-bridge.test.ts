@@ -197,34 +197,34 @@ describe('cli-bridge', () => {
   describe('buildSubprocessEnv', () => {
     it('only includes allowlisted env vars (not arbitrary process.env keys)', () => {
       // Temporarily set a non-allowlisted var
-      const original = process.env['MY_CUSTOM_SECRET'];
-      process.env['MY_CUSTOM_SECRET'] = 'should-not-leak';
+      const original = process.env.MY_CUSTOM_SECRET;
+      process.env.MY_CUSTOM_SECRET = 'should-not-leak';
 
       try {
         const env = buildSubprocessEnv();
-        expect(env['MY_CUSTOM_SECRET']).toBeUndefined();
+        expect(env.MY_CUSTOM_SECRET).toBeUndefined();
       } finally {
         if (original !== undefined) {
-          process.env['MY_CUSTOM_SECRET'] = original;
+          process.env.MY_CUSTOM_SECRET = original;
         } else {
-          delete process.env['MY_CUSTOM_SECRET'];
+          delete process.env.MY_CUSTOM_SECRET;
         }
       }
     });
 
     it('excludes sensitive env vars even if set in process.env', () => {
       const original = { ...process.env };
-      process.env['ANTHROPIC_API_KEY'] = 'secret-anthropic';
-      process.env['OPENAI_API_KEY'] = 'secret-openai';
-      process.env['AZURE_OPENAI_KEY'] = 'secret-azure';
-      process.env['REPLICATE_API_TOKEN'] = 'secret-replicate';
+      process.env.ANTHROPIC_API_KEY = 'secret-anthropic';
+      process.env.OPENAI_API_KEY = 'secret-openai';
+      process.env.AZURE_OPENAI_KEY = 'secret-azure';
+      process.env.REPLICATE_API_TOKEN = 'secret-replicate';
 
       try {
         const env = buildSubprocessEnv();
-        expect(env['ANTHROPIC_API_KEY']).toBeUndefined();
-        expect(env['OPENAI_API_KEY']).toBeUndefined();
-        expect(env['AZURE_OPENAI_KEY']).toBeUndefined();
-        expect(env['REPLICATE_API_TOKEN']).toBeUndefined();
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(env.OPENAI_API_KEY).toBeUndefined();
+        expect(env.AZURE_OPENAI_KEY).toBeUndefined();
+        expect(env.REPLICATE_API_TOKEN).toBeUndefined();
       } finally {
         for (const key of [
           'ANTHROPIC_API_KEY',
@@ -243,21 +243,21 @@ describe('cli-bridge', () => {
 
     it('preserves allowlisted env vars like PATH and HOME', () => {
       const env = buildSubprocessEnv();
-      expect(env['PATH']).toBe(process.env['PATH']);
-      expect(env['HOME']).toBe(process.env['HOME']);
+      expect(env.PATH).toBe(process.env.PATH);
+      expect(env.HOME).toBe(process.env.HOME);
     });
 
     it('adds the single required credential', () => {
       const env = buildSubprocessEnv('ANTHROPIC_API_KEY', 'my-secret-key');
-      expect(env['ANTHROPIC_API_KEY']).toBe('my-secret-key');
+      expect(env.ANTHROPIC_API_KEY).toBe('my-secret-key');
     });
 
     it('returns env without credentials when no args given', () => {
       const env = buildSubprocessEnv();
-      expect(env['PATH']).toBeDefined();
+      expect(env.PATH).toBeDefined();
       // No credentials should be present
-      expect(env['COPILOT_GITHUB_TOKEN']).toBeUndefined();
-      expect(env['GH_TOKEN']).toBeUndefined();
+      expect(env.COPILOT_GITHUB_TOKEN).toBeUndefined();
+      expect(env.GH_TOKEN).toBeUndefined();
     });
   });
 
@@ -304,8 +304,8 @@ describe('cli-bridge', () => {
       const available = getAvailableCLIs();
       if (available.includes('gemini')) {
         // Set GEMINI_API_KEY so credential validation passes
-        const original = process.env['GEMINI_API_KEY'];
-        process.env['GEMINI_API_KEY'] = 'test-key';
+        const original = process.env.GEMINI_API_KEY;
+        process.env.GEMINI_API_KEY = 'test-key';
         try {
           // Should not throw CLIConfigurationError about cliModel format for gemini
           // (cliModel format validation only applies to opencode)
@@ -317,7 +317,7 @@ describe('cli-bridge', () => {
             }),
           ).not.toThrow(CLIConfigurationError);
         } finally {
-          process.env['GEMINI_API_KEY'] = original;
+          process.env.GEMINI_API_KEY = original;
         }
       }
     });
@@ -429,8 +429,8 @@ describe('cli-bridge', () => {
       const available = getAvailableCLIs();
       if (available.includes('opencode')) {
         // Set credential so validation passes
-        const original = process.env['ANTHROPIC_API_KEY'];
-        process.env['ANTHROPIC_API_KEY'] = 'test-key';
+        const original = process.env.ANTHROPIC_API_KEY;
+        process.env.ANTHROPIC_API_KEY = 'test-key';
         try {
           // Mock opencode to return valid JSON output
           const jsonOutput = [
@@ -445,7 +445,7 @@ describe('cli-bridge', () => {
           expect(result.cli).toBe('opencode');
           expect(result.provider).toBe('cli-bridge');
         } finally {
-          process.env['ANTHROPIC_API_KEY'] = original;
+          process.env.ANTHROPIC_API_KEY = original;
         }
       }
     });
@@ -455,8 +455,8 @@ describe('cli-bridge', () => {
       // the explicit model should be used, not the default anthropic/claude-sonnet-4-5
       const available = getAvailableCLIs();
       if (available.includes('opencode')) {
-        const original = process.env['OPENAI_API_KEY'];
-        process.env['OPENAI_API_KEY'] = 'test-key';
+        const original = process.env.OPENAI_API_KEY;
+        process.env.OPENAI_API_KEY = 'test-key';
         try {
           const jsonOutput = [
             JSON.stringify({ type: 'text', part: { text: 'review output' } }),
@@ -470,7 +470,7 @@ describe('cli-bridge', () => {
           });
           expect(result.cli).toBe('opencode');
         } finally {
-          process.env['OPENAI_API_KEY'] = original;
+          process.env.OPENAI_API_KEY = original;
         }
       }
     });
@@ -524,28 +524,28 @@ describe('cli-bridge', () => {
   describe('buildSubprocessEnv credential isolation', () => {
     it('injecting ANTHROPIC_API_KEY does NOT leak other sensitive vars', () => {
       const original = { ...process.env };
-      process.env['OPENAI_API_KEY'] = 'secret-openai-key';
-      process.env['GEMINI_API_KEY'] = 'secret-gemini-key';
-      process.env['GROQ_API_KEY'] = 'secret-groq-key';
-      process.env['GITHUB_TOKEN'] = 'secret-github-token';
-      process.env['COPILOT_GITHUB_TOKEN'] = 'secret-copilot-token';
-      process.env['GH_TOKEN'] = 'secret-gh-token';
-      process.env['OPENROUTER_API_KEY'] = 'secret-openrouter-key';
+      process.env.OPENAI_API_KEY = 'secret-openai-key';
+      process.env.GEMINI_API_KEY = 'secret-gemini-key';
+      process.env.GROQ_API_KEY = 'secret-groq-key';
+      process.env.GITHUB_TOKEN = 'secret-github-token';
+      process.env.COPILOT_GITHUB_TOKEN = 'secret-copilot-token';
+      process.env.GH_TOKEN = 'secret-gh-token';
+      process.env.OPENROUTER_API_KEY = 'secret-openrouter-key';
 
       try {
         const env = buildSubprocessEnv('ANTHROPIC_API_KEY', 'injected-anthropic-key');
 
         // The injected credential MUST be present
-        expect(env['ANTHROPIC_API_KEY']).toBe('injected-anthropic-key');
+        expect(env.ANTHROPIC_API_KEY).toBe('injected-anthropic-key');
 
         // ALL other sensitive vars MUST be absent (allowlist excludes them)
-        expect(env['OPENAI_API_KEY']).toBeUndefined();
-        expect(env['GEMINI_API_KEY']).toBeUndefined();
-        expect(env['GROQ_API_KEY']).toBeUndefined();
-        expect(env['GITHUB_TOKEN']).toBeUndefined();
-        expect(env['COPILOT_GITHUB_TOKEN']).toBeUndefined();
-        expect(env['GH_TOKEN']).toBeUndefined();
-        expect(env['OPENROUTER_API_KEY']).toBeUndefined();
+        expect(env.OPENAI_API_KEY).toBeUndefined();
+        expect(env.GEMINI_API_KEY).toBeUndefined();
+        expect(env.GROQ_API_KEY).toBeUndefined();
+        expect(env.GITHUB_TOKEN).toBeUndefined();
+        expect(env.COPILOT_GITHUB_TOKEN).toBeUndefined();
+        expect(env.GH_TOKEN).toBeUndefined();
+        expect(env.OPENROUTER_API_KEY).toBeUndefined();
       } finally {
         // Restore original env
         for (const key of [
@@ -570,36 +570,36 @@ describe('cli-bridge', () => {
       const env = buildSubprocessEnv('GEMINI_API_KEY', 'test-gemini-key');
 
       // Allowlisted vars should survive
-      expect(env['PATH']).toBe(process.env['PATH']);
-      expect(env['HOME']).toBe(process.env['HOME']);
+      expect(env.PATH).toBe(process.env.PATH);
+      expect(env.HOME).toBe(process.env.HOME);
 
       // Injected credential should be present
-      expect(env['GEMINI_API_KEY']).toBe('test-gemini-key');
+      expect(env.GEMINI_API_KEY).toBe('test-gemini-key');
     });
 
     it('excludes ALL sensitive vars when no credential is injected (allowlist approach)', () => {
       const original = { ...process.env };
-      process.env['ANTHROPIC_API_KEY'] = 'secret1';
-      process.env['OPENAI_API_KEY'] = 'secret2';
-      process.env['GEMINI_API_KEY'] = 'secret3';
-      process.env['GROQ_API_KEY'] = 'secret4';
-      process.env['OPENROUTER_API_KEY'] = 'secret5';
-      process.env['GITHUB_TOKEN'] = 'secret6';
-      process.env['COPILOT_GITHUB_TOKEN'] = 'secret7';
-      process.env['GH_TOKEN'] = 'secret8';
+      process.env.ANTHROPIC_API_KEY = 'secret1';
+      process.env.OPENAI_API_KEY = 'secret2';
+      process.env.GEMINI_API_KEY = 'secret3';
+      process.env.GROQ_API_KEY = 'secret4';
+      process.env.OPENROUTER_API_KEY = 'secret5';
+      process.env.GITHUB_TOKEN = 'secret6';
+      process.env.COPILOT_GITHUB_TOKEN = 'secret7';
+      process.env.GH_TOKEN = 'secret8';
 
       try {
         const env = buildSubprocessEnv();
 
         // Allowlist approach: none of these are in SAFE_ENV_VARS, so all excluded
-        expect(env['ANTHROPIC_API_KEY']).toBeUndefined();
-        expect(env['OPENAI_API_KEY']).toBeUndefined();
-        expect(env['GEMINI_API_KEY']).toBeUndefined();
-        expect(env['GROQ_API_KEY']).toBeUndefined();
-        expect(env['OPENROUTER_API_KEY']).toBeUndefined();
-        expect(env['GITHUB_TOKEN']).toBeUndefined();
-        expect(env['COPILOT_GITHUB_TOKEN']).toBeUndefined();
-        expect(env['GH_TOKEN']).toBeUndefined();
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(env.OPENAI_API_KEY).toBeUndefined();
+        expect(env.GEMINI_API_KEY).toBeUndefined();
+        expect(env.GROQ_API_KEY).toBeUndefined();
+        expect(env.OPENROUTER_API_KEY).toBeUndefined();
+        expect(env.GITHUB_TOKEN).toBeUndefined();
+        expect(env.COPILOT_GITHUB_TOKEN).toBeUndefined();
+        expect(env.GH_TOKEN).toBeUndefined();
       } finally {
         for (const key of [
           'ANTHROPIC_API_KEY',
@@ -625,16 +625,16 @@ describe('cli-bridge', () => {
       // credentials like AZURE_OPENAI_KEY or REPLICATE_API_TOKEN are
       // automatically excluded even though they're not in any known list.
       const original = { ...process.env };
-      process.env['AZURE_OPENAI_KEY'] = 'azure-secret';
-      process.env['REPLICATE_API_TOKEN'] = 'replicate-secret';
-      process.env['COHERE_API_KEY'] = 'cohere-secret';
+      process.env.AZURE_OPENAI_KEY = 'azure-secret';
+      process.env.REPLICATE_API_TOKEN = 'replicate-secret';
+      process.env.COHERE_API_KEY = 'cohere-secret';
 
       try {
         const env = buildSubprocessEnv();
 
-        expect(env['AZURE_OPENAI_KEY']).toBeUndefined();
-        expect(env['REPLICATE_API_TOKEN']).toBeUndefined();
-        expect(env['COHERE_API_KEY']).toBeUndefined();
+        expect(env.AZURE_OPENAI_KEY).toBeUndefined();
+        expect(env.REPLICATE_API_TOKEN).toBeUndefined();
+        expect(env.COHERE_API_KEY).toBeUndefined();
       } finally {
         for (const key of ['AZURE_OPENAI_KEY', 'REPLICATE_API_TOKEN', 'COHERE_API_KEY']) {
           if (original[key] !== undefined) {

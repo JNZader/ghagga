@@ -447,7 +447,7 @@ describe('parseHypotheses', () => {
         ].join('\n'),
       );
     }
-    const text = blocks.join('\n') + 'FINDINGS:\n';
+    const text = `${blocks.join('\n')}FINDINGS:\n`;
 
     const hypotheses = parseHypotheses(text);
     expect(hypotheses).toHaveLength(5);

@@ -126,8 +126,8 @@ describe('mapDiffToSymbols', () => {
     const result = mapDiffToSymbols(hunks, symbols);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.symbol.name).toBe('foo');
-    expect(result[0]!.overlappingHunks).toHaveLength(1);
+    expect(result[0]?.symbol.name).toBe('foo');
+    expect(result[0]?.overlappingHunks).toHaveLength(1);
   });
 
   it('returns empty when hunk does not overlap any symbol', () => {
@@ -159,7 +159,7 @@ describe('mapDiffToSymbols', () => {
     const result = mapDiffToSymbols(hunks, symbols);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.overlappingHunks).toHaveLength(2);
+    expect(result[0]?.overlappingHunks).toHaveLength(2);
   });
 
   it('handles exact boundary overlap (hunk end == symbol start)', () => {

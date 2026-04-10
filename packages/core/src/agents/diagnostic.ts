@@ -177,7 +177,7 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
     const callResult = await generateFn(system, prompt);
     responseText = callResult.text;
     tokensUsed = callResult.tokensUsed;
-  } catch (err) {
+  } catch (_err) {
     const executionTimeMs = Date.now() - startTime;
     emit({
       step: 'diagnostic-done',

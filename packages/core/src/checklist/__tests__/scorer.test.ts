@@ -51,7 +51,7 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]!.dimensionId).toBe('security');
+    expect(result.findings[0]?.dimensionId).toBe('security');
   });
 
   it('matches error handling findings', () => {
@@ -60,7 +60,7 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]!.dimensionId).toBe('error-handling');
+    expect(result.findings[0]?.dimensionId).toBe('error-handling');
   });
 
   it('matches boundary condition findings', () => {
@@ -69,7 +69,7 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]!.dimensionId).toBe('boundary-conditions');
+    expect(result.findings[0]?.dimensionId).toBe('boundary-conditions');
   });
 
   it('matches SOLID findings', () => {
@@ -81,7 +81,7 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]!.dimensionId).toBe('solid');
+    expect(result.findings[0]?.dimensionId).toBe('solid');
   });
 
   // ─── Check-Level Matching ─────────────────────────────────
@@ -94,7 +94,7 @@ describe('scoreFindings', () => {
       }),
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
-    expect(result.findings[0]!.checkId).toBe('injection-prevention');
+    expect(result.findings[0]?.checkId).toBe('injection-prevention');
   });
 
   it('uses check weight when matched to specific check', () => {
@@ -103,8 +103,8 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     // injection-prevention weight = 10, critical multiplier = 5
-    expect(result.findings[0]!.checkWeight).toBe(10);
-    expect(result.findings[0]!.score).toBe(10 * SEVERITY_MULTIPLIER['critical']!);
+    expect(result.findings[0]?.checkWeight).toBe(10);
+    expect(result.findings[0]?.score).toBe(10 * SEVERITY_MULTIPLIER.critical!);
   });
 
   it('falls back to dimension-level match when no check matches', () => {
@@ -116,9 +116,9 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]!.dimensionId).toBe('security');
+    expect(result.findings[0]?.dimensionId).toBe('security');
     // Dimension-level match uses average weight, no specific check
-    expect(result.findings[0]!.checkId).toBeNull();
+    expect(result.findings[0]?.checkId).toBeNull();
   });
 
   // ─── Severity Multipliers ─────────────────────────────────
@@ -128,8 +128,8 @@ describe('scoreFindings', () => {
     for (const severity of severities) {
       const findings = [makeFinding({ severity, category: 'security', message: 'XSS injection' })];
       const result = scoreFindings(findings, DEFAULT_CHECKLIST);
-      const expected = result.findings[0]!.checkWeight * SEVERITY_MULTIPLIER[severity]!;
-      expect(result.findings[0]!.score).toBe(expected);
+      const expected = result.findings[0]?.checkWeight * SEVERITY_MULTIPLIER[severity]!;
+      expect(result.findings[0]?.score).toBe(expected);
     }
   });
 
@@ -155,7 +155,7 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     for (let i = 1; i < result.findings.length; i++) {
-      expect(result.findings[i - 1]!.score).toBeGreaterThanOrEqual(result.findings[i]!.score);
+      expect(result.findings[i - 1]?.score).toBeGreaterThanOrEqual(result.findings[i]?.score);
     }
   });
 
@@ -173,8 +173,8 @@ describe('scoreFindings', () => {
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     const secDim = result.dimensionScores.find((d) => d.dimensionId === 'security');
     expect(secDim).toBeDefined();
-    expect(secDim!.findingCount).toBe(2);
-    expect(secDim!.totalScore).toBe(
+    expect(secDim?.findingCount).toBe(2);
+    expect(secDim?.totalScore).toBe(
       result.findings
         .filter((f) => f.dimensionId === 'security')
         .reduce((sum, f) => sum + f.score, 0),
@@ -187,7 +187,7 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     expect(result.dimensionScores).toHaveLength(1);
-    expect(result.dimensionScores[0]!.dimensionId).toBe('security');
+    expect(result.dimensionScores[0]?.dimensionId).toBe('security');
   });
 
   it('sorts dimension scores by total score descending', () => {
@@ -197,8 +197,8 @@ describe('scoreFindings', () => {
     ];
     const result = scoreFindings(findings, DEFAULT_CHECKLIST);
     if (result.dimensionScores.length > 1) {
-      expect(result.dimensionScores[0]!.totalScore).toBeGreaterThanOrEqual(
-        result.dimensionScores[1]!.totalScore,
+      expect(result.dimensionScores[0]?.totalScore).toBeGreaterThanOrEqual(
+        result.dimensionScores[1]?.totalScore,
       );
     }
   });
@@ -274,7 +274,7 @@ describe('scoreFindings', () => {
     const result = scoreFindings(findings, config);
     // Should not match injection-prevention (disabled), but may match dimension-level
     if (result.findings.length > 0) {
-      expect(result.findings[0]!.checkId).not.toBe('injection-prevention');
+      expect(result.findings[0]?.checkId).not.toBe('injection-prevention');
     }
   });
 });

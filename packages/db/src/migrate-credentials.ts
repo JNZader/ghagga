@@ -10,7 +10,7 @@
  * Safe to run multiple times — v2 rows are skipped automatically.
  */
 
-import { eq, isNotNull, sql } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { migrateToV2 } from './crypto.js';

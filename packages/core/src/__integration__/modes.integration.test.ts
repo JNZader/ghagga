@@ -843,7 +843,7 @@ diff --git a/.env b/.env
 
     const result = await reviewPipeline(makeInput());
     expect(result.metadata.fileList).toBeDefined();
-    expect(result.metadata.fileList!.length).toBeGreaterThan(0);
+    expect(result.metadata.fileList?.length).toBeGreaterThan(0);
     expect(result.metadata.totalAdditions).toBeGreaterThanOrEqual(0);
     expect(result.metadata.totalDeletions).toBeGreaterThanOrEqual(0);
     expect(result.metadata.executionTimeMs).toBeGreaterThanOrEqual(0);

@@ -6,7 +6,7 @@
  */
 
 import type { FindingSeverity } from '../types.js';
-import type { ChecklistCheck, ChecklistConfig, ChecklistDimension } from './types.js';
+import type { ChecklistConfig, ChecklistDimension } from './types.js';
 import { SEVERITY_MULTIPLIER } from './types.js';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ function matchFinding(
 
     for (const check of activeChecks) {
       const keywords = CHECK_KEYWORDS.get(check.id);
-      if (keywords && keywords.some((kw) => text.includes(kw))) {
+      if (keywords?.some((kw) => text.includes(kw))) {
         return { dimensionId: dim.id, checkId: check.id, weight: check.weight };
       }
     }
@@ -307,7 +307,7 @@ function matchFinding(
   for (const dim of dimensions) {
     if (!dim.enabled) continue;
     const keywords = DIMENSION_KEYWORDS.get(dim.id);
-    if (keywords && keywords.some((kw) => text.includes(kw))) {
+    if (keywords?.some((kw) => text.includes(kw))) {
       // Use average weight of active checks in this dimension
       const activeChecks = dim.checks.filter((c) => c.enabled);
       const avgWeight =

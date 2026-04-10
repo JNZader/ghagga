@@ -62,7 +62,7 @@ export function buildReverseIndex(graph: DependencyGraph): Map<string, Set<strin
       if (!reverseIndex.has(importPath)) {
         reverseIndex.set(importPath, new Set());
       }
-      reverseIndex.get(importPath)!.add(filePath);
+      reverseIndex.get(importPath)?.add(filePath);
     }
 
     // Reverse edges for calls: if filePath calls target, then target → filePath
@@ -70,7 +70,7 @@ export function buildReverseIndex(graph: DependencyGraph): Map<string, Set<strin
       if (!reverseIndex.has(call.target)) {
         reverseIndex.set(call.target, new Set());
       }
-      reverseIndex.get(call.target)!.add(filePath);
+      reverseIndex.get(call.target)?.add(filePath);
     }
   }
 

@@ -8,41 +8,39 @@
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface CallChainNode {
-	filePath: string;
-	symbolName: string;
-	kind: "function" | "method" | "class" | "variable";
+  filePath: string;
+  symbolName: string;
+  kind: 'function' | 'method' | 'class' | 'variable';
 }
 
 export interface CallChainEdge {
-	from: CallChainNode;
-	to: CallChainNode;
-	kind: "calls" | "imports" | "extends" | "implements";
+  from: CallChainNode;
+  to: CallChainNode;
+  kind: 'calls' | 'imports' | 'extends' | 'implements';
 }
 
 export interface CallChainGraph {
-	nodes: CallChainNode[];
-	edges: CallChainEdge[];
+  nodes: CallChainNode[];
+  edges: CallChainEdge[];
 }
 
 export interface CallChainBlastRadius {
-	changedSymbols: CallChainNode[];
-	affectedSymbols: CallChainNode[];
-	callChainGraph: CallChainGraph;
-	depth: number;
+  changedSymbols: CallChainNode[];
+  affectedSymbols: CallChainNode[];
+  callChainGraph: CallChainGraph;
+  depth: number;
 }
 
 // ─── Regex Patterns ──────────────────────────────────────────────
 
 /** Matches: function foo(...), export function foo(...), async function foo(...) */
-const FUNCTION_DECL_RE =
-	/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g;
+const FUNCTION_DECL_RE = /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g;
 
 /** Matches: class Foo, export class Foo, export default class Foo */
 const CLASS_DECL_RE = /(?:export\s+(?:default\s+)?)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
 
 /** Matches: const foo = ..., let foo = ..., var foo = ... */
-const VARIABLE_DECL_RE =
-	/(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=/g;
+const VARIABLE_DECL_RE = /(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=/g;
 
 /** Matches: foo(...) call references */
 const FUNCTION_CALL_RE = /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g;
@@ -72,186 +70,197 @@ const IMPORT_DEFAULT_RE = /import\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s*["'][^"'
  * Returns the file path and approximate symbol name for each modified hunk.
  */
 function extractChangedSymbolsFromDiff(unifiedDiff: string): Map<string, Set<string>> {
-	const result = new Map<string, Set<string>>();
-	const lines = unifiedDiff.split("\n");
+  const result = new Map<string, Set<string>>();
+  const lines = unifiedDiff.split('\n');
 
-	let currentFile = "";
-	let currentSymbol = "";
+  let currentFile = '';
+  let currentSymbol = '';
 
-	for (const line of lines) {
-		// Detect file path from diff header
-		if (line.startsWith("+++ b/")) {
-			currentFile = line.slice(6).trim();
-			if (!result.has(currentFile)) {
-				result.set(currentFile, new Set());
-			}
-			continue;
-		}
+  for (const line of lines) {
+    // Detect file path from diff header
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.slice(6).trim();
+      if (!result.has(currentFile)) {
+        result.set(currentFile, new Set());
+      }
+      continue;
+    }
 
-		// Detect hunk header — may contain function context: @@ ... @@ functionName
-		if (line.startsWith("@@")) {
-			const m = line.match(/@@ .* @@ (.+)/);
-			if (m?.[1]) {
-				const ctx = m[1].trim();
-				// Extract first identifier from the hunk context
-				const idMatch = ctx.match(/(?:function|class|const|let|var|async)?\s*([A-Za-z_$][A-Za-z0-9_$]*)/);
-				if (idMatch?.[1]) {
-					currentSymbol = idMatch[1];
-				}
-			}
-			continue;
-		}
+    // Detect hunk header — may contain function context: @@ ... @@ functionName
+    if (line.startsWith('@@')) {
+      const m = line.match(/@@ .* @@ (.+)/);
+      if (m?.[1]) {
+        const ctx = m[1].trim();
+        // Extract first identifier from the hunk context
+        const idMatch = ctx.match(
+          /(?:function|class|const|let|var|async)?\s*([A-Za-z_$][A-Za-z0-9_$]*)/,
+        );
+        if (idMatch?.[1]) {
+          currentSymbol = idMatch[1];
+        }
+      }
+      continue;
+    }
 
-		// Changed lines (+ or -) that declare a function/class
-		if ((line.startsWith("+") || line.startsWith("-")) && !line.startsWith("+++") && !line.startsWith("---")) {
-			const content = line.slice(1);
+    // Changed lines (+ or -) that declare a function/class
+    if (
+      (line.startsWith('+') || line.startsWith('-')) &&
+      !line.startsWith('+++') &&
+      !line.startsWith('---')
+    ) {
+      const content = line.slice(1);
 
-			// Check for function declarations in changed lines
-			const fnMatch = content.match(/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
-			if (fnMatch?.[1] && currentFile) {
-				result.get(currentFile)?.add(fnMatch[1]);
-				currentSymbol = fnMatch[1];
-			}
+      // Check for function declarations in changed lines
+      const fnMatch = content.match(
+        /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/,
+      );
+      if (fnMatch?.[1] && currentFile) {
+        result.get(currentFile)?.add(fnMatch[1]);
+        currentSymbol = fnMatch[1];
+      }
 
-			// Check for class declarations
-			const clsMatch = content.match(/(?:export\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
-			if (clsMatch?.[1] && currentFile) {
-				result.get(currentFile)?.add(clsMatch[1]);
-				currentSymbol = clsMatch[1];
-			}
-		}
-	}
+      // Check for class declarations
+      const clsMatch = content.match(/(?:export\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
+      if (clsMatch?.[1] && currentFile) {
+        result.get(currentFile)?.add(clsMatch[1]);
+        currentSymbol = clsMatch[1];
+      }
+    }
+  }
 
-	// If we found files but no symbols in some files, use the current symbol context
-	if (currentSymbol && currentFile && result.get(currentFile)?.size === 0) {
-		result.get(currentFile)?.add(currentSymbol);
-	}
+  // If we found files but no symbols in some files, use the current symbol context
+  if (currentSymbol && currentFile && result.get(currentFile)?.size === 0) {
+    result.get(currentFile)?.add(currentSymbol);
+  }
 
-	return result;
+  return result;
 }
 
 /**
  * Extract all symbol declarations from file content.
  */
 function extractSymbols(filePath: string, content: string): CallChainNode[] {
-	const nodes: CallChainNode[] = [];
-	const seen = new Set<string>();
+  const nodes: CallChainNode[] = [];
+  const seen = new Set<string>();
 
-	const addNode = (name: string, kind: CallChainNode["kind"]) => {
-		if (!seen.has(name)) {
-			seen.add(name);
-			nodes.push({ filePath, symbolName: name, kind });
-		}
-	};
+  const addNode = (name: string, kind: CallChainNode['kind']) => {
+    if (!seen.has(name)) {
+      seen.add(name);
+      nodes.push({ filePath, symbolName: name, kind });
+    }
+  };
 
-	// Functions
-	for (const m of content.matchAll(FUNCTION_DECL_RE)) {
-		if (m[1]) addNode(m[1], "function");
-	}
+  // Functions
+  for (const m of content.matchAll(FUNCTION_DECL_RE)) {
+    if (m[1]) addNode(m[1], 'function');
+  }
 
-	// Classes
-	for (const m of content.matchAll(CLASS_DECL_RE)) {
-		if (m[1]) addNode(m[1], "class");
-	}
+  // Classes
+  for (const m of content.matchAll(CLASS_DECL_RE)) {
+    if (m[1]) addNode(m[1], 'class');
+  }
 
-	// Variables (only top-level assignments — const/let/var)
-	for (const m of content.matchAll(VARIABLE_DECL_RE)) {
-		if (m[1]) addNode(m[1], "variable");
-	}
+  // Variables (only top-level assignments — const/let/var)
+  for (const m of content.matchAll(VARIABLE_DECL_RE)) {
+    if (m[1]) addNode(m[1], 'variable');
+  }
 
-	// Arrow functions assigned to variables (already captured above via VARIABLE_DECL_RE)
-	// Also capture method-like patterns inside classes: methodName(...) {
-	const METHOD_DECL_RE = /^\s{2,}([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*[:{]/gm;
-	for (const m of content.matchAll(METHOD_DECL_RE)) {
-		if (m[1] && !["if", "for", "while", "switch", "catch"].includes(m[1])) {
-			addNode(m[1], "method");
-		}
-	}
+  // Arrow functions assigned to variables (already captured above via VARIABLE_DECL_RE)
+  // Also capture method-like patterns inside classes: methodName(...) {
+  const METHOD_DECL_RE = /^\s{2,}([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*[:{]/gm;
+  for (const m of content.matchAll(METHOD_DECL_RE)) {
+    if (m[1] && !['if', 'for', 'while', 'switch', 'catch'].includes(m[1])) {
+      addNode(m[1], 'method');
+    }
+  }
 
-	return nodes;
+  return nodes;
 }
 
 /**
  * Build edges for references from symbolsInFile to any symbol name in the codebase.
  */
 function buildEdgesForFile(
-	filePath: string,
-	content: string,
-	symbolsByFile: Map<string, CallChainNode[]>,
-	symbolIndex: Map<string, CallChainNode[]>,
+  filePath: string,
+  content: string,
+  symbolsByFile: Map<string, CallChainNode[]>,
+  symbolIndex: Map<string, CallChainNode[]>,
 ): CallChainEdge[] {
-	const edges: CallChainEdge[] = [];
-	const mySymbols = symbolsByFile.get(filePath) ?? [];
+  const edges: CallChainEdge[] = [];
+  const mySymbols = symbolsByFile.get(filePath) ?? [];
 
-	// Collect all referenced symbol names from this file
-	const refs = new Map<string, CallChainEdge["kind"]>();
+  // Collect all referenced symbol names from this file
+  const refs = new Map<string, CallChainEdge['kind']>();
 
-	// Function calls
-	for (const m of content.matchAll(FUNCTION_CALL_RE)) {
-		if (m[1] && !["if", "for", "while", "switch", "catch", "return", "typeof", "instanceof"].includes(m[1])) {
-			if (!refs.has(m[1])) refs.set(m[1], "calls");
-		}
-	}
+  // Function calls
+  for (const m of content.matchAll(FUNCTION_CALL_RE)) {
+    if (
+      m[1] &&
+      !['if', 'for', 'while', 'switch', 'catch', 'return', 'typeof', 'instanceof'].includes(m[1])
+    ) {
+      if (!refs.has(m[1])) refs.set(m[1], 'calls');
+    }
+  }
 
-	// Method calls
-	for (const m of content.matchAll(METHOD_CALL_RE)) {
-		if (m[1] && !refs.has(m[1])) refs.set(m[1], "calls");
-	}
+  // Method calls
+  for (const m of content.matchAll(METHOD_CALL_RE)) {
+    if (m[1] && !refs.has(m[1])) refs.set(m[1], 'calls');
+  }
 
-	// new ClassName(
-	for (const m of content.matchAll(NEW_CALL_RE)) {
-		if (m[1] && !refs.has(m[1])) refs.set(m[1], "calls");
-	}
+  // new ClassName(
+  for (const m of content.matchAll(NEW_CALL_RE)) {
+    if (m[1] && !refs.has(m[1])) refs.set(m[1], 'calls');
+  }
 
-	// extends
-	for (const m of content.matchAll(EXTENDS_RE)) {
-		if (m[1]) refs.set(m[1], "extends");
-	}
+  // extends
+  for (const m of content.matchAll(EXTENDS_RE)) {
+    if (m[1]) refs.set(m[1], 'extends');
+  }
 
-	// implements
-	for (const m of content.matchAll(IMPLEMENTS_RE)) {
-		if (m[1]) refs.set(m[1], "implements");
-	}
+  // implements
+  for (const m of content.matchAll(IMPLEMENTS_RE)) {
+    if (m[1]) refs.set(m[1], 'implements');
+  }
 
-	// Named imports → "imports" edges
-	for (const m of content.matchAll(IMPORT_NAMED_RE)) {
-		if (m[1]) {
-			for (const name of m[1].split(",").map((n) => n.trim().split(" as ")[0]?.trim() ?? "")) {
-				if (name && !refs.has(name)) refs.set(name, "imports");
-			}
-		}
-	}
+  // Named imports → "imports" edges
+  for (const m of content.matchAll(IMPORT_NAMED_RE)) {
+    if (m[1]) {
+      for (const name of m[1].split(',').map((n) => n.trim().split(' as ')[0]?.trim() ?? '')) {
+        if (name && !refs.has(name)) refs.set(name, 'imports');
+      }
+    }
+  }
 
-	// Default imports → "imports" edges
-	for (const m of content.matchAll(IMPORT_DEFAULT_RE)) {
-		if (m[1] && !refs.has(m[1])) refs.set(m[1], "imports");
-	}
+  // Default imports → "imports" edges
+  for (const m of content.matchAll(IMPORT_DEFAULT_RE)) {
+    if (m[1] && !refs.has(m[1])) refs.set(m[1], 'imports');
+  }
 
-	// For each reference: find the symbol in ANY file, create edges from each of MY symbols
-	for (const [refName, kind] of refs) {
-		const targetNodes = symbolIndex.get(refName);
-		if (!targetNodes) continue;
+  // For each reference: find the symbol in ANY file, create edges from each of MY symbols
+  for (const [refName, kind] of refs) {
+    const targetNodes = symbolIndex.get(refName);
+    if (!targetNodes) continue;
 
-		for (const targetNode of targetNodes) {
-			if (targetNode.filePath === filePath) continue; // skip self-references
+    for (const targetNode of targetNodes) {
+      if (targetNode.filePath === filePath) continue; // skip self-references
 
-			for (const fromNode of mySymbols) {
-				edges.push({ from: fromNode, to: targetNode, kind });
-			}
+      for (const fromNode of mySymbols) {
+        edges.push({ from: fromNode, to: targetNode, kind });
+      }
 
-			// If we have no local symbols, create a "file-level" edge
-			if (mySymbols.length === 0) {
-				const fileNode: CallChainNode = {
-					filePath,
-					symbolName: "(module)",
-					kind: "function",
-				};
-				edges.push({ from: fileNode, to: targetNode, kind });
-			}
-		}
-	}
+      // If we have no local symbols, create a "file-level" edge
+      if (mySymbols.length === 0) {
+        const fileNode: CallChainNode = {
+          filePath,
+          symbolName: '(module)',
+          kind: 'function',
+        };
+        edges.push({ from: fileNode, to: targetNode, kind });
+      }
+    }
+  }
 
-	return edges;
+  return edges;
 }
 
 // ─── Main Export ─────────────────────────────────────────────────
@@ -267,101 +276,101 @@ const MAX_BFS_DEPTH = 3;
  * 4. BFS from changed symbols to find affected symbols (max depth 3)
  */
 export function buildCallChainFromDiff(
-	unifiedDiff: string,
-	fileContents: Map<string, string>,
+  unifiedDiff: string,
+  fileContents: Map<string, string>,
 ): CallChainBlastRadius {
-	// Step 1: Find changed symbols from diff
-	const changedSymbolsByFile = extractChangedSymbolsFromDiff(unifiedDiff);
+  // Step 1: Find changed symbols from diff
+  const changedSymbolsByFile = extractChangedSymbolsFromDiff(unifiedDiff);
 
-	// Step 2: Extract all symbols from all files
-	const symbolsByFile = new Map<string, CallChainNode[]>();
-	const symbolIndex = new Map<string, CallChainNode[]>();
+  // Step 2: Extract all symbols from all files
+  const symbolsByFile = new Map<string, CallChainNode[]>();
+  const symbolIndex = new Map<string, CallChainNode[]>();
 
-	for (const [filePath, content] of fileContents) {
-		const symbols = extractSymbols(filePath, content);
-		symbolsByFile.set(filePath, symbols);
+  for (const [filePath, content] of fileContents) {
+    const symbols = extractSymbols(filePath, content);
+    symbolsByFile.set(filePath, symbols);
 
-		for (const sym of symbols) {
-			const existing = symbolIndex.get(sym.symbolName) ?? [];
-			existing.push(sym);
-			symbolIndex.set(sym.symbolName, existing);
-		}
-	}
+    for (const sym of symbols) {
+      const existing = symbolIndex.get(sym.symbolName) ?? [];
+      existing.push(sym);
+      symbolIndex.set(sym.symbolName, existing);
+    }
+  }
 
-	// Step 3: Build all edges
-	const allEdges: CallChainEdge[] = [];
-	for (const [filePath, content] of fileContents) {
-		const edges = buildEdgesForFile(filePath, content, symbolsByFile, symbolIndex);
-		allEdges.push(...edges);
-	}
+  // Step 3: Build all edges
+  const allEdges: CallChainEdge[] = [];
+  for (const [filePath, content] of fileContents) {
+    const edges = buildEdgesForFile(filePath, content, symbolsByFile, symbolIndex);
+    allEdges.push(...edges);
+  }
 
-	// Collect all nodes
-	const allNodes: CallChainNode[] = [];
-	for (const symbols of symbolsByFile.values()) {
-		allNodes.push(...symbols);
-	}
+  // Collect all nodes
+  const allNodes: CallChainNode[] = [];
+  for (const symbols of symbolsByFile.values()) {
+    allNodes.push(...symbols);
+  }
 
-	// Step 4: Identify changed symbols
-	const changedSymbols: CallChainNode[] = [];
-	for (const [filePath, names] of changedSymbolsByFile) {
-		for (const name of names) {
-			const nodes = symbolIndex.get(name);
-			if (nodes) {
-				const match = nodes.find((n) => n.filePath === filePath);
-				if (match) changedSymbols.push(match);
-			}
-		}
-		// If no specific symbols found, add all symbols from the changed file
-		if (names.size === 0 && symbolsByFile.has(filePath)) {
-			changedSymbols.push(...(symbolsByFile.get(filePath) ?? []));
-		}
-	}
+  // Step 4: Identify changed symbols
+  const changedSymbols: CallChainNode[] = [];
+  for (const [filePath, names] of changedSymbolsByFile) {
+    for (const name of names) {
+      const nodes = symbolIndex.get(name);
+      if (nodes) {
+        const match = nodes.find((n) => n.filePath === filePath);
+        if (match) changedSymbols.push(match);
+      }
+    }
+    // If no specific symbols found, add all symbols from the changed file
+    if (names.size === 0 && symbolsByFile.has(filePath)) {
+      changedSymbols.push(...(symbolsByFile.get(filePath) ?? []));
+    }
+  }
 
-	// Step 5: BFS to find affected symbols (reverse direction — who calls the changed symbols)
-	// Build reverse edge index: symbolName → nodes that call it
-	const reverseEdgeMap = new Map<string, Set<CallChainNode>>();
-	for (const edge of allEdges) {
-		const key = `${edge.to.filePath}::${edge.to.symbolName}`;
-		const existing = reverseEdgeMap.get(key) ?? new Set();
-		existing.add(edge.from);
-		reverseEdgeMap.set(key, existing);
-	}
+  // Step 5: BFS to find affected symbols (reverse direction — who calls the changed symbols)
+  // Build reverse edge index: symbolName → nodes that call it
+  const reverseEdgeMap = new Map<string, Set<CallChainNode>>();
+  for (const edge of allEdges) {
+    const key = `${edge.to.filePath}::${edge.to.symbolName}`;
+    const existing = reverseEdgeMap.get(key) ?? new Set();
+    existing.add(edge.from);
+    reverseEdgeMap.set(key, existing);
+  }
 
-	const visited = new Set<string>();
-	const affectedSymbols: CallChainNode[] = [];
-	let queue: CallChainNode[] = [...changedSymbols];
-	let actualDepth = 0;
+  const visited = new Set<string>();
+  const affectedSymbols: CallChainNode[] = [];
+  let queue: CallChainNode[] = [...changedSymbols];
+  let actualDepth = 0;
 
-	for (const sym of changedSymbols) {
-		visited.add(`${sym.filePath}::${sym.symbolName}`);
-	}
+  for (const sym of changedSymbols) {
+    visited.add(`${sym.filePath}::${sym.symbolName}`);
+  }
 
-	for (let depth = 0; depth < MAX_BFS_DEPTH && queue.length > 0; depth++) {
-		const nextQueue: CallChainNode[] = [];
+  for (let depth = 0; depth < MAX_BFS_DEPTH && queue.length > 0; depth++) {
+    const nextQueue: CallChainNode[] = [];
 
-		for (const sym of queue) {
-			const key = `${sym.filePath}::${sym.symbolName}`;
-			const callers = reverseEdgeMap.get(key);
-			if (!callers) continue;
+    for (const sym of queue) {
+      const key = `${sym.filePath}::${sym.symbolName}`;
+      const callers = reverseEdgeMap.get(key);
+      if (!callers) continue;
 
-			for (const caller of callers) {
-				const callerKey = `${caller.filePath}::${caller.symbolName}`;
-				if (!visited.has(callerKey)) {
-					visited.add(callerKey);
-					affectedSymbols.push(caller);
-					nextQueue.push(caller);
-				}
-			}
-		}
+      for (const caller of callers) {
+        const callerKey = `${caller.filePath}::${caller.symbolName}`;
+        if (!visited.has(callerKey)) {
+          visited.add(callerKey);
+          affectedSymbols.push(caller);
+          nextQueue.push(caller);
+        }
+      }
+    }
 
-		if (nextQueue.length > 0) actualDepth = depth + 1;
-		queue = nextQueue;
-	}
+    if (nextQueue.length > 0) actualDepth = depth + 1;
+    queue = nextQueue;
+  }
 
-	return {
-		changedSymbols,
-		affectedSymbols,
-		callChainGraph: { nodes: allNodes, edges: allEdges },
-		depth: actualDepth,
-	};
+  return {
+    changedSymbols,
+    affectedSymbols,
+    callChainGraph: { nodes: allNodes, edges: allEdges },
+    depth: actualDepth,
+  };
 }

@@ -37,7 +37,6 @@ import { buildCallChainFromDiff } from './graph/call-chain.js';
 import { buildReverseDependencyMap, findDependents } from './graph/reverse-deps.js';
 import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
-import { deriveRules, formatRulesForPrompt, loadFeedback } from './self-improve/index.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { SqliteMemoryStorage } from './memory/sqlite.js';
@@ -51,6 +50,7 @@ import {
 } from './providers/generate-fn.js';
 import { rankFindings } from './ranking/index.js';
 import { recursiveReview } from './recursive/index.js';
+import { deriveRules, formatRulesForPrompt, loadFeedback } from './self-improve/index.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import {
@@ -336,7 +336,10 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             });
           }
 
-          const reverseDepMap = buildReverseDependencyMap([...fileContentsMap.keys()], fileContentsMap);
+          const reverseDepMap = buildReverseDependencyMap(
+            [...fileContentsMap.keys()],
+            fileContentsMap,
+          );
           const highRiskFiles: string[] = [];
           for (const fp of fileList) {
             const result = findDependents(fp, reverseDepMap, 2);
@@ -345,8 +348,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
             }
           }
           if (highRiskFiles.length > 0) {
-            callChainContext +=
-              `\n## High-Risk Files (many dependents)\nThese changed files have many transitive dependents — review carefully:\n${highRiskFiles.map((f) => `- ${f}`).join('\n')}\n`;
+            callChainContext += `\n## High-Risk Files (many dependents)\nThese changed files have many transitive dependents — review carefully:\n${highRiskFiles.map((f) => `- ${f}`).join('\n')}\n`;
             emit({
               step: 'reverse-deps',
               message: `Reverse deps: ${highRiskFiles.length} high-risk file(s) detected`,

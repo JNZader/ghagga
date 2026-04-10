@@ -57,10 +57,10 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('foo');
-    expect(symbols[0]!.kind).toBe('function');
-    expect(symbols[0]!.startLine).toBe(1);
-    expect(symbols[0]!.endLine).toBe(3);
+    expect(symbols[0]?.name).toBe('foo');
+    expect(symbols[0]?.kind).toBe('function');
+    expect(symbols[0]?.startLine).toBe(1);
+    expect(symbols[0]?.endLine).toBe(3);
   });
 
   it('extracts a class with methods', () => {
@@ -78,16 +78,16 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(3); // class + 2 methods
-    expect(symbols[0]!.name).toBe('Bar');
-    expect(symbols[0]!.kind).toBe('class');
+    expect(symbols[0]?.name).toBe('Bar');
+    expect(symbols[0]?.kind).toBe('class');
 
-    expect(symbols[1]!.name).toBe('baz');
-    expect(symbols[1]!.kind).toBe('method');
-    expect(symbols[1]!.parent).toBe('Bar');
+    expect(symbols[1]?.name).toBe('baz');
+    expect(symbols[1]?.kind).toBe('method');
+    expect(symbols[1]?.parent).toBe('Bar');
 
-    expect(symbols[2]!.name).toBe('qux');
-    expect(symbols[2]!.kind).toBe('method');
-    expect(symbols[2]!.parent).toBe('Bar');
+    expect(symbols[2]?.name).toBe('qux');
+    expect(symbols[2]?.kind).toBe('method');
+    expect(symbols[2]?.parent).toBe('Bar');
   });
 
   it('extracts an interface declaration', () => {
@@ -96,8 +96,8 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('Boop');
-    expect(symbols[0]!.kind).toBe('interface');
+    expect(symbols[0]?.name).toBe('Boop');
+    expect(symbols[0]?.kind).toBe('interface');
   });
 
   it('extracts arrow function assigned to const', () => {
@@ -106,8 +106,8 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('arrow');
-    expect(symbols[0]!.kind).toBe('function');
+    expect(symbols[0]?.name).toBe('arrow');
+    expect(symbols[0]?.kind).toBe('function');
   });
 
   it('extracts exported function', () => {
@@ -116,8 +116,8 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('foo');
-    expect(symbols[0]!.kind).toBe('function');
+    expect(symbols[0]?.name).toBe('foo');
+    expect(symbols[0]?.kind).toBe('function');
   });
 
   it('extracts exported class', () => {
@@ -126,10 +126,10 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(2); // class + method
-    expect(symbols[0]!.name).toBe('Foo');
-    expect(symbols[0]!.kind).toBe('class');
-    expect(symbols[1]!.name).toBe('bar');
-    expect(symbols[1]!.kind).toBe('method');
+    expect(symbols[0]?.name).toBe('Foo');
+    expect(symbols[0]?.kind).toBe('class');
+    expect(symbols[1]?.name).toBe('bar');
+    expect(symbols[1]?.kind).toBe('method');
   });
 
   it('extracts exported interface', () => {
@@ -138,8 +138,8 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('Props');
-    expect(symbols[0]!.kind).toBe('interface');
+    expect(symbols[0]?.name).toBe('Props');
+    expect(symbols[0]?.kind).toBe('interface');
   });
 
   it('extracts exported arrow function', () => {
@@ -148,8 +148,8 @@ describe('TypeScript symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('handler');
-    expect(symbols[0]!.kind).toBe('function');
+    expect(symbols[0]?.name).toBe('handler');
+    expect(symbols[0]?.kind).toBe('function');
   });
 
   it('extracts multiple top-level symbols', () => {
@@ -176,8 +176,8 @@ const e = () => {};`;
     const symbols = extractSymbolsFromTree(tree, 'typescript');
     tree.delete();
 
-    expect(symbols[0]!.startByte).toBe(0);
-    expect(symbols[0]!.endByte).toBe(source.length);
+    expect(symbols[0]?.startByte).toBe(0);
+    expect(symbols[0]?.endByte).toBe(source.length);
   });
 });
 
@@ -194,10 +194,10 @@ class Bar {
     tree.delete();
 
     expect(symbols).toHaveLength(3);
-    expect(symbols[0]!.name).toBe('foo');
-    expect(symbols[1]!.name).toBe('Bar');
-    expect(symbols[2]!.name).toBe('baz');
-    expect(symbols[2]!.parent).toBe('Bar');
+    expect(symbols[0]?.name).toBe('foo');
+    expect(symbols[1]?.name).toBe('Bar');
+    expect(symbols[2]?.name).toBe('baz');
+    expect(symbols[2]?.parent).toBe('Bar');
   });
 
   it('does not extract interfaces (JS has none)', () => {
@@ -219,8 +219,8 @@ describe('Python symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('foo');
-    expect(symbols[0]!.kind).toBe('function');
+    expect(symbols[0]?.name).toBe('foo');
+    expect(symbols[0]?.kind).toBe('function');
   });
 
   it('extracts a class with methods', () => {
@@ -235,14 +235,14 @@ describe('Python symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(3); // class + 2 methods
-    expect(symbols[0]!.name).toBe('Bar');
-    expect(symbols[0]!.kind).toBe('class');
-    expect(symbols[1]!.name).toBe('baz');
-    expect(symbols[1]!.kind).toBe('method');
-    expect(symbols[1]!.parent).toBe('Bar');
-    expect(symbols[2]!.name).toBe('qux');
-    expect(symbols[2]!.kind).toBe('method');
-    expect(symbols[2]!.parent).toBe('Bar');
+    expect(symbols[0]?.name).toBe('Bar');
+    expect(symbols[0]?.kind).toBe('class');
+    expect(symbols[1]?.name).toBe('baz');
+    expect(symbols[1]?.kind).toBe('method');
+    expect(symbols[1]?.parent).toBe('Bar');
+    expect(symbols[2]?.name).toBe('qux');
+    expect(symbols[2]?.kind).toBe('method');
+    expect(symbols[2]?.parent).toBe('Bar');
   });
 
   it('extracts multiple top-level functions', () => {
@@ -252,8 +252,8 @@ describe('Python symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(2);
-    expect(symbols[0]!.name).toBe('a');
-    expect(symbols[1]!.name).toBe('b');
+    expect(symbols[0]?.name).toBe('a');
+    expect(symbols[1]?.name).toBe('b');
   });
 });
 
@@ -267,8 +267,8 @@ describe('Go symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('Foo');
-    expect(symbols[0]!.kind).toBe('function');
+    expect(symbols[0]?.name).toBe('Foo');
+    expect(symbols[0]?.kind).toBe('function');
   });
 
   it('extracts a method with pointer receiver', () => {
@@ -278,9 +278,9 @@ describe('Go symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('Bar');
-    expect(symbols[0]!.kind).toBe('method');
-    expect(symbols[0]!.parent).toBe('Svc');
+    expect(symbols[0]?.name).toBe('Bar');
+    expect(symbols[0]?.kind).toBe('method');
+    expect(symbols[0]?.parent).toBe('Svc');
   });
 
   it('extracts a method with value receiver', () => {
@@ -290,9 +290,9 @@ describe('Go symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('Bar');
-    expect(symbols[0]!.kind).toBe('method');
-    expect(symbols[0]!.parent).toBe('Svc');
+    expect(symbols[0]?.name).toBe('Bar');
+    expect(symbols[0]?.kind).toBe('method');
+    expect(symbols[0]?.parent).toBe('Svc');
   });
 
   it('extracts a struct type', () => {
@@ -302,8 +302,8 @@ describe('Go symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('Svc');
-    expect(symbols[0]!.kind).toBe('class'); // struct → class
+    expect(symbols[0]?.name).toBe('Svc');
+    expect(symbols[0]?.kind).toBe('class'); // struct → class
   });
 
   it('extracts an interface type', () => {
@@ -313,8 +313,8 @@ describe('Go symbol extraction', () => {
     tree.delete();
 
     expect(symbols).toHaveLength(1);
-    expect(symbols[0]!.name).toBe('Reader');
-    expect(symbols[0]!.kind).toBe('interface');
+    expect(symbols[0]?.name).toBe('Reader');
+    expect(symbols[0]?.kind).toBe('interface');
   });
 
   it('extracts multiple Go symbols', () => {

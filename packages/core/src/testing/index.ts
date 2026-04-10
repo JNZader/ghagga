@@ -8,16 +8,16 @@
  * Designed to be used in CI to catch regressions in the review engine.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
-import type { ReviewFinding, ReviewInput, ReviewResult } from "../types.js";
+import { readFile, writeFile } from 'node:fs/promises';
+import type { ReviewFinding, ReviewInput, ReviewResult } from '../types.js';
 
 // ─── Public types ────────────────────────────────────────────────
 
 export interface ReviewTrace {
-	input: ReviewInput;
-	output: ReviewResult;
-	recordedAt: string;
-	label: string;
+  input: ReviewInput;
+  output: ReviewResult;
+  recordedAt: string;
+  label: string;
 }
 
 /**
@@ -26,22 +26,22 @@ export interface ReviewTrace {
  * `mustNotFind` requires zero matching findings.
  */
 export interface TraceAssertion {
-	label: string;
+  label: string;
 
-	/** Each entry must match at least one finding in the trace output. */
-	mustFind: Array<{
-		filePath?: string;
-		category?: string;
-		severity?: string;
-		messageContains?: string;
-	}>;
+  /** Each entry must match at least one finding in the trace output. */
+  mustFind: Array<{
+    filePath?: string;
+    category?: string;
+    severity?: string;
+    messageContains?: string;
+  }>;
 
-	/** Each entry must NOT match any finding in the trace output. */
-	mustNotFind?: Array<{
-		filePath?: string;
-		category?: string;
-		messageContains?: string;
-	}>;
+  /** Each entry must NOT match any finding in the trace output. */
+  mustNotFind?: Array<{
+    filePath?: string;
+    category?: string;
+    messageContains?: string;
+  }>;
 }
 
 // ─── I/O helpers ────────────────────────────────────────────────
@@ -53,7 +53,7 @@ export interface TraceAssertion {
  * @param outputPath - Absolute or relative path for the output file
  */
 export async function recordTrace(trace: ReviewTrace, outputPath: string): Promise<void> {
-	await writeFile(outputPath, JSON.stringify(trace, null, 2), "utf8");
+  await writeFile(outputPath, JSON.stringify(trace, null, 2), 'utf8');
 }
 
 /**
@@ -64,31 +64,28 @@ export async function recordTrace(trace: ReviewTrace, outputPath: string): Promi
  * @throws          If the file does not exist or contains invalid JSON
  */
 export async function loadTrace(tracePath: string): Promise<ReviewTrace> {
-	const raw = await readFile(tracePath, "utf8");
-	return JSON.parse(raw) as ReviewTrace;
+  const raw = await readFile(tracePath, 'utf8');
+  return JSON.parse(raw) as ReviewTrace;
 }
 
 // ─── Assertion engine ────────────────────────────────────────────
 
 function findingMatchesMatcher(
-	finding: ReviewFinding,
-	matcher: {
-		filePath?: string;
-		category?: string;
-		severity?: string;
-		messageContains?: string;
-	},
+  finding: ReviewFinding,
+  matcher: {
+    filePath?: string;
+    category?: string;
+    severity?: string;
+    messageContains?: string;
+  },
 ): boolean {
-	if (matcher.filePath !== undefined && finding.file !== matcher.filePath) return false;
-	if (matcher.category !== undefined && finding.category !== matcher.category) return false;
-	if (matcher.severity !== undefined && finding.severity !== matcher.severity) return false;
-	if (
-		matcher.messageContains !== undefined &&
-		!finding.message.includes(matcher.messageContains)
-	) {
-		return false;
-	}
-	return true;
+  if (matcher.filePath !== undefined && finding.file !== matcher.filePath) return false;
+  if (matcher.category !== undefined && finding.category !== matcher.category) return false;
+  if (matcher.severity !== undefined && finding.severity !== matcher.severity) return false;
+  if (matcher.messageContains !== undefined && !finding.message.includes(matcher.messageContains)) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -102,33 +99,33 @@ function findingMatchesMatcher(
  * @param assertions - Array of {@link TraceAssertion} to evaluate
  */
 export async function assertTrace(
-	trace: ReviewTrace,
-	assertions: TraceAssertion[],
+  trace: ReviewTrace,
+  assertions: TraceAssertion[],
 ): Promise<{ passed: boolean; failures: string[] }> {
-	const findings = trace.output.findings;
-	const failures: string[] = [];
+  const findings = trace.output.findings;
+  const failures: string[] = [];
 
-	for (const assertion of assertions) {
-		// ── mustFind ────────────────────────────────────────────
-		for (const matcher of assertion.mustFind) {
-			const found = findings.some((f) => findingMatchesMatcher(f, matcher));
-			if (!found) {
-				failures.push(
-					`[${assertion.label}] mustFind: no finding matched ${JSON.stringify(matcher)}`,
-				);
-			}
-		}
+  for (const assertion of assertions) {
+    // ── mustFind ────────────────────────────────────────────
+    for (const matcher of assertion.mustFind) {
+      const found = findings.some((f) => findingMatchesMatcher(f, matcher));
+      if (!found) {
+        failures.push(
+          `[${assertion.label}] mustFind: no finding matched ${JSON.stringify(matcher)}`,
+        );
+      }
+    }
 
-		// ── mustNotFind ─────────────────────────────────────────
-		for (const matcher of assertion.mustNotFind ?? []) {
-			const found = findings.some((f) => findingMatchesMatcher(f, matcher));
-			if (found) {
-				failures.push(
-					`[${assertion.label}] mustNotFind: unexpected finding matched ${JSON.stringify(matcher)}`,
-				);
-			}
-		}
-	}
+    // ── mustNotFind ─────────────────────────────────────────
+    for (const matcher of assertion.mustNotFind ?? []) {
+      const found = findings.some((f) => findingMatchesMatcher(f, matcher));
+      if (found) {
+        failures.push(
+          `[${assertion.label}] mustNotFind: unexpected finding matched ${JSON.stringify(matcher)}`,
+        );
+      }
+    }
+  }
 
-	return { passed: failures.length === 0, failures };
+  return { passed: failures.length === 0, failures };
 }

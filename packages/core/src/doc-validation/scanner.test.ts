@@ -165,8 +165,8 @@ describe('scanDocsForSymbols', () => {
 
     const result = scanDocsForSymbols(symbols, allFiles, []);
     expect(result.staleReferences).toHaveLength(1);
-    expect(result.staleReferences[0]!.symbol).toBe('reviewPipeline');
-    expect(result.staleReferences[0]!.file).toBe('docs/architecture.md');
+    expect(result.staleReferences[0]?.symbol).toBe('reviewPipeline');
+    expect(result.staleReferences[0]?.file).toBe('docs/architecture.md');
   });
 
   it('detects backtick references with parentheses', () => {
@@ -216,7 +216,7 @@ describe('scanDocsForSymbols', () => {
 
     const result = scanDocsForSymbols(symbols, allFiles, []);
     expect(result.staleReferences).toHaveLength(1);
-    expect(result.staleReferences[0]!.symbol).toBe('ReviewInput');
+    expect(result.staleReferences[0]?.symbol).toBe('ReviewInput');
   });
 
   it('reports correct line numbers', () => {
@@ -226,7 +226,7 @@ describe('scanDocsForSymbols', () => {
 
     const result = scanDocsForSymbols(symbols, allFiles, []);
     expect(result.staleReferences).toHaveLength(1);
-    expect(result.staleReferences[0]!.line).toBe(3);
+    expect(result.staleReferences[0]?.line).toBe(3);
   });
 
   it('scans external doc contents not in diff', () => {
@@ -236,7 +236,7 @@ describe('scanDocsForSymbols', () => {
 
     const result = scanDocsForSymbols(symbols, allFiles, [], docContents);
     expect(result.staleReferences).toHaveLength(1);
-    expect(result.staleReferences[0]!.file).toBe('docs/auth.md');
+    expect(result.staleReferences[0]?.file).toBe('docs/auth.md');
     expect(result.docsScanned).toBe(1);
   });
 

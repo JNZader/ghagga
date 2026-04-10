@@ -9,10 +9,10 @@
  */
 
 export interface RemoteQueryOptions {
-	owner: string;
-	repo: string;
-	/** Git ref to target. Defaults to "HEAD". */
-	ref?: string;
+  owner: string;
+  repo: string;
+  /** Git ref to target. Defaults to "HEAD". */
+  ref?: string;
 }
 
 /**
@@ -24,42 +24,42 @@ export interface RemoteQueryOptions {
  * @returns      File contents as a string, or null on any error (4xx, 5xx, network, etc.)
  */
 export async function fetchRemoteFile(
-	path: string,
-	opts: RemoteQueryOptions,
-	token?: string,
+  path: string,
+  opts: RemoteQueryOptions,
+  token?: string,
 ): Promise<string | null> {
-	const ref = opts.ref ?? "HEAD";
-	const url = `https://raw.githubusercontent.com/${opts.owner}/${opts.repo}/${ref}/${path}`;
+  const ref = opts.ref ?? 'HEAD';
+  const url = `https://raw.githubusercontent.com/${opts.owner}/${opts.repo}/${ref}/${path}`;
 
-	try {
-		const headers: Record<string, string> = {};
-		if (token) {
-			headers["Authorization"] = `Bearer ${token}`;
-		}
+  try {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
 
-		const response = await fetch(url, { headers });
-		if (!response.ok) {
-			return null;
-		}
-		return await response.text();
-	} catch {
-		return null;
-	}
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      return null;
+    }
+    return await response.text();
+  } catch {
+    return null;
+  }
 }
 
 // ─── GitHub Search API types ───────────────────────────────────
 
 interface GitHubSearchTextMatch {
-	fragment: string;
+  fragment: string;
 }
 
 interface GitHubSearchItem {
-	path: string;
-	text_matches?: GitHubSearchTextMatch[];
+  path: string;
+  text_matches?: GitHubSearchTextMatch[];
 }
 
 interface GitHubSearchResponse {
-	items: GitHubSearchItem[];
+  items: GitHubSearchItem[];
 }
 
 /**
@@ -74,32 +74,32 @@ interface GitHubSearchResponse {
  * @returns      Array of { path, snippet } objects, or [] on any error
  */
 export async function searchRemoteCode(
-	query: string,
-	opts: RemoteQueryOptions,
-	token?: string,
+  query: string,
+  opts: RemoteQueryOptions,
+  token?: string,
 ): Promise<Array<{ path: string; snippet: string }>> {
-	const scopedQuery = `${query} repo:${opts.owner}/${opts.repo}`;
-	const url = `https://api.github.com/search/code?q=${encodeURIComponent(scopedQuery)}`;
+  const scopedQuery = `${query} repo:${opts.owner}/${opts.repo}`;
+  const url = `https://api.github.com/search/code?q=${encodeURIComponent(scopedQuery)}`;
 
-	try {
-		const headers: Record<string, string> = {
-			Accept: "application/vnd.github.v3.text-match+json",
-		};
-		if (token) {
-			headers["Authorization"] = `Bearer ${token}`;
-		}
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3.text-match+json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
 
-		const response = await fetch(url, { headers });
-		if (!response.ok) {
-			return [];
-		}
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      return [];
+    }
 
-		const data = (await response.json()) as GitHubSearchResponse;
-		return (data.items ?? []).map((item) => ({
-			path: item.path,
-			snippet: item.text_matches?.[0]?.fragment ?? "",
-		}));
-	} catch {
-		return [];
-	}
+    const data = (await response.json()) as GitHubSearchResponse;
+    return (data.items ?? []).map((item) => ({
+      path: item.path,
+      snippet: item.text_matches?.[0]?.fragment ?? '',
+    }));
+  } catch {
+    return [];
+  }
 }

@@ -12,8 +12,8 @@
  *   ]);
  */
 
-import { describe, expect, it } from "vitest";
-import { assertTrace, loadTrace, type TraceAssertion } from "./index.js";
+import { describe, expect, it } from 'vitest';
+import { assertTrace, loadTrace, type TraceAssertion } from './index.js';
 
 /**
  * Create a vitest `describe` block that loads a trace from disk and runs
@@ -26,12 +26,12 @@ import { assertTrace, loadTrace, type TraceAssertion } from "./index.js";
  * @param assertions - Array of structural assertions to evaluate
  */
 export function describeTrace(tracePath: string, assertions: TraceAssertion[]): void {
-	describe(`Trace: ${tracePath}`, () => {
-		it("passes all assertions", async () => {
-			const trace = await loadTrace(tracePath);
-			const result = await assertTrace(trace, assertions);
-			if (!result.passed) throw new Error(result.failures.join("\n"));
-			expect(result.passed).toBe(true);
-		});
-	});
+  describe(`Trace: ${tracePath}`, () => {
+    it('passes all assertions', async () => {
+      const trace = await loadTrace(tracePath);
+      const result = await assertTrace(trace, assertions);
+      if (!result.passed) throw new Error(result.failures.join('\n'));
+      expect(result.passed).toBe(true);
+    });
+  });
 }

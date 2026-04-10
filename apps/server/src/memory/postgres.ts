@@ -55,7 +55,7 @@ export class PostgresMemoryStorage implements MemoryStorage {
       ...options,
       // Pass the embed function for hybrid search when provider is available
       embedFn: this.embeddingProvider
-        ? (text: string) => this.embeddingProvider!.embed(text)
+        ? (text: string) => this.embeddingProvider?.embed(text)
         : undefined,
     });
     return rows.map((row: ObservationRow) => ({

@@ -816,7 +816,7 @@ diff --git a/README.md b/README.md
 
       // failedSteps should be populated
       expect(result.failedSteps).toBeDefined();
-      expect(result.failedSteps!.length).toBeGreaterThan(0);
+      expect(result.failedSteps?.length).toBeGreaterThan(0);
 
       // Status should remain FAILED, not downgraded to PARTIAL
       expect(result.status).toBe('FAILED');

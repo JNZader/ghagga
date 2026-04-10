@@ -11,7 +11,6 @@ import {
   categorizeFiles,
   formatFileCategorySummary,
   formatReviewComment,
-  REVIEW_COMMENT_MARKER,
   SEVERITY_EMOJI,
   STATUS_EMOJI,
 } from './format.js';
@@ -509,7 +508,7 @@ describe('categorizeFiles', () => {
     // Should match UI (components/) before Core (src/)
     const uiCat = categories.find((c) => c.name === 'UI');
     expect(uiCat).toBeDefined();
-    expect(uiCat!.files).toContain('src/components/Button.tsx');
+    expect(uiCat?.files).toContain('src/components/Button.tsx');
     // Should NOT also be in Core
     const coreCat = categories.find((c) => c.name === 'Core');
     expect(coreCat).toBeUndefined();

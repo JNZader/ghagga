@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { SqliteMemoryStorage } from './sqlite.js';
 import {
   BranchExistsError,
@@ -119,7 +119,7 @@ describe('branches', () => {
     );
     rawDb().run(
       'INSERT OR IGNORE INTO memory_branch_observations (branch_id, observation_id) VALUES (?, ?)',
-      [expBranch!.id, obs.id],
+      [expBranch?.id, obs.id],
     );
 
     versioning.deleteBranch('exp');
@@ -195,7 +195,7 @@ describe('merge', () => {
     );
     rawDb().run(
       'INSERT OR IGNORE INTO memory_branch_observations (branch_id, observation_id) VALUES (?, ?)',
-      [expBranch!.id, obs.id],
+      [expBranch?.id, obs.id],
     );
 
     const result = versioning.mergeBranch('exp', 'main');
@@ -229,7 +229,7 @@ describe('merge', () => {
     rawDb().run('UPDATE memory_observations SET severity = ? WHERE id = ?', ['low', obs2.id]);
     rawDb().run(
       'INSERT OR IGNORE INTO memory_branch_observations (branch_id, observation_id) VALUES (?, ?)',
-      [expBranch!.id, obs2.id],
+      [expBranch?.id, obs2.id],
     );
 
     const result = versioning.mergeBranch('exp', 'main');

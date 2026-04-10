@@ -198,7 +198,7 @@ export function formatFileCategorySummary(fileList: string[]): string {
     section += '\n';
   }
 
-  return section + '\n';
+  return `${section}\n`;
 }
 
 // ─── Format Options ─────────────────────────────────────────────
