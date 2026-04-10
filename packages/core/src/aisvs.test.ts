@@ -50,9 +50,20 @@ describe("scanContentForAISVS", () => {
 	});
 
 	it("detects MCP tool with shell execution", () => {
-		const code = "const tool = { handler: async () => exec('ls') }";
+		const code = "const tool = { handler: async () => exec('ls -la') }";
 		const findings = scanContentForAISVS(code, "mcp-server.ts");
 		expect(findings.some((f) => f.category === "mcp-security")).toBe(true);
+	});
+
+	it("does NOT flag normal query/result usage", () => {
+		const code = [
+			"const result = await query('SELECT 1');",
+			"const findings = results.filter(f => f.severity);",
+			"expect(result).toBeDefined();",
+			"const executed = toolsRun.includes('semgrep');",
+		].join("\n");
+		const findings = scanContentForAISVS(code, "normal.ts");
+		expect(findings.filter((f) => f.checkId === "AISVS-12.3")).toHaveLength(0);
 	});
 
 	it("detects API key in prompt context", () => {

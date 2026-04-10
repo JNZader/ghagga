@@ -108,7 +108,7 @@ export const AISVS_CHECKS: AISVSCheck[] = [
 		severity: "medium",
 		title: "LLM output used in database query",
 		description: "AI response interpolated into SQL/NoSQL queries",
-		pattern: /(?:query|execute|find|aggregate).*(?:result|response|completion|generated)/i,
+		pattern: /(?:\.query|\.execute|\.run)\s*\(\s*[`'"]\s*(?:SELECT|INSERT|UPDATE|DELETE|CREATE).*\$\{.*(?:result|response|completion|output)/i,
 		recommendation: "Use parameterized queries. Never interpolate LLM output into database operations.",
 	},
 
@@ -119,7 +119,7 @@ export const AISVS_CHECKS: AISVSCheck[] = [
 		severity: "critical",
 		title: "MCP tool with shell execution",
 		description: "MCP tool handler that executes shell commands",
-		pattern: /(?:tool|handler).*(?:exec|spawn|shell|child_process)/i,
+		pattern: /(?:tool|handler)\s*[=:{].*(?:execSync|child_process|spawn\s*\(|exec\s*\()/i,
 		recommendation: "MCP tools should not execute arbitrary shell commands. Use allowlists and sandboxing.",
 	},
 	{
