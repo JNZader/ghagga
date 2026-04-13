@@ -485,3 +485,54 @@ export { buildCallChainFromDiff } from './graph/call-chain.js';
 
 export type { ReverseDependencyMap, ReverseDepsResult } from './graph/reverse-deps.js';
 export { buildReverseDependencyMap, findDependents } from './graph/reverse-deps.js';
+
+// ─── ACP (Agent Communication Protocol) ──────────────────────
+
+export { ACPAdapter, ACPTaskStore, resetTaskCounter } from './acp/index.js';
+export type {
+  ACPAdapterOptions,
+  ACPAgentCapabilities,
+  ACPArtifact,
+  ACPArtifactType,
+  ACPNotification,
+  ACPRequest,
+  ACPResponse,
+  ACPTask,
+  ACPTaskError,
+  ACPTaskInput,
+  ACPTaskOutput,
+  ACPTaskState,
+} from './acp/index.js';
+
+// ─── Dual-Critique Loop ──────────────────────────────────────
+
+export {
+  applyCritique,
+  parseCritiqueResponse,
+  runDualCritique,
+} from './critique/index.js';
+export type {
+  CritiqueResult,
+  CritiqueVerdict,
+  DualCritiqueConfig,
+  DualCritiqueInput,
+  DualCritiqueResult,
+  FindingCritique,
+} from './critique/index.js';
+export { DEFAULT_DUAL_CRITIQUE_CONFIG } from './critique/index.js';
+
+// ─── Cross-Model Review ──────────────────────────────────────
+
+export {
+  computeSimilarity,
+  matchFindings,
+  runCrossModelReview,
+} from './critique/index.js';
+export type {
+  AgreementLevel,
+  CrossModelConfig,
+  CrossModelFinding,
+  CrossModelInput,
+  CrossModelResult,
+} from './critique/index.js';
+export { DEFAULT_CROSS_MODEL_CONFIG } from './critique/index.js';
