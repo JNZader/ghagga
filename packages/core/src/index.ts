@@ -536,3 +536,18 @@ export type {
   CrossModelResult,
 } from './critique/index.js';
 export { DEFAULT_CROSS_MODEL_CONFIG } from './critique/index.js';
+
+// ─── Semantic Search (Historical Reviews) ──────────────────────
+
+export type {
+  BM25Params,
+  IndexSnapshot,
+  SearchDocument,
+  SearchDocumentSource,
+  SearchOptions,
+  SearchResult,
+  TermPosting,
+  TermStats,
+} from './search/index.js';
+
+export { SearchEngine, SearchIndexer, STOP_WORDS, tokenize } from './search/index.js';
