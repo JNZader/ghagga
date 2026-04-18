@@ -10,17 +10,27 @@ import type {
   PageContextRequest, 
   PageContextResponse,
   PageNavigationRequest,
-  PageDirection,
   CompactionCheck,
   RelevantPageRequest
 } from './types.js';
+import { PageDirection } from './types.js';
+
+/**
+ * Extended Database interface matching GHAGGA's sqlite.ts
+ */
+interface DatabaseWithParams extends Database {
+  exec(
+    sql: string,
+    params?: (string | number | Buffer | null)[],
+  ): Array<{ columns: string[]; values: unknown[][] }>;
+}
 import { chunkProjectMemory, shouldCompact, extractTopics } from './chunker.js';
 
 export class ProjectPageIndexService {
-  private db: Database;
+  private db: DatabaseWithParams;
 
   constructor(db: Database) {
-    this.db = db;
+    this.db = db as DatabaseWithParams;
     this.initSchema();
   }
 
@@ -62,7 +72,7 @@ export class ProjectPageIndexService {
       [projectId]
     );
     
-    if (existing[0]?.values[0][0] > 0) {
+    if ((existing[0]?.values[0][0] as number) > 0) {
       // Return existing stats
       const stats = this.getProjectStats(projectId);
       return { pages: stats.pages, tokens: stats.tokens };

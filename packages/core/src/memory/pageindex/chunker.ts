@@ -4,7 +4,7 @@
  * Chunks project memory by topics and extracts file references.
  */
 
-import type { ProjectPageChunk } from './types.js';
+import type { ProjectPageChunk, CompactionCheck } from './types.js';
 
 export const GHAGGA_CHUNK_CONFIG = {
   maxTokensPerPage: 1500,
