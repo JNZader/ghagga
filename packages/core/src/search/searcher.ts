@@ -16,8 +16,8 @@
  *   - b = document length normalization (default 0.75)
  */
 
-import { tokenize } from './indexer.js';
 import type { SearchIndexer } from './indexer.js';
+import { tokenize } from './indexer.js';
 import type { BM25Params, SearchOptions, SearchResult } from './types.js';
 
 // ─── Default BM25 Parameters ──────────────────────────────────

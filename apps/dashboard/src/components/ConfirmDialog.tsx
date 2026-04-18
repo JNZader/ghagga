@@ -108,13 +108,14 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      role="presentation"
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center"
       onKeyDown={handleKeyDown}
     >
       {/* Backdrop — acts as a dismiss button for keyboard/mouse */}
-      <div
-        role="button"
+      <button
+        type="button"
         tabIndex={-1}
         aria-label="Close dialog"
         className="absolute inset-0 bg-black/60"

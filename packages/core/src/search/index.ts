@@ -6,6 +6,8 @@
  * "memory leak in connection pool" → finds related past findings.
  */
 
+export { SearchIndexer, STOP_WORDS, tokenize } from './indexer.js';
+export { SearchEngine } from './searcher.js';
 export type {
   BM25Params,
   IndexSnapshot,
@@ -16,6 +18,3 @@ export type {
   TermPosting,
   TermStats,
 } from './types.js';
-
-export { SearchIndexer, STOP_WORDS, tokenize } from './indexer.js';
-export { SearchEngine } from './searcher.js';

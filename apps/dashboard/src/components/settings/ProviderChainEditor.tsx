@@ -10,6 +10,7 @@ interface ProviderChainEditorProps {
 }
 
 const DEFAULT_ENTRY: ProviderEntryState = {
+  id: crypto.randomUUID(),
   provider: 'gateway' as SaaSProvider,
   model: 'auto',
   apiKey: '',
@@ -93,7 +94,7 @@ export function ProviderChainEditor({
         <>
           {chain.map((entry, index) => (
             <ProviderEntry
-              key={`provider-${index}`}
+              key={entry.id}
               index={index}
               entry={entry}
               totalEntries={chain.length}

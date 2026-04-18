@@ -170,6 +170,14 @@ export { formatMemoryContext } from './memory/context.js';
 export { detectContradictions } from './memory/contradiction.js';
 export { computeStrength, decayPhase } from './memory/decay.js';
 export { EngramMemoryStorage } from './memory/engram.js';
+export {
+  createProjectPageIndex,
+  type PageContextRequest,
+  type PageContextResponse,
+  PageDirection,
+  type ProjectPageChunk,
+  ProjectPageIndexService,
+} from './memory/pageindex/index.js';
 export { stripPrivateData } from './memory/privacy.js';
 export { SqliteMemoryStorage, type SqliteMemoryStorageOptions } from './memory/sqlite.js';
 export {
@@ -180,14 +188,6 @@ export {
   SnapshotExistsError,
   SnapshotNotFoundError,
 } from './memory/versioning.js';
-export {
-  ProjectPageIndexService,
-  type ProjectPageChunk,
-  type PageContextRequest,
-  type PageContextResponse,
-  PageDirection,
-  createProjectPageIndex,
-} from './memory/pageindex/index.js';
 
 // ─── Formatting ─────────────────────────────────────────────────
 
@@ -496,7 +496,6 @@ export { buildReverseDependencyMap, findDependents } from './graph/reverse-deps.
 
 // ─── ACP (Agent Communication Protocol) ──────────────────────
 
-export { ACPAdapter, ACPTaskStore, resetTaskCounter } from './acp/index.js';
 export type {
   ACPAdapterOptions,
   ACPAgentCapabilities,
@@ -511,14 +510,10 @@ export type {
   ACPTaskOutput,
   ACPTaskState,
 } from './acp/index.js';
+export { ACPAdapter, ACPTaskStore, resetTaskCounter } from './acp/index.js';
 
 // ─── Dual-Critique Loop ──────────────────────────────────────
 
-export {
-  applyCritique,
-  parseCritiqueResponse,
-  runDualCritique,
-} from './critique/index.js';
 export type {
   CritiqueResult,
   CritiqueVerdict,
@@ -527,15 +522,15 @@ export type {
   DualCritiqueResult,
   FindingCritique,
 } from './critique/index.js';
-export { DEFAULT_DUAL_CRITIQUE_CONFIG } from './critique/index.js';
+export {
+  applyCritique,
+  DEFAULT_DUAL_CRITIQUE_CONFIG,
+  parseCritiqueResponse,
+  runDualCritique,
+} from './critique/index.js';
 
 // ─── Cross-Model Review ──────────────────────────────────────
 
-export {
-  computeSimilarity,
-  matchFindings,
-  runCrossModelReview,
-} from './critique/index.js';
 export type {
   AgreementLevel,
   CrossModelConfig,
@@ -543,7 +538,12 @@ export type {
   CrossModelInput,
   CrossModelResult,
 } from './critique/index.js';
-export { DEFAULT_CROSS_MODEL_CONFIG } from './critique/index.js';
+export {
+  computeSimilarity,
+  DEFAULT_CROSS_MODEL_CONFIG,
+  matchFindings,
+  runCrossModelReview,
+} from './critique/index.js';
 
 // ─── Semantic Search (Historical Reviews) ──────────────────────
 

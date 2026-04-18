@@ -67,8 +67,24 @@ describe('ACPTaskStore', () => {
   it('lists all tasks', () => {
     const store = new ACPTaskStore();
     const now = new Date().toISOString();
-    store.set({ id: 'a', state: 'submitted', description: '', input: { diff: '' }, artifacts: [], createdAt: now, updatedAt: now });
-    store.set({ id: 'b', state: 'working', description: '', input: { diff: '' }, artifacts: [], createdAt: now, updatedAt: now });
+    store.set({
+      id: 'a',
+      state: 'submitted',
+      description: '',
+      input: { diff: '' },
+      artifacts: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    store.set({
+      id: 'b',
+      state: 'working',
+      description: '',
+      input: { diff: '' },
+      artifacts: [],
+      createdAt: now,
+      updatedAt: now,
+    });
 
     expect(store.list()).toHaveLength(2);
   });
@@ -76,7 +92,15 @@ describe('ACPTaskStore', () => {
   it('deletes tasks', () => {
     const store = new ACPTaskStore();
     const now = new Date().toISOString();
-    store.set({ id: 'del', state: 'submitted', description: '', input: { diff: '' }, artifacts: [], createdAt: now, updatedAt: now });
+    store.set({
+      id: 'del',
+      state: 'submitted',
+      description: '',
+      input: { diff: '' },
+      artifacts: [],
+      createdAt: now,
+      updatedAt: now,
+    });
 
     expect(store.delete('del')).toBe(true);
     expect(store.get('del')).toBeUndefined();
@@ -309,7 +333,7 @@ describe('ACPAdapter', () => {
         method: 'task/list',
       });
 
-      expect((response.result as any[])).toHaveLength(2);
+      expect(response.result as any[]).toHaveLength(2);
     });
 
     it('handles task/cancel', async () => {

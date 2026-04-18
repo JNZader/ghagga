@@ -1,18 +1,19 @@
 /**
  * PageIndex Tests for GHAGGA
- * 
+ *
  * TDD: Tests for ProjectPageIndexService
  * Run: pnpm test test/pageindex.test.ts
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import initSqlJs from 'fts5-sql-bundle';
-import { ProjectPageIndexService, PageDirection } from '../src/memory/pageindex/index.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PageDirection, ProjectPageIndexService } from '../src/memory/pageindex/index.js';
 
 // CJS/ESM interop
-const initSqlJsFn = typeof initSqlJs === 'function' 
-  ? initSqlJs 
-  : (initSqlJs as unknown as { initSqlJs: typeof initSqlJs }).initSqlJs;
+const initSqlJsFn =
+  typeof initSqlJs === 'function'
+    ? initSqlJs
+    : (initSqlJs as unknown as { initSqlJs: typeof initSqlJs }).initSqlJs;
 
 describe('ProjectPageIndexService', () => {
   let db: any;
@@ -31,14 +32,14 @@ describe('ProjectPageIndexService', () => {
   describe('Schema Initialization', () => {
     it('should create project_page_index table', () => {
       const result = db.exec(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='project_page_index'"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='project_page_index'",
       );
       expect(result[0].values.length).toBe(1);
     });
 
     it('should create indexes', () => {
       const result = db.exec(
-        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_project_pages%'"
+        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_project_pages%'",
       );
       expect(result[0].values.length).toBe(2);
     });
@@ -84,7 +85,7 @@ describe('ProjectPageIndexService', () => {
       const page = service.getPage('topic-project', 1);
 
       expect(page?.topics.length).toBeGreaterThan(0);
-      expect(page?.topics.some(t => t.includes('Authentication'))).toBe(true);
+      expect(page?.topics.some((t) => t.includes('Authentication'))).toBe(true);
     });
 
     it('should extract file references', async () => {
@@ -98,13 +99,14 @@ describe('ProjectPageIndexService', () => {
       const page = service.getPage('files-project', 1);
 
       expect(page?.fileRefs.length).toBeGreaterThan(0);
-      expect(page?.fileRefs.some(f => f.includes('src/auth/middleware.ts'))).toBe(true);
+      expect(page?.fileRefs.some((f) => f.includes('src/auth/middleware.ts'))).toBe(true);
     });
 
     it('should link pages with prev/next', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Section ${i}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Section ${i}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('linked-project', content);
 
@@ -132,13 +134,14 @@ describe('ProjectPageIndexService', () => {
   describe('getPage', () => {
     it('should retrieve specific page', async () => {
       // Use large enough content to ensure we get multiple pages
-      const content = Array(10).fill(0).map((_, i) => 
-        `===Section${i + 1}===\n${'Text '.repeat(500)}`
-      ).join('\n\n');
+      const content = Array(10)
+        .fill(0)
+        .map((_, i) => `===Section${i + 1}===\n${'Text '.repeat(500)}`)
+        .join('\n\n');
 
       await service.createPageIndex('get-page-project', content);
       const stats = service.getProjectStats('get-page-project');
-      
+
       // Verify we have multiple pages
       expect(stats.pages).toBeGreaterThan(1);
 
@@ -163,16 +166,17 @@ describe('ProjectPageIndexService', () => {
 
   describe('getContext', () => {
     it('should get context window with surrounding pages', async () => {
-      const content = Array(7).fill(0).map((_, i) => 
-        `Section ${i + 1}\n${'Content '.repeat(400)}`
-      ).join('\n\n');
+      const content = Array(7)
+        .fill(0)
+        .map((_, i) => `Section ${i + 1}\n${'Content '.repeat(400)}`)
+        .join('\n\n');
 
       await service.createPageIndex('context-project', content);
 
       const context = service.getContext({
         projectId: 'context-project',
         pageNum: 4,
-        windowSize: 1
+        windowSize: 1,
       });
 
       expect(context.totalInContext).toBe(3); // prev + current + next
@@ -184,16 +188,17 @@ describe('ProjectPageIndexService', () => {
     });
 
     it('should handle boundaries (first page)', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Section ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Section ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('boundary-project', content);
 
       const context = service.getContext({
         projectId: 'boundary-project',
         pageNum: 1,
-        windowSize: 1
+        windowSize: 1,
       });
 
       expect(context.previousPages.length).toBe(0);
@@ -202,9 +207,10 @@ describe('ProjectPageIndexService', () => {
     });
 
     it('should handle boundaries (last page)', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Section ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Section ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('last-page-project', content);
       const stats = service.getProjectStats('last-page-project');
@@ -212,7 +218,7 @@ describe('ProjectPageIndexService', () => {
       const context = service.getContext({
         projectId: 'last-page-project',
         pageNum: stats.pages,
-        windowSize: 1
+        windowSize: 1,
       });
 
       expect(context.previousPages.length).toBe(1);
@@ -221,16 +227,17 @@ describe('ProjectPageIndexService', () => {
     });
 
     it('should calculate total tokens correctly', async () => {
-      const content = Array(3).fill(0).map((_, i) => 
-        `Section ${i + 1}\n${'Content '.repeat(300)}`
-      ).join('\n\n');
+      const content = Array(3)
+        .fill(0)
+        .map((_, i) => `Section ${i + 1}\n${'Content '.repeat(300)}`)
+        .join('\n\n');
 
       await service.createPageIndex('tokens-project', content);
 
       const context = service.getContext({
         projectId: 'tokens-project',
         pageNum: 2,
-        windowSize: 1
+        windowSize: 1,
       });
 
       expect(context.totalTokens).toBeGreaterThan(0);
@@ -240,57 +247,61 @@ describe('ProjectPageIndexService', () => {
 
   describe('navigate', () => {
     it('should navigate to next page', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Page ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Page ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('nav-project', content);
 
       const next = service.navigate({
         projectId: 'nav-project',
         currentPageNum: 2,
-        direction: PageDirection.NEXT
+        direction: PageDirection.NEXT,
       });
 
       expect(next?.pageNum).toBe(3);
     });
 
     it('should navigate to previous page', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Page ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Page ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('nav-prev-project', content);
 
       const prev = service.navigate({
         projectId: 'nav-prev-project',
         currentPageNum: 3,
-        direction: PageDirection.PREV
+        direction: PageDirection.PREV,
       });
 
       expect(prev?.pageNum).toBe(2);
     });
 
     it('should navigate to first page', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Page ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Page ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('nav-first-project', content);
 
       const first = service.navigate({
         projectId: 'nav-first-project',
         currentPageNum: 4,
-        direction: PageDirection.FIRST
+        direction: PageDirection.FIRST,
       });
 
       expect(first?.pageNum).toBe(1);
     });
 
     it('should navigate to last page', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Page ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Page ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('nav-last-project', content);
       const stats = service.getProjectStats('nav-last-project');
@@ -298,32 +309,34 @@ describe('ProjectPageIndexService', () => {
       const last = service.navigate({
         projectId: 'nav-last-project',
         currentPageNum: 2,
-        direction: PageDirection.LAST
+        direction: PageDirection.LAST,
       });
 
       expect(last?.pageNum).toBe(stats.pages);
     });
 
     it('should return null when navigating prev from first', async () => {
-      const content = Array(3).fill(0).map((_, i) => 
-        `Page ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(3)
+        .fill(0)
+        .map((_, i) => `Page ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('nav-boundary-project', content);
 
       const prev = service.navigate({
         projectId: 'nav-boundary-project',
         currentPageNum: 1,
-        direction: PageDirection.PREV
+        direction: PageDirection.PREV,
       });
 
       expect(prev).toBeNull();
     });
 
     it('should return null when navigating next from last', async () => {
-      const content = Array(3).fill(0).map((_, i) => 
-        `Page ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(3)
+        .fill(0)
+        .map((_, i) => `Page ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('nav-last-boundary-project', content);
       const stats = service.getProjectStats('nav-last-boundary-project');
@@ -331,7 +344,7 @@ describe('ProjectPageIndexService', () => {
       const next = service.navigate({
         projectId: 'nav-last-boundary-project',
         currentPageNum: stats.pages,
-        direction: PageDirection.NEXT
+        direction: PageDirection.NEXT,
       });
 
       expect(next).toBeNull();
@@ -361,13 +374,13 @@ describe('ProjectPageIndexService', () => {
         prContext: {
           title: 'Add JWT authentication',
           description: 'Implement auth system',
-          files: []
+          files: [],
         },
-        maxPages: 2
+        maxPages: 2,
       });
 
       expect(relevant.length).toBeGreaterThan(0);
-      expect(relevant[0].topics.some(t => t.includes('Authentication'))).toBe(true);
+      expect(relevant[0].topics.some((t) => t.includes('Authentication'))).toBe(true);
     });
 
     it('should find pages matching file references', async () => {
@@ -388,19 +401,20 @@ describe('ProjectPageIndexService', () => {
         prContext: {
           title: 'Fix auth bug',
           description: 'Update middleware',
-          files: ['src/auth/middleware.ts']
+          files: ['src/auth/middleware.ts'],
         },
-        maxPages: 2
+        maxPages: 2,
       });
 
       expect(relevant.length).toBeGreaterThan(0);
-      expect(relevant[0].fileRefs.some(f => f.includes('middleware.ts'))).toBe(true);
+      expect(relevant[0].fileRefs.some((f) => f.includes('middleware.ts'))).toBe(true);
     });
 
     it('should respect maxPages limit', async () => {
-      const content = Array(10).fill(0).map((_, i) => 
-        `Topic ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(10)
+        .fill(0)
+        .map((_, i) => `Topic ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('max-pages-project', content);
 
@@ -409,9 +423,9 @@ describe('ProjectPageIndexService', () => {
         prContext: {
           title: 'Topic 1 Topic 3 Topic 5',
           description: 'Multiple topics',
-          files: []
+          files: [],
         },
-        maxPages: 2
+        maxPages: 2,
       });
 
       expect(relevant.length).toBeLessThanOrEqual(2);
@@ -430,9 +444,9 @@ describe('ProjectPageIndexService', () => {
         prContext: {
           title: 'Database migration',
           description: 'PostgreSQL updates',
-          files: ['src/database/migrate.ts']
+          files: ['src/database/migrate.ts'],
         },
-        maxPages: 3
+        maxPages: 3,
       });
 
       expect(relevant.length).toBe(0);
@@ -477,9 +491,10 @@ describe('ProjectPageIndexService', () => {
 
   describe('getProjectStats', () => {
     it('should return correct page count', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Section ${i + 1}\n${'Content '.repeat(300)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Section ${i + 1}\n${'Content '.repeat(300)}`)
+        .join('\n\n');
 
       await service.createPageIndex('stats-count-project', content);
       const stats = service.getProjectStats('stats-count-project');
@@ -508,12 +523,13 @@ describe('ProjectPageIndexService', () => {
 
   describe('deletePageIndex', () => {
     it('should delete all pages for project', async () => {
-      const content = Array(5).fill(0).map((_, i) => 
-        `Page ${i + 1}\n${'Content '.repeat(200)}`
-      ).join('\n\n');
+      const content = Array(5)
+        .fill(0)
+        .map((_, i) => `Page ${i + 1}\n${'Content '.repeat(200)}`)
+        .join('\n\n');
 
       await service.createPageIndex('delete-project', content);
-      
+
       const beforeStats = service.getProjectStats('delete-project');
       expect(beforeStats.pages).toBeGreaterThan(0);
 
@@ -564,18 +580,18 @@ describe('ProjectPageIndexService', () => {
         prContext: {
           title: 'Fix JWT token expiration',
           description: 'Update auth middleware',
-          files: ['src/auth/middleware.ts']
+          files: ['src/auth/middleware.ts'],
         },
-        maxPages: 2
+        maxPages: 2,
       });
 
       expect(relevantPages.length).toBeGreaterThan(0);
       // Check that relevant page has content or topics related to auth
-      const hasAuthContent = relevantPages[0].content.toLowerCase().includes('auth') ||
-                            relevantPages[0].topics.some(t => 
-                              t.toLowerCase().includes('authentication') || 
-                              t.toLowerCase().includes('auth')
-                            );
+      const hasAuthContent =
+        relevantPages[0].content.toLowerCase().includes('auth') ||
+        relevantPages[0].topics.some(
+          (t) => t.toLowerCase().includes('authentication') || t.toLowerCase().includes('auth'),
+        );
       expect(hasAuthContent).toBe(true);
 
       // Step 3: Build context within token budget
@@ -602,9 +618,9 @@ describe('ProjectPageIndexService', () => {
         const nextPage = service.navigate({
           projectId: 'integration-project',
           currentPageNum: lastPage.pageNum,
-          direction: PageDirection.NEXT
+          direction: PageDirection.NEXT,
         });
-        
+
         if (nextPage) {
           expect(nextPage.pageNum).toBe(lastPage.pageNum + 1);
         }

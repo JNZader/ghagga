@@ -1,6 +1,6 @@
 /**
  * PageIndex for GHAGGA Project Memory
- * 
+ *
  * Enables navigable access to large project memories for small context models.
  * Adapts MCP-LLM-Bridge PageIndex pattern for GHAGGA's sql.js architecture.
  */
@@ -11,8 +11,8 @@ export interface ProjectPageChunk {
   pageNum: number;
   totalPages: number;
   content: string;
-  topics: string[];        // Extracted topics for relevance matching
-  fileRefs: string[];      // Referenced files in this page
+  topics: string[]; // Extracted topics for relevance matching
+  fileRefs: string[]; // Referenced files in this page
   tokenCount: number;
   prevPageId?: number;
   nextPageId?: number;
@@ -45,7 +45,7 @@ export enum PageDirection {
   NEXT = 'next',
   PREV = 'prev',
   FIRST = 'first',
-  LAST = 'last'
+  LAST = 'last',
 }
 
 export interface PageNavigationRequest {

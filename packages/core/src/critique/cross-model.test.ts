@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ReviewFinding, ReviewResult } from '../types.js';
-import {
-  computeSimilarity,
-  matchFindings,
-  runCrossModelReview,
-} from './cross-model.js';
+import { computeSimilarity, matchFindings, runCrossModelReview } from './cross-model.js';
 
 // ─── computeSimilarity ─────────────────────────────────────────
 
@@ -100,9 +96,7 @@ describe('matchFindings', () => {
       makeFinding('src/app.ts', 'SQL injection vulnerability'),
       makeFinding('src/app.ts', 'Missing input validation'),
     ];
-    const findingsB = [
-      makeFinding('src/app.ts', 'SQL injection vulnerability detected'),
-    ];
+    const findingsB = [makeFinding('src/app.ts', 'SQL injection vulnerability detected')];
 
     const { matches, unmatchedA, unmatchedB } = matchFindings(findingsA, findingsB, 0.4);
 
@@ -117,9 +111,7 @@ describe('matchFindings', () => {
       makeFinding('src/app.ts', 'SQL injection vulnerability'),
       makeFinding('src/app.ts', 'SQL injection in different module'),
     ];
-    const findingsB = [
-      makeFinding('src/app.ts', 'SQL injection vulnerability detected'),
-    ];
+    const findingsB = [makeFinding('src/app.ts', 'SQL injection vulnerability detected')];
 
     const { matches } = matchFindings(findingsA, findingsB, 0.4);
 
@@ -149,7 +141,10 @@ describe('runCrossModelReview', () => {
     source: 'semgrep',
   });
 
-  const makeReview = (aiFindings: ReviewFinding[], staticFindings: ReviewFinding[] = []): ReviewResult => ({
+  const makeReview = (
+    aiFindings: ReviewFinding[],
+    staticFindings: ReviewFinding[] = [],
+  ): ReviewResult => ({
     status: 'FAILED',
     summary: 'Issues found.',
     findings: [...aiFindings, ...staticFindings],
@@ -201,7 +196,9 @@ describe('runCrossModelReview', () => {
     );
 
     expect(result.metadata.agreedCount).toBe(1);
-    expect(result.findings.filter((f) => f.agreementLevel === 'agreed' && f.source === 'ai')).toHaveLength(1);
+    expect(
+      result.findings.filter((f) => f.agreementLevel === 'agreed' && f.source === 'ai'),
+    ).toHaveLength(1);
     expect(result.findings[0].crossModelConfidence).toBeGreaterThan(0.8);
     expect(result.findings[0].reportedBy).toEqual(['claude', 'gpt-4o']);
   });
@@ -229,7 +226,8 @@ describe('runCrossModelReview', () => {
     expect(aOnly).toHaveLength(1);
     expect(aOnly[0].message).toBe('XSS in template rendering');
     expect(aOnly[0].crossModelConfidence).toBeLessThan(
-      result.findings.find((f) => f.agreementLevel === 'agreed' && f.source === 'ai')!.crossModelConfidence,
+      result.findings.find((f) => f.agreementLevel === 'agreed' && f.source === 'ai')!
+        .crossModelConfidence,
     );
   });
 
@@ -283,7 +281,9 @@ describe('runCrossModelReview', () => {
 
   it('returns NEEDS_HUMAN_REVIEW when models disagree', async () => {
     const reviewA = makeReview([makeFinding('Issue only model A sees')]);
-    const reviewB = makeReview([makeFinding('Completely different issue model B sees', 'other.ts')]);
+    const reviewB = makeReview([
+      makeFinding('Completely different issue model B sees', 'other.ts'),
+    ]);
 
     const result = await runCrossModelReview(
       reviewA,
@@ -301,7 +301,8 @@ describe('runCrossModelReview', () => {
     const reviewB = makeReview([makeFinding('Issue B', 'other.ts')]);
 
     // Mock critique responses: first pair for model A, second for model B
-    const genA = vi.fn()
+    const genA = vi
+      .fn()
       .mockResolvedValueOnce({
         text: `OVERALL_ASSESSMENT: OK
 CRITIQUES:
@@ -319,7 +320,8 @@ CRITIQUES:
         model: 'test',
       });
 
-    const genB = vi.fn()
+    const genB = vi
+      .fn()
       .mockResolvedValueOnce({
         text: `OVERALL_ASSESSMENT: OK
 CRITIQUES:

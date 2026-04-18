@@ -26,42 +26,48 @@ function buildSearchEngine(docs: SearchDocument[]): SearchEngine {
 const CORPUS: SearchDocument[] = [
   makeDoc({
     id: 'review-1',
-    content: 'Found a memory leak in the database connection pool. The connections are never released back when the query times out, causing pool exhaustion under load.',
+    content:
+      'Found a memory leak in the database connection pool. The connections are never released back when the query times out, causing pool exhaustion under load.',
     source: 'review-comment',
     prNumber: 42,
     createdAt: '2025-01-10T10:00:00Z',
   }),
   makeDoc({
     id: 'review-2',
-    content: 'The authentication middleware does not properly validate JWT tokens. Missing expiration check allows expired tokens to be used indefinitely.',
+    content:
+      'The authentication middleware does not properly validate JWT tokens. Missing expiration check allows expired tokens to be used indefinitely.',
     source: 'review-comment',
     prNumber: 43,
     createdAt: '2025-01-11T10:00:00Z',
   }),
   makeDoc({
     id: 'review-3',
-    content: 'Race condition in the async event handler. Multiple concurrent requests modify shared state without synchronization, causing data corruption.',
+    content:
+      'Race condition in the async event handler. Multiple concurrent requests modify shared state without synchronization, causing data corruption.',
     source: 'review-comment',
     prNumber: 44,
     createdAt: '2025-01-12T10:00:00Z',
   }),
   makeDoc({
     id: 'pr-desc-1',
-    content: 'Fix connection pool memory leak by adding proper cleanup on timeout. Also adds connection health checks and idle connection pruning.',
+    content:
+      'Fix connection pool memory leak by adding proper cleanup on timeout. Also adds connection health checks and idle connection pruning.',
     source: 'pr-description',
     prNumber: 45,
     createdAt: '2025-01-13T10:00:00Z',
   }),
   makeDoc({
     id: 'review-4',
-    content: 'SQL injection vulnerability in the user search endpoint. User input is concatenated directly into the query string without parameterization.',
+    content:
+      'SQL injection vulnerability in the user search endpoint. User input is concatenated directly into the query string without parameterization.',
     source: 'review-comment',
     prNumber: 46,
     createdAt: '2025-01-14T10:00:00Z',
   }),
   makeDoc({
     id: 'review-5',
-    content: 'The retry logic uses exponential backoff but has no jitter, causing thundering herd problems when the upstream service recovers.',
+    content:
+      'The retry logic uses exponential backoff but has no jitter, causing thundering herd problems when the upstream service recovers.',
     source: 'review-comment',
     prNumber: 47,
     createdAt: '2025-01-15T10:00:00Z',

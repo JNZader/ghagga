@@ -305,9 +305,8 @@ export async function runCrossModelReview(
     const fB = findingsB[match.indexB];
 
     // Use the higher severity between the two
-    const severity = severityRank(fA.severity) >= severityRank(fB.severity)
-      ? fA.severity
-      : fB.severity;
+    const severity =
+      severityRank(fA.severity) >= severityRank(fB.severity) ? fA.severity : fB.severity;
 
     const conf = Math.min(1.0, baseConfidence(severity) + config.agreementBoost);
 

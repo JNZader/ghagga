@@ -15,6 +15,7 @@
  */
 
 import { reviewPipeline } from '../pipeline.js';
+import { buildSarif } from '../sarif/index.js';
 import type {
   LLMProvider,
   ReviewInput,
@@ -23,7 +24,6 @@ import type {
   ReviewSettings,
 } from '../types.js';
 import { DEFAULT_SETTINGS } from '../types.js';
-import { buildSarif } from '../sarif/index.js';
 import type {
   ACPAgentCapabilities,
   ACPArtifact,
@@ -147,10 +147,7 @@ export class ACPAdapter {
    * Execute a submitted task (transitions through working → completed/failed).
    * This is async — the caller should not block on it.
    */
-  async executeTask(
-    taskId: string,
-    onProgress?: (task: ACPTask) => void,
-  ): Promise<ACPTask> {
+  async executeTask(taskId: string, onProgress?: (task: ACPTask) => void): Promise<ACPTask> {
     const task = this.store.get(taskId);
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
@@ -353,7 +350,7 @@ export class ACPAdapter {
 
     // SARIF output
     try {
-      const sarif = buildSarif(result.findings);
+      const sarif = buildSarif(result, '2.1.0');
       artifacts.push({
         id: `${taskId}-sarif`,
         type: 'sarif',

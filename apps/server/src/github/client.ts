@@ -228,7 +228,8 @@ export async function findExistingComment(
     if (allMatchIds.length === 0) return null;
 
     // Latest = last in chronological order (GitHub returns oldest first)
-    const latestId = allMatchIds[allMatchIds.length - 1]!;
+    const latestId = allMatchIds[allMatchIds.length - 1];
+    if (!latestId) return null;
     const staleIds = allMatchIds.slice(0, -1); // all except the last
 
     return { latestId, staleIds };

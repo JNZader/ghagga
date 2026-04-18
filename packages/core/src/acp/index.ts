@@ -1,5 +1,5 @@
-export { ACPAdapter, ACPTaskStore, resetTaskCounter } from './adapter.js';
 export type { ACPAdapterOptions } from './adapter.js';
+export { ACPAdapter, ACPTaskStore, resetTaskCounter } from './adapter.js';
 export type {
   ACPAgentCapabilities,
   ACPArtifact,

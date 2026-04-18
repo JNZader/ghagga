@@ -1,12 +1,12 @@
 /**
  * PageIndex for GHAGGA Project Memory
- * 
+ *
  * Exports all PageIndex components for navigable project memory.
  */
 
-export * from './types.js';
 export * from './chunker.js';
 export * from './service.js';
+export * from './types.js';
 
 import { ProjectPageIndexService } from './service.js';
 

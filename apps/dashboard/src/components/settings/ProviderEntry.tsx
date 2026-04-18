@@ -6,6 +6,8 @@ import type { SaaSProvider } from '@/lib/types';
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface ProviderEntryState {
+  /** Unique identifier for this entry */
+  id: string;
   provider: SaaSProvider;
   model: string;
   apiKey: string;
@@ -304,7 +306,7 @@ export function ProviderEntry({
 
       {/* Provider Mode: Gateway | CLI Bridge | Ollama */}
       <div className="mb-3">
-        <label className="mb-1 block text-xs font-medium text-text-secondary">Provider</label>
+        <span className="mb-1 block text-xs font-medium text-text-secondary">Provider</span>
         <div className="mb-2 flex flex-wrap items-center gap-4 text-sm">
           <label className="flex cursor-pointer items-center gap-1.5">
             <input
@@ -432,11 +434,15 @@ export function ProviderEntry({
       {/* CLI Bridge: OpenCode model input (only when opencode is selected) */}
       {isCLIBridge && entry.model === 'opencode' && (
         <div className="mb-3">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">
+          <label
+            htmlFor={`cli-model-${index}`}
+            className="mb-1 block text-xs font-medium text-text-secondary"
+          >
             OpenCode Model (provider/model)
             <span className="ml-1 text-red-400">*</span>
           </label>
           <input
+            id={`cli-model-${index}`}
             type="text"
             list={`cli-model-suggestions-${index}`}
             value={entry.cliModel ?? ''}
@@ -474,11 +480,15 @@ export function ProviderEntry({
       {isGateway && (
         <div className="mb-3 space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label
+              htmlFor={`gateway-url-${index}`}
+              className="mb-1 block text-xs font-medium text-text-secondary"
+            >
               Gateway URL
               <span className="ml-1 text-red-400">*</span>
             </label>
             <input
+              id={`gateway-url-${index}`}
               type="url"
               autoComplete="off"
               value={entry.gatewayUrl ?? ''}
@@ -494,13 +504,17 @@ export function ProviderEntry({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">
+            <label
+              htmlFor={`gateway-model-${index}`}
+              className="mb-1 block text-xs font-medium text-text-secondary"
+            >
               Model
               <span className="ml-2 font-normal text-text-muted">
                 (type or select from gateway)
               </span>
             </label>
             <input
+              id={`gateway-model-${index}`}
               type="text"
               autoComplete="off"
               list={`gateway-models-${index}`}
@@ -594,13 +608,13 @@ export function ProviderEntry({
       {/* Hidden for ollama (no key needed) and free opencode models */}
       <div className={`mb-3 ${isOllama || isFreeModel ? 'hidden' : ''}`}>
         <div className="mb-1 flex items-center justify-between">
-          <label className="text-xs font-medium text-text-secondary">
+          <span className="text-xs font-medium text-text-secondary">
             {isGateway
               ? 'Gateway Token'
               : isCLIBridge
                 ? getCliCredentialLabel(entry.model, entry.cliModel)
                 : 'API Key'}
-          </label>
+          </span>
           {/* Toggle between reusing a saved key and entering a new one */}
           {showReuseSelector && !isCLIBridge && (
             <button
@@ -698,10 +712,16 @@ export function ProviderEntry({
 
       {/* Model Selector — hidden for CLI Bridge (uses CLI dropdown) and Gateway (always 'auto') */}
       <div className={isCLIBridge || isGateway ? 'hidden' : ''}>
-        <label className="mb-1 block text-xs font-medium text-text-secondary">Model</label>
+        <label
+          htmlFor={`model-selector-${index}`}
+          className="mb-1 block text-xs font-medium text-text-secondary"
+        >
+          Model
+        </label>
         {effectiveModels.length > 0 || entry.model ? (
           <div>
             <input
+              id={`model-selector-${index}`}
               type="text"
               list={`models-${entry.provider}-${effectiveModels.length}`}
               value={entry.model}

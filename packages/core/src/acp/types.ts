@@ -12,12 +12,7 @@
 
 // ─── ACP Task Lifecycle ────────────────────────────────────────
 
-export type ACPTaskState =
-  | 'submitted'
-  | 'working'
-  | 'completed'
-  | 'failed'
-  | 'canceled';
+export type ACPTaskState = 'submitted' | 'working' | 'completed' | 'failed' | 'canceled';
 
 /**
  * ACP Task — the core unit of work in the protocol.
