@@ -122,11 +122,14 @@ export function shouldCompact(
 ): CompactionCheck {
   const threshold = modelMaxTokens * (1 - safetyMargin);
   
+  const shouldCompact = currentTokens > threshold;
+  
   return {
     currentTokens,
     maxTokens: modelMaxTokens,
     projectId: '',
-    shouldCompact: currentTokens > threshold,
-    suggestedAction: currentTokens > threshold ? 'paginate' : 'none',
+    shouldCompact,
+    safeToProceed: !shouldCompact,
+    suggestedAction: shouldCompact ? 'paginate' : 'none',
   };
 }

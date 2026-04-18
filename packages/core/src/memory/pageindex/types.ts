@@ -59,6 +59,7 @@ export interface CompactionCheck {
   maxTokens: number;
   projectId: string;
   shouldCompact: boolean;
+  safeToProceed: boolean;
   suggestedAction: 'compact' | 'paginate' | 'none';
 }
 
