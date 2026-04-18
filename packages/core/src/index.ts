@@ -180,6 +180,14 @@ export {
   SnapshotExistsError,
   SnapshotNotFoundError,
 } from './memory/versioning.js';
+export {
+  ProjectPageIndexService,
+  type ProjectPageChunk,
+  type PageContextRequest,
+  type PageContextResponse,
+  PageDirection,
+  createProjectPageIndex,
+} from './memory/pageindex/index.js';
 
 // ─── Formatting ─────────────────────────────────────────────────
 

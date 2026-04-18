@@ -34,6 +34,7 @@ import type {
 } from '../types.js';
 import { DEFAULT_DECAY_CONFIG, type DecayConfig } from '../types.js';
 import { computeStrength } from './decay.js';
+import { ProjectPageIndexService } from './pageindex/service.js';
 
 /**
  * Extended Database interface — fts5-sql-bundle types omit the params overload
@@ -168,6 +169,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
   private dedupWindowMinutes: number;
   private decayConfig: DecayConfig;
   private embeddingProvider: EmbeddingProvider | undefined;
+  private pageIndex: ProjectPageIndexService;
 
   private constructor(
     private db: DatabaseWithParams,
@@ -177,6 +179,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
     this.dedupWindowMinutes = options.dedupWindowMinutes ?? DEFAULT_DEDUP_WINDOW_MINUTES;
     this.decayConfig = options.decayConfig ?? DEFAULT_DECAY_CONFIG;
     this.embeddingProvider = options.embeddingProvider;
+    this.pageIndex = new ProjectPageIndexService(this.db);
   }
 
   /**
@@ -185,6 +188,15 @@ export class SqliteMemoryStorage implements MemoryStorage {
    */
   getDatabase(): DatabaseWithParams {
     return this.db;
+  }
+
+  /**
+   * Get the PageIndex service for paginated project memory access.
+   * Enables small context models (4K-8K tokens) to handle large project memories
+   * without compaction loops.
+   */
+  getPageIndex(): ProjectPageIndexService {
+    return this.pageIndex;
   }
 
   /**
