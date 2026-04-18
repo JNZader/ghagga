@@ -1,0 +1,87 @@
+# ═══════════════════════════════════════════════════════════════
+# NPM IGNORE - Prevent Source Code Leakage
+# Based on: https://github.com/JNZader/dotfiles
+# ═══════════════════════════════════════════════════════════════
+
+# ─── SOURCE MAPS (Security: prevent source code leakage) ────────
+*.map
+*.js.map
+*.d.ts.map
+*.css.map
+
+# ─── SOURCE FILES (only compiled dist/ should be published) ───────
+src/
+test/
+tests/
+*.test.ts
+*.test.js
+*.test.tsx
+*.spec.ts
+*.spec.js
+*.spec.tsx
+
+# ─── CONFIGURATION FILES ────────────────────────────────────────
+.eslintrc*
+.prettierrc*
+biome.json
+tsconfig*.json
+jsconfig.json
+.env*
+.env.example
+.env.local
+.env.*.local
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── BUILD ARTIFACTS & TEMP FILES ─────────────────────────────
+node_modules/
+.coverage/
+coverage/
+.nyc_output/
+reports/
+.stryker-tmp/
+stryker.config.*
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tgz
+*.tar.gz
+
+# ─── CI/CD & DEVOPS ─────────────────────────────────────────────
+.github/
+.gitlab-ci.yml
+.azure-pipelines.yml
+.travis.yml
+jenkins*
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# ─── DOCUMENTATION (README.md is explicitly included) ───────────
+docs/
+*.md
+!README.md
+!CHANGELOG.md
+LICENSE*
+
+# ─── CACHE & TEMP FILES ─────────────────────────────────────────
+.cache/
+.temp/
+tmp/
+temp/
+*.tmp
+.DS_Store
+Thumbs.db
+*.lock
+!pnpm-lock.yaml
+!package-lock.json
+!yarn.lock
+
+# ─── OS SPECIFIC ────────────────────────────────────────────────
+*.pid
+*.seed
+*.pid.lock

@@ -1,0 +1,35 @@
+# Source maps - prevent source code leakage
+*.map
+*.js.map
+*.d.ts.map
+
+# Source files
+src/
+test/
+tests/
+*.test.ts
+*.test.js
+
+# Config files
+.eslintrc*
+.prettierrc*
+tsconfig.json
+.env*
+.vscode/
+.idea/
+
+# Dev dependencies & build artifacts
+node_modules/
+coverage/
+*.log
+
+# CI/CD
+.github/
+
+# Documentation
+*.md
+!README.md
+
+# Misc
+*.tgz
+.DS_Store
