@@ -36,8 +36,6 @@ interface StaticAnalysisCallbackPayload {
   staticAnalysis: StaticAnalysisResult;
 }
 
-type CallbackPayload = StaticAnalysisCallbackPayload;
-
 export function createRunnerCallbackRouter() {
   const router = new Hono();
 
@@ -46,9 +44,9 @@ export function createRunnerCallbackRouter() {
     const rawBody = await c.req.text();
 
     // Parse the body
-    let payload: CallbackPayload;
+    let payload: StaticAnalysisCallbackPayload;
     try {
-      payload = JSON.parse(rawBody) as CallbackPayload;
+      payload = JSON.parse(rawBody) as StaticAnalysisCallbackPayload;
     } catch {
       logger.warn('Runner callback: invalid JSON body');
       return c.json({ error: 'Invalid JSON body' }, 400);

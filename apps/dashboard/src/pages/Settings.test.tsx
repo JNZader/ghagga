@@ -568,7 +568,6 @@ describe('Settings — save', () => {
       expect(mockMutateAsync).toHaveBeenCalledWith({
         repoFullName: 'acme/app',
         useGlobalSettings: true,
-        delegatedCiPolicy: null,
       });
     });
   });
