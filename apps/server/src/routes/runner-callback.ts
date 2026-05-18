@@ -1,13 +1,9 @@
 /**
  * Runner callback route.
  *
- * Receives results from the GitHub Actions runner workflow.
+ * Receives static-analysis results from the GitHub Actions runner workflow.
  * Authenticates via per-dispatch HMAC signatures
  * (not the user session auth middleware).
- *
- * Supports two callback types:
- *   - Static analysis (default): payloads without executionKind
- *   - Delegated CI: payloads with executionKind: 'delegated-ci'
  *
  * POST /runner/callback
  *
@@ -15,26 +11,11 @@
  *   x-ghagga-signature: sha256=<hex>   — HMAC of raw body using per-dispatch secret
  *
  * Body (JSON):
- *   Static analysis:
- *     callbackId: string
- *     repoFullName: string
- *     prNumber: number
- *     headSha: string
- *     staticAnalysis: StaticAnalysisResult
- *
- *   Delegated CI:
- *     executionKind: 'delegated-ci'
- *     callbackId: string
- *     repoFullName: string
- *     jobKey: string
- *     state: 'running' | 'completed' | 'failed'
- *     startedAt?: string
- *     completedAt?: string
- *     durationMs?: number
- *     summary?: string
- *     outcome?: 'success' | 'failure'
- *     errorCode?: string
- *     errorMessage?: string
+ *   callbackId: string
+ *   repoFullName: string
+ *   prNumber: number
+ *   headSha: string
+ *   staticAnalysis: StaticAnalysisResult
  */
 
 import type { StaticAnalysisResult } from 'ghagga-core';
@@ -48,7 +29,6 @@ const logger = rootLogger.child({ module: 'runner-callback' });
 // ─── Payload Types ──────────────────────────────────────────────
 
 interface StaticAnalysisCallbackPayload {
-  executionKind?: undefined;
   callbackId: string;
   repoFullName: string;
   prNumber: number;
@@ -56,22 +36,7 @@ interface StaticAnalysisCallbackPayload {
   staticAnalysis: StaticAnalysisResult;
 }
 
-interface DelegatedCiCallbackPayload {
-  executionKind: 'delegated-ci';
-  callbackId: string;
-  repoFullName: string;
-  jobKey: string;
-  state: 'running' | 'completed' | 'failed';
-  startedAt?: string;
-  completedAt?: string;
-  durationMs?: number;
-  summary?: string;
-  outcome?: 'success' | 'failure';
-  errorCode?: string;
-  errorMessage?: string;
-}
-
-type CallbackPayload = StaticAnalysisCallbackPayload | DelegatedCiCallbackPayload;
+type CallbackPayload = StaticAnalysisCallbackPayload;
 
 export function createRunnerCallbackRouter() {
   const router = new Hono();
@@ -89,92 +54,39 @@ export function createRunnerCallbackRouter() {
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 
-    // Validate common required fields
-    const { callbackId, repoFullName } = payload;
+    // Validate required fields
+    const { callbackId, repoFullName, prNumber, headSha, staticAnalysis } = payload;
 
-    if (payload.executionKind === 'delegated-ci') {
-      // ── Delegated CI callback ──
-      if (!callbackId || !repoFullName || !payload.jobKey || !payload.state) {
-        logger.warn({ callbackId }, 'Runner callback: missing required fields');
-        return c.json({ error: 'Missing required fields' }, 400);
-      }
-
-      // Verify HMAC signature
-      const signature = c.req.header('x-ghagga-signature');
-      if (!signature) {
-        logger.warn({ callbackId }, 'Runner callback: missing x-ghagga-signature header');
-        return c.json({ error: 'Missing signature' }, 401);
-      }
-
-      const valid = verifyCallbackSignature(callbackId, rawBody, signature);
-      if (!valid) {
-        logger.warn({ callbackId }, 'Runner callback: HMAC verification failed');
-        return c.json({ error: 'Invalid signature' }, 401);
-      }
-
-      // Update the delegated CI run record with callback data
-      try {
-        const { updateDelegatedCiRunByCallbackId } = await import('ghagga-db');
-        const { createDatabaseFromEnv } = await import('ghagga-db');
-        const db = createDatabaseFromEnv();
-
-        const newState =
-          payload.state === 'completed'
-            ? payload.outcome === 'success'
-              ? 'completed'
-              : 'failed'
-            : payload.state;
-
-        await updateDelegatedCiRunByCallbackId(db, callbackId, {
-          state: newState,
-          summary: payload.summary ?? null,
-          resultSummary: null,
-          completedAt: new Date(),
-        });
-
-        logger.info(
-          { callbackId, repoFullName, jobKey: payload.jobKey, state: newState },
-          'Delegated CI callback processed — run record updated',
-        );
-      } catch (err) {
-        logger.error({ err, callbackId }, 'Failed to process delegated CI callback');
-      }
-    } else {
-      // ── Static analysis callback (existing behavior) ──
-      const saPayload = payload as StaticAnalysisCallbackPayload;
-      const { prNumber, headSha, staticAnalysis } = saPayload;
-
-      if (!callbackId || !repoFullName || !prNumber || !headSha || !staticAnalysis) {
-        logger.warn({ callbackId }, 'Runner callback: missing required fields');
-        return c.json({ error: 'Missing required fields' }, 400);
-      }
-
-      // Verify HMAC signature
-      const signature = c.req.header('x-ghagga-signature');
-      if (!signature) {
-        logger.warn({ callbackId }, 'Runner callback: missing x-ghagga-signature header');
-        return c.json({ error: 'Missing signature' }, 401);
-      }
-
-      const valid = verifyCallbackSignature(callbackId, rawBody, signature);
-      if (!valid) {
-        logger.warn({ callbackId }, 'Runner callback: HMAC verification failed');
-        return c.json({ error: 'Invalid signature' }, 401);
-      }
-
-      // Write static analysis results to Redis for the BullMQ worker to pick up
-      await redis.set(
-        callbackResultKey(callbackId),
-        JSON.stringify(staticAnalysis),
-        'EX',
-        CALLBACK_RESULT_TTL,
-      );
-
-      logger.info(
-        { callbackId, repoFullName, prNumber, staticAnalysisTools: Object.keys(staticAnalysis) },
-        'Runner callback accepted — static analysis results stored in Redis',
-      );
+    if (!callbackId || !repoFullName || !prNumber || !headSha || !staticAnalysis) {
+      logger.warn({ callbackId }, 'Runner callback: missing required fields');
+      return c.json({ error: 'Missing required fields' }, 400);
     }
+
+    // Verify HMAC signature
+    const signature = c.req.header('x-ghagga-signature');
+    if (!signature) {
+      logger.warn({ callbackId }, 'Runner callback: missing x-ghagga-signature header');
+      return c.json({ error: 'Missing signature' }, 401);
+    }
+
+    const valid = verifyCallbackSignature(callbackId, rawBody, signature);
+    if (!valid) {
+      logger.warn({ callbackId }, 'Runner callback: HMAC verification failed');
+      return c.json({ error: 'Invalid signature' }, 401);
+    }
+
+    // Write static analysis results to Redis for the BullMQ worker to pick up
+    await redis.set(
+      callbackResultKey(callbackId),
+      JSON.stringify(staticAnalysis),
+      'EX',
+      CALLBACK_RESULT_TTL,
+    );
+
+    logger.info(
+      { callbackId, repoFullName, prNumber, staticAnalysisTools: Object.keys(staticAnalysis) },
+      'Runner callback accepted — static analysis results stored in Redis',
+    );
 
     return c.json({ ok: true });
   });

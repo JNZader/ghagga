@@ -11,21 +11,16 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from 'ghagga-db';
 import {
-  createDelegatedCiRun,
   deactivateInstallation,
   deleteMappingsByInstallationId,
-  getDelegatedCiPolicy,
   getEffectiveRepoSettings,
   getInstallationByGitHubId,
-  getInstallationById,
   getRepoByGithubId,
   updateWorkflowStatus,
   upsertInstallation,
   upsertRepository,
 } from 'ghagga-db';
 import { Hono } from 'hono';
-import { evaluateAllJobs, normalizePolicy } from '../delegated-ci/policy.js';
-import { getProfile } from '../delegated-ci/profiles.js';
 import {
   addCommentReaction,
   fetchPRDetails,
@@ -34,7 +29,6 @@ import {
 } from '../github/client.js';
 import { injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
-import { enqueueDelegatedCiJob } from '../queues/delegated-ci.js';
 import { enqueueReview } from '../queues/review.js';
 
 const logger = rootLogger.child({ module: 'webhook' });
@@ -335,76 +329,6 @@ async function handlePullRequest(
     { repo: payload.repository.full_name, pr: payload.number, reviewId },
     'Review dispatched',
   );
-
-  // ── Delegated CI evaluation (non-critical) ──────────────────
-  try {
-    const rawPolicy = await getDelegatedCiPolicy(db, repo.id);
-    const normalizedPolicy = normalizePolicy(rawPolicy);
-
-    if (normalizedPolicy?.enabled) {
-      const evaluations = evaluateAllJobs(normalizedPolicy);
-      const approvedJobs = evaluations.filter((e) => e.approved);
-      const rejectedJobs = evaluations.filter((e) => !e.approved);
-
-      // Record rejected runs for audit trail
-      for (const rejected of rejectedJobs) {
-        await createDelegatedCiRun(db, {
-          repositoryId: repo.id,
-          prNumber: payload.number,
-          jobKey: rejected.jobKey,
-          classification: rejected.classification ?? 'sensitive/no-delegable',
-          state: 'rejected',
-          profile: rejected.profile ?? 'unknown',
-          reasonCode: rejected.reasonCode ?? undefined,
-          reasonDetail: rejected.reasonDetail ?? undefined,
-        });
-      }
-
-      if (approvedJobs.length > 0) {
-        // Resolve internal DB installation ID to GitHub's installation ID
-        const ciInstallation = await getInstallationById(db, repo.installationId);
-        if (!ciInstallation) {
-          logger.warn(
-            { repoId: repo.id, installationId: repo.installationId },
-            'Installation record not found for delegated CI dispatch',
-          );
-        } else {
-          for (const approved of approvedJobs) {
-            const profile = getProfile(approved.profile ?? 'node-lint');
-            await enqueueDelegatedCiJob({
-              repositoryId: repo.id,
-              repoFullName: payload.repository.full_name,
-              prNumber: payload.number,
-              headSha: payload.pull_request.head.sha,
-              baseBranch: payload.pull_request.base.ref,
-              installationId: ciInstallation.githubInstallationId,
-              jobKey: approved.jobKey,
-              profile: approved.profile ?? 'node-lint',
-              allowArtifacts: false,
-              allowCache: true,
-              maxDurationMinutes: profile?.defaultTimeoutMinutes ?? 10,
-            });
-          }
-        }
-      }
-
-      logger.info(
-        {
-          repo: payload.repository.full_name,
-          pr: payload.number,
-          approved: approvedJobs.length,
-          rejected: rejectedJobs.length,
-        },
-        'Delegated CI evaluation complete',
-      );
-    }
-  } catch (error) {
-    // Delegated CI is non-critical — don't fail the webhook
-    logger.warn(
-      { error: String(error), repo: payload.repository.full_name },
-      'Delegated CI evaluation failed — continuing with review only',
-    );
-  }
 
   return c.json(
     {
