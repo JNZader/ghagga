@@ -206,9 +206,6 @@ importers:
       ioredis:
         specifier: ^5.6.0
         version: 5.10.0
-      libsodium-wrappers:
-        specifier: ^0.8.2
-        version: 0.8.2
       node-cron:
         specifier: ^4.2.1
         version: 4.2.1
@@ -225,9 +222,6 @@ importers:
       '@stryker-mutator/vitest-runner':
         specifier: ^9.6.0
         version: 9.6.0(@stryker-mutator/core@9.6.0(@types/node@25.3.5))(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.5)(jiti@2.6.1)(jsdom@29.0.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2))
-      '@types/libsodium-wrappers':
-        specifier: ^0.8.2
-        version: 0.8.2
       '@types/node':
         specifier: ^25.3.5
         version: 25.3.5
@@ -246,12 +240,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@ai-sdk/anthropic':
-        specifier: ^3.0.0
-        version: 3.0.58(zod@4.3.6)
-      '@ai-sdk/google':
-        specifier: ^3.0.0
-        version: 3.0.43(zod@4.3.6)
       '@ai-sdk/openai':
         specifier: ^3.0.0
         version: 3.0.41(zod@4.3.6)
@@ -356,20 +344,8 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@ai-sdk/anthropic@3.0.58':
-    resolution: {integrity: sha512-/53SACgmVukO4bkms4dpxpRlYhW8Ct6QZRe6sj1Pi5H00hYhxIrqfiLbZBGxkdRvjsBQeP/4TVGsXgH5rQeb8Q==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/gateway@3.0.66':
     resolution: {integrity: sha512-SIQ0YY0iMuv+07HLsZ+bB990zUJ6S4ujORAh+Jv1V2KGNn73qQKnGO0JBk+w+Res8YqOFSycwDoWcFlQrVxS4A==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/google@3.0.43':
-    resolution: {integrity: sha512-NGCgP5g8HBxrNdxvF8Dhww+UKfqAkZAmyYBvbu9YLoBkzAmGKDBGhVptN/oXPB5Vm0jggMdoLycZ8JReQM8Zqg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1949,10 +1925,6 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
-  '@types/libsodium-wrappers@0.8.2':
-    resolution: {integrity: sha512-+2IDfSULPUskSjIYfZl9suIUsIE5PXwoKZiE/j0MZWd+M9nEGvJDsk/ztMZKNhL1lBL+1CaypW0dQSjqPW2dMg==}
-    deprecated: This is a stub types definition. libsodium-wrappers provides its own type definitions, so you do not need this installed.
-
   '@types/node-cron@3.0.11':
     resolution: {integrity: sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==}
 
@@ -2706,12 +2678,6 @@ packages:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
     engines: {node: '>=6'}
     hasBin: true
-
-  libsodium-wrappers@0.8.2:
-    resolution: {integrity: sha512-VFLmfxkxo+U9q60tjcnSomQBRx2UzlRjKWJqvB4K1pUqsMQg4cu3QXA2nrcsj9A1qRsnJBbi2Ozx1hsiDoCkhw==}
-
-  libsodium@0.8.2:
-    resolution: {integrity: sha512-TsnGYMoZtpweT+kR+lOv5TVsnJ/9U0FZOsLFzFOMWmxqOAYXjX3fsrPAW+i1LthgDKXJnI9A8dWEanT1tnJKIw==}
 
   lightningcss-android-arm64@1.31.1:
     resolution: {integrity: sha512-HXJF3x8w9nQ4jbXRiNppBCqeZPIAfUo8zE/kOEGbW5NZvGc/K7nMxbhIr+YlFlHW5mpbg/YFPdbnCh1wAXCKFg==}
@@ -3696,23 +3662,11 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@ai-sdk/anthropic@3.0.58(zod@4.3.6)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
-      zod: 4.3.6
-
   '@ai-sdk/gateway@3.0.66(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
       '@vercel/oidc': 3.1.0
-      zod: 4.3.6
-
-  '@ai-sdk/google@3.0.43(zod@4.3.6)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
       zod: 4.3.6
 
   '@ai-sdk/openai-compatible@2.0.35(zod@4.3.6)':
@@ -5061,10 +5015,6 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
-  '@types/libsodium-wrappers@0.8.2':
-    dependencies:
-      libsodium-wrappers: 0.8.2
-
   '@types/node-cron@3.0.11': {}
 
   '@types/node@25.3.5':
@@ -5806,12 +5756,6 @@ snapshots:
   json-with-bigint@3.5.7: {}
 
   json5@2.2.3: {}
-
-  libsodium-wrappers@0.8.2:
-    dependencies:
-      libsodium: 0.8.2
-
-  libsodium@0.8.2: {}
 
   lightningcss-android-arm64@1.31.1:
     optional: true
