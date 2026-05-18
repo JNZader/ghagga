@@ -1,8 +1,5 @@
 export type {
   DayStats,
-  DelegatedCiPolicyView,
-  DelegatedCiRunsResponse,
-  DelegatedCiRunView,
   Finding,
   Installation,
   InstallationSettings,
@@ -18,10 +15,6 @@ export type {
   ReviewMode,
   ReviewStatus,
   ReviewsResponse,
-  RunnerConfigureResult,
-  RunnerCreateResult,
-  RunnerError,
-  RunnerStatus,
   SaaSProvider,
   Stats,
   User,
@@ -29,16 +22,3 @@ export type {
   WorkflowInstallResult,
   WorkflowStatus,
 } from './api.js';
-
-export type {
-  DelegatedCiClassification,
-  DelegatedCiJobPolicy,
-  DelegatedCiPolicy,
-  DelegatedCiProfile,
-  DelegatedCiRunState,
-  DiscoveredCiJob,
-  DiscoveredCiRuntime,
-  DiscoveredCiSource,
-  JobRecommendation,
-  RecommendationConfidence,
-} from './delegated-ci.js';

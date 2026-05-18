@@ -1,5 +1,3 @@
-import type { DelegatedCiClassification, DelegatedCiRunState } from './delegated-ci.js';
-
 // ─── Enums / Unions ─────────────────────────────────────────────
 
 export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED';
@@ -173,7 +171,6 @@ export interface RepositorySettings {
   enabledTools: string[];
   disabledTools: string[];
   registeredTools: RegisteredTool[];
-  delegatedCiPolicy: DelegatedCiPolicyView | null;
   globalSettings?: InstallationSettings;
 }
 
@@ -205,38 +202,6 @@ export interface Observation {
   updatedAt: string;
 }
 
-// ─── Runner (legacy — kept for backward compat until fully removed) ──────────
-
-/** @deprecated Use WorkflowStatus instead */
-export interface RunnerStatus {
-  exists: boolean;
-  repoFullName?: string;
-  isPrivate?: boolean;
-  warning?: string;
-}
-
-/** @deprecated Use WorkflowInstallResult instead */
-export interface RunnerCreateResult {
-  created: boolean;
-  repoFullName: string;
-  secretConfigured: boolean;
-  isPrivate: boolean;
-  warning?: string;
-}
-
-/** @deprecated */
-export interface RunnerConfigureResult {
-  configured: boolean;
-}
-
-/** Error response from runner endpoints */
-export interface RunnerError {
-  error: string;
-  message?: string;
-  repoFullName?: string;
-  retryAfter?: number;
-}
-
 // ─── Workflow Installation ────────────────────────────────────────
 
 /** Response from GET /api/runner/install-workflow/status/:owner/:repo */
@@ -251,47 +216,4 @@ export interface WorkflowInstallResult {
   installed: boolean;
   sha: string;
   created: boolean;
-}
-
-// ─── Delegated CI ───────────────────────────────────────────────
-
-/** API view of a repository's delegated CI policy (GET /api/repos/:id/delegated-ci) */
-export interface DelegatedCiPolicyView {
-  enabled: boolean;
-  allowManualTrigger: boolean;
-  allowPullRequestTrigger: boolean;
-  jobs: Array<{
-    jobKey: string;
-    displayName: string;
-    classification: DelegatedCiClassification;
-    profile: string;
-    enabled: boolean;
-    allowArtifacts: false | string[];
-    allowCache: boolean;
-    maxDurationMinutes?: number;
-    rationale?: string;
-  }>;
-}
-
-/** API view of a delegated CI run */
-export interface DelegatedCiRunView {
-  id: number;
-  repositoryId: number;
-  prNumber: number | null;
-  jobKey: string;
-  classification: DelegatedCiClassification;
-  state: DelegatedCiRunState;
-  reasonCode: string | null;
-  reasonDetail: string | null;
-  profile: string;
-  summary: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  createdAt: string;
-}
-
-/** API response for listing delegated CI runs */
-export interface DelegatedCiRunsResponse {
-  runs: DelegatedCiRunView[];
-  total: number;
 }
