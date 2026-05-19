@@ -304,6 +304,31 @@ describe('GET /api/reviews', () => {
     expect(json).toHaveProperty('errorId');
     expect(json.errorId).toHaveLength(8);
   });
+
+  // PR #185 follow-up M3: PARTIAL roundtrip — verify that a DB row with the
+  // PARTIAL status survives the pipeline → DB → API → wire contract chain
+  // without being rewritten, stripped, or coerced. This is the lightweight
+  // integration test that replaces a full e2e (DB + frontend runner) until a
+  // broader e2e harness exists.
+  it('passes PARTIAL status through verbatim in the API response', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    const partialReview = {
+      id: 99,
+      prNumber: 42,
+      status: 'PARTIAL' as const,
+      summary: 'Static analysis ran but the AI agent failed midway.',
+    };
+    mockGetReviewsByRepoId.mockResolvedValueOnce([partialReview]);
+
+    const app = createApp();
+    const res = await app.request('/api/reviews?repo=owner/repo');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveLength(1);
+    expect(json.data[0].status).toBe('PARTIAL');
+    expect(json.data[0]).toEqual(partialReview);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
