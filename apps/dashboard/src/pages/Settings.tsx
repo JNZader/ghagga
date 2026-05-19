@@ -1,7 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader } from '@/components/Card';
-import { DelegatedCiEditor } from '@/components/settings/DelegatedCiEditor';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
 import { KNOWN_MODELS, type ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { ToolGrid } from '@/components/settings/ToolGrid';
@@ -15,7 +14,6 @@ import {
 } from '@/lib/api';
 import { useSelectedRepo } from '@/lib/repo-context';
 import type {
-  DelegatedCiPolicy,
   ProviderChainUpdate,
   ProviderChainView,
   RegisteredTool,
@@ -62,9 +60,6 @@ export function Settings() {
   // ── Review mode ─────────────────────────────────────────────
   const [reviewMode, setReviewMode] = useState<ReviewMode>('simple');
 
-  // ── Delegated CI policy (repo-scoped, not inherited) ──────
-  const [delegatedCiPolicy, setDelegatedCiPolicy] = useState<DelegatedCiPolicy | null>(null);
-
   // ── Blast Radius toggle ──────────────────────────────────────
   const [enableBlastRadius, setEnableBlastRadius] = useState(false);
 
@@ -94,7 +89,6 @@ export function Settings() {
       setIgnorePatterns(settings.ignorePatterns.join('\n'));
       setDisabledTools(settings.disabledTools ?? []);
       setRegisteredTools(settings.registeredTools ?? []);
-      setDelegatedCiPolicy((settings.delegatedCiPolicy as DelegatedCiPolicy | null) ?? null);
 
       // Map server chain view to local entry state
       setProviderChain(
@@ -163,11 +157,10 @@ export function Settings() {
     if (!selectedRepo) return;
 
     if (useGlobalSettings) {
-      // Only save the toggle + delegated CI (repo-scoped, not inherited)
+      // Only save the toggle
       await updateSettings.mutateAsync({
         repoFullName: selectedRepo,
         useGlobalSettings: true,
-        delegatedCiPolicy,
       });
     } else {
       const chainUpdate: ProviderChainUpdate[] = providerChain.map((entry) => ({
@@ -197,7 +190,6 @@ export function Settings() {
           .split('\n')
           .map((p) => p.trim())
           .filter(Boolean),
-        delegatedCiPolicy,
       });
     }
 
@@ -651,24 +643,8 @@ export function Settings() {
                   />
                 </div>
               </Card>
-
-              {/* ── Delegated CI ──────────────────────────────────── */}
-              <DelegatedCiEditor
-                value={delegatedCiPolicy}
-                onChange={setDelegatedCiPolicy}
-                repoId={selectedRepoId}
-              />
             </>
           ) : null}
-
-          {/* ── Delegated CI (always visible — repo-only, not inherited) ── */}
-          {useGlobalSettings && (
-            <DelegatedCiEditor
-              value={delegatedCiPolicy}
-              onChange={setDelegatedCiPolicy}
-              repoId={selectedRepoId}
-            />
-          )}
 
           {/* ── Workflow Installation ─────────────────────────── */}
           <Card>

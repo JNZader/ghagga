@@ -1,6 +1,6 @@
 # Static Analysis — Tool Candidates
 
-> Reference document for evaluating new static analysis tools to integrate into GHAGGA's runner. See [current tools](static-analysis.md) and [runner architecture](runner-architecture.md).
+> Reference document for evaluating new static analysis tools to integrate into GHAGGA's inline static-analysis workflow. See [current tools](static-analysis.md) and the [architecture overview](architecture.md#inline-static-analysis-workflow).
 
 ## Current Toolset (16 tools — plugin registry)
 

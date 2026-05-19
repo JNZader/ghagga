@@ -11,12 +11,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseStats = vi.fn();
 const mockUseRepositories = vi.fn();
-const mockUseDelegatedCiRuns = vi.fn();
 
 vi.mock('@/lib/api', () => ({
   useStats: () => mockUseStats(),
   useRepositories: () => mockUseRepositories(),
-  useDelegatedCiRuns: () => mockUseDelegatedCiRuns(),
 }));
 
 const mockUseSelectedRepo = vi.fn();
@@ -56,7 +54,6 @@ beforeEach(() => {
   });
   mockUseRepositories.mockReturnValue({ data: [], isLoading: false });
   mockUseStats.mockReturnValue({ data: undefined, isLoading: false });
-  mockUseDelegatedCiRuns.mockReturnValue({ data: undefined, isLoading: false, isError: false });
 });
 
 // ═══════════════════════════════════════════════════════════════════

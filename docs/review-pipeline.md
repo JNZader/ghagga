@@ -113,7 +113,7 @@ See [Memory System](memory-system.md) for full details on backends, search, dedu
 
 ## Trigger Modes
 
-> **Static analysis in SaaS mode**: When a runner repo exists, static analysis runs on the delegated runner. Without a runner, the review proceeds with AI only. See [Runner Architecture](runner-architecture.md).
+> **Static analysis in SaaS mode**: The server injects `.github/workflows/ghagga.yml` into each target repo and dispatches it via `workflow_dispatch`. If injection is blocked (branch protection, missing permissions), the review proceeds with AI only. See [Architecture — Inline Static-Analysis Workflow](architecture.md#inline-static-analysis-workflow).
 
 Reviews can be triggered in two ways in SaaS mode:
 
@@ -134,8 +134,8 @@ In server mode, the pipeline runs via a **BullMQ job queue** backed by Redis. Wh
 // Webhook handler enqueues the job; worker executes the steps
 // All steps carry the reviewId for correlation
 Step 1: Fetch PR diff from GitHub API
-Step 2: Discover runner repo ({owner}/ghagga-runner)
-Step 3: Dispatch to runner + wait for callback (or skip if no runner)
+Step 2: Inject .github/workflows/ghagga.yml into the target repo (idempotent)
+Step 3: Dispatch the inline workflow + wait for HMAC callback (or skip if injection is blocked)
 Step 4: Memory Search (Layer 1)
 Step 5: AI Review (Layer 2)
 Step 6: Save Memory (Layer 3)
@@ -153,5 +153,5 @@ BullMQ provides automatic retries with configurable backoff. If an LLM call fail
 | Static analysis tools | Not installed | Skipped individually, review continues with available tools |
 | Memory (PostgreSQL or SQLite) | No database connection | Skipped, no memory context |
 | LLM Provider | API error | Fallback chain attempts next provider |
-| Runner repo | Not configured | LLM-only review (no static analysis) |
+| Inline workflow injection | Blocked (branch protection, missing perms) | LLM-only review (no static analysis) |
 | Redis/BullMQ | Not connected | Sync execution (no queue-based processing) |

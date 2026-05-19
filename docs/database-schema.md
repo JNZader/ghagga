@@ -148,48 +148,6 @@ Maps GitHub users to installations. Used by auth middleware to auto-discover whi
 
 **Indexes**: `idx_user_mappings_github_user` on `github_user_id`
 
-### delegated_ci_runs
-
-Delegated CI run records. Each row tracks a single CI job dispatched to the runner.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | serial PK | Internal ID |
-| `repository_id` | integer FK | References `repositories.id` (ON DELETE CASCADE) |
-| `pr_number` | integer | Pull request number |
-| `job_key` | varchar(255) | CI job identifier (e.g., `lint`, `test`) |
-| `classification` | varchar(50) | Job classification: `safe/delegable` or `sensitive/no-delegable` |
-| `state` | varchar(30) | Current state (see states below) |
-| `reason_code` | varchar(100) | Machine-readable rejection reason (null if approved) |
-| `reason_detail` | text | Human-readable rejection detail (null if approved) |
-| `callback_id` | varchar(255) | Correlation ID linking dispatch to callback (UUID + timestamp) |
-| `workflow_run_id` | integer | GitHub Actions workflow run ID (null until dispatched) |
-| `profile` | varchar(100) | Execution profile used (e.g., `node-lint`, `python-pytest`) |
-| `summary` | text | Short result summary |
-| `result_summary` | jsonb | Detailed result data (exit code, duration, output snippet) |
-| `created_at` | timestamp | When the run was created |
-| `updated_at` | timestamp | Last state transition |
-
-**States**:
-
-| State | Description |
-|-------|-------------|
-| `pending` | Job received, awaiting policy evaluation |
-| `approved` | Policy approved, awaiting dispatch |
-| `dispatched` | Workflow dispatched to runner |
-| `running` | Runner reported execution started |
-| `completed` | Runner reported successful completion |
-| `failed` | Runner reported failure |
-| `rejected` | Policy evaluation rejected the job |
-| `timeout` | No callback received within TTL |
-| `cancelled` | Job cancelled before completion |
-
-**Indexes**:
-- `idx_dcr_repo_pr` on `(repository_id, pr_number)`
-- `idx_dcr_callback` on `callback_id`
-- `idx_dcr_state` on `state`
-- `idx_dcr_repo_state` on `(repository_id, state)`
-
 ---
 
 ## Shared Types
@@ -258,7 +216,6 @@ erDiagram
   installations ||--o{ repositories : has
   installations ||--o{ github_user_mappings : "has users"
   repositories ||--o{ reviews : has
-  repositories ||--o{ delegated_ci_runs : has
   memory_sessions ||--o{ memory_observations : contains
 ```
 

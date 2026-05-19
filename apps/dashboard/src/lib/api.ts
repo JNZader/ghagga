@@ -1,8 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  DelegatedCiRunsResponse,
-  DelegatedCiRunView,
-  DiscoveredCiJob,
   Installation,
   InstallationSettings,
   MemorySession,
@@ -11,9 +8,6 @@ import type {
   RepositorySettings,
   Review,
   ReviewsResponse,
-  RunnerConfigureResult,
-  RunnerCreateResult,
-  RunnerStatus,
   SaaSProvider,
   Stats,
   ValidationResponse,
@@ -412,41 +406,6 @@ export function useBatchDeleteObservations() {
   });
 }
 
-// ─── Runner ───────────────────────────────────────────────
-
-export function useRunnerStatus(ownerLogin?: string) {
-  return useQuery<RunnerStatus>({
-    queryKey: ['runner', 'status', ownerLogin],
-    queryFn: () => fetchData<RunnerStatus>('/api/runner/status'),
-    enabled: !!ownerLogin,
-    staleTime: 30_000,
-    retry: 1,
-  });
-}
-
-export function useCreateRunner() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () =>
-      fetchApi<{ data: RunnerCreateResult }>('/api/runner/create', {
-        method: 'POST',
-      }).then((res) => res.data),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['runner', 'status'] });
-    },
-  });
-}
-
-export function useConfigureRunnerSecret() {
-  return useMutation({
-    mutationFn: () =>
-      fetchApi<{ data: RunnerConfigureResult }>('/api/runner/configure-secret', {
-        method: 'POST',
-      }).then((res) => res.data),
-  });
-}
-
 // ─── Workflow Installation ─────────────────────────────────
 
 export function useWorkflowStatus(owner?: string, repo?: string) {
@@ -470,45 +429,6 @@ export function useInstallWorkflow(owner: string, repo: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['workflow', 'status', owner, repo] });
     },
-  });
-}
-
-// ─── Delegated CI ─────────────────────────────────────────
-
-export function useDelegatedCiRuns(repo: string, page = 1) {
-  return useQuery<DelegatedCiRunsResponse>({
-    queryKey: ['delegated-ci-runs', repo, page],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      params.set('repo', repo);
-      params.set('page', String(page));
-      const result = await fetchApi<{
-        data: DelegatedCiRunsResponse;
-        pagination: { page: number; limit: number; offset: number };
-      }>(`/api/delegated-ci/runs?${params.toString()}`);
-      return result.data;
-    },
-    enabled: !!repo,
-  });
-}
-
-export function useDiscoverCi(repoId: number | null) {
-  return useQuery<DiscoveredCiJob[]>({
-    queryKey: ['discover-ci', repoId],
-    queryFn: () => {
-      if (!repoId) return Promise.resolve([]);
-      return fetchData<DiscoveredCiJob[]>(`/api/repositories/${repoId}/discover-ci`);
-    },
-    enabled: !!repoId,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
-}
-
-export function useDelegatedCiRun(runId: number) {
-  return useQuery<DelegatedCiRunView>({
-    queryKey: ['delegated-ci-run', runId],
-    queryFn: () => fetchData<DelegatedCiRunView>(`/api/delegated-ci/runs/${runId}`),
-    enabled: !!runId,
   });
 }
 

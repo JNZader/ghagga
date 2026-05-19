@@ -58,40 +58,6 @@ export const DEFAULT_REPO_SETTINGS: RepoSettings = {
   disabledTools: [],
 };
 
-// ─── Delegated CI (DB-specific types) ───────────────────────────
-
-/** Classification of a job for delegation eligibility */
-export type DbDelegatedCiClassification = 'safe/delegable' | 'sensitive/no-delegable';
-
-/** Supported curated execution profiles for MVP */
-export type DbDelegatedCiProfile =
-  | 'node-lint'
-  | 'node-unit'
-  | 'python-lint'
-  | 'python-pytest'
-  | 'go-test';
-
-/** Per-job policy within a repository's delegated CI configuration */
-export interface DbDelegatedCiJobPolicy {
-  jobKey: string;
-  displayName: string;
-  classification: DbDelegatedCiClassification;
-  profile: DbDelegatedCiProfile;
-  enabled: boolean;
-  allowArtifacts: false | string[];
-  allowCache: boolean;
-  maxDurationMinutes?: number;
-  rationale?: string;
-}
-
-/** Repository-scoped delegated CI policy (stored as JSONB) */
-export interface DbDelegatedCiPolicy {
-  enabled: boolean;
-  allowManualTrigger?: boolean;
-  allowPullRequestTrigger?: boolean;
-  jobs: DbDelegatedCiJobPolicy[];
-}
-
 /**
  * Shape of each entry stored in the provider_chain JSONB column.
  * Encrypted API keys are stored here (one per provider entry).
@@ -155,9 +121,6 @@ export const repositories = pgTable(
     // ── Provider chain (replaces flat llm_provider/llm_model/encrypted_api_key) ──
     providerChain: jsonb('provider_chain').$type<DbProviderChainEntry[]>().default([]).notNull(),
     aiReviewEnabled: boolean('ai_review_enabled').default(true).notNull(),
-
-    // ── Delegated CI (repo-only, not inherited) ──
-    delegatedCiPolicy: jsonb('delegated_ci_policy').$type<DbDelegatedCiPolicy>(),
 
     // ── Old columns (kept for rollback safety, will be dropped in a future migration) ──
     encryptedApiKey: text('encrypted_api_key'),
@@ -273,38 +236,5 @@ export const githubUserMappings = pgTable(
   (t) => [
     index('idx_user_mappings_github_user').on(t.githubUserId),
     unique('uq_user_installation').on(t.githubUserId, t.installationId),
-  ],
-);
-
-// ─── Delegated CI Runs ──────────────────────────────────────────
-
-export const delegatedCiRuns = pgTable(
-  'delegated_ci_runs',
-  {
-    id: serial('id').primaryKey(),
-    repositoryId: integer('repository_id')
-      .references(() => repositories.id, { onDelete: 'cascade' })
-      .notNull(),
-    prNumber: integer('pr_number'),
-    jobKey: varchar('job_key', { length: 100 }).notNull(),
-    classification: varchar('classification', { length: 30 }).notNull(), // 'safe/delegable' | 'sensitive/no-delegable'
-    state: varchar('state', { length: 20 }).notNull(), // DelegatedCiRunState
-    reasonCode: varchar('reason_code', { length: 50 }),
-    reasonDetail: text('reason_detail'),
-    callbackId: varchar('callback_id', { length: 100 }),
-    workflowRunId: varchar('workflow_run_id', { length: 50 }),
-    profile: varchar('profile', { length: 50 }).notNull(),
-    summary: text('summary'),
-    resultSummary: jsonb('result_summary'),
-    startedAt: timestamp('started_at'),
-    completedAt: timestamp('completed_at'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  },
-  (t) => [
-    index('idx_delegated_ci_runs_repository').on(t.repositoryId),
-    index('idx_delegated_ci_runs_state').on(t.state),
-    index('idx_delegated_ci_runs_created_at').on(t.createdAt),
-    index('idx_delegated_ci_runs_callback_id').on(t.callbackId),
   ],
 );

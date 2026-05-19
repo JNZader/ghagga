@@ -7,13 +7,11 @@
 - Architecture
   - [Core + Adapters](architecture.md)
   - [Review Pipeline](review-pipeline.md)
-  - [Runner Architecture](runner-architecture.md)
   - [Review Modes](review-modes.md)
 
 - Features
   - [Static Analysis](static-analysis.md)
   - [Tool Candidates](static-analysis-candidates.md)
-  - [Delegated CI](delegated-ci.md)
   - [Health Check](health.md)
   - [Memory System](memory-system.md)
   - [Security Policy](security.md)

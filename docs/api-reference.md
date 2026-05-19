@@ -121,61 +121,55 @@ Other events return `200` with a `message` field.
 POST /runner/callback
 ```
 
-Receives static analysis results from a delegated GitHub Actions runner. No bearer auth — validated via HMAC-SHA256 signature.
+Receives static analysis results from the inline GitHub Actions workflow injected at `.github/workflows/ghagga.yml`. No bearer auth — validated via HMAC-SHA256 signature with TTL enforcement.
 
 **Required Headers**:
 
 | Header | Description |
 |--------|-------------|
-| `X-Runner-Signature` | HMAC-SHA256 signature of the raw body using the per-dispatch callback secret |
+| `X-Ghagga-Signature` | `sha256=<hex>` — HMAC of the raw body using the per-dispatch derived secret |
 | `Content-Type` | `application/json` |
 
-**Body**:
+**Body** (`StaticAnalysisCallbackPayload`):
 
 ```json
 {
-  "callbackId": "uuid-of-the-dispatch",
-  "findings": [
-    {
-      "source": "semgrep",
-      "severity": "high",
-      "file": "src/index.ts",
-      "line": 42,
-      "message": "Possible SQL injection"
-    }
-  ],
-  "toolVersions": {
-    "semgrep": "1.56.0",
-    "trivy": "0.69.3",
-    "cpd": "7.9.0"
-  },
-  "durationMs": 17900
+  "callbackId": "550e8400-e29b-41d4-a716-446655440000.m1abc",
+  "repoFullName": "owner/repo",
+  "prNumber": 42,
+  "headSha": "abc123…",
+  "staticAnalysis": {
+    "semgrep": { "status": "success", "findings": [], "executionTimeMs": 5421 },
+    "trivy":   { "status": "success", "findings": [], "executionTimeMs": 8190 },
+    "cpd":     { "status": "skipped", "findings": [], "executionTimeMs": 0 }
+  }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `callbackId` | `string` | UUID matching the dispatch (links callback to the waiting job) |
-| `findings` | `array` | Static analysis findings with source, severity, file, line, message |
-| `toolVersions` | `object` | Versions of tools that ran |
-| `durationMs` | `number` | Total analysis duration in milliseconds |
+| `callbackId` | `string` | `{uuid}.{timestamp_base36}` — used for HMAC re-derivation and TTL enforcement |
+| `repoFullName` | `string` | Target repository (`owner/repo`) |
+| `prNumber` | `number` | Pull request number |
+| `headSha` | `string` | Head commit SHA the workflow analyzed |
+| `staticAnalysis` | `object` | Per-tool result map (`StaticAnalysisResult`) |
 
 **Response** `200` (success):
 
 ```json
-{ "message": "Findings received" }
+{ "ok": true }
 ```
 
-**Response** `401` (invalid signature):
+**Response** `400` (invalid JSON or missing required fields):
+
+```json
+{ "error": "Missing required fields" }
+```
+
+**Response** `401` (missing or invalid signature, or TTL expired):
 
 ```json
 { "error": "Invalid signature" }
-```
-
-**Response** `404` (unknown callback ID — expired or already delivered):
-
-```json
-{ "error": "Unknown callback" }
 ```
 
 ---
@@ -770,187 +764,6 @@ Deletes all sessions that have zero observations.
 
 ---
 
-## CI Discovery
-
-### Discover CI Jobs
-
-```
-GET /api/repositories/:repoId/discover-ci
-```
-
-Auto-discovers CI job configurations for a repository by analyzing its workflow files.
-
-**Path Parameters**:
-
-| Parameter | Description |
-|-----------|-------------|
-| `repoId` | Numeric repository ID |
-
-**Response** `200`:
-
-```json
-{
-  "data": {
-    "jobs": [
-      {
-        "key": "lint",
-        "name": "Lint",
-        "profile": "node-lint",
-        "classification": "safe/delegable"
-      }
-    ]
-  }
-}
-```
-
----
-
-## Delegated CI
-
-### List Delegated CI Runs
-
-```
-GET /api/delegated-ci/runs
-```
-
-Returns delegated CI runs, optionally filtered by repository or PR.
-
-**Query Parameters**:
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `repo` | No | Full repository name (`owner/repo`) |
-| `pr` | No | Pull request number |
-| `state` | No | Filter by state (e.g., `completed`, `failed`) |
-
-**Response** `200`:
-
-```json
-{
-  "data": [
-    {
-      "id": 1,
-      "repositoryId": 10,
-      "prNumber": 42,
-      "jobKey": "lint",
-      "classification": "safe/delegable",
-      "state": "completed",
-      "profile": "node-lint",
-      "summary": "Lint passed",
-      "createdAt": "2025-01-15T12:00:00.000Z"
-    }
-  ]
-}
-```
-
-### Get Delegated CI Run
-
-```
-GET /api/delegated-ci/runs/:id
-```
-
-Returns a single delegated CI run by ID.
-
-**Path Parameters**:
-
-| Parameter | Description |
-|-----------|-------------|
-| `id` | Numeric run ID |
-
-**Response** `200`:
-
-```json
-{
-  "data": {
-    "id": 1,
-    "repositoryId": 10,
-    "prNumber": 42,
-    "jobKey": "lint",
-    "classification": "safe/delegable",
-    "state": "completed",
-    "reasonCode": null,
-    "reasonDetail": null,
-    "callbackId": "uuid-123",
-    "workflowRunId": 456,
-    "profile": "node-lint",
-    "summary": "Lint passed",
-    "resultSummary": { "exitCode": 0, "durationMs": 12000 },
-    "createdAt": "2025-01-15T12:00:00.000Z",
-    "updatedAt": "2025-01-15T12:01:00.000Z"
-  }
-}
-```
-
-**Response** `404`:
-
-```json
-{ "error": "Not found" }
-```
-
----
-
-## Runner Management
-
-### Check Runner Status
-
-```
-GET /api/runner/status
-```
-
-Checks whether the authenticated user's `ghagga-runner` repo exists.
-
-**Response** `200`:
-
-```json
-{
-  "data": {
-    "exists": true,
-    "fullName": "user/ghagga-runner"
-  }
-}
-```
-
-### Create Runner Repository
-
-```
-POST /api/runner/create
-```
-
-Creates a `ghagga-runner` repo from the template repository in the user's account.
-
-**Response** `201`:
-
-```json
-{
-  "data": {
-    "fullName": "user/ghagga-runner",
-    "url": "https://github.com/user/ghagga-runner"
-  }
-}
-```
-
-**Response** `409`:
-
-```json
-{ "error": "Runner repository already exists" }
-```
-
-### Configure Runner Secret
-
-```
-POST /api/runner/configure-secret
-```
-
-Sets the callback secret on the user's runner repository.
-
-**Response** `200`:
-
-```json
-{ "data": { "message": "Secret configured" } }
-```
-
----
-
 ## Provider Validation
 
 ### Validate Provider API Key
@@ -1008,7 +821,6 @@ Tests whether a provider API key is valid. Returns the list of available models 
 | `POST` | `/auth/device/code` | No | OAuth Device Flow -- request codes |
 | `POST` | `/auth/device/token` | No | OAuth Device Flow -- poll for token |
 | `GET` | `/api/repositories` | Bearer | List user's repositories |
-| `GET` | `/api/repositories/:repoId/discover-ci` | Bearer | Discover CI jobs for a repository |
 | `GET` | `/api/installations` | Bearer | List user's installations |
 | `GET` | `/api/reviews` | Bearer | List reviews (paginated) |
 | `GET` | `/api/stats` | Bearer | Review statistics |
@@ -1017,11 +829,6 @@ Tests whether a provider API key is valid. Returns the list of available models 
 | `GET` | `/api/installation-settings` | Bearer | Get global installation settings |
 | `PUT` | `/api/installation-settings` | Bearer | Update global installation settings |
 | `POST` | `/api/providers/validate` | Bearer | Validate provider API key |
-| `GET` | `/api/delegated-ci/runs` | Bearer | List delegated CI runs |
-| `GET` | `/api/delegated-ci/runs/:id` | Bearer | Get single delegated CI run |
-| `GET` | `/api/runner/status` | Bearer | Check runner repo exists |
-| `POST` | `/api/runner/create` | Bearer | Create runner from template |
-| `POST` | `/api/runner/configure-secret` | Bearer | Set callback secret on runner |
 | `GET` | `/api/memory/sessions` | Bearer | List memory sessions |
 | `GET` | `/api/memory/sessions/:id/observations` | Bearer | List session observations |
 | `DELETE` | `/api/memory/observations/:id` | Bearer | Delete a single observation |
