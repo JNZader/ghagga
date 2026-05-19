@@ -36,5 +36,4 @@ If you discover a security vulnerability, please do not open a public issue with
 
 - Use HTTPS for webhooks and dashboard callbacks
 - Rotate `GITHUB_WEBHOOK_SECRET`, `STATE_SECRET`, and provider credentials if compromise is suspected
-- Keep runner repositories public only when needed for GitHub-hosted free minutes, and review runner workflow changes carefully
 - See `docs/security.md` for architecture details and additional rationale

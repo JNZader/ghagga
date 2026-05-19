@@ -2,6 +2,22 @@
 
 > Canonical security policy: see the root [`SECURITY.md`](../SECURITY.md). This docs page mirrors the current architecture-specific details.
 
+## Pending Security Hardening
+
+The following items reduce the GitHub App's blast radius and SHOULD be addressed
+before re-enabling production deployments. They are documented here so the work is
+not lost.
+
+- **Narrow GitHub App manifest permissions**: The App on github.com still requests
+  `Secrets: Read & Write`. Following the removal of the delegated CI pattern
+  (no more `setRunnerSecret`), this scope is no longer required by any runtime
+  code path. Drop the scope via the GitHub App settings page. Re-issuing
+  installation tokens after narrowing is required.
+- **Verify `administration` permission is not declared** (if it was added for
+  the `ghagga-runner` repo provisioning flow, which is gone).
+
+Once these items are done, remove this section.
+
 ## Security Measures
 
 | Measure | Implementation |

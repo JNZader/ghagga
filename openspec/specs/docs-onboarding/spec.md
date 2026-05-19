@@ -118,7 +118,6 @@ Every textual reference to "Open the Dashboard" or "the Dashboard" in the docume
 
 Files that MUST be updated:
 - `docs/quick-start.md` — line 66 ("Open the Dashboard")
-- `docs/runner-architecture.md` — line 22 ("Open the Dashboard")
 - `docs/configuration.md` — any Dashboard reference in the new SaaS callout
 
 The new `docs/saas-getting-started.md` MUST use the linked Dashboard URL in all references.
@@ -128,12 +127,6 @@ Within `landing/index.html`, the Dashboard link SHOULD use the relative path `ap
 #### Scenario: User clicks Dashboard link in quick-start
 
 - GIVEN a user reading `docs/quick-start.md`
-- WHEN the user encounters the text "Open the Dashboard"
-- THEN the text is a clickable hyperlink to `https://ghagga.javierzader.com/app/`
-
-#### Scenario: User clicks Dashboard link in runner-architecture
-
-- GIVEN a user reading `docs/runner-architecture.md`
 - WHEN the user encounters the text "Open the Dashboard"
 - THEN the text is a clickable hyperlink to `https://ghagga.javierzader.com/app/`
 
