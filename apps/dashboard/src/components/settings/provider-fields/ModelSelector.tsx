@@ -27,10 +27,6 @@ export interface ModelSelectorProps {
  *
  * Rendering branches:
  *   1. `effectiveModels.length > 0 || entry.model` → datalist input
- *      (NOTE: this is the only branch that runs at runtime today because
- *      branch 2 is unreachable when branch 1's condition is true. Kept here
- *      to mirror the original ProviderEntry block byte-for-byte; cleanup is
- *      out of scope for this extraction.)
  *   2. fallback → "Validate first" hint
  */
 export function ModelSelector({
@@ -63,13 +59,6 @@ export function ModelSelector({
               <option key={m} value={m} />
             ))}
           </datalist>
-        </div>
-      ) : entry.model ? (
-        <div className="flex items-center gap-2">
-          <span className="flex-1 rounded-md border border-surface-border bg-surface-bg px-3 py-2 text-sm text-text-primary">
-            {entry.model}
-          </span>
-          <span className="text-xs text-text-secondary">Validate to see all models</span>
         </div>
       ) : (
         <div className="rounded-md border border-surface-border bg-surface-bg px-3 py-2 text-sm text-text-secondary">

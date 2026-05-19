@@ -121,8 +121,8 @@ describe('ModelSelector — datalist input branch (effectiveModels populated)', 
 
   // Branch coverage: effectiveModels=[] but entry.model is set — the
   // condition `effectiveModels.length > 0 || entry.model` still takes the
-  // datalist branch (this is the original ProviderEntry behavior preserved
-  // byte-for-byte during the extraction).
+  // datalist branch (entry.model is truthy → datalist with an empty option
+  // list is rendered, not the fallback hint).
   it('takes the datalist branch when effectiveModels is empty but entry.model is set', () => {
     const { container } = render(
       <ModelSelector
