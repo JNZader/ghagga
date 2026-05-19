@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { AvailableKeysMap } from '@/lib/api';
 import type { ProviderEntryState } from '../ProviderEntry';
-import { getCliCredentialLabel, KNOWN_MODELS } from './shared';
+import { applySavedKey, getCliCredentialLabel } from './shared';
 
 export interface CredentialBlockProps {
   index: number;
@@ -94,16 +94,10 @@ export function CredentialBlock({
             type="button"
             onClick={() => {
               // One-click to apply the saved key — no dropdown needed when there's only one option.
-              const knownModels = KNOWN_MODELS[entry.provider] ?? [];
-              onChange({
-                ...entry,
-                apiKey: '',
-                hasExistingKey: true,
-                maskedApiKey: savedKeyInfo?.maskedApiKey,
-                validated: true,
-                availableModels: knownModels,
-                model: entry.model || knownModels[0] || '',
-              });
+              // `savedKeyInfo` is guaranteed non-null here: this branch only renders when
+              // `showReuseSelector` is true, which requires `hasSavedKey` (i.e. savedKeyInfo exists).
+              if (!savedKeyInfo) return;
+              onChange(applySavedKey(entry, savedKeyInfo));
             }}
             className="input-field flex-1 cursor-pointer text-left text-text-secondary hover:border-primary-600/50 hover:text-text-primary"
           >

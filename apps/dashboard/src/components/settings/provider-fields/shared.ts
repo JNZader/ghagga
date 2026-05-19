@@ -1,4 +1,6 @@
+import type { AvailableKeyInfo } from '@/lib/api';
 import type { SaaSProvider } from '@/lib/types';
+import type { ProviderEntryState } from '../ProviderEntry';
 
 // ─── Known Models per Provider (for instant model selection without re-validation) ──
 
@@ -7,6 +9,41 @@ export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
   gateway: ['auto'],
   ollama: ['llama3', 'llama3.1', 'codellama', 'mistral', 'gemma3', 'qwen2.5-coder'],
 };
+
+// ─── Saved-key reuse helper ─────────────────────────────────────
+
+/**
+ * Composes the ProviderEntryState mutation when the user clicks the saved-key
+ * reuse button in {@link CredentialBlock}.
+ *
+ * Domain rule: applying a saved key flips the entry to "hasExistingKey" mode,
+ * clears any in-flight `apiKey`, marks it as validated (the key is known-good
+ * on the server), and seeds `availableModels` from `KNOWN_MODELS` so the
+ * model dropdown is populated immediately — without a re-validation round trip.
+ *
+ * Model resolution order:
+ *   1. preserve `entry.model` if already set
+ *   2. fall back to the first known model for the provider
+ *   3. fall back to '' if no known models exist
+ *
+ * Pure function — no side effects. Returns a new state object; the caller
+ * owns dispatching it via `onChange`.
+ */
+export function applySavedKey(
+  entry: ProviderEntryState,
+  savedKeyInfo: AvailableKeyInfo,
+): ProviderEntryState {
+  const knownModels = KNOWN_MODELS[entry.provider] ?? [];
+  return {
+    ...entry,
+    apiKey: '',
+    hasExistingKey: true,
+    maskedApiKey: savedKeyInfo.maskedApiKey,
+    validated: true,
+    availableModels: knownModels,
+    model: entry.model || knownModels[0] || '',
+  };
+}
 
 // ─── Ollama suggestions ─────────────────────────────────────────
 
