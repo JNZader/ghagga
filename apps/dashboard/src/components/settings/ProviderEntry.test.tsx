@@ -15,7 +15,7 @@
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AvailableKeysMap } from '@/lib/api';
 import { createTestQueryClient } from '@/test/test-utils';
 import { ProviderEntry, type ProviderEntryState } from './ProviderEntry';
@@ -25,16 +25,19 @@ import { ProviderEntry, type ProviderEntryState } from './ProviderEntry';
 // Stubbed at module top so the bindings are in place before the component
 // imports `fetchApi` from '@/lib/api'. fetchApi calls
 // `localStorage.getItem('ghagga_token')`, and Vitest 4 + jsdom 29 does not
-// always provide a working localStorage — so we stub both. Each test
-// re-installs the fetch response via `mockValidationOk(...)`.
+// always provide a working localStorage — so we stub both. The stubs are
+// re-installed in `beforeEach` so the `afterEach(vi.unstubAllGlobals)` cleanup
+// (added to prevent cross-file pollution when Vitest reuses workers) does not
+// leave subsequent tests in this file without bindings.
 
 const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
-vi.stubGlobal('localStorage', {
+const mockLocalStorage = {
   getItem: vi.fn().mockReturnValue(null),
   setItem: vi.fn(),
   removeItem: vi.fn(),
-});
+};
+vi.stubGlobal('fetch', mockFetch);
+vi.stubGlobal('localStorage', mockLocalStorage);
 
 /** Make fetch resolve with the given validation response body. */
 function mockValidationOk(body: { valid: boolean; models?: string[]; error?: string }) {
@@ -97,9 +100,19 @@ function renderEntry(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Re-install module-level stubs because `afterEach(vi.unstubAllGlobals)`
+  // wipes them between tests. Matches the pattern in src/lib/api.test.ts.
+  vi.stubGlobal('fetch', mockFetch);
+  vi.stubGlobal('localStorage', mockLocalStorage);
   // Default fetch response — most tests do not exercise validation, but the
   // mock must always resolve to avoid promise hangs if validate is triggered.
   mockValidationOk({ valid: true, models: [] });
+});
+
+afterEach(() => {
+  // Clear the vi.stubGlobal bindings so they don't leak across files when
+  // Vitest reuses the worker. Matches the pattern in src/lib/api.test.ts.
+  vi.unstubAllGlobals();
 });
 
 // ─── Tests ─────────────────────────────────────────────────────
@@ -141,6 +154,45 @@ describe('ProviderEntry — provider selector', () => {
     expect(next.model).toBe('auto');
     // cli-bridge starts validated=true because there's no validation flow for the
     // default tool; opencode flips it back to false via the CLI tool selector.
+    expect(next.validated).toBe(true);
+  });
+});
+
+describe('ProviderEntry — cli-bridge tool switching', () => {
+  // Coverage gap: CliBridgeFields.test.tsx verifies the onCliToolChange callback
+  // is invoked, but never asserts the PARENT reset (handleCliToolChange in
+  // ProviderEntry.tsx:135-145). Switching the CLI tool must wipe tool-specific
+  // credentials and recompute `validated` based on the new tool.
+  it('resets cliModel, apiKey, hasExistingKey, maskedApiKey and recomputes validated when the CLI tool changes', () => {
+    const onChange = vi.fn();
+    const { container } = renderEntry(
+      createEntry({
+        provider: 'cli-bridge',
+        model: 'opencode',
+        cliModel: 'anthropic/claude-3-7-sonnet-20250219',
+        apiKey: 'some-key',
+        hasExistingKey: true,
+        maskedApiKey: 'sk-...wxyz',
+        validated: true,
+      }),
+      { onChange },
+    );
+
+    // The CLI tool selector is the only <select> in the entry (the hidden
+    // generic Model Selector also carries value='opencode' on its <input list>,
+    // so `getByDisplayValue` is ambiguous — querying by tag is unambiguous).
+    const cliToolSelect = container.querySelector('select');
+    if (!cliToolSelect) throw new Error('CLI tool <select> not found');
+    fireEvent.change(cliToolSelect, { target: { value: 'auto' } });
+
+    expect(onChange).toHaveBeenCalledOnce();
+    const next = onChange.mock.calls[0]?.[0] as ProviderEntryState;
+    expect(next.model).toBe('auto');
+    expect(next.cliModel).toBeUndefined();
+    expect(next.apiKey).toBe('');
+    expect(next.hasExistingKey).toBe(false);
+    expect(next.maskedApiKey).toBeUndefined();
+    // validated is `cliTool !== 'opencode'` — switching to 'auto' should validate.
     expect(next.validated).toBe(true);
   });
 });
