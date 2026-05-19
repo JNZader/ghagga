@@ -23,10 +23,15 @@ vi.mock('@/lib/api', () => ({
   useSettings: () => mockUseSettings(),
   useUpdateSettings: () => mockUseUpdateSettings(),
   useCopySettingsToGlobal: () => mockUseCopySettingsToGlobal(),
-  useDiscoverCi: () => ({
+  useWorkflowStatus: () => ({
     data: undefined,
     isLoading: false,
     refetch: vi.fn(),
+  }),
+  useInstallWorkflow: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
   }),
 }));
 
