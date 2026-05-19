@@ -178,7 +178,9 @@ describe('reviewPipeline', () => {
 
     it('throws on missing provider', async () => {
       // biome-ignore lint/suspicious/noExplicitAny: mock cast
-      await expect(reviewPipeline(makeInput({ provider: '' as any }))).rejects.toThrow('provider');
+      await expect(reviewPipeline(makeInput({ provider: '' as any }))).rejects.toThrow(
+        'Review input must specify an LLM provider',
+      );
     });
 
     it('throws on missing model', async () => {

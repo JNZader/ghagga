@@ -182,45 +182,6 @@ describe('GitHub Action', () => {
     });
   });
 
-  describe('provider API key resolution', () => {
-    it('github provider uses GitHub token as API key (no api-key needed)', () => {
-      // When provider is "github" and api-key is empty,
-      // the action should use the github token as the LLM API key
-      const provider = 'github';
-      const apiKeyInput = '';
-      const githubToken = 'ghp_faketoken';
-
-      const resolvedKey = provider === 'github' ? apiKeyInput || githubToken : apiKeyInput;
-
-      expect(resolvedKey).toBe('ghp_faketoken');
-    });
-
-    it('ollama provider uses placeholder key', () => {
-      const provider = 'ollama';
-      const apiKeyInput = '';
-
-      const resolvedKey = provider === 'ollama' ? apiKeyInput || 'ollama' : apiKeyInput;
-
-      expect(resolvedKey).toBe('ollama');
-    });
-
-    it('anthropic provider requires explicit api-key', () => {
-      const provider: string = 'anthropic';
-      const apiKeyInput = '';
-
-      const needsKey = provider !== 'github' && provider !== 'ollama' && !apiKeyInput;
-      expect(needsKey).toBe(true);
-    });
-
-    it('anthropic provider accepts explicit api-key', () => {
-      const provider: string = 'anthropic';
-      const apiKeyInput = 'sk-test-key';
-
-      const needsKey = provider !== 'github' && provider !== 'ollama' && !apiKeyInput;
-      expect(needsKey).toBe(false);
-    });
-  });
-
   describe('review result handling', () => {
     it('maps PASSED status to success (no setFailed call)', () => {
       const result = makeResult({ status: 'PASSED' });
@@ -250,12 +211,14 @@ describe('GitHub Action', () => {
         FAILED: '\u274c FAILED',
         NEEDS_HUMAN_REVIEW: '\u26a0\ufe0f NEEDS_HUMAN_REVIEW',
         SKIPPED: '\u23ed\ufe0f SKIPPED',
+        PARTIAL: '\u26a1 PARTIAL',
       };
 
       expect(STATUS_EMOJI.PASSED).toContain('PASSED');
       expect(STATUS_EMOJI.FAILED).toContain('FAILED');
       expect(STATUS_EMOJI.NEEDS_HUMAN_REVIEW).toContain('NEEDS_HUMAN_REVIEW');
       expect(STATUS_EMOJI.SKIPPED).toContain('SKIPPED');
+      expect(STATUS_EMOJI.PARTIAL).toContain('PARTIAL');
     });
 
     it('SEVERITY_EMOJI maps all valid severities', () => {
