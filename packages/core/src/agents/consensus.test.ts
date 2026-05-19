@@ -115,11 +115,11 @@ describe('parseVote', () => {
 
   it('sets provider, model, and stance from args', () => {
     const vote = call('DECISION: approve\nCONFIDENCE: 0.9\nREASONING: Ok.', {
-      provider: 'openai',
+      provider: 'cli-bridge',
       model: 'gpt-4o',
       stance: 'for',
     });
-    expect(vote.provider).toBe('openai');
+    expect(vote.provider).toBe('cli-bridge');
     expect(vote.model).toBe('gpt-4o');
     expect(vote.stance).toBe('for');
   });
@@ -487,10 +487,10 @@ describe('calculateConsensus', () => {
 // ─── parseVote — mutant-killing precision tests ─────────────────
 
 describe('parseVote (mutant killers)', () => {
-  const defaults = {
-    provider: 'anthropic' as const,
+  const defaults: { provider: LLMProvider; model: string; stance: ConsensusStance } = {
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
-    stance: 'neutral' as ConsensusStance,
+    stance: 'neutral',
   };
 
   function call(text: string) {
@@ -552,7 +552,7 @@ describe('parseVote (mutant killers)', () => {
 
   it('parseVote: returns all fields correctly for standard input', () => {
     const vote = call('DECISION: approve\nCONFIDENCE: 0.9\nREASONING: Code is clean.');
-    expect(vote.provider).toBe('anthropic');
+    expect(vote.provider).toBe('gateway');
     expect(vote.model).toBe('claude-sonnet-4-20250514');
     expect(vote.stance).toBe('neutral');
     expect(vote.decision).toBe('approve');
@@ -660,22 +660,22 @@ describe('parseVote (mutant killers)', () => {
     const fakeGen = async (_sys: string, _prompt: string) => ({
       text: 'DECISION: approve\nCONFIDENCE: 0.85\nREASONING: Looks good.\nFINDINGS:\n',
       tokensUsed: 200,
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
     });
 
     const result = await runConsensusReview({
       diff: '--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new',
       models: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'for' },
+        { provider: 'gateway', model: 'claude-sonnet-4-20250514', apiKey: 'k', stance: 'for' },
         {
-          provider: 'anthropic',
+          provider: 'gateway',
           model: 'claude-sonnet-4-20250514',
           apiKey: 'k',
           stance: 'against',
         },
         {
-          provider: 'anthropic',
+          provider: 'gateway',
           model: 'claude-sonnet-4-20250514',
           apiKey: 'k',
           stance: 'neutral',
@@ -705,7 +705,7 @@ describe('parseVote (mutant killers)', () => {
       return {
         text: `DECISION: ${decision}\nCONFIDENCE: 0.7\nREASONING: Mixed opinions.\nFINDINGS:\n`,
         tokensUsed: 150,
-        provider: 'anthropic',
+        provider: 'gateway',
         model: 'test',
       };
     };
@@ -713,9 +713,9 @@ describe('parseVote (mutant killers)', () => {
     const result = await runConsensusReview({
       diff: '--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new',
       models: [
-        { provider: 'anthropic', model: 'test', apiKey: 'k', stance: 'for' },
-        { provider: 'anthropic', model: 'test', apiKey: 'k', stance: 'against' },
-        { provider: 'anthropic', model: 'test', apiKey: 'k', stance: 'neutral' },
+        { provider: 'gateway', model: 'test', apiKey: 'k', stance: 'for' },
+        { provider: 'gateway', model: 'test', apiKey: 'k', stance: 'against' },
+        { provider: 'gateway', model: 'test', apiKey: 'k', stance: 'neutral' },
       ],
       staticContext: '',
       memoryContext: null,

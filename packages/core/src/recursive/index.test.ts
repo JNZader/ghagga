@@ -13,7 +13,7 @@ function createMockGenerateFn(responses: string[]): GenerateTextFn {
     return {
       text,
       tokensUsed: 50,
-      provider: 'openai',
+      provider: 'gateway',
       model: 'gpt-4o-mini',
     };
   };

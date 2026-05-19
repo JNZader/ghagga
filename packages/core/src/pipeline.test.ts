@@ -88,7 +88,7 @@ const SIMPLE_RESULT: ReviewResult = {
   memoryContext: null,
   metadata: {
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     tokensUsed: 100,
     executionTimeMs: 500,
@@ -107,7 +107,7 @@ function makeInput(overrides: Partial<ReviewInput> = {}): ReviewInput {
   return {
     diff: MINIMAL_DIFF,
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     apiKey: 'test-api-key',
     settings: {
@@ -434,7 +434,7 @@ index 1234567..abcdefg 100644
 
       expect(runSimpleReview).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: 'anthropic',
+          provider: 'gateway',
           model: 'claude-sonnet-4-20250514',
           apiKey: 'test-api-key',
         }),
@@ -541,13 +541,13 @@ index 1234567..abcdefg 100644
       await reviewPipeline(
         makeInput({
           mode: 'workflow',
-          providerChain: [{ provider: 'groq', model: 'test', apiKey: 'key' }],
+          providerChain: [{ provider: 'gateway', model: 'test', apiKey: 'key' }],
         }),
       );
 
       expect(runWorkflowReview).toHaveBeenCalledWith(
         expect.objectContaining({
-          providerChain: [{ provider: 'groq', model: 'test', apiKey: 'key' }],
+          providerChain: [{ provider: 'gateway', model: 'test', apiKey: 'key' }],
         }),
       );
     });
@@ -653,7 +653,7 @@ index 1234567..abcdefg 100644
     it('skipped result has correct mode/provider/model from input', async () => {
       const result = await reviewPipeline(skipInput());
       expect(result.metadata.mode).toBe('simple');
-      expect(result.metadata.provider).toBe('anthropic');
+      expect(result.metadata.provider).toBe('gateway');
       expect(result.metadata.model).toBe('claude-sonnet-4-20250514');
     });
 

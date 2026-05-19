@@ -407,7 +407,7 @@ Returns the settings for a specific repository, including its resolved global se
     "reviewMode": "simple",
     "providerChain": [
       {
-        "provider": "anthropic",
+        "provider": "gateway",
         "model": "claude-sonnet-4-20250514",
         "hasApiKey": true,
         "maskedApiKey": "sk-...xYzW"
@@ -425,8 +425,8 @@ Returns the settings for a specific repository, including its resolved global se
     "globalSettings": {
       "providerChain": [
         {
-          "provider": "github",
-          "model": "gpt-4o-mini",
+          "provider": "cli-bridge",
+          "model": "auto",
           "hasApiKey": false
         }
       ],
@@ -466,8 +466,8 @@ Updates configuration for a repository. Supports partial updates — only includ
   "aiReviewEnabled": true,
   "reviewMode": "workflow",
   "providerChain": [
-    { "provider": "anthropic", "model": "claude-sonnet-4-20250514", "apiKey": "sk-ant-..." },
-    { "provider": "github", "model": "gpt-4o-mini" }
+    { "provider": "gateway", "model": "claude-sonnet-4-20250514", "apiKey": "sk-gateway-..." },
+    { "provider": "cli-bridge", "model": "auto" }
   ],
   "enableSemgrep": true,
   "enableTrivy": true,
@@ -502,18 +502,18 @@ Updates configuration for a repository. Supports partial updates — only includ
 **Provider Chain Entries**:
 
 ```json
-{ "provider": "anthropic", "model": "claude-sonnet-4-20250514", "apiKey": "sk-ant-..." }
+{ "provider": "gateway", "model": "claude-sonnet-4-20250514", "apiKey": "sk-gateway-..." }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
-| `model` | `string` | Yes | Model identifier (e.g., `gpt-4o-mini`, `claude-sonnet-4-20250514`) |
-| `apiKey` | `string` | No | API key (omit to keep existing key; `github` provider never needs one) |
+| `provider` | `string` | Yes | One of: `gateway`, `cli-bridge`, `ollama` |
+| `model` | `string` | Yes | Model identifier (e.g., `auto`, `claude-sonnet-4-20250514`). Use `auto` to let the provider select the best available model |
+| `apiKey` | `string` | No | API key (omit to keep existing key; `cli-bridge` and `ollama` do not require one) |
 
-> **API Key Behavior**: When you send a `providerChain` entry without an `apiKey`, the server preserves the previously stored encrypted key for that provider. Send a new `apiKey` to rotate it. The `github` provider uses the user's session token and never requires an API key.
+> **API Key Behavior**: When you send a `providerChain` entry without an `apiKey`, the server preserves the previously stored encrypted key for that provider. Send a new `apiKey` to rotate it. The `cli-bridge` and `ollama` providers do not require an API key.
 
-> **Valid Providers**: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter`. The `ollama` provider is **not** available in the SaaS dashboard — use the CLI or GitHub Action instead.
+> **Valid Providers**: `gateway`, `cli-bridge`, `ollama`. Pre-v2 legacy provider values are automatically remapped to `gateway` for backward compatibility. The `ollama` provider is stored as a valid setting but is **not** accepted by `POST /api/providers/validate` — see that endpoint for runtime restrictions.
 
 **Response** `200`:
 
@@ -544,8 +544,8 @@ Returns the global (installation-level) settings that apply as defaults to all r
     "accountLogin": "my-org",
     "providerChain": [
       {
-        "provider": "github",
-        "model": "gpt-4o-mini",
+        "provider": "cli-bridge",
+        "model": "auto",
         "hasApiKey": false
       }
     ],
@@ -578,7 +578,7 @@ Updates the global settings for an installation. These settings apply to all rep
 {
   "installationId": 123,
   "providerChain": [
-    { "provider": "github", "model": "gpt-4o-mini" }
+    { "provider": "cli-bridge", "model": "auto" }
   ],
   "aiReviewEnabled": true,
   "reviewMode": "simple",
@@ -820,7 +820,7 @@ The `ollama` provider is intentionally rejected by this endpoint — it is only 
 ```json
 {
   "error": "VALIDATION_ERROR",
-  "message": "Unknown provider: anthropic"
+  "message": "Unknown provider: invalid"
 }
 ```
 
