@@ -1,6 +1,6 @@
 // ─── Enums / Unions ─────────────────────────────────────────────
 
-export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED';
+export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED' | 'PARTIAL';
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'fan-out';
 
