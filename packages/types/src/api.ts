@@ -1,6 +1,11 @@
 // ─── Enums / Unions ─────────────────────────────────────────────
 
-export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED' | 'PARTIAL';
+// Single source of truth: ReviewStatus is defined in `ghagga-core` (the review
+// engine runtime). We re-export it here so the dashboard / server / shared
+// wire contract cannot drift from the runtime enum. Adding a new status to
+// core is automatically reflected in @ghagga/types — no manual sync needed.
+import type { ReviewStatus } from 'ghagga-core';
+export type { ReviewStatus };
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'fan-out';
 

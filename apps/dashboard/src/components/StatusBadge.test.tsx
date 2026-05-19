@@ -27,4 +27,16 @@ describe('StatusBadge', () => {
     const badge = screen.getByText('Passed');
     expect(badge.className).toContain('my-custom');
   });
+
+  it('falls back to a neutral gray badge for an unknown status', () => {
+    // Defense-in-depth: the server might return a new status before the
+    // dashboard ships. The component should render the raw string as label
+    // and apply neutral gray classes instead of crashing.
+    render(<StatusBadge status={'UNKNOWN_STATUS' as ReviewStatus} />);
+    const badge = screen.getByText('UNKNOWN_STATUS');
+    expect(badge).toBeInTheDocument();
+    expect(badge.className).toContain('bg-gray-500/15');
+    expect(badge.className).toContain('text-gray-400');
+    expect(badge.className).toContain('border-gray-500/25');
+  });
 });
