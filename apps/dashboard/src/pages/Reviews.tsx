@@ -262,6 +262,7 @@ export function Reviews() {
           <option value="FAILED">Failed</option>
           <option value="NEEDS_HUMAN_REVIEW">Needs Review</option>
           <option value="SKIPPED">Skipped</option>
+          <option value="PARTIAL">Partial</option>
         </select>
 
         <input

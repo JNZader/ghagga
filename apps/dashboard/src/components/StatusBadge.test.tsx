@@ -13,6 +13,7 @@ const statuses: Array<{ status: ReviewStatus; label: string }> = [
   { status: 'FAILED', label: 'Failed' },
   { status: 'NEEDS_HUMAN_REVIEW', label: 'Needs Review' },
   { status: 'SKIPPED', label: 'Skipped' },
+  { status: 'PARTIAL', label: 'Partial' },
 ];
 
 describe('StatusBadge', () => {

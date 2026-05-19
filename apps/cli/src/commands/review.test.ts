@@ -196,18 +196,20 @@ describe('CLI review module', () => {
 describe('CLI output formatting and exit codes', () => {
   // We test the internal formatting/exit code logic by checking types/contracts
 
-  it('defines valid exit codes: PASSED=0, SKIPPED=0, FAILED=1, NEEDS_HUMAN_REVIEW=1', () => {
+  it('defines valid exit codes: PASSED=0, SKIPPED=0, FAILED=1, NEEDS_HUMAN_REVIEW=1, PARTIAL=1', () => {
     const exitCodes: Record<ReviewStatus, number> = {
       PASSED: 0,
       SKIPPED: 0,
       FAILED: 1,
       NEEDS_HUMAN_REVIEW: 1,
+      PARTIAL: 1,
     };
 
     expect(exitCodes.PASSED).toBe(0);
     expect(exitCodes.SKIPPED).toBe(0);
     expect(exitCodes.FAILED).toBe(1);
     expect(exitCodes.NEEDS_HUMAN_REVIEW).toBe(1);
+    expect(exitCodes.PARTIAL).toBe(1);
   });
 
   it('ReviewResult findings have expected structure', () => {

@@ -718,6 +718,7 @@ function getExitCode(status: ReviewStatus): number {
       return 0;
     case 'FAILED':
     case 'NEEDS_HUMAN_REVIEW':
+    case 'PARTIAL':
       return 1;
     default: {
       const _exhaustive: never = status;

@@ -23,10 +23,19 @@ const statusConfig: Record<ReviewStatus, { label: string; classes: string }> = {
     label: 'Skipped',
     classes: 'bg-gray-500/15 text-gray-400 border-gray-500/25',
   },
+  PARTIAL: {
+    label: 'Partial',
+    classes: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+  },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  // Defense-in-depth: fall back to a neutral badge if the server returns an
+  // unknown status (e.g. a new value added before the dashboard ships).
+  const config = statusConfig[status] ?? {
+    label: status,
+    classes: 'bg-gray-500/15 text-gray-400 border-gray-500/25',
+  };
 
   return (
     <span
