@@ -73,7 +73,7 @@ function makeResult(
     memoryContext: null,
     metadata: {
       mode: 'simple',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 150,
       executionTimeMs: 1200,

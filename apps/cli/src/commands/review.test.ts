@@ -6,7 +6,7 @@
  * needing an actual LLM API key.
  */
 
-import type { FindingSeverity, ReviewResult, ReviewStatus } from 'ghagga-core';
+import type { FindingSeverity, LLMProvider, ReviewResult, ReviewStatus } from 'ghagga-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── Mock ghagga-core to prevent actual LLM calls ───────────────
@@ -149,9 +149,9 @@ vi.mock('ghagga-core', () => {
       disabledTools: [],
     },
     DEFAULT_MODELS: {
-      anthropic: 'claude-sonnet-4-20250514',
-      openai: 'gpt-4o',
-      google: 'gemini-2.0-flash',
+      gateway: 'auto',
+      'cli-bridge': 'auto',
+      ollama: 'llama3',
     },
     initializeDefaultTools: vi.fn(),
     toolRegistry: {
@@ -231,7 +231,7 @@ describe('CLI output formatting and exit codes', () => {
   it('ReviewResult has all required metadata fields', () => {
     const metadata = {
       mode: 'simple' as const,
-      provider: 'anthropic' as const,
+      provider: 'gateway' as const,
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 500,
       executionTimeMs: 3200,
@@ -240,7 +240,7 @@ describe('CLI output formatting and exit codes', () => {
     };
 
     expect(metadata.mode).toBe('simple');
-    expect(metadata.provider).toBe('anthropic');
+    expect(metadata.provider).toBe('gateway');
     expect(metadata.tokensUsed).toBeGreaterThan(0);
     expect(metadata.executionTimeMs).toBeGreaterThan(0);
     expect(metadata.toolsRun).toContain('semgrep');
@@ -252,7 +252,7 @@ describe('CLI config file handling', () => {
   it('.ghagga.json config shape matches expected interface', () => {
     const config = {
       mode: 'workflow',
-      provider: 'openai',
+      provider: 'gateway',
       model: 'gpt-4o',
       enableSemgrep: true,
       enableTrivy: false,
@@ -303,27 +303,13 @@ describe('CLI input validation', () => {
     expect(validModes).not.toContain('turbo');
   });
 
-  it('valid providers are: anthropic, openai, google, github, qwen, groq, cerebras, deepseek, openrouter', () => {
-    const validProviders = [
-      'anthropic',
-      'openai',
-      'google',
-      'github',
-      'qwen',
-      'groq',
-      'cerebras',
-      'deepseek',
-      'openrouter',
-    ];
-    expect(validProviders).toContain('anthropic');
-    expect(validProviders).toContain('openai');
-    expect(validProviders).toContain('google');
-    expect(validProviders).toContain('github');
-    expect(validProviders).toContain('groq');
-    expect(validProviders).toContain('cerebras');
-    expect(validProviders).toContain('deepseek');
-    expect(validProviders).toContain('openrouter');
-    expect(validProviders).not.toContain('mistral');
+  it('valid providers are: gateway, cli-bridge, ollama', () => {
+    const validProviders: LLMProvider[] = ['gateway', 'cli-bridge', 'ollama'];
+    expect(validProviders).toContain('gateway');
+    expect(validProviders).toContain('cli-bridge');
+    expect(validProviders).toContain('ollama');
+    expect(validProviders as string[]).not.toContain('anthropic');
+    expect(validProviders as string[]).not.toContain('openai');
   });
 
   it('valid formats are: markdown, json', () => {
@@ -352,7 +338,7 @@ const mockReviewPipeline = vi.mocked(reviewPipeline);
 function defaultOptions(overrides: Partial<ReviewOptions> = {}): ReviewOptions {
   return {
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     apiKey: 'test-key',
     semgrep: true,
@@ -374,7 +360,7 @@ function makeReviewResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     findings: [],
     metadata: {
       mode: 'simple',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 100,
       executionTimeMs: 1500,
@@ -431,7 +417,7 @@ describe('reviewCommand — functional tests', () => {
       expect.objectContaining({
         diff,
         mode: 'simple',
-        provider: 'anthropic',
+        provider: 'gateway',
         model: 'claude-sonnet-4-20250514',
         apiKey: 'test-key',
       }),
@@ -653,12 +639,12 @@ describe('reviewCommand — functional tests', () => {
     const { reviewCommand } = await import('./review.js');
     await reviewCommand(
       '.',
-      defaultOptions({ mode: 'workflow', provider: 'openai', model: 'gpt-4o' }),
+      defaultOptions({ mode: 'workflow', provider: 'cli-bridge', model: 'gpt-4o' }),
     );
 
     const allLogCalls = logSpy.mock.calls.map((c: unknown[]) => String(c[0]));
     expect(allLogCalls.some((s: string) => s.includes('workflow'))).toBe(true);
-    expect(allLogCalls.some((s: string) => s.includes('openai'))).toBe(true);
+    expect(allLogCalls.some((s: string) => s.includes('cli-bridge'))).toBe(true);
     expect(allLogCalls.some((s: string) => s.includes('gpt-4o'))).toBe(true);
   });
 });

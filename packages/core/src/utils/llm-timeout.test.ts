@@ -41,7 +41,7 @@ describe('generateTextWithTimeout', () => {
 
     const promise = generateTextWithTimeout(
       { model: {} as Parameters<typeof generateText>[0]['model'], prompt: 'test' },
-      { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+      { provider: 'gateway', model: 'claude-sonnet-4-20250514' },
     );
 
     // Let the promise resolve
@@ -92,7 +92,7 @@ describe('generateTextWithTimeout', () => {
 
     const promise = generateTextWithTimeout(
       { model: {} as Parameters<typeof generateText>[0]['model'], prompt: 'test' },
-      { provider: 'google', model: 'gemini-2.5-flash' },
+      { provider: 'gateway', model: 'gemini-2.5-flash' },
     );
 
     // Advance past the timeout
@@ -102,7 +102,7 @@ describe('generateTextWithTimeout', () => {
 
     expect(result).toBeNull();
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('LLM call timed out'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('google/gemini-2.5-flash'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('gateway/gemini-2.5-flash'));
 
     warnSpy.mockRestore();
   });
@@ -114,7 +114,7 @@ describe('generateTextWithTimeout', () => {
     await expect(
       generateTextWithTimeout(
         { model: {} as Parameters<typeof generateText>[0]['model'], prompt: 'test' },
-        { provider: 'openai', model: 'gpt-4o' },
+        { provider: 'gateway', model: 'gpt-4o' },
       ),
     ).rejects.toThrow('API rate limit exceeded');
   });

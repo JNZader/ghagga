@@ -107,7 +107,7 @@ describe('createGatewayGenerateFn', () => {
   it('returns correct GenerateResult shape', async () => {
     vi.mocked(generateViaGateway).mockResolvedValue({
       text: 'Gateway review',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 250,
     });
@@ -123,7 +123,7 @@ describe('createGatewayGenerateFn', () => {
     expect(result).toEqual({
       text: 'Gateway review',
       tokensUsed: 250,
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
     });
   });
@@ -131,7 +131,7 @@ describe('createGatewayGenerateFn', () => {
   it('passes options correctly to generateViaGateway', async () => {
     vi.mocked(generateViaGateway).mockResolvedValue({
       text: 'ok',
-      provider: 'groq',
+      provider: 'gateway',
       model: 'llama-3',
     });
 
@@ -150,7 +150,7 @@ describe('createGatewayGenerateFn', () => {
   it('maps tokensUsed from gateway response (defaults to 0 when missing)', async () => {
     vi.mocked(generateViaGateway).mockResolvedValue({
       text: 'output',
-      provider: 'groq',
+      provider: 'gateway',
       model: 'llama-3',
       // No tokensUsed field
     });

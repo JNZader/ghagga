@@ -52,7 +52,7 @@ function makeFakeGenerateFn(response: string): GenerateTextFn {
   return vi.fn().mockResolvedValue({
     text: response,
     tokensUsed: 100,
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
   });
 }
@@ -228,7 +228,7 @@ describe('runFanOutReview', () => {
   function makeInput(overrides: Partial<FanOutReviewInput> = {}): FanOutReviewInput {
     return {
       diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       apiKey: 'test-key',
       staticContext: '',
@@ -589,7 +589,7 @@ describe('runFanOutReview with custom lenses', () => {
   function makeInput(overrides: Partial<FanOutReviewInput> = {}): FanOutReviewInput {
     return {
       diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       apiKey: 'test-key',
       staticContext: '',

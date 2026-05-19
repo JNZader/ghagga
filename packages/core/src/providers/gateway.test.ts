@@ -31,7 +31,7 @@ describe('generateViaGateway', () => {
   it('sends correct request to gateway', async () => {
     const mockResponse = {
       text: 'Review result',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 500,
     };
@@ -94,7 +94,7 @@ describe('generateViaGateway', () => {
 
   it('sends without optional fields when not provided', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ text: 'ok', provider: 'groq', model: 'auto' }), {
+      new Response(JSON.stringify({ text: 'ok', provider: 'gateway', model: 'auto' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),

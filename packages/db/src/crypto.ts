@@ -18,8 +18,8 @@
  *
  * ## Migration
  * ghagga v4 is a fresh deploy — there is no production data to migrate from v1
- * to v2. v2 is the only format `encrypt()` writes; `migrateToV2()` is retained
- * for completeness but currently has no callers.
+ * to v2. v2 is the only format `encrypt()` writes; v1 reads are still supported
+ * by `decrypt()` for any rare legacy values.
  *
  * ENCRYPTION_KEY env var: 64 hex characters (32 bytes).
  * Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -105,14 +105,4 @@ function decryptV2(payload: string, key: Buffer): string {
   decipher.setAuthTag(authTag);
 
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
-}
-
-/**
- * Re-encrypt a v1 value as v2. Used by the migration script.
- * Returns the value unchanged if it's already v2.
- */
-export function migrateToV2(value: string): string {
-  if (value.startsWith(V2_PREFIX)) return value;
-  const plaintext = decrypt(value);
-  return encrypt(plaintext);
 }
