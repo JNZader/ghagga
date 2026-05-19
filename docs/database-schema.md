@@ -124,7 +124,7 @@ Individual observations extracted from reviews.
 - `idx_observations_type` on `type`
 - `idx_observations_content_hash` on `content_hash`
 
-**Hidden columns** (added via raw SQL migration `migrations/0001_add_tsvector.sql`):
+**Hidden columns** (added via raw SQL migration `packages/db/drizzle/_custom_tsvector.sql` -- the underscore prefix keeps drizzle-kit from clobbering it on future `generate` runs, since drizzle-kit only manages numerically-prefixed files):
 
 | Column | Type | Description |
 |--------|------|-------------|

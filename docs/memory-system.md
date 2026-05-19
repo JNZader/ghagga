@@ -114,7 +114,7 @@ graph TB
 
 ### PostgreSQL (Server Mode)
 
-Observations are indexed using a `tsvector` column with a **GIN index**, added via raw SQL migration (`migrations/0001_add_tsvector.sql`). A database trigger automatically updates the `tsvector` column (`search_observations`) when observation content changes. Results are ranked using `ts_rank`.
+Observations are indexed using a `tsvector` column with a **GIN index**, added via raw SQL migration (`packages/db/drizzle/_custom_tsvector.sql` -- the underscore prefix keeps drizzle-kit from clobbering it on future `generate` runs, since drizzle-kit only manages numerically-prefixed files). A database trigger automatically updates the `tsvector` column (`search_observations`) when observation content changes. Results are ranked using `ts_rank`.
 
 ### SQLite (CLI and Action Modes)
 
