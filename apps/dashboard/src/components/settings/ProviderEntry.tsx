@@ -5,7 +5,7 @@ import type { SaaSProvider } from '@/lib/types';
 import { CliBridgeFields } from './provider-fields/CliBridgeFields';
 import { GatewayFields } from './provider-fields/GatewayFields';
 import { OllamaFields } from './provider-fields/OllamaFields';
-import { CLI_OPTIONS, getCliCredentialLabel, KNOWN_MODELS } from './provider-fields/shared';
+import { getCliCredentialLabel, KNOWN_MODELS } from './provider-fields/shared';
 
 // Re-export shared constants for backwards compatibility with parent pages
 // (Settings.tsx, GlobalSettings.tsx) that import KNOWN_MODELS from here.
@@ -101,19 +101,46 @@ export function ProviderEntry({
     setValidationError(null);
   }, []);
 
-  const _handleProviderChange = (provider: SaaSProvider) => {
-    setKeyMode('reuse'); // reset to default so the selector shows if a saved key exists
+  /**
+   * Switch the entry to a different provider. Resets transient state
+   * (apiKey, cliModel, gatewayUrl, validation) and seeds the new provider's
+   * defaults. Each provider has its own initial model + validated state:
+   *   - gateway:    model 'auto', validated=false (token still needs validate)
+   *   - cli-bridge: model 'auto', validated=true (no validation flow)
+   *   - ollama:     model '',      validated=false (keyless but model required)
+   */
+  const handleProviderChange = (provider: SaaSProvider) => {
+    setKeyMode('reuse'); // reset so the selector shows if a saved key exists
+    const isNewGateway = provider === 'gateway';
+    const isNewCli = provider === 'cli-bridge';
     onChange({
       ...entry,
       provider,
-      model: '',
+      model: provider === 'ollama' ? '' : 'auto',
       apiKey: '',
-      availableModels: [],
-      validated: false,
+      validated: isNewCli, // cli-bridge starts pre-validated; others need explicit validation
       hasExistingKey: false,
       maskedApiKey: undefined,
+      availableModels: KNOWN_MODELS[provider] ?? [],
       cliModel: undefined,
-      gatewayUrl: undefined,
+      gatewayUrl: isNewGateway ? '' : undefined,
+    });
+  };
+
+  /**
+   * Switch the CLI tool (entry.model) for a cli-bridge entry. Resets cliModel
+   * and any entered API key since credentials are tool-specific. opencode is
+   * special: it requires a cliModel before it can be considered valid.
+   */
+  const handleCliToolChange = (cliTool: string) => {
+    onChange({
+      ...entry,
+      model: cliTool,
+      cliModel: undefined,
+      apiKey: '',
+      hasExistingKey: false,
+      maskedApiKey: undefined,
+      validated: cliTool !== 'opencode',
     });
   };
 
@@ -213,20 +240,7 @@ export function ProviderEntry({
               type="radio"
               name={`mode-${index}`}
               checked={entry.provider === 'gateway'}
-              onChange={() => {
-                onChange({
-                  ...entry,
-                  provider: 'gateway' as SaaSProvider,
-                  model: 'auto',
-                  apiKey: '',
-                  validated: false,
-                  hasExistingKey: false,
-                  maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS.gateway ?? [],
-                  cliModel: undefined,
-                  gatewayUrl: '',
-                });
-              }}
+              onChange={() => handleProviderChange('gateway')}
               className="accent-primary-500"
             />
             <span className="text-text-secondary">LLM Gateway</span>
@@ -237,19 +251,7 @@ export function ProviderEntry({
               type="radio"
               name={`mode-${index}`}
               checked={entry.provider === 'cli-bridge'}
-              onChange={() => {
-                onChange({
-                  ...entry,
-                  provider: 'cli-bridge' as SaaSProvider,
-                  model: 'auto',
-                  apiKey: '',
-                  validated: true,
-                  hasExistingKey: false,
-                  maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS['cli-bridge'] ?? [],
-                  cliModel: undefined,
-                });
-              }}
+              onChange={() => handleProviderChange('cli-bridge')}
               className="accent-primary-500"
             />
             <span className="text-text-secondary">Local CLI</span>
@@ -260,20 +262,7 @@ export function ProviderEntry({
               type="radio"
               name={`mode-${index}`}
               checked={entry.provider === 'ollama'}
-              onChange={() => {
-                onChange({
-                  ...entry,
-                  provider: 'ollama' as SaaSProvider,
-                  model: '',
-                  apiKey: '',
-                  validated: false,
-                  hasExistingKey: false,
-                  maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS.ollama ?? [],
-                  cliModel: undefined,
-                  gatewayUrl: undefined,
-                });
-              }}
+              onChange={() => handleProviderChange('ollama')}
               className="accent-primary-500"
             />
             <span className="text-text-secondary">Ollama</span>
@@ -287,30 +276,18 @@ export function ProviderEntry({
             Model: <code className="font-mono">auto</code> — the gateway handles model selection
           </div>
         ) : entry.provider === 'cli-bridge' ? (
-          /* CLI tool selector */
-          <select
-            value={entry.model}
-            onChange={(e) => {
-              const newTool = e.target.value;
-              // On tool change: reset cliModel and clear entered API key (credentials are tool-specific)
+          <CliBridgeFields
+            index={index}
+            entry={entry}
+            onCliToolChange={handleCliToolChange}
+            onCliModelChange={(cliModel) =>
               onChange({
                 ...entry,
-                model: newTool,
-                cliModel: undefined,
-                apiKey: '',
-                hasExistingKey: false,
-                maskedApiKey: undefined,
-                validated: newTool !== 'opencode', // opencode needs cliModel before it's "valid"
-              });
-            }}
-            className="select-field"
-          >
-            {CLI_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+                cliModel,
+                validated: false, // Model changed — prior validation is stale
+              })
+            }
+          />
         ) : (
           /* Ollama: free-text model input with suggestions */
           <OllamaFields
@@ -320,21 +297,6 @@ export function ProviderEntry({
           />
         )}
       </div>
-
-      {/* CLI Bridge: cliModel input + help + free-banner */}
-      {isCLIBridge && (
-        <CliBridgeFields
-          index={index}
-          entry={entry}
-          onCliModelChange={(cliModel) =>
-            onChange({
-              ...entry,
-              cliModel,
-              validated: false, // Model changed — prior validation is stale
-            })
-          }
-        />
-      )}
 
       {/* LLM Gateway: URL + Model input */}
       {isGateway && (

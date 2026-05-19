@@ -1,5 +1,6 @@
 import type { ProviderEntryState } from '../ProviderEntry';
 import {
+  CLI_OPTIONS,
   getCliCredentialHelp,
   isValidCliModelFormat,
   OPENCODE_MODEL_SUGGESTIONS,
@@ -8,26 +9,30 @@ import {
 export interface CliBridgeFieldsProps {
   index: number;
   entry: ProviderEntryState;
+  /** Called when the user picks a different CLI tool (entry.model) */
+  onCliToolChange: (cliTool: string) => void;
   /** Called when the user edits the OpenCode model input (entry.cliModel) */
   onCliModelChange: (cliModel: string) => void;
 }
 
 /**
- * CLI Bridge-specific provider fields rendered AFTER the CLI tool selector.
+ * CLI Bridge-specific provider fields.
  *
  * Renders, in order:
- *   1. OpenCode model input (only when CLI tool === 'opencode')
- *   2. Contextual help text for the selected CLI tool
- *   3. Free-model banner (only when the cliModel is an opencode/* free model)
+ *   1. CLI tool selector (Auto / OpenCode / Copilot / Gemini)
+ *   2. OpenCode model input (only when CLI tool === 'opencode')
+ *   3. Contextual help text for the selected CLI tool
+ *   4. Free-model banner (only when the cliModel is an opencode/* free model)
  *
- * The CLI tool selector itself stays inline in the parent (ProviderEntry)
- * because it sits within the provider-mode block alongside the radio
- * buttons (parallel to the gateway info banner and the ollama input).
- *
- * The API-key / credential block lives in the parent because it is shared
- * across providers and needs the validate-button wiring.
+ * The API-key / credential block lives in the parent (ProviderEntry) because
+ * it is shared across providers and needs the validate-button wiring.
  */
-export function CliBridgeFields({ index, entry, onCliModelChange }: CliBridgeFieldsProps) {
+export function CliBridgeFields({
+  index,
+  entry,
+  onCliToolChange,
+  onCliModelChange,
+}: CliBridgeFieldsProps) {
   const isOpencode = entry.model === 'opencode';
   const trimmedCliModel = entry.cliModel?.trim();
   const cliModelMissing = isOpencode && !trimmedCliModel;
@@ -37,6 +42,19 @@ export function CliBridgeFields({ index, entry, onCliModelChange }: CliBridgeFie
 
   return (
     <>
+      {/* CLI tool selector */}
+      <select
+        value={entry.model}
+        onChange={(e) => onCliToolChange(e.target.value)}
+        className="select-field"
+      >
+        {CLI_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+
       {/* OpenCode model input (only when opencode is selected) */}
       {isOpencode && (
         <div className="mb-3">
