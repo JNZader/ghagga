@@ -2,6 +2,19 @@ import { useEffect, useState } from 'react';
 import type { AvailableKeysMap } from '@/lib/api';
 import { useValidateProvider } from '@/lib/api';
 import type { SaaSProvider } from '@/lib/types';
+import { OllamaFields } from './provider-fields/OllamaFields';
+import {
+  CLI_OPTIONS,
+  getCliCredentialHelp,
+  getCliCredentialLabel,
+  isValidCliModelFormat,
+  KNOWN_MODELS,
+  OPENCODE_MODEL_SUGGESTIONS,
+} from './provider-fields/shared';
+
+// Re-export shared constants for backwards compatibility with parent pages
+// (Settings.tsx, GlobalSettings.tsx) that import KNOWN_MODELS from here.
+export { KNOWN_MODELS };
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -35,111 +48,6 @@ interface ProviderEntryProps {
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-}
-
-// ─── Known Models per Provider (for instant model selection without re-validation) ──
-
-export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
-  'cli-bridge': ['auto', 'opencode', 'copilot', 'gemini'],
-  gateway: ['auto'],
-  ollama: ['llama3', 'llama3.1', 'codellama', 'mistral', 'gemma3', 'qwen2.5-coder'],
-};
-
-// ─── Provider Labels ────────────────────────────────────────────
-
-// Ollama local-models suggestions for the model input datalist
-const OLLAMA_MODEL_SUGGESTIONS = [
-  'llama3',
-  'llama3.1',
-  'llama3.2',
-  'codellama',
-  'mistral',
-  'gemma3',
-  'qwen2.5-coder',
-  'deepseek-coder-v2',
-  'phi3',
-];
-
-const CLI_OPTIONS: { value: string; label: string }[] = [
-  { value: 'auto', label: 'Auto-detect (best available)' },
-  { value: 'opencode', label: 'OpenCode (recommended)' },
-  { value: 'copilot', label: 'Copilot CLI' },
-  { value: 'gemini', label: 'Gemini CLI' },
-];
-
-/** Free OpenCode models — no API key needed */
-const OPENCODE_FREE_MODELS = [
-  'opencode/gpt-5-nano',
-  'opencode/big-pickle',
-  'opencode/mimo-v2-pro-free',
-  'opencode/minimax-m2.5-free',
-  'opencode/nemotron-3-super-free',
-  'opencode/mimo-v2-omni-free',
-];
-
-/** Curated OpenCode model suggestions (require API key for the provider) */
-const OPENCODE_PAID_MODELS = [
-  'anthropic/claude-sonnet-4-5',
-  'anthropic/claude-opus-4-6',
-  'anthropic/claude-haiku-4-5',
-  'openai/gpt-5-codex',
-  'groq/openai/gpt-oss-120b',
-  'openrouter/deepseek/deepseek-chat',
-];
-
-const OPENCODE_MODEL_SUGGESTIONS = [...OPENCODE_FREE_MODELS, ...OPENCODE_PAID_MODELS];
-
-/** Derive a human-readable credential label from the CLI tool and cliModel prefix */
-function getCliCredentialLabel(cliTool: string, cliModel?: string): string {
-  if (cliTool === 'gemini') return 'Gemini API Key';
-  if (cliTool === 'copilot') return 'GitHub Token (Fine-Grained PAT)';
-  if (cliTool === 'auto') return 'API Key (optional)';
-
-  // opencode — derive from cliModel prefix
-  if (cliTool === 'opencode' && cliModel) {
-    const prefix = cliModel.split('/')[0];
-    switch (prefix) {
-      case 'opencode':
-        return ''; // Free models — no API key needed
-      case 'anthropic':
-        return 'Anthropic API Key';
-      case 'openai':
-        return 'OpenAI API Key';
-      case 'google':
-        return 'Gemini API Key';
-      case 'github-copilot':
-        return 'GitHub Token';
-      case 'groq':
-        return 'Groq API Key';
-      case 'openrouter':
-        return 'OpenRouter API Key';
-      default:
-        return 'Provider API Key';
-    }
-  }
-
-  return 'Provider API Key';
-}
-
-/** Get contextual help text for the CLI credential input */
-function getCliCredentialHelp(cliTool: string): string {
-  switch (cliTool) {
-    case 'opencode':
-      return 'Models prefixed with opencode/ are free and need no API key. For other providers (anthropic/, openai/, etc.), provide the corresponding API key.';
-    case 'gemini':
-      return 'Provide a Gemini API key, or leave empty to use the server\u2019s GEMINI_API_KEY.';
-    case 'copilot':
-      return 'Provide a GitHub Fine-Grained PAT with Copilot permissions, or leave empty to use the server\u2019s token.';
-    case 'auto':
-      return 'Credentials are optional. The server will use its own keys if no credential is provided.';
-    default:
-      return '';
-  }
-}
-
-/** Check if cliModel matches the expected provider/model format */
-function isValidCliModelFormat(cliModel: string): boolean {
-  return /^[^/]+\/.+$/.test(cliModel);
 }
 
 // ─── Component ──────────────────────────────────────────────────
@@ -413,21 +321,11 @@ export function ProviderEntry({
           </select>
         ) : (
           /* Ollama: free-text model input with suggestions */
-          <div>
-            <input
-              type="text"
-              list={`ollama-models-${index}`}
-              value={entry.model}
-              onChange={(e) => onChange({ ...entry, model: e.target.value })}
-              placeholder="e.g., llama3, codellama, qwen2.5-coder"
-              className="input-field w-full"
-            />
-            <datalist id={`ollama-models-${index}`}>
-              {OLLAMA_MODEL_SUGGESTIONS.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </div>
+          <OllamaFields
+            index={index}
+            entry={entry}
+            onModelChange={(model) => onChange({ ...entry, model })}
+          />
         )}
       </div>
 
