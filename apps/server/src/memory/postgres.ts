@@ -51,12 +51,12 @@ export class PostgresMemoryStorage implements MemoryStorage {
     query: string,
     options?: { limit?: number; type?: string },
   ): Promise<MemoryObservationRow[]> {
+    // Capture the provider locally so the closure does not need to re-narrow `this.X`.
+    const provider = this.embeddingProvider;
     const rows = await searchObservations(this.db, project, query, {
       ...options,
       // Pass the embed function for hybrid search when provider is available
-      embedFn: this.embeddingProvider
-        ? (text: string) => this.embeddingProvider?.embed(text)
-        : undefined,
+      embedFn: provider ? (text: string) => provider.embed(text) : undefined,
     });
     return rows.map((row: ObservationRow) => ({
       id: row.id,

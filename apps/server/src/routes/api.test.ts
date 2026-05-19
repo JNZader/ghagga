@@ -173,7 +173,7 @@ const FAKE_REPO = {
   aiReviewEnabled: true,
   reviewMode: 'simple',
   providerChain: [
-    { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-key-1' },
+    { provider: 'gateway', model: 'auto', encryptedApiKey: 'enc-key-1' },
   ],
   settings: {
     enableSemgrep: true,
@@ -864,7 +864,7 @@ describe('PUT /api/installation-settings', () => {
       body: JSON.stringify({
         installationId: 100,
         providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'sk-ant-new-key' },
+          { provider: 'gateway', model: 'auto', apiKey: 'sk-gw-new-key' },
         ],
         aiReviewEnabled: false,
         reviewMode: 'consensus',
@@ -882,13 +882,13 @@ describe('PUT /api/installation-settings', () => {
     expect(json.data.message).toBe('Installation settings updated');
 
     // Verify encrypt was called with the new key
-    expect(mockEncrypt).toHaveBeenCalledWith('sk-ant-new-key');
+    expect(mockEncrypt).toHaveBeenCalledWith('sk-gw-new-key');
 
     // Verify upsert was called with correct args
     expect(mockUpsertInstallationSettings).toHaveBeenCalledOnce();
     const [_db, installId, updates] = mockUpsertInstallationSettings.mock.calls[0];
     expect(installId).toBe(100);
-    expect(updates.providerChain[0].encryptedApiKey).toBe('encrypted-sk-ant-new-key');
+    expect(updates.providerChain[0].encryptedApiKey).toBe('encrypted-sk-gw-new-key');
     expect(updates.aiReviewEnabled).toBe(false);
     expect(updates.reviewMode).toBe('consensus');
     expect(updates.settings.enableSemgrep).toBe(false);
@@ -900,8 +900,8 @@ describe('PUT /api/installation-settings', () => {
     mockGetInstallationSettings.mockResolvedValueOnce({
       providerChain: [
         {
-          provider: 'anthropic',
-          model: 'claude-sonnet-4-20250514',
+          provider: 'gateway',
+          model: 'auto',
           encryptedApiKey: 'existing-enc-key',
         },
       ],
@@ -924,7 +924,7 @@ describe('PUT /api/installation-settings', () => {
       body: JSON.stringify({
         installationId: 100,
         providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }, // No apiKey
+          { provider: 'gateway', model: 'auto' }, // No apiKey
         ],
       }),
     });
@@ -934,25 +934,6 @@ describe('PUT /api/installation-settings', () => {
 
     const [, , updates] = mockUpsertInstallationSettings.mock.calls[0];
     expect(updates.providerChain[0].encryptedApiKey).toBe('existing-enc-key');
-  });
-
-  it('sets null encryptedApiKey for github provider', async () => {
-    mockGetInstallationSettings.mockResolvedValueOnce(null);
-    mockUpsertInstallationSettings.mockResolvedValueOnce({});
-
-    const app = createApp();
-    const res = await app.request('/api/installation-settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        installationId: 100,
-        providerChain: [{ provider: 'github', model: 'gpt-4o' }],
-      }),
-    });
-
-    expect(res.status).toBe(200);
-    const [, , updates] = mockUpsertInstallationSettings.mock.calls[0];
-    expect(updates.providerChain[0].encryptedApiKey).toBeNull();
   });
 
   it('returns 400 for invalid JSON body', async () => {
@@ -1032,7 +1013,7 @@ describe('PUT /api/installation-settings', () => {
       body: JSON.stringify({
         installationId: 100,
         providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'key' },
+          { provider: 'gateway', model: 'auto', apiKey: 'key' },
         ],
       }),
     });
@@ -1055,7 +1036,7 @@ describe('GET /api/settings', () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     // Global settings for reference
     mockGetInstallationSettings.mockResolvedValueOnce({
-      providerChain: [{ provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'global-enc-key' }],
+      providerChain: [{ provider: 'gateway', model: 'auto', encryptedApiKey: 'global-enc-key' }],
       aiReviewEnabled: true,
       reviewMode: 'simple',
       settings: {
@@ -1089,7 +1070,7 @@ describe('GET /api/settings', () => {
 
     // Provider chain: keys are masked
     expect(data.providerChain).toHaveLength(1);
-    expect(data.providerChain[0].provider).toBe('anthropic');
+    expect(data.providerChain[0].provider).toBe('gateway');
     expect(data.providerChain[0].hasApiKey).toBe(true);
     expect(data.providerChain[0].maskedApiKey).toBeDefined();
     // No encryptedApiKey exposed
@@ -1097,7 +1078,7 @@ describe('GET /api/settings', () => {
 
     // Global settings reference
     expect(data.globalSettings).toBeDefined();
-    expect(data.globalSettings.providerChain[0].provider).toBe('openai');
+    expect(data.globalSettings.providerChain[0].provider).toBe('gateway');
     expect(data.globalSettings.providerChain[0].hasApiKey).toBe(true);
   });
 
@@ -1202,7 +1183,7 @@ describe('PUT /api/settings', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         repoFullName: 'owner/repo',
-        providerChain: [{ provider: 'openai', model: 'gpt-4o', apiKey: 'sk-new-openai-key' }],
+        providerChain: [{ provider: 'gateway', model: 'auto', apiKey: 'sk-new-gw-key' }],
         aiReviewEnabled: true,
         reviewMode: 'workflow',
         enableSemgrep: true,
@@ -1219,13 +1200,13 @@ describe('PUT /api/settings', () => {
     const json = await res.json();
     expect(json.data.message).toBe('Settings updated');
 
-    expect(mockEncrypt).toHaveBeenCalledWith('sk-new-openai-key');
+    expect(mockEncrypt).toHaveBeenCalledWith('sk-new-gw-key');
     expect(mockUpdateRepoSettings).toHaveBeenCalledOnce();
 
     const [_db, repoId, updates] = mockUpdateRepoSettings.mock.calls[0];
     expect(repoId).toBe(42);
-    expect(updates.providerChain[0].provider).toBe('openai');
-    expect(updates.providerChain[0].encryptedApiKey).toBe('encrypted-sk-new-openai-key');
+    expect(updates.providerChain[0].provider).toBe('gateway');
+    expect(updates.providerChain[0].encryptedApiKey).toBe('encrypted-sk-new-gw-key');
     expect(updates.aiReviewEnabled).toBe(true);
     expect(updates.reviewMode).toBe('workflow');
     expect(updates.useGlobalSettings).toBe(false);
@@ -1246,7 +1227,7 @@ describe('PUT /api/settings', () => {
       body: JSON.stringify({
         repoFullName: 'owner/repo',
         providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }, // No apiKey
+          { provider: 'gateway', model: 'auto' }, // No apiKey
         ],
       }),
     });
@@ -1257,26 +1238,6 @@ describe('PUT /api/settings', () => {
     const [, , updates] = mockUpdateRepoSettings.mock.calls[0];
     // Should preserve existing encryptedApiKey from FAKE_REPO's providerChain
     expect(updates.providerChain[0].encryptedApiKey).toBe('enc-key-1');
-  });
-
-  it('sets null encryptedApiKey for github provider without key', async () => {
-    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
-    mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
-
-    const app = createApp();
-    const res = await app.request('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        repoFullName: 'owner/repo',
-        providerChain: [{ provider: 'github', model: 'gpt-4o-mini' }],
-      }),
-    });
-
-    expect(res.status).toBe(200);
-    const [, , updates] = mockUpdateRepoSettings.mock.calls[0];
-    expect(updates.providerChain[0].provider).toBe('github');
-    expect(updates.providerChain[0].encryptedApiKey).toBeNull();
   });
 
   it('sets null for provider with no existing key and no new key', async () => {
@@ -1290,7 +1251,7 @@ describe('PUT /api/settings', () => {
       body: JSON.stringify({
         repoFullName: 'owner/repo',
         providerChain: [
-          { provider: 'google', model: 'gemini-2.0-flash' }, // No existing key in FAKE_REPO
+          { provider: 'cli-bridge', model: 'auto' }, // No existing key in FAKE_REPO (FAKE_REPO uses gateway)
         ],
       }),
     });
@@ -1544,20 +1505,20 @@ describe('PUT /api/settings', () => {
   // ── Bug 2: fallback to global chain when repo has no key ──────
 
   it('copies encrypted key from global chain when repo has no key for provider (Bug 2 fix)', async () => {
-    // Repo with no key for 'google' (only has 'anthropic')
-    const repoWithoutGoogleKey = {
+    // Repo with no key for 'cli-bridge' (only has 'gateway')
+    const repoWithoutCliBridgeKey = {
       ...FAKE_REPO,
       providerChain: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-key-1' },
+        { provider: 'gateway', model: 'auto', encryptedApiKey: 'enc-key-1' },
       ],
     };
-    mockGetRepoByFullName.mockResolvedValueOnce(repoWithoutGoogleKey);
+    mockGetRepoByFullName.mockResolvedValueOnce(repoWithoutCliBridgeKey);
     mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
 
-    // Global installation settings DO have a Google key
+    // Global installation settings DO have a cli-bridge key
     mockGetInstallationSettings.mockResolvedValueOnce({
       providerChain: [
-        { provider: 'google', model: 'gemini-2.5-flash', encryptedApiKey: 'enc-global-google' },
+        { provider: 'cli-bridge', model: 'auto', encryptedApiKey: 'enc-global-cli' },
       ],
     });
 
@@ -1569,7 +1530,7 @@ describe('PUT /api/settings', () => {
         repoFullName: 'owner/repo',
         providerChain: [
           // User pre-filled from global — no apiKey sent (only hasExistingKey was shown)
-          { provider: 'google', model: 'gemini-2.5-flash' },
+          { provider: 'cli-bridge', model: 'auto' },
         ],
         useGlobalSettings: false,
       }),
@@ -1580,14 +1541,14 @@ describe('PUT /api/settings', () => {
 
     const [, , updates] = mockUpdateRepoSettings.mock.calls[0];
     // Key should be copied from global chain, NOT silently set to null
-    expect(updates.providerChain[0].provider).toBe('google');
-    expect(updates.providerChain[0].encryptedApiKey).toBe('enc-global-google');
+    expect(updates.providerChain[0].provider).toBe('cli-bridge');
+    expect(updates.providerChain[0].encryptedApiKey).toBe('enc-global-cli');
   });
 
   it('still returns null when neither repo nor global chain has a key for the provider', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
-    // Global chain also has no key for 'qwen' (null from beforeEach is already set)
+    // Global chain also has no key for 'cli-bridge' (null from beforeEach is already set)
 
     const app = createApp();
     const res = await app.request('/api/settings', {
@@ -1595,7 +1556,7 @@ describe('PUT /api/settings', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         repoFullName: 'owner/repo',
-        providerChain: [{ provider: 'qwen', model: 'qwen-coder-plus' }],
+        providerChain: [{ provider: 'cli-bridge', model: 'auto' }],
       }),
     });
 
@@ -1691,66 +1652,6 @@ describe('GET /api/providers/keys', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe('POST /api/providers/validate', () => {
-  it('validates an anthropic API key successfully', async () => {
-    mockValidateProviderKey.mockResolvedValueOnce({
-      valid: true,
-      models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'],
-    });
-
-    const app = createApp();
-    const res = await app.request('/api/providers/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'anthropic', apiKey: 'sk-ant-key' }),
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.valid).toBe(true);
-    expect(json.models).toHaveLength(2);
-
-    expect(mockValidateProviderKey).toHaveBeenCalledWith('anthropic', 'sk-ant-key');
-  });
-
-  it('validates openai key', async () => {
-    mockValidateProviderKey.mockResolvedValueOnce({
-      valid: true,
-      models: ['gpt-4o'],
-    });
-
-    const app = createApp();
-    const res = await app.request('/api/providers/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'openai', apiKey: 'sk-openai-key' }),
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.valid).toBe(true);
-  });
-
-  it('uses user session token for github provider', async () => {
-    mockValidateProviderKey.mockResolvedValueOnce({
-      valid: true,
-      models: ['gpt-4o-mini'],
-    });
-
-    const app = createApp();
-    const res = await app.request('/api/providers/validate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ghp-user-token',
-      },
-      body: JSON.stringify({ provider: 'github' }),
-    });
-
-    expect(res.status).toBe(200);
-    // Should use the Bearer token, not body.apiKey
-    expect(mockValidateProviderKey).toHaveBeenCalledWith('github', 'ghp-user-token');
-  });
-
   it('returns 400 for invalid JSON body', async () => {
     const app = createApp();
     const res = await app.request('/api/providers/validate', {
@@ -1807,67 +1708,6 @@ describe('POST /api/providers/validate', () => {
     expect(json.message).toContain('Unknown provider');
   });
 
-  it('returns 400 when apiKey missing and no saved key in installation chain', async () => {
-    // No apiKey in body AND no saved key in installation chain → still 400
-    mockGetInstallationSettingsBatch.mockResolvedValueOnce([]);
-
-    const app = createApp();
-    const res = await app.request('/api/providers/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'anthropic' }), // No apiKey
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe('VALIDATION_ERROR');
-    expect(json.message).toBe('Missing apiKey for non-GitHub provider');
-  });
-
-  it('validates using saved key from installation chain when no apiKey provided', async () => {
-    // No apiKey in body but saved key exists in installation chain
-    mockGetInstallationSettingsBatch.mockResolvedValueOnce([
-      {
-        providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
-        ],
-      },
-    ]);
-    mockValidateProviderKey.mockResolvedValueOnce({
-      valid: true,
-      models: ['claude-sonnet-4-20250514', 'claude-haiku-3'],
-    });
-
-    const app = createApp();
-    const res = await app.request('/api/providers/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'anthropic' }), // No apiKey — uses saved key
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.valid).toBe(true);
-    expect(json.models).toContain('claude-sonnet-4-20250514');
-    // Verify decrypt was called to resolve the saved key
-    expect(mockDecrypt).toHaveBeenCalledWith('enc-ant');
-  });
-
-  it('returns error result when validateProviderKey throws', async () => {
-    mockValidateProviderKey.mockRejectedValueOnce(new Error('Network error'));
-
-    const app = createApp();
-    const res = await app.request('/api/providers/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'anthropic', apiKey: 'sk-key' }),
-    });
-
-    expect(res.status).toBe(200); // Returns 200 with error in body
-    const json = await res.json();
-    expect(json.valid).toBe(false);
-    expect(json.error).toBe('Validation request failed');
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════

@@ -79,8 +79,10 @@ export function ConfirmDialog({
   }, [open, countdownSeconds, secondsRemaining]);
 
   // ── Escape key handling ───────────────────────────────────────
+  // `HTMLElement` covers both the dialog `<div>` and the backdrop `<button>` —
+  // both attach this handler.
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLDivElement>) => {
+    (e: KeyboardEvent<HTMLElement>) => {
       if (e.key === 'Escape' && !isLoading) {
         onCancel();
       }

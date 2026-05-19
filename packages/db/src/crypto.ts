@@ -17,7 +17,9 @@
  * `encrypt()` always produces v2. Existing v1 values decrypt transparently.
  *
  * ## Migration
- * Run `pnpm --filter ghagga-db migrate:vault` to rewrite all v1 rows to v2.
+ * ghagga v4 is a fresh deploy — there is no production data to migrate from v1
+ * to v2. v2 is the only format `encrypt()` writes; `migrateToV2()` is retained
+ * for completeness but currently has no callers.
  *
  * ENCRYPTION_KEY env var: 64 hex characters (32 bytes).
  * Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
