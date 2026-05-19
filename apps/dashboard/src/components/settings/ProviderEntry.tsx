@@ -2,15 +2,9 @@ import { useEffect, useState } from 'react';
 import type { AvailableKeysMap } from '@/lib/api';
 import { useValidateProvider } from '@/lib/api';
 import type { SaaSProvider } from '@/lib/types';
+import { CliBridgeFields } from './provider-fields/CliBridgeFields';
 import { OllamaFields } from './provider-fields/OllamaFields';
-import {
-  CLI_OPTIONS,
-  getCliCredentialHelp,
-  getCliCredentialLabel,
-  isValidCliModelFormat,
-  KNOWN_MODELS,
-  OPENCODE_MODEL_SUGGESTIONS,
-} from './provider-fields/shared';
+import { CLI_OPTIONS, getCliCredentialLabel, KNOWN_MODELS } from './provider-fields/shared';
 
 // Re-export shared constants for backwards compatibility with parent pages
 // (Settings.tsx, GlobalSettings.tsx) that import KNOWN_MODELS from here.
@@ -75,12 +69,9 @@ export function ProviderEntry({
   // Can validate if: key typed, existing key saved, ollama (keyless), or cli-bridge (keyless flow)
   const canValidate =
     isOllama || isCLIBridge || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
-  // For opencode: cliModel is required — disable save/validate if missing
+  // For opencode: cliModel is required to validate / show free banner
   const isOpencode = isCLIBridge && entry.model === 'opencode';
-  const cliModelMissing = isOpencode && !entry.cliModel?.trim();
-  const cliModelInvalid =
-    isOpencode && entry.cliModel?.trim() && !isValidCliModelFormat(entry.cliModel.trim());
-  // Free opencode/* models don't need API keys
+  // Free opencode/* models don't need API keys — used by the credential block below
   const isFreeModel = isOpencode && entry.cliModel?.startsWith('opencode/');
 
   // Saved key for the current provider (from global/installation settings)
@@ -329,49 +320,19 @@ export function ProviderEntry({
         )}
       </div>
 
-      {/* CLI Bridge: OpenCode model input (only when opencode is selected) */}
-      {isCLIBridge && entry.model === 'opencode' && (
-        <div className="mb-3">
-          <label
-            htmlFor={`cli-model-${index}`}
-            className="mb-1 block text-xs font-medium text-text-secondary"
-          >
-            OpenCode Model (provider/model)
-            <span className="ml-1 text-red-400">*</span>
-          </label>
-          <input
-            id={`cli-model-${index}`}
-            type="text"
-            list={`cli-model-suggestions-${index}`}
-            value={entry.cliModel ?? ''}
-            onChange={(e) => {
-              const newCliModel = e.target.value;
-              onChange({
-                ...entry,
-                cliModel: newCliModel,
-                validated: false, // Model changed — prior validation is stale
-              });
-            }}
-            placeholder="e.g., anthropic/claude-sonnet-4-5"
-            className="input-field w-full"
-          />
-          <datalist id={`cli-model-suggestions-${index}`}>
-            {OPENCODE_MODEL_SUGGESTIONS.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-          {cliModelMissing && (
-            <p className="mt-1 text-xs text-yellow-400">
-              Model is required when using OpenCode. Select or type a provider/model.
-            </p>
-          )}
-          {cliModelInvalid && (
-            <p className="mt-1 text-xs text-yellow-400">
-              Expected format: <code className="rounded bg-surface-bg px-1">provider/model</code>{' '}
-              (e.g., anthropic/claude-sonnet-4-5)
-            </p>
-          )}
-        </div>
+      {/* CLI Bridge: cliModel input + help + free-banner */}
+      {isCLIBridge && (
+        <CliBridgeFields
+          index={index}
+          entry={entry}
+          onCliModelChange={(cliModel) =>
+            onChange({
+              ...entry,
+              cliModel,
+              validated: false, // Model changed — prior validation is stale
+            })
+          }
+        />
       )}
 
       {/* LLM Gateway: URL + Model input */}
@@ -485,20 +446,6 @@ export function ProviderEntry({
             </p>
           </div>
           <p className="text-xs text-text-secondary">The token goes in the API Key field below.</p>
-        </div>
-      )}
-
-      {/* CLI Bridge: contextual help text */}
-      {isCLIBridge && (
-        <div className="mb-3 rounded-md border border-surface-border/50 bg-surface-bg/30 p-3 text-xs text-text-secondary">
-          <p>{getCliCredentialHelp(entry.model)}</p>
-        </div>
-      )}
-
-      {/* Free model banner — no API key needed */}
-      {isFreeModel && (
-        <div className="mb-3 rounded-md border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-400">
-          <p>✨ Free model — no API key required. Just save and start reviewing!</p>
         </div>
       )}
 
