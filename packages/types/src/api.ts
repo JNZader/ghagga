@@ -1,5 +1,10 @@
 // ─── Enums / Unions ─────────────────────────────────────────────
 
+// CONVENTION: All status/enum/discriminated-union types shared between
+// ghagga-core (runtime) and the @ghagga/types API surface MUST be canonical
+// in ghagga-core and re-exported from here. This prevents drift like the
+// ReviewStatus PARTIAL issue (resolved in PR #186).
+//
 // Single source of truth: ReviewStatus is defined in `ghagga-core` (the review
 // engine runtime). We re-export it here so the dashboard / server / shared
 // wire contract cannot drift from the runtime enum. Adding a new status to
