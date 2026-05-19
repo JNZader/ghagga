@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import type { AvailableKeysMap } from '@/lib/api';
 import { useValidateProvider } from '@/lib/api';
 import type { SaaSProvider } from '@/lib/types';
+import { CliBridgeFields } from './provider-fields/CliBridgeFields';
+import { GatewayFields } from './provider-fields/GatewayFields';
+import { OllamaFields } from './provider-fields/OllamaFields';
+import { getCliCredentialLabel, KNOWN_MODELS } from './provider-fields/shared';
+
+// Re-export shared constants for backwards compatibility with parent pages
+// (Settings.tsx, GlobalSettings.tsx) that import KNOWN_MODELS from here.
+export { KNOWN_MODELS };
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -37,111 +45,6 @@ interface ProviderEntryProps {
   onMoveDown: () => void;
 }
 
-// ─── Known Models per Provider (for instant model selection without re-validation) ──
-
-export const KNOWN_MODELS: Record<SaaSProvider, string[]> = {
-  'cli-bridge': ['auto', 'opencode', 'copilot', 'gemini'],
-  gateway: ['auto'],
-  ollama: ['llama3', 'llama3.1', 'codellama', 'mistral', 'gemma3', 'qwen2.5-coder'],
-};
-
-// ─── Provider Labels ────────────────────────────────────────────
-
-// Ollama local-models suggestions for the model input datalist
-const OLLAMA_MODEL_SUGGESTIONS = [
-  'llama3',
-  'llama3.1',
-  'llama3.2',
-  'codellama',
-  'mistral',
-  'gemma3',
-  'qwen2.5-coder',
-  'deepseek-coder-v2',
-  'phi3',
-];
-
-const CLI_OPTIONS: { value: string; label: string }[] = [
-  { value: 'auto', label: 'Auto-detect (best available)' },
-  { value: 'opencode', label: 'OpenCode (recommended)' },
-  { value: 'copilot', label: 'Copilot CLI' },
-  { value: 'gemini', label: 'Gemini CLI' },
-];
-
-/** Free OpenCode models — no API key needed */
-const OPENCODE_FREE_MODELS = [
-  'opencode/gpt-5-nano',
-  'opencode/big-pickle',
-  'opencode/mimo-v2-pro-free',
-  'opencode/minimax-m2.5-free',
-  'opencode/nemotron-3-super-free',
-  'opencode/mimo-v2-omni-free',
-];
-
-/** Curated OpenCode model suggestions (require API key for the provider) */
-const OPENCODE_PAID_MODELS = [
-  'anthropic/claude-sonnet-4-5',
-  'anthropic/claude-opus-4-6',
-  'anthropic/claude-haiku-4-5',
-  'openai/gpt-5-codex',
-  'groq/openai/gpt-oss-120b',
-  'openrouter/deepseek/deepseek-chat',
-];
-
-const OPENCODE_MODEL_SUGGESTIONS = [...OPENCODE_FREE_MODELS, ...OPENCODE_PAID_MODELS];
-
-/** Derive a human-readable credential label from the CLI tool and cliModel prefix */
-function getCliCredentialLabel(cliTool: string, cliModel?: string): string {
-  if (cliTool === 'gemini') return 'Gemini API Key';
-  if (cliTool === 'copilot') return 'GitHub Token (Fine-Grained PAT)';
-  if (cliTool === 'auto') return 'API Key (optional)';
-
-  // opencode — derive from cliModel prefix
-  if (cliTool === 'opencode' && cliModel) {
-    const prefix = cliModel.split('/')[0];
-    switch (prefix) {
-      case 'opencode':
-        return ''; // Free models — no API key needed
-      case 'anthropic':
-        return 'Anthropic API Key';
-      case 'openai':
-        return 'OpenAI API Key';
-      case 'google':
-        return 'Gemini API Key';
-      case 'github-copilot':
-        return 'GitHub Token';
-      case 'groq':
-        return 'Groq API Key';
-      case 'openrouter':
-        return 'OpenRouter API Key';
-      default:
-        return 'Provider API Key';
-    }
-  }
-
-  return 'Provider API Key';
-}
-
-/** Get contextual help text for the CLI credential input */
-function getCliCredentialHelp(cliTool: string): string {
-  switch (cliTool) {
-    case 'opencode':
-      return 'Models prefixed with opencode/ are free and need no API key. For other providers (anthropic/, openai/, etc.), provide the corresponding API key.';
-    case 'gemini':
-      return 'Provide a Gemini API key, or leave empty to use the server\u2019s GEMINI_API_KEY.';
-    case 'copilot':
-      return 'Provide a GitHub Fine-Grained PAT with Copilot permissions, or leave empty to use the server\u2019s token.';
-    case 'auto':
-      return 'Credentials are optional. The server will use its own keys if no credential is provided.';
-    default:
-      return '';
-  }
-}
-
-/** Check if cliModel matches the expected provider/model format */
-function isValidCliModelFormat(cliModel: string): boolean {
-  return /^[^/]+\/.+$/.test(cliModel);
-}
-
 // ─── Component ──────────────────────────────────────────────────
 
 export function ProviderEntry({
@@ -167,12 +70,9 @@ export function ProviderEntry({
   // Can validate if: key typed, existing key saved, ollama (keyless), or cli-bridge (keyless flow)
   const canValidate =
     isOllama || isCLIBridge || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
-  // For opencode: cliModel is required — disable save/validate if missing
+  // For opencode: cliModel is required to validate / show free banner
   const isOpencode = isCLIBridge && entry.model === 'opencode';
-  const cliModelMissing = isOpencode && !entry.cliModel?.trim();
-  const cliModelInvalid =
-    isOpencode && entry.cliModel?.trim() && !isValidCliModelFormat(entry.cliModel.trim());
-  // Free opencode/* models don't need API keys
+  // Free opencode/* models don't need API keys — used by the credential block below
   const isFreeModel = isOpencode && entry.cliModel?.startsWith('opencode/');
 
   // Saved key for the current provider (from global/installation settings)
@@ -201,19 +101,46 @@ export function ProviderEntry({
     setValidationError(null);
   }, []);
 
-  const _handleProviderChange = (provider: SaaSProvider) => {
-    setKeyMode('reuse'); // reset to default so the selector shows if a saved key exists
+  /**
+   * Switch the entry to a different provider. Resets transient state
+   * (apiKey, cliModel, gatewayUrl, validation) and seeds the new provider's
+   * defaults. Each provider has its own initial model + validated state:
+   *   - gateway:    model 'auto', validated=false (token still needs validate)
+   *   - cli-bridge: model 'auto', validated=true (no validation flow)
+   *   - ollama:     model '',      validated=false (keyless but model required)
+   */
+  const handleProviderChange = (provider: SaaSProvider) => {
+    setKeyMode('reuse'); // reset so the selector shows if a saved key exists
+    const isNewGateway = provider === 'gateway';
+    const isNewCli = provider === 'cli-bridge';
     onChange({
       ...entry,
       provider,
-      model: '',
+      model: provider === 'ollama' ? '' : 'auto',
       apiKey: '',
-      availableModels: [],
-      validated: false,
+      validated: isNewCli, // cli-bridge starts pre-validated; others need explicit validation
       hasExistingKey: false,
       maskedApiKey: undefined,
+      availableModels: KNOWN_MODELS[provider] ?? [],
       cliModel: undefined,
-      gatewayUrl: undefined,
+      gatewayUrl: isNewGateway ? '' : undefined,
+    });
+  };
+
+  /**
+   * Switch the CLI tool (entry.model) for a cli-bridge entry. Resets cliModel
+   * and any entered API key since credentials are tool-specific. opencode is
+   * special: it requires a cliModel before it can be considered valid.
+   */
+  const handleCliToolChange = (cliTool: string) => {
+    onChange({
+      ...entry,
+      model: cliTool,
+      cliModel: undefined,
+      apiKey: '',
+      hasExistingKey: false,
+      maskedApiKey: undefined,
+      validated: cliTool !== 'opencode',
     });
   };
 
@@ -313,20 +240,7 @@ export function ProviderEntry({
               type="radio"
               name={`mode-${index}`}
               checked={entry.provider === 'gateway'}
-              onChange={() => {
-                onChange({
-                  ...entry,
-                  provider: 'gateway' as SaaSProvider,
-                  model: 'auto',
-                  apiKey: '',
-                  validated: false,
-                  hasExistingKey: false,
-                  maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS.gateway ?? [],
-                  cliModel: undefined,
-                  gatewayUrl: '',
-                });
-              }}
+              onChange={() => handleProviderChange('gateway')}
               className="accent-primary-500"
             />
             <span className="text-text-secondary">LLM Gateway</span>
@@ -337,19 +251,7 @@ export function ProviderEntry({
               type="radio"
               name={`mode-${index}`}
               checked={entry.provider === 'cli-bridge'}
-              onChange={() => {
-                onChange({
-                  ...entry,
-                  provider: 'cli-bridge' as SaaSProvider,
-                  model: 'auto',
-                  apiKey: '',
-                  validated: true,
-                  hasExistingKey: false,
-                  maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS['cli-bridge'] ?? [],
-                  cliModel: undefined,
-                });
-              }}
+              onChange={() => handleProviderChange('cli-bridge')}
               className="accent-primary-500"
             />
             <span className="text-text-secondary">Local CLI</span>
@@ -360,20 +262,7 @@ export function ProviderEntry({
               type="radio"
               name={`mode-${index}`}
               checked={entry.provider === 'ollama'}
-              onChange={() => {
-                onChange({
-                  ...entry,
-                  provider: 'ollama' as SaaSProvider,
-                  model: '',
-                  apiKey: '',
-                  validated: false,
-                  hasExistingKey: false,
-                  maskedApiKey: undefined,
-                  availableModels: KNOWN_MODELS.ollama ?? [],
-                  cliModel: undefined,
-                  gatewayUrl: undefined,
-                });
-              }}
+              onChange={() => handleProviderChange('ollama')}
               className="accent-primary-500"
             />
             <span className="text-text-secondary">Ollama</span>
@@ -387,221 +276,38 @@ export function ProviderEntry({
             Model: <code className="font-mono">auto</code> — the gateway handles model selection
           </div>
         ) : entry.provider === 'cli-bridge' ? (
-          /* CLI tool selector */
-          <select
-            value={entry.model}
-            onChange={(e) => {
-              const newTool = e.target.value;
-              // On tool change: reset cliModel and clear entered API key (credentials are tool-specific)
+          <CliBridgeFields
+            index={index}
+            entry={entry}
+            onCliToolChange={handleCliToolChange}
+            onCliModelChange={(cliModel) =>
               onChange({
                 ...entry,
-                model: newTool,
-                cliModel: undefined,
-                apiKey: '',
-                hasExistingKey: false,
-                maskedApiKey: undefined,
-                validated: newTool !== 'opencode', // opencode needs cliModel before it's "valid"
-              });
-            }}
-            className="select-field"
-          >
-            {CLI_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+                cliModel,
+                validated: false, // Model changed — prior validation is stale
+              })
+            }
+          />
         ) : (
           /* Ollama: free-text model input with suggestions */
-          <div>
-            <input
-              type="text"
-              list={`ollama-models-${index}`}
-              value={entry.model}
-              onChange={(e) => onChange({ ...entry, model: e.target.value })}
-              placeholder="e.g., llama3, codellama, qwen2.5-coder"
-              className="input-field w-full"
-            />
-            <datalist id={`ollama-models-${index}`}>
-              {OLLAMA_MODEL_SUGGESTIONS.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </div>
+          <OllamaFields
+            index={index}
+            entry={entry}
+            onModelChange={(model) => onChange({ ...entry, model })}
+          />
         )}
       </div>
 
-      {/* CLI Bridge: OpenCode model input (only when opencode is selected) */}
-      {isCLIBridge && entry.model === 'opencode' && (
-        <div className="mb-3">
-          <label
-            htmlFor={`cli-model-${index}`}
-            className="mb-1 block text-xs font-medium text-text-secondary"
-          >
-            OpenCode Model (provider/model)
-            <span className="ml-1 text-red-400">*</span>
-          </label>
-          <input
-            id={`cli-model-${index}`}
-            type="text"
-            list={`cli-model-suggestions-${index}`}
-            value={entry.cliModel ?? ''}
-            onChange={(e) => {
-              const newCliModel = e.target.value;
-              onChange({
-                ...entry,
-                cliModel: newCliModel,
-                validated: false, // Model changed — prior validation is stale
-              });
-            }}
-            placeholder="e.g., anthropic/claude-sonnet-4-5"
-            className="input-field w-full"
-          />
-          <datalist id={`cli-model-suggestions-${index}`}>
-            {OPENCODE_MODEL_SUGGESTIONS.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-          {cliModelMissing && (
-            <p className="mt-1 text-xs text-yellow-400">
-              Model is required when using OpenCode. Select or type a provider/model.
-            </p>
-          )}
-          {cliModelInvalid && (
-            <p className="mt-1 text-xs text-yellow-400">
-              Expected format: <code className="rounded bg-surface-bg px-1">provider/model</code>{' '}
-              (e.g., anthropic/claude-sonnet-4-5)
-            </p>
-          )}
-        </div>
-      )}
-
       {/* LLM Gateway: URL + Model input */}
       {isGateway && (
-        <div className="mb-3 space-y-3">
-          <div>
-            <label
-              htmlFor={`gateway-url-${index}`}
-              className="mb-1 block text-xs font-medium text-text-secondary"
-            >
-              Gateway URL
-              <span className="ml-1 text-red-400">*</span>
-            </label>
-            <input
-              id={`gateway-url-${index}`}
-              type="url"
-              autoComplete="off"
-              value={entry.gatewayUrl ?? ''}
-              onChange={(e) => {
-                onChange({
-                  ...entry,
-                  gatewayUrl: e.target.value,
-                  validated: false,
-                });
-              }}
-              placeholder="https://llm-gateway.example.com"
-              className="input-field w-full"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor={`gateway-model-${index}`}
-              className="mb-1 block text-xs font-medium text-text-secondary"
-            >
-              Model
-              <span className="ml-2 font-normal text-text-muted">
-                (type or select from gateway)
-              </span>
-            </label>
-            <input
-              id={`gateway-model-${index}`}
-              type="text"
-              autoComplete="off"
-              list={`gateway-models-${index}`}
-              value={entry.model === 'auto' ? '' : entry.model}
-              onChange={(e) => {
-                onChange({
-                  ...entry,
-                  model: e.target.value || 'auto',
-                });
-              }}
-              placeholder="auto (gateway selects best available)"
-              className="input-field w-full"
-            />
-            <datalist id={`gateway-models-${index}`}>
-              <option value="auto">Auto — gateway selects best available</option>
-              {/* ── Copilot FREE (0x multiplier, no premium requests) ── */}
-              <option value="github-copilot/gpt-4o">GPT-4o (Copilot FREE)</option>
-              <option value="github-copilot/gpt-4.1">GPT-4.1 (Copilot FREE)</option>
-              <option value="github-copilot/gpt-5-mini">GPT-5 Mini (Copilot FREE)</option>
-              {/* ── Copilot CHEAP (0.25-0.33x multiplier) ── */}
-              <option value="github-copilot/claude-haiku-4.5">
-                Claude Haiku 4.5 (Copilot 0.33x)
-              </option>
-              <option value="github-copilot/gemini-3-flash-preview">
-                Gemini 3 Flash (Copilot 0.33x)
-              </option>
-              <option value="github-copilot/gpt-5.4-mini">GPT-5.4 Mini (Copilot 0.33x)</option>
-              <option value="github-copilot/grok-code-fast-1">
-                Grok Code Fast 1 (Copilot 0.25x)
-              </option>
-              {/* ── Copilot STANDARD (1x multiplier) ── */}
-              <option value="github-copilot/claude-sonnet-4">Claude Sonnet 4 (Copilot 1x)</option>
-              <option value="github-copilot/claude-sonnet-4.5">
-                Claude Sonnet 4.5 (Copilot 1x)
-              </option>
-              <option value="github-copilot/claude-sonnet-4.6">
-                Claude Sonnet 4.6 (Copilot 1x)
-              </option>
-              <option value="github-copilot/gemini-2.5-pro">Gemini 2.5 Pro (Copilot 1x)</option>
-              <option value="github-copilot/gemini-3-pro-preview">Gemini 3 Pro (Copilot 1x)</option>
-              <option value="github-copilot/gpt-5">GPT-5 (Copilot 1x)</option>
-              <option value="github-copilot/gpt-5.1">GPT-5.1 (Copilot 1x)</option>
-              <option value="github-copilot/gpt-5.1-codex">GPT-5.1 Codex (Copilot 1x)</option>
-              <option value="github-copilot/gpt-5.2-codex">GPT-5.2 Codex (Copilot 1x)</option>
-              {/* ── Copilot EXPENSIVE (3x multiplier) ── */}
-              <option value="github-copilot/claude-opus-4.5">Claude Opus 4.5 (Copilot 3x)</option>
-              <option value="github-copilot/claude-opus-4.6">Claude Opus 4.6 (Copilot 3x)</option>
-              {/* ── OpenCode FREE ── */}
-              <option value="opencode/gpt-5-nano">GPT-5 Nano (OpenCode free)</option>
-              <option value="opencode/big-pickle">Big Pickle (OpenCode free)</option>
-              <option value="opencode/minimax-m2.5-free">MiniMax M2.5 Free (OpenCode free)</option>
-              <option value="opencode/mimo-v2-pro-free">MIMO v2 Pro Free (OpenCode free)</option>
-              <option value="opencode/mimo-v2-omni-free">MIMO v2 Omni Free (OpenCode free)</option>
-              <option value="opencode/nemotron-3-super-free">
-                Nemotron 3 Super Free (OpenCode free)
-              </option>
-              {/* ── Anthropic via OpenCode ── */}
-              <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5 (Anthropic)</option>
-              <option value="anthropic/claude-opus-4-6">Claude Opus 4.6 (Anthropic)</option>
-              <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5 (Anthropic)</option>
-              {/* ── OpenAI via OpenCode ── */}
-              <option value="openai/gpt-5-codex">GPT-5 Codex (OpenAI)</option>
-              <option value="openai/gpt-5.2-codex">GPT-5.2 Codex (OpenAI)</option>
-              {/* ── OpenCode Subscription ── */}
-              <option value="opencode-go/kimi-k2.5">Kimi K2.5 (OpenCode sub)</option>
-              <option value="opencode-go/minimax-m2.7">MiniMax M2.7 (OpenCode sub)</option>
-            </datalist>
-            <p className="mt-1 text-xs text-text-secondary">
-              Leave empty for auto-selection. Type any model ID available on your gateway.
-            </p>
-          </div>
-          <p className="text-xs text-text-secondary">The token goes in the API Key field below.</p>
-        </div>
-      )}
-
-      {/* CLI Bridge: contextual help text */}
-      {isCLIBridge && (
-        <div className="mb-3 rounded-md border border-surface-border/50 bg-surface-bg/30 p-3 text-xs text-text-secondary">
-          <p>{getCliCredentialHelp(entry.model)}</p>
-        </div>
-      )}
-
-      {/* Free model banner — no API key needed */}
-      {isFreeModel && (
-        <div className="mb-3 rounded-md border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-400">
-          <p>✨ Free model — no API key required. Just save and start reviewing!</p>
-        </div>
+        <GatewayFields
+          index={index}
+          entry={entry}
+          onUrlChange={(gatewayUrl) =>
+            onChange({ ...entry, gatewayUrl, validated: false })
+          }
+          onModelChange={(model) => onChange({ ...entry, model: model || 'auto' })}
+        />
       )}
 
       {/* API Key / Credential Input + Validate Button */}
