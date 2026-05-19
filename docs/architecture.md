@@ -12,9 +12,9 @@ graph TB
     CLI["CLI"]
   end
 
-  subgraph Runner["Delegated Runner"]
-    RunnerRepo["ghagga-runner<br/>GitHub Actions"]
-    RunnerTools["16 Static Analysis Tools<br/>7GB RAM"]
+  subgraph Inline["Inline Workflow (per repo)"]
+    InlineYml[".github/workflows/ghagga.yml<br/>injected by server"]
+    InlineTools["16 Static Analysis Tools<br/>(GitHub Actions runner)"]
   end
 
   subgraph Core["@ghagga/core"]
@@ -30,9 +30,9 @@ graph TB
     Crypto["AES-256-GCM<br/>Encryption"]
   end
 
-  Server -- "workflow_dispatch" --> RunnerRepo
-  RunnerRepo --> RunnerTools
-  RunnerTools -- "callback" --> Server
+  Server -- "inject + workflow_dispatch" --> InlineYml
+  InlineYml --> InlineTools
+  InlineTools -- "HMAC callback" --> Server
 
   Server --> Core
   Action --> Core
@@ -46,8 +46,8 @@ Each adapter does the minimum work necessary to bridge between its I/O world and
 
 | Adapter | Input | Output | Memory | Static Analysis |
 |---------|-------|--------|--------|----------------|
-| **Server** | GitHub webhook | PR comment via GitHub API | Yes (PostgreSQL) | Delegated to runner |
-| **Action** | PR event in GitHub Actions | PR comment via Octokit | Yes (SQLite) | Direct on runner |
+| **Server** | GitHub webhook | PR comment via GitHub API | Yes (PostgreSQL) | Injected inline workflow on the target repo |
+| **Action** | PR event in GitHub Actions | PR comment via Octokit | Yes (SQLite) | Direct on the Actions runner |
 | **CLI** | Local `git diff` | Terminal output (markdown/json/sarif) | Yes (SQLite or Engram) | If installed locally |
 
 > Memory uses PostgreSQL + tsvector FTS in Server mode, SQLite (via `sql.js` WASM) with FTS5 in Action mode, and SQLite or [Engram](https://github.com/Gentleman-Programming/engram) in CLI mode (`--memory-backend engram`). All three backends implement the same `MemoryStorage` interface. Content is deduplicated via SHA-256 hashing with a 15-minute dedup window, and all data passes through `stripPrivateData()` (13 regex patterns) before storage. See [Memory System](memory-system.md) for full details.
@@ -79,31 +79,29 @@ ghagga/
 │   ├── cli/            # CLI tool (Commander.js)
 │   └── action/         # GitHub Action (node20 + Docker)
 │
-├── templates/                 # Runner dispatch templates
-│   ├── ghagga-analysis.yml       # GitHub Actions workflow for analysis
-│   └── ghagga-runner-README.md   # Template repo README
+├── templates/                 # Inline static-analysis workflow template
+│   └── ghagga-inline.yml         # Injected at .github/workflows/ghagga.yml in target repos
 └── docker-compose.yml  # PostgreSQL + Redis + server + worker
 ```
 
-## Runner Architecture
+## Inline Static-Analysis Workflow
 
-Static analysis can be delegated to a **user-owned GitHub Actions runner** on public repos. This is useful for deployments where the server container has limited RAM, or when you want to offload analysis to GitHub's free compute (7GB RAM, unlimited free minutes for public repos).
+Static analysis runs as an **inline GitHub Actions workflow** that the server injects into each target repository at `.github/workflows/ghagga.yml` (built from `templates/ghagga-inline.yml`). There is no separate runner repository — the workflow runs in the PR's own repo on GitHub Actions infrastructure.
 
 ```mermaid
 sequenceDiagram
     participant S as GHAGGA Server
-    participant R as ghagga-runner
     participant GH as GitHub API
+    participant Repo as Target repo<br/>.github/workflows/ghagga.yml
 
-    S->>GH: Check {owner}/ghagga-runner exists
-    S->>GH: Set GHAGGA_TOKEN secret
-    S->>GH: workflow_dispatch (10 inputs)
-    R->>R: Install + run static analysis (16 tools)
-    R->>S: POST /runner/callback (HMAC-signed)
-    S->>S: Verify HMAC, merge findings
+    S->>GH: Inject/update ghagga.yml (Contents: write)
+    S->>GH: workflow_dispatch with callbackId + callbackSecret
+    Repo->>Repo: Install + run static analysis (16 tools)
+    Repo->>S: POST /runner/callback (HMAC-signed)
+    S->>S: Verify HMAC (timestamp + STATE_SECRET), merge findings
 ```
 
-If no runner repo is discovered, the server falls back to LLM-only review (no static analysis). See [Runner Architecture](runner-architecture.md) for full details.
+Per-dispatch callback secrets are derived deterministically as `HMAC-SHA256(STATE_SECRET, callbackId)` (no in-memory state), and the `callbackId` embeds a base-36 timestamp so callbacks older than `CALLBACK_TTL_MINUTES` (default 11) are rejected. If workflow injection is blocked (branch protection, missing permissions, etc.), the server falls back to LLM-only review (no static analysis).
 
 ## Design Decisions
 

@@ -53,14 +53,16 @@ Copy the output (e.g., `a1b2c3d4e5f6...`). You'll need it for `GITHUB_WEBHOOK_SE
 
 Under **Repository permissions**:
 
-| Permission | Access |
-|-----------|--------|
-| **Pull requests** | Read and write |
-| **Actions** | Write |
-| **Secrets** | Read and write |
-| **Metadata** | Read-only (auto-selected) |
+| Permission | Access | Why |
+|-----------|--------|-----|
+| **Pull requests** | Read and write | Fetch PR diffs and post review comments |
+| **Contents** | Read and write | Inject the static-analysis workflow file at `.github/workflows/ghagga.yml` |
+| **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
+| **Metadata** | Read-only (auto-selected) | List repositories and installations |
 
 Under **Account permissions**: Leave everything as "No access".
+
+> **Note**: GHAGGA does **not** require the `Secrets: Read and write` permission. The static-analysis runner is an inline workflow injected into each target repo; the per-dispatch callback secret travels via `workflow_dispatch` inputs, not via GitHub Actions repository secrets.
 
 ### 1.4 Subscribe to events
 
@@ -372,17 +374,17 @@ Once deployed, configure your LLM providers:
 
 ---
 
-## Step 8.5: Configure Runner (Optional)
+## Step 8.5: Static Analysis Runner
 
-For self-hosted deployments on machines with 1GB+ RAM, static analysis tools run directly inside the Docker container -- no runner needed.
+Static analysis runs as an inline GitHub Actions workflow that the server injects into each target repository at `.github/workflows/ghagga.yml` (built from `templates/ghagga-inline.yml`). There is no separate runner repository to provision — the workflow runs on the PR's own repo using the repo's own free GitHub Actions minutes.
 
-For deployments where you want to offload static analysis to GitHub's free compute:
+The only deployment-side requirement is that the server's callback endpoint must be publicly reachable so the workflow can POST results:
 
-1. Each user creates a public repo from [`JNZader/ghagga-runner-template`](https://github.com/JNZader/ghagga-runner-template) named `ghagga-runner`
-2. The server auto-discovers runner repos by convention (`GET /repos/{owner}/ghagga-runner`)
-3. The server needs the callback endpoint accessible: `https://api.yourdomain.com/runner/callback`
+```
+https://api.yourdomain.com/runner/callback
+```
 
-The runner setup is per-user -- each GitHub user/org that installs GHAGGA can have their own runner repo.
+If you prefer to run static-analysis tools directly inside the Docker container (no GitHub Actions involvement), the server image already ships with Semgrep, Trivy, PMD/CPD, and the other tools pre-installed for direct execution. The inline-workflow path is recommended for SaaS deployments where you want to offload analysis to GitHub's compute.
 
 ---
 
@@ -441,7 +443,7 @@ If any tool is missing or fails, the review continues without it (graceful degra
 flowchart TB
   subgraph GitHub
     PR["Pull Request Event"]
-    Runner["ghagga-runner<br/>GitHub Actions"]
+    Inline["Inline workflow<br/>.github/workflows/ghagga.yml<br/>(injected per repo)"]
   end
 
   subgraph Hetzner["Hetzner VPS (Coolify)"]
@@ -458,8 +460,8 @@ flowchart TB
   PR -->|webhook| Server
   Server -->|enqueue job| Redis
   Redis -->|dequeue job| Worker
-  Server -->|workflow_dispatch| Runner
-  Runner -->|callback| Server
+  Server -->|inject + workflow_dispatch| Inline
+  Inline -->|HMAC callback| Server
   Worker --> PG
   Worker --> LLM
   Worker -->|PR comment| GitHub

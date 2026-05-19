@@ -83,25 +83,23 @@ This starts PostgreSQL 16 on port 5432 and the GHAGGA Server (Hono) on port 3000
 
 See [Self-Hosted](self-hosted.md) for full deployment details.
 
-## SaaS Mode — Runner Setup
+## SaaS Mode — Static Analysis Setup
 
-If you're using the hosted GHAGGA SaaS (Render deployment), static analysis runs on a delegated runner.
+If you're using the hosted GHAGGA SaaS, static analysis runs as an **inline GitHub Actions workflow** that the server injects into each target repository at `.github/workflows/ghagga.yml` (built from `templates/ghagga-inline.yml`).
 
 > **Important**: After installing the GitHub App, you must configure an LLM provider in the [Dashboard](https://ghagga.javierzader.com/app/) before reviews will work. See the [SaaS Getting Started Guide](saas-getting-started.md) for the full setup flow.
 
 > **Auth note**: The dashboard signs in with GitHub OAuth Web Flow. That login is separate from GitHub Models credentials in SaaS/server mode.
 
-To enable static analysis:
+There is nothing to enable manually for static analysis — on each PR review, the server:
 
-1. **[Open the Dashboard](https://ghagga.javierzader.com/app/)** and go to **Global Settings**
-2. **Click "Enable Runner"** in the Static Analysis Runner card
-3. A public repository named `ghagga-runner` will be created in your GitHub account from the official template
+1. PUTs `.github/workflows/ghagga.yml` into your repo (if it's missing or out-of-date).
+2. Triggers `workflow_dispatch` with a per-dispatch HMAC callback secret.
+3. Receives the signed callback at `/runner/callback` and merges the findings into the AI review.
 
-If your account was created before the `public_repo` scope was added, you'll be prompted to re-authenticate. This is a one-time step.
+The workflow uses your repo's own GitHub Actions minutes (unlimited on public repos). If injection is blocked by branch protection or missing permissions, the server falls back to LLM-only review — no hard failure.
 
-That's it. The server will auto-discover your runner and dispatch static analysis to it. If you skip this step, reviews still work — they just skip static analysis.
-
-See [Runner Architecture](runner-architecture.md) for details.
+See [Architecture — Inline Static-Analysis Workflow](architecture.md#inline-static-analysis-workflow) for details.
 
 ## BYOK — Bring Your Own Key
 

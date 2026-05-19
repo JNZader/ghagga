@@ -27,9 +27,11 @@ Go from zero to your first AI code review in under 5 minutes. This guide walks y
 | Permission | Access | Why |
 |-----------|--------|-----|
 | **Pull requests** | Read and write | Fetch PR diffs and post review comments |
-| **Actions** | Write | Dispatch and manage runner workflows for static analysis |
-| **Secrets** | Read and write | Store and retrieve encrypted LLM API keys per installation |
+| **Contents** | Read and write | Inject the static-analysis workflow at `.github/workflows/ghagga.yml` |
+| **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
 | **Metadata** | Read-only | List repositories (auto-selected by GitHub) |
+
+> **Note**: GHAGGA does **not** request the `Secrets` permission. LLM API keys are encrypted with AES-256-GCM and stored inside GHAGGA's own database, not in GitHub repository secrets. The per-dispatch callback secret travels via `workflow_dispatch` inputs, not via repo secrets.
 
 > **Important**: After installing the App, reviews will **NOT** work until you configure at least one LLM provider in the [Dashboard](https://ghagga.javierzader.com/app/). Continue to Step 2.
 
@@ -89,28 +91,24 @@ Navigate to **Dashboard** > **Settings** (or **Global Settings** for installatio
 
 ---
 
-## Step 4: Enable the Runner (Optional)
+## Step 4: Static Analysis (Inline Workflow)
 
-The Runner enables **static analysis** (Semgrep for security, Trivy for vulnerabilities, CPD for code duplication) alongside the AI review. Without it, reviews are LLM-only — still useful, but without Layer 0 static findings.
+Static analysis (Semgrep for security, Trivy for vulnerabilities, CPD for code duplication, plus 13 other auto-detected tools) runs alongside the AI review using an **inline GitHub Actions workflow**.
 
-1. Go to **Dashboard** > **Global Settings**
-2. Click **"Enable Runner"** in the Static Analysis Runner card
-3. A public repository named `ghagga-runner` will be created in your GitHub account from the [official template](https://github.com/JNZader/ghagga-runner-template)
+There is nothing to enable manually — when GHAGGA dispatches a review, it injects `.github/workflows/ghagga.yml` (built from `templates/ghagga-inline.yml`) into the target repository if it doesn't already exist, then triggers a `workflow_dispatch`. The workflow runs in your own repo using your own free GitHub Actions minutes and posts results back to the server via an HMAC-signed callback.
 
-> **Note**: If your GitHub OAuth token was created before the `public_repo` scope was added, you'll be prompted to re-authenticate. This is a **one-time** step.
+**What you get**:
 
-**What the runner provides**:
+| Component | Behavior |
+|-----------|---------|
+| AI review (LLM analysis) | Always runs once a provider is configured |
+| Static analysis (16 tools) | Runs on every dispatch via the inline workflow |
 
-| Component | Without Runner | With Runner |
-|-----------|---------------|-------------|
-| AI review (LLM analysis) | Yes | Yes |
-| Static analysis (16 tools) | No | Yes |
+The inline workflow provides access to the full 16-tool plugin registry: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. Tools are automatically selected based on the detected tech stack in your PR.
 
-The runner provides access to the full 16-tool plugin registry: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. Tools are automatically selected based on the detected tech stack in your PR.
+The workflow uses **GitHub Actions free minutes** on public repos (unlimited; 7GB RAM per run). First run takes ~3–5 minutes (tool installation); subsequent runs take ~18 seconds (cached). On private repos, runs consume your GitHub Actions quota.
 
-The runner uses **GitHub Actions free minutes** (unlimited for public repos, 7GB RAM per run). First run takes ~3-5 minutes (tool installation); subsequent runs take ~18 seconds (cached).
-
-**Verification**: Check your GitHub account — you should see a new public repo named `ghagga-runner`.
+**Verification**: After your first PR review, check `.github/workflows/ghagga.yml` — the file should exist and match the canonical template.
 
 ---
 
@@ -143,29 +141,28 @@ sequenceDiagram
     participant You as Your PR
     participant App as GitHub App
     participant Server as GHAGGA Server
-    participant Runner as ghagga-runner
+    participant Inline as Inline workflow<br/>(your repo)
     participant LLM as LLM Provider
 
     You->>App: PR opened/updated
     App->>Server: Webhook event
     Server->>Server: Parse diff, detect stack
-    alt Runner enabled
-        Server->>Runner: Dispatch static analysis
-        Runner->>Runner: Static analysis (16 tools)
-        Runner->>Server: Callback with findings
-    end
+    Server->>Inline: Inject ghagga.yml + workflow_dispatch
+    Inline->>Inline: Static analysis (16 tools)
+    Inline->>Server: HMAC-signed callback with findings
     Server->>LLM: Diff + findings + memory
     LLM->>Server: Structured review
     Server->>You: PR comment posted
     Server->>Server: Extract & persist observations
 ```
 
-1. GitHub sends a **webhook** to the GHAGGA server when your PR is opened or updated
-2. The server **parses the diff**, detects the tech stack, and checks your token budget
-3. If the runner is enabled, it **dispatches static analysis** to your `ghagga-runner` repo (16 tools via plugin registry)
-4. The server sends the diff + static findings + project memory to your configured **LLM provider**
-5. The LLM returns a structured review, which is **posted as a PR comment**
-6. Observations from the review are **extracted and stored** in project memory for future reviews
+1. GitHub sends a **webhook** to the GHAGGA server when your PR is opened or updated.
+2. The server **parses the diff**, detects the tech stack, and checks your token budget.
+3. The server **injects** `.github/workflows/ghagga.yml` into your repo (if not present) and **dispatches** the inline workflow (16 tools via plugin registry).
+4. The inline workflow runs, signs its results with the per-dispatch HMAC secret, and POSTs to `/runner/callback`.
+5. The server sends the diff + static findings + project memory to your configured **LLM provider**.
+6. The LLM returns a structured review, which is **posted as a PR comment**.
+7. Observations from the review are **extracted and stored** in project memory for future reviews.
 
 ---
 
@@ -174,8 +171,8 @@ sequenceDiagram
 | State | What you get |
 |-------|-------------|
 | App installed, **no LLM provider configured** | No review comment posted — the server has no AI provider to analyze the diff |
-| App installed, **LLM configured, no runner** | AI-only review — findings from the LLM but no static analysis (no Semgrep/Trivy/CPD) |
-| App installed, **LLM configured, runner enabled** | Full review — static analysis findings + AI review + project memory |
+| App installed, **LLM configured, inline workflow blocked** | AI-only review — branch protection or missing `Contents: write` prevents workflow injection; review still runs without static analysis |
+| App installed, **LLM configured, normal setup** | Full review — static analysis findings + AI review + project memory |
 
 ---
 
@@ -193,15 +190,12 @@ sequenceDiagram
 - **Check your review mode**: Try `workflow` mode (5 specialist agents) in Settings for more thorough reviews
 - **Small diffs may produce minimal reviews** — this is expected for trivial changes
 
-### Runner not discovered
+### Static analysis didn't run
 
-- The runner repo **must be named exactly `ghagga-runner`** in your GitHub account
-- The runner repo **must be public** (GitHub Actions free minutes require public repos)
-- If you created the runner manually, ensure it was created from the [official template](https://github.com/JNZader/ghagga-runner-template)
-
-### OAuth re-authentication prompt
-
-If clicking "Enable Runner" triggers a re-authentication prompt, this means your GitHub token needs the `public_repo` scope to create the runner repository. This is a **one-time** step — authorize the additional scope and the runner will be created. See the [security documentation](security.md) for details on OAuth scopes and token handling.
+- Verify the GitHub App has **Contents: Read and write** and **Actions: Write** on the target repo — both are required to inject `.github/workflows/ghagga.yml` and dispatch it.
+- Branch protection rules on the default branch can block the workflow injection. Add an exception for the `github-actions[bot]` user or pre-commit the workflow file yourself.
+- Check the GitHub App webhook deliveries (Advanced → Recent Deliveries) for non-200 responses indicating dispatch failures.
+- If the workflow file is present but never runs, confirm Actions is enabled for the repository (Settings → Actions → General).
 
 ---
 
@@ -218,25 +212,9 @@ If clicking "Enable Runner" triggers a re-authentication prompt, this means your
 
 ---
 
-## Step 6: Configure Delegated CI (Optional)
-
-Delegated CI allows GHAGGA to run your CI jobs (lint, tests) on Pull Requests without you needing to set up GitHub Actions workflows in your repository.
-
-1. Go to **Dashboard → Settings → [Select Repository] → Delegated CI**
-2. Toggle **"Enabled"** to create a policy
-3. Click **"+ Add Job"** to configure lint or test jobs
-4. Select an execution profile (Node.js Lint, Python Pytest, Go Test, etc.)
-5. Click **"Save Settings"**
-
-See the **[Delegated CI Guide](delegated-ci.md)** for detailed configuration, security model, and troubleshooting.
-
----
-
 ## Next Steps
 
-- **[Delegated CI](delegated-ci.md)** — Run lint/tests on PRs without repo workflows
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
 - **[Memory System](memory-system.md)** — How GHAGGA learns from past reviews
 - **[Configuration](configuration.md)** — Environment variables and config file options
-- **[Runner Architecture](runner-architecture.md)** — Deep dive into delegated static analysis
 - **[Static Analysis](static-analysis.md)** — Semgrep rules, Trivy scanning, CPD detection

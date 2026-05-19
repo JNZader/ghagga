@@ -1,13 +1,15 @@
 /**
- * GitHub Actions runner integration.
+ * Inline GitHub Actions workflow integration.
  *
- * Manages dispatching static analysis workflows to per-user
- * `ghagga-runner` repos and verifying callback signatures.
+ * Injects the inline static-analysis workflow into the target repository
+ * (`.github/workflows/ghagga.yml`, built from `templates/ghagga-inline.yml`),
+ * dispatches it via `workflow_dispatch`, and verifies the HMAC-signed
+ * callbacks it produces.
  *
- * Architecture: Each user who enables Actions-based static analysis
- * creates a `ghagga-runner` repo in their org/account. This module
- * discovers it, sets the callback secret, and dispatches the
- * `ghagga-analysis.yml` workflow via `workflow_dispatch`.
+ * Architecture: every dispatch derives its callback secret deterministically
+ * via `HMAC-SHA256(STATE_SECRET, callbackId)` (see `deriveCallbackSecret`).
+ * No per-dispatch state is held in memory, so callbacks survive server
+ * restarts, container redeploys, and horizontal scaling.
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -42,7 +44,7 @@ export interface WorkflowInjectionResult {
 }
 
 export interface DispatchParams {
-  /** Target repo in "owner/repo" format — the PR's repo, NOT ghagga-runner */
+  /** Target repo in "owner/repo" format — the PR's own repo, where the inline workflow runs */
   repoFullName: string;
   prNumber: number;
   headSha: string;
@@ -290,12 +292,12 @@ export async function injectWorkflow(
 /**
  * Dispatch the `ghagga.yml` workflow directly on the target repo (the PR's repo).
  *
- * Unlike the old ghagga-runner approach, this dispatches to the actual repo where
- * the PR lives. `callbackUrl` and `callbackSecret` are passed as workflow inputs
- * so no GitHub Actions secrets need to be set per-dispatch.
+ * `callbackUrl` and `callbackSecret` are passed as workflow inputs, so no
+ * GitHub Actions repository secrets need to be set per dispatch.
  *
  * The caller is responsible for generating `callbackId` and `callbackSecret`
- * (via `randomUUID()` and `deriveCallbackSecret()`) before calling this function.
+ * (via `randomUUID()` plus a base-36 timestamp and `deriveCallbackSecret()`)
+ * before calling this function.
  *
  * Returns the callbackId for correlation with the callback.
  */

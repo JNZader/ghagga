@@ -5,7 +5,7 @@
 <h1 align="center">GHAGGA</h1>
 
 <p align="center">
-  <strong>AI code review for pull requests and local changes, backed by static analysis, project memory, and delegated CI.</strong>
+  <strong>AI code review for pull requests and local changes, backed by static analysis and project memory.</strong>
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@ GHAGGA is a production-oriented AI review system, not just a prompt wrapper.
 - It combines LLM review with up to 16 static analysis tools so known issues are caught before tokens are spent.
 - It persists project memory across reviews using PostgreSQL, SQLite, or Engram-compatible backends.
 - It supports multiple review orchestration strategies: single-pass, specialist workflow, consensus voting, and fan-out lenses.
-- It includes delegated CI orchestration so safe lint and test jobs can run on user-owned runner infrastructure.
+- Static analysis runs as an inline GitHub Actions workflow injected into each target repo — no separate runner repository to provision.
 - It was built as a full TypeScript monorepo with a real server, worker, dashboard, CLI, crypto layer, queueing, and testing story.
 
 Visuals coming soon: live review screenshots and dashboard walkthrough.
@@ -41,7 +41,7 @@ Visuals coming soon: live review screenshots and dashboard walkthrough.
 - **For teams**: preserves prior decisions, patterns, bugfixes, and architecture context as searchable memory.
 - **For local development**: lets developers review staged or unstaged changes before pushing.
 - **For self-hosters**: supports a full Docker deployment with PostgreSQL, Redis, BullMQ, dashboard auth, and encrypted provider settings.
-- **For security-minded users**: layers static analysis, HMAC verification, AES-256-GCM encryption, privacy stripping, and delegated execution boundaries.
+- **For security-minded users**: layers static analysis, HMAC verification, AES-256-GCM encryption, and privacy stripping across every review.
 
 ## Quick Start
 
@@ -118,8 +118,7 @@ docker compose up -d
 - [Review Pipeline](#review-pipeline)
 - [Review Modes](#review-modes)
 - [Static Analysis](#static-analysis)
-- [Runner Architecture](#runner-architecture)
-- [Delegated CI](#delegated-ci)
+- [Inline Static-Analysis Workflow](#inline-static-analysis-workflow)
 - [Memory System](#memory-system)
 - [Security](#security)
 - [Monorepo Structure](#monorepo-structure)
@@ -152,9 +151,9 @@ Every review follows the same high-level flow:
 | **4 review modes** | `simple`, `workflow`, `consensus`, `fan-out` |
 | **16 static analysis tools** | Always-on and auto-detected tools that cost zero LLM tokens |
 | **Project memory** | PostgreSQL, SQLite, or Engram-backed observation storage and retrieval |
-| **Delegated CI** | Safe lint and test execution on user-owned runner infrastructure |
+| **Inline static-analysis workflow** | The server injects `.github/workflows/ghagga.yml` into target repos and dispatches it directly — no separate runner repo |
 | **Multiple delivery modes** | GitHub App, GitHub Action, CLI, or full self-hosted deployment |
-| **Security controls** | AES-256-GCM encryption, HMAC callbacks, privacy stripping, execution boundaries |
+| **Security controls** | AES-256-GCM encryption, HMAC callbacks, privacy stripping, output hardening in the injected workflow |
 
 ---
 
@@ -162,10 +161,10 @@ Every review follows the same high-level flow:
 
 | Mode | Primary use | Static analysis | Memory |
 |------|-------------|-----------------|--------|
-| **GitHub App** | Hosted PR reviews via dashboard configuration | Via delegated runner when enabled | PostgreSQL |
+| **GitHub App** | Hosted PR reviews via dashboard configuration | Via injected inline workflow (`.github/workflows/ghagga.yml`) | PostgreSQL |
 | **GitHub Action** | Per-repo CI workflow | Direct on the Actions runner | SQLite + `@actions/cache` |
 | **CLI** | Local review before commit/push | Direct if tools are installed locally | SQLite or Engram |
-| **Self-hosted server** | Full control over infra and secrets | Via delegated runner | PostgreSQL |
+| **Self-hosted server** | Full control over infra and secrets | Via injected inline workflow (`.github/workflows/ghagga.yml`) | PostgreSQL |
 
 ---
 
@@ -177,7 +176,7 @@ The hosted GitHub App is the fastest path for teams that want PR review without 
 
 - Receives `pull_request` webhooks.
 - Uses dashboard-configured settings and provider chain.
-- Optionally dispatches static analysis to a `ghagga-runner` repository.
+- Injects `.github/workflows/ghagga.yml` into the target repo (if missing or out-of-date) and dispatches the inline workflow.
 - Posts structured review comments back to the PR.
 - Stores review history and project memory in PostgreSQL.
 
@@ -186,9 +185,11 @@ The hosted GitHub App is the fastest path for teams that want PR review without 
 | Permission | Access | Why |
 |------------|--------|-----|
 | **Pull requests** | Read and write | Fetch diffs and post comments |
-| **Actions** | Write | Dispatch runner workflows |
-| **Secrets** | Read and write | Store encrypted provider credentials |
+| **Contents** | Read and write | Inject the inline static-analysis workflow file at `.github/workflows/ghagga.yml` |
+| **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
 | **Metadata** | Read-only | Enumerate repos and installations |
+
+LLM API keys are encrypted with AES-256-GCM inside GHAGGA's own database — `Secrets: Read & Write` is **not** required.
 
 ### Important auth note
 
@@ -401,7 +402,7 @@ ghagga feedback list --category security
 
 ## Self-Hosted
 
-The self-hosted deployment is the full-stack version: server, worker, PostgreSQL, Redis, dashboard auth, encrypted settings, and delegated runner support.
+The self-hosted deployment is the full-stack version: server, worker, PostgreSQL, Redis, dashboard auth, and encrypted settings. Static analysis is dispatched as an inline GitHub Actions workflow on each target repo — no separate runner infrastructure to operate.
 
 ### Minimal bootstrap
 
@@ -426,8 +427,8 @@ docker compose up -d
 To self-host the PR-reviewing server you need a GitHub App with:
 
 - Pull requests: read and write
+- Contents: read and write (needed to inject `.github/workflows/ghagga.yml`)
 - Actions: write
-- Secrets: read and write
 - `pull_request` and `issue_comment` event subscriptions if you want comment-triggered reviews
 
 ### Security bootstrap
@@ -456,12 +457,11 @@ graph TB
 
   subgraph Worker["Async Worker"]
     BullMQ["BullMQ Worker<br/>Review Jobs"]
-    DelegatedCI["Delegated CI<br/>Job Orchestration"]
   end
 
-  subgraph Runner["Delegated Runner"]
-    RunnerRepo["ghagga-runner<br/>GitHub Actions"]
-    RunnerTools["Static Analysis Tools<br/>7GB RAM"]
+  subgraph Inline["Inline Workflow (per repo)"]
+    InlineYml[".github/workflows/ghagga.yml<br/>injected by server"]
+    InlineTools["Static Analysis Tools<br/>(GitHub Actions runner)"]
   end
 
   subgraph Core["@ghagga/core"]
@@ -487,10 +487,9 @@ graph TB
   Server -- enqueue --> Redis
   Redis -- dequeue --> BullMQ
   BullMQ --> Core
-  BullMQ -- dispatch --> DelegatedCI
-  DelegatedCI -- workflow_dispatch --> RunnerRepo
-  RunnerRepo --> RunnerTools
-  RunnerTools -- callback --> Server
+  BullMQ -- "inject + workflow_dispatch" --> InlineYml
+  InlineYml --> InlineTools
+  InlineTools -- "HMAC callback" --> Server
   Action --> Core
   CLI --> Core
   Core --> DB
@@ -502,7 +501,7 @@ The project is intentionally structured so `@ghagga/core` owns the review engine
 
 | Adapter | Input | Output | Memory | Static analysis |
 |---------|-------|--------|--------|-----------------|
-| **Server** | GitHub webhook | PR comment via GitHub API | PostgreSQL | Delegated runner |
+| **Server** | GitHub webhook | PR comment via GitHub API | PostgreSQL | Inline workflow injected into the target repo |
 | **Action** | PR event | PR comment via Octokit | SQLite | Local on Actions runner |
 | **CLI** | Local git diff | Terminal output / JSON / SARIF | SQLite or Engram | Local if tools exist |
 
@@ -597,72 +596,38 @@ Static analysis is Layer 0. That matters because deterministic checks should run
 
 ---
 
-## Runner Architecture
+## Inline Static-Analysis Workflow
 
-The server mode offloads heavy static analysis to a user-owned `ghagga-runner` repository on GitHub Actions.
+The server mode runs heavy static analysis on GitHub Actions infrastructure by **injecting an inline workflow** into each target repository.
 
 ### Why it exists
 
-Running tools like Semgrep, PMD/CPD, Trivy, and the rest together is RAM-hungry. A tiny server should not pretend it is a CI worker farm.
+Running tools like Semgrep, PMD/CPD, Trivy, and the rest together is RAM-hungry. A tiny server should not pretend it is a CI worker farm. By dispatching analysis inside the target repo, GHAGGA reuses the repo's own free GitHub Actions minutes (unlimited on public repos) and avoids fanning out installation tokens to a separate runner repository.
 
 ### Flow
 
 1. Server receives PR webhook.
-2. Server checks whether `{owner}/ghagga-runner` exists.
-3. If it exists, the server generates a per-dispatch callback secret.
-4. The server triggers `workflow_dispatch` with 10 string inputs.
-5. The runner installs or restores tools, runs analysis, and posts a signed callback.
-6. The server verifies HMAC, merges findings, and posts the final review.
+2. Server reads `templates/ghagga-inline.yml` and PUTs it as `.github/workflows/ghagga.yml` on the target repo (skip if content already matches).
+3. Server generates a `callbackId = {uuid}.{timestamp_base36}` and derives a per-dispatch HMAC secret as `HMAC-SHA256(STATE_SECRET, callbackId)`.
+4. Server triggers `workflow_dispatch` on the injected workflow, passing the callback inputs.
+5. The workflow installs or restores tools, runs analysis, and POSTs a signed callback to `/runner/callback`.
+6. Server verifies HMAC (timing-safe, with TTL), merges findings, and posts the final review.
 
 ### Dispatch inputs
 
 | Input | Description |
 |-------|-------------|
-| `callbackId` | UUID for this dispatch |
-| `repoFullName` | `owner/repo` being reviewed |
+| `callbackId` | `{uuid}.{timestamp_base36}` (used for HMAC re-derivation and TTL) |
 | `prNumber` | Pull request number |
-| `headSha` | Head commit SHA |
-| `baseBranch` | Base branch |
+| `headSha` | Head commit SHA to check out |
 | `callbackUrl` | Server endpoint for callback |
-| `callbackSecret` | Per-dispatch HMAC secret |
-| `enabledTools` | Comma-separated tool overrides |
-| `disabledTools` | Comma-separated tool overrides |
-| `toolRegistryEnabled` | Compatibility flag kept for old runner templates |
+| `callbackSecret` | Per-dispatch HMAC secret (derived, not stored) |
+| `enableSemgrep` / `enableTrivy` / `enableCpd` | Legacy boolean toggles |
+| `enabledTools` / `disabledTools` | JSON-encoded tool override arrays |
 
 ### Fallback behavior
 
-If no runner is available, the server continues with LLM-only review instead of hard failing.
-
----
-
-## Delegated CI
-
-Delegated CI extends the runner idea beyond static analysis. Instead of only running GHAGGA-owned tools, it can run curated safe jobs like lint and tests.
-
-### What it is for
-
-- Zero repo workflow maintenance for basic CI.
-- Reuse of the same public runner infrastructure.
-- Explicit policy control over which jobs are safe to delegate.
-
-### Supported execution profiles
-
-| Profile | Runtime | Command | Default timeout |
-|---------|---------|---------|-----------------|
-| `node-lint` | Node.js 20 | `npm run lint` | 5 min |
-| `node-unit` | Node.js 20 | `npm test` | 10 min |
-| `python-lint` | Python 3.12 | `ruff check .` | 5 min |
-| `python-pytest` | Python 3.12 | `pytest` | 10 min |
-| `go-test` | Go 1.22 | `go test ./...` | 10 min |
-
-### Policy model
-
-Jobs are repo-scoped and classified as either:
-
-- `safe/delegable`
-- `sensitive/no-delegable`
-
-Sensitive jobs are rejected instead of being run on public runner infrastructure. That boundary is a feature, not a limitation.
+If workflow injection is blocked (branch protection, missing `Contents: write`, repo Actions disabled), the server continues with LLM-only review instead of hard failing.
 
 ---
 
@@ -767,20 +732,20 @@ If Engram is unreachable, the CLI falls back to SQLite automatically.
 |---------|----------------|
 | **API key encryption** | AES-256-GCM with per-installation encryption keys |
 | **Webhook verification** | HMAC-SHA256 with constant-time comparison |
-| **Runner callback verification** | Per-dispatch HMAC secret with TTL |
+| **Runner callback verification** | Per-dispatch HMAC secret derived from `STATE_SECRET + callbackId` with embedded-timestamp TTL |
 | **Privacy stripping** | 13 regex patterns before memory persistence |
 | **Timeouts** | LLM and HTTP timeout boundaries |
 | **Installation scoping** | Data and routes scoped to GitHub installation or repo context |
 | **Correlation IDs** | End-to-end tracing through review execution |
 
-### Runner security model
+### Inline-workflow security model
 
-When private repo code is analyzed through the public runner model, the system relies on multiple layers:
+When the injected workflow runs static analysis inside the target repository, the system relies on multiple layers:
 
-- output suppression
-- log masking
-- log deletion
-- short retention windows
+- output normalization (tool errors collapse to generic strings)
+- `::add-mask::` for `callbackSecret` and `callbackUrl`
+- minimal `permissions: contents: read` on the workflow itself
+- short-lived per-dispatch HMAC secrets with TTL enforcement
 
 ### Automated security coverage
 
@@ -808,7 +773,7 @@ ghagga/
 │   ├── dashboard/   # React SPA for settings, stats, reviews, memory
 │   ├── cli/         # npm CLI with login, review, memory, hooks, audit
 │   └── action/      # GitHub Action runtime
-├── templates/       # Runner workflow templates
+├── templates/       # Inline static-analysis workflow template (ghagga-inline.yml)
 ├── docs/            # Long-form documentation
 ├── landing/         # Marketing site
 └── openspec/        # Spec-driven development artifacts
@@ -832,11 +797,11 @@ ghagga/
 | `REDIS_HOST` | No | Redis host when `REDIS_URL` is absent |
 | `REDIS_PORT` | No | Redis port when `REDIS_URL` is absent |
 | `WORKER_CONCURRENCY` | No | BullMQ worker concurrency, default `3` |
+| `CALLBACK_TTL_MINUTES` | No | Runner callback HMAC TTL window (default `11`, minimum `1`) |
 | `SERVICE_TYPE` | No | `server`, `worker`, or both |
 | `SERVER_URL` | No | Public base URL for callbacks |
 | `ENCRYPTION_KEY` | Yes | 64-char hex AES key |
 | `STATE_SECRET` | Conditional | OAuth state signing and callback HMAC derivation |
-| `CALLBACK_TTL_MINUTES` | No | Runner callback secret TTL, default `11` |
 | `PORT` | No | Server port, default `3000` |
 | `NODE_ENV` | No | `development` or `production` |
 
@@ -957,7 +922,7 @@ The test surface is broad because the system has multiple adapters and real oper
 |------|-----------------|
 | `@ghagga/core` | Pipeline, diff parsing, stack detection, token budget, prompts, agents, memory, decay, versioning, tools, exploitability |
 | `ghagga-db` | Crypto, schema, queries, settings resolution |
-| `@ghagga/server` | Routes, auth, webhooks, queues, runner dispatch, callbacks, health checks |
+| `@ghagga/server` | Routes, auth, webhooks, queues, inline workflow injection/dispatch, callbacks, health checks |
 | `ghagga` CLI | Config resolution, review output, hooks, memory commands, exit codes |
 | `@ghagga/action` | Input parsing, outputs, comment formatting, tool caching, error handling |
 | `@ghagga/dashboard` | Rendering, memory UX, a11y, virtualization, destructive action safety |

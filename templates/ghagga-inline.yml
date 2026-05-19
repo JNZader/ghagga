@@ -1,14 +1,15 @@
 # =============================================================================
 # GHAGGA Inline Static Analysis
 # =============================================================================
-# This workflow runs static analysis tools (Semgrep, Trivy, PMD/CPD) directly
-# inside the target repository. It is injected into .github/workflows/ghagga.yml
-# by the GHAGGA server and triggered via workflow_dispatch.
+# This workflow runs static analysis tools (Semgrep, Trivy, PMD/CPD, etc.)
+# directly inside the target repository. The GHAGGA server injects this file
+# at .github/workflows/ghagga.yml and triggers it via workflow_dispatch.
 #
-# Unlike ghagga-analysis.yml (runner repo variant), this workflow:
+# Properties of the inline pattern:
 #   - Runs IN the target repo — no separate clone needed
 #   - Uses github.token for checkout — no GHAGGA_TOKEN required
-#   - Does NOT delete logs (the repo owner can see logs; no privacy concern)
+#   - Does NOT delete logs (the repo owner already has full repo access)
+#   - Per-dispatch callback secret derived from STATE_SECRET + callbackId
 # =============================================================================
 
 name: GHAGGA Static Analysis

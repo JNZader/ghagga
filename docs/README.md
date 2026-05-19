@@ -29,8 +29,7 @@ GHAGGA is a code review tool that posts intelligent comments on your Pull Reques
 |---------|-------------|
 | **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (same model, three perspectives + algorithmic vote) |
 | **16 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 9 auto-detect tools — zero tokens |
-| **Delegated Runner** | Static analysis runs on user-owned GitHub Actions runners (7GB RAM, free for public repos) |
-| **Delegated CI** | Run lint/tests on PRs without repo workflows — Dashboard configuration, zero maintenance |
+| **Inline Static-Analysis Workflow** | Server injects `.github/workflows/ghagga.yml` into each target repo and dispatches it — no separate runner repo to provision |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews. 3 backends: PostgreSQL + tsvector (Server), SQLite + FTS5 (CLI & Action), Engram (optional cross-tool sharing) |
 | **Multi-Provider** | 6 providers: GitHub Models (free), Anthropic, OpenAI, Google, Ollama (local), Qwen (Alibaba) — bring your own key |
 | **3 Distribution Modes** | SaaS, GitHub Action, CLI |
@@ -48,8 +47,8 @@ graph TB
     CLI["CLI"]
   end
 
-  subgraph Runner["Delegated Runner"]
-    RunnerRepo["ghagga-runner"]
+  subgraph Inline["Inline workflow (per repo)"]
+    InlineYml[".github/workflows/ghagga.yml"]
   end
 
   subgraph Core["@ghagga/core"]
@@ -58,8 +57,8 @@ graph TB
     Memory["Memory<br/>Search · Persist · Privacy"]
   end
 
-  Server -- "dispatch" --> RunnerRepo
-  RunnerRepo -- "callback" --> Server
+  Server -- "inject + workflow_dispatch" --> InlineYml
+  InlineYml -- "HMAC callback" --> Server
   Server --> Core
   Action --> Core
   CLI --> Core
@@ -71,7 +70,6 @@ The review engine (`@ghagga/core`) is distribution-agnostic. Each app is a thin 
 
 - **[Quick Start](quick-start.md)** — Get running in 5 minutes
 - **[SaaS Guide](saas-getting-started.md)** — GitHub App setup (easiest)
-- **[Delegated CI](delegated-ci.md)** — Run lint/tests without repo workflows
 - **[GitHub Action](github-action.md)** — CI/CD integration
 - **[CLI](cli.md)** — Review local changes from your terminal
 - **[Self-Hosted](self-hosted.md)** — Full deployment with Docker

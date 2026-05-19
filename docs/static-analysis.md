@@ -59,7 +59,7 @@ flowchart TB
   AutoDetect --> Merge
 ```
 
-> **Where do tools run?** In SaaS mode, tools run on a [delegated runner](runner-architecture.md). In Action mode, tools auto-install on the GitHub Actions runner. In CLI mode, tools run locally if installed. In Docker, tools are pre-installed.
+> **Where do tools run?** In SaaS mode, tools run inside the target repository via an injected inline workflow (`.github/workflows/ghagga.yml`). In Action mode, tools auto-install on the GitHub Actions runner. In CLI mode, tools run locally if installed. In Docker, tools are pre-installed.
 
 Each tool's output is parsed into a common `ReviewFinding` format with severity, file, line, and message.
 
@@ -112,13 +112,13 @@ Tools are optional. If a binary isn't installed or fails to run, it's silently s
 
 | Distribution | Always-on tools | Auto-detect tools | How |
 |-------------|-----------------|-------------------|-----|
-| **SaaS (with runner)** | Yes | Yes | Delegated to `ghagga-runner` via workflow_dispatch |
-| **SaaS (no runner)** | No | No | Falls back to LLM-only review |
+| **SaaS (workflow injection succeeded)** | Yes | Yes | Inline workflow `.github/workflows/ghagga.yml` dispatched on the target repo |
+| **SaaS (injection blocked)** | No | No | Falls back to LLM-only review |
 | **GitHub Action (node20)** | Yes | Yes | Auto-installed + cached on runner |
 | **Docker (action/server)** | Yes | Yes | Pre-installed in Docker image |
 | **CLI** | If installed | If installed | Uses locally installed binaries |
 
-> SaaS mode delegates static analysis to the user's [`ghagga-runner`](runner-architecture.md) repository. If no runner is configured, the review continues with AI only (no static analysis findings). See [Runner Architecture](runner-architecture.md) for details.
+> In SaaS mode the server injects `.github/workflows/ghagga.yml` (built from `templates/ghagga-inline.yml`) into the target repo and triggers it via `workflow_dispatch`. If injection is blocked (branch protection, missing `Contents: write`, Actions disabled), the review continues with AI only — no static-analysis findings.
 
 > The GitHub Action auto-installs tools directly on the `ubuntu-latest` runner and caches binaries with `@actions/cache`. First run takes ~3-5 minutes (installation); subsequent runs use cache (~1-2 minutes).
 
