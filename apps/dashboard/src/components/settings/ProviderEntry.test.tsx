@@ -231,12 +231,7 @@ describe('ProviderEntry — header (index, reorder, remove)', () => {
   it('invokes onMoveUp / onMoveDown when the reorder buttons are clicked', () => {
     const onMoveUp = vi.fn();
     const onMoveDown = vi.fn();
-    renderEntry(
-      createEntry(),
-      { onMoveUp, onMoveDown },
-      {},
-      { index: 1, totalEntries: 3 },
-    );
+    renderEntry(createEntry(), { onMoveUp, onMoveDown }, {}, { index: 1, totalEntries: 3 });
 
     fireEvent.click(screen.getByTitle('Move up'));
     fireEvent.click(screen.getByTitle('Move down'));
@@ -254,25 +249,11 @@ describe('ProviderEntry — header (index, reorder, remove)', () => {
   });
 });
 
-describe('ProviderEntry — credential block + validate button', () => {
-  it('disables Validate when no API key and no existing key (gateway)', () => {
-    renderEntry(createEntry({ provider: 'gateway', apiKey: '', hasExistingKey: false }));
-
-    expect(screen.getByRole('button', { name: /validate/i })).toBeDisabled();
-  });
-
-  it('enables Validate when an API key has been entered', () => {
-    renderEntry(createEntry({ provider: 'gateway', apiKey: 'sk-test' }));
-
-    expect(screen.getByRole('button', { name: /validate/i })).toBeEnabled();
-  });
-
-  it('shows the validated status message when entry.validated is true', () => {
-    renderEntry(createEntry({ provider: 'gateway', apiKey: 'sk-test', validated: true }));
-
-    expect(screen.getByText(/gateway token validated successfully/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /valid/i })).toBeInTheDocument();
-  });
+describe('ProviderEntry — validate flow integration', () => {
+  // The button-state tests (disabled/enabled/Valid label) live in
+  // provider-fields/CredentialBlock.test.tsx. Here we exercise the
+  // parent-owned useValidateProvider hook: mock the mutation and assert
+  // the onChange propagation on success and the error rendering on failure.
 
   // Coverage gap: validate-button async success flow (mock mutation, click,
   // assert onChange called with availableModels + validated=true).
@@ -323,61 +304,52 @@ describe('ProviderEntry — credential block + validate button', () => {
   });
 });
 
-describe('ProviderEntry — key-reuse selector', () => {
-  const availableKeys: AvailableKeysMap = {
-    gateway: { maskedApiKey: 'sk-...wxyz', source: 'global' },
-  };
+describe('ProviderEntry — credential block re-mount on provider switch', () => {
+  // The credential UI lives in provider-fields/CredentialBlock.tsx with the
+  // toggle state (`keyMode`) local to that component. The parent uses
+  // `key={entry.provider}` to force a re-mount when the provider changes,
+  // which resets `keyMode` back to 'reuse'. This test asserts that
+  // contract from the parent's perspective: after switching reuse → new
+  // and then changing provider, the saved-key selector is visible again
+  // for the new provider (proving the subtree was re-mounted).
+  it('re-mounts CredentialBlock and resets keyMode to reuse when provider changes', () => {
+    const availableKeys: AvailableKeysMap = {
+      gateway: { maskedApiKey: 'sk-...wxyz', source: 'global' },
+      ollama: { maskedApiKey: 'unused', source: 'global' }, // ollama hides credential block anyway
+    };
+    // Use a non-ollama provider on the other side so the credential block stays visible.
+    const otherKeys: AvailableKeysMap = {
+      gateway: { maskedApiKey: 'sk-...wxyz', source: 'global' },
+      'cli-bridge': { maskedApiKey: 'tok-...abcd', source: 'global' },
+    };
 
-  it('shows the masked-key button when a saved key exists for the provider', () => {
-    renderEntry(createEntry({ provider: 'gateway' }), {}, availableKeys);
-
-    expect(screen.getByText(/sk-\.\.\.wxyz.*click to use/i)).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/enter gateway bearer token/i)).not.toBeInTheDocument();
-  });
-
-  it('calls onChange with hasExistingKey=true when the saved-key button is clicked', () => {
-    const onChange = vi.fn<(entry: ProviderEntryState) => void>();
-    renderEntry(createEntry({ provider: 'gateway' }), { onChange }, availableKeys);
-
-    fireEvent.click(screen.getByText(/sk-\.\.\.wxyz.*click to use/i));
-
-    expect(onChange).toHaveBeenCalledOnce();
-    const next = onChange.mock.calls[0]?.[0];
-    if (!next) throw new Error('onChange not called');
-    expect(next.hasExistingKey).toBe(true);
-    expect(next.maskedApiKey).toBe('sk-...wxyz');
-    expect(next.apiKey).toBe('');
-    expect(next.validated).toBe(true);
-    expect(next.availableModels.length).toBeGreaterThan(0);
-  });
-
-  // Coverage gap: reverse-toggle. The user can switch reuse → new and back
-  // to reuse without re-mounting the component.
-  it('toggles between reuse and new key entry modes on the "Use ..." button', () => {
-    renderEntry(createEntry({ provider: 'gateway' }), {}, availableKeys);
-
-    // Initial: reuse mode — saved-key button visible, no password input.
+    // 1) Render with gateway + saved key — initial mode is 'reuse' (selector visible).
+    const { rerender } = renderEntry(createEntry({ provider: 'gateway' }), {}, otherKeys);
     expect(screen.getByText(/click to use/i)).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/enter gateway bearer token/i)).not.toBeInTheDocument();
 
-    // Click "Use a different key" → switches to manual input mode.
+    // 2) Toggle to 'new' mode — password input shows.
     fireEvent.click(screen.getByText(/use a different key/i));
     expect(screen.getByPlaceholderText(/enter gateway bearer token/i)).toBeInTheDocument();
     expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
 
-    // Click "Use saved key" → switches back to reuse mode.
-    fireEvent.click(screen.getByText(/use saved key/i));
-    expect(screen.getByText(/click to use/i)).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/enter gateway bearer token/i)).not.toBeInTheDocument();
-  });
+    // 3) Re-render with provider=cli-bridge — CredentialBlock re-mounts
+    //    (key changed from "gateway" → "cli-bridge"), resetting keyMode.
+    rerender(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <ProviderEntry
+          index={0}
+          entry={createEntry({ provider: 'cli-bridge', model: 'gemini' })}
+          totalEntries={1}
+          availableKeys={otherKeys}
+          onChange={noop}
+          onRemove={noop}
+          onMoveUp={noop}
+          onMoveDown={noop}
+        />
+      </QueryClientProvider>,
+    );
 
-  it('does NOT show the key selector when no saved key matches the provider', () => {
-    const otherProviderKeys: AvailableKeysMap = {
-      'cli-bridge': { maskedApiKey: 'token-...xyz', source: 'global' },
-    };
-    renderEntry(createEntry({ provider: 'gateway' }), {}, otherProviderKeys);
-
-    expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/enter gateway bearer token/i)).toBeInTheDocument();
+    // CLI Bridge with a saved key shows the saved-key selector (reuse mode is fresh).
+    expect(screen.getByText(/tok-\.\.\.abcd.*click to use/i)).toBeInTheDocument();
   });
 });
