@@ -23,10 +23,8 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "ghagga-core": "workspace:*"
-  },
   "devDependencies": {
+    "ghagga-core": "workspace:*",
     "typescript": "^5.9.0"
   }
 }
