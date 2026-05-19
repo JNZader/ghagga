@@ -1,12 +1,17 @@
 /**
  * ProviderEntry component tests.
  *
- * Tests rendering of provider dropdown, API key input,
- * validation button states, model selection, and the key selector.
+ * Tests rendering of the provider radio selector (gateway / cli-bridge / ollama),
+ * credential inputs, validation flow, model selection, key-reuse selector,
+ * and reorder controls.
+ *
+ * The component was refactored from a dropdown of legacy providers
+ * (anthropic / openai / github / etc.) to a 3-radio-button UI matching the
+ * current `SaaSProvider` union: 'gateway' | 'cli-bridge' | 'ollama'.
  */
 
 import { QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AvailableKeysMap } from '@/lib/api';
 import { createTestQueryClient } from '@/test/test-utils';
@@ -29,8 +34,9 @@ function renderWithQuery(ui: React.ReactElement) {
 
 function createEntry(overrides: Partial<ProviderEntryState> = {}): ProviderEntryState {
   return {
-    provider: 'anthropic',
-    model: '',
+    id: 'entry-0',
+    provider: 'gateway',
+    model: 'auto',
     apiKey: '',
     availableModels: [],
     hasExistingKey: false,
@@ -45,12 +51,13 @@ function renderEntry(
   entry: ProviderEntryState,
   onChange = noop,
   availableKeys: AvailableKeysMap = {},
+  options: { index?: number; totalEntries?: number } = {},
 ) {
   return renderWithQuery(
     <ProviderEntry
-      index={0}
+      index={options.index ?? 0}
       entry={entry}
-      totalEntries={1}
+      totalEntries={options.totalEntries ?? 1}
       availableKeys={availableKeys}
       onChange={onChange}
       onRemove={noop}
@@ -68,117 +75,241 @@ beforeEach(() => {
 
 // ─── Tests ─────────────────────────────────────────────────────
 
-describe('ProviderEntry', () => {
-  it('renders provider dropdown with correct options', () => {
-    renderEntry(createEntry());
+describe('ProviderEntry — provider selector (radio buttons)', () => {
+  it('renders three radio options: LLM Gateway, Local CLI, Ollama', () => {
+    renderEntry(createEntry({ provider: 'gateway' }));
 
-    const select = screen.getByDisplayValue('Anthropic');
-    expect(select).toBeInTheDocument();
-    expect(select.tagName).toBe('SELECT');
+    const radios = screen.getAllByRole('radio');
+    expect(radios).toHaveLength(3);
+
+    expect(screen.getByLabelText(/llm gateway/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/local cli/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/ollama/i)).toBeInTheDocument();
   });
 
-  it('renders API key input for non-GitHub providers (no saved keys)', () => {
-    renderEntry(createEntry({ provider: 'anthropic' }));
+  it('marks the gateway radio checked when provider is gateway', () => {
+    renderEntry(createEntry({ provider: 'gateway' }));
 
-    const input = screen.getByPlaceholderText(/enter api key/i);
-    expect(input).toBeInTheDocument();
-    expect(input).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText(/llm gateway/i)).toBeChecked();
+    expect(screen.getByLabelText(/local cli/i)).not.toBeChecked();
+    expect(screen.getByLabelText(/ollama/i)).not.toBeChecked();
   });
 
-  it('shows GitHub Models disclaimer instead of API key input for GitHub provider', () => {
-    renderEntry(createEntry({ provider: 'github' }));
+  it('marks the cli-bridge radio checked when provider is cli-bridge', () => {
+    renderEntry(createEntry({ provider: 'cli-bridge', model: 'auto' }));
 
-    expect(screen.getByText(/github models is not available/i)).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/enter api key/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/local cli/i)).toBeChecked();
   });
 
-  it('shows "Validate" button that is disabled when apiKey is empty', () => {
-    renderEntry(createEntry({ provider: 'openai', apiKey: '' }));
+  it('marks the ollama radio checked when provider is ollama', () => {
+    renderEntry(createEntry({ provider: 'ollama', model: '' }));
+
+    expect(screen.getByLabelText(/ollama/i)).toBeChecked();
+  });
+
+  it('calls onChange with provider=ollama when the ollama radio is selected', () => {
+    const onChange = vi.fn();
+    renderEntry(createEntry({ provider: 'gateway' }), onChange);
+
+    fireEvent.click(screen.getByLabelText(/ollama/i));
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0]?.[0].provider).toBe('ollama');
+  });
+
+  it('calls onChange with provider=cli-bridge when the Local CLI radio is selected', () => {
+    const onChange = vi.fn();
+    renderEntry(createEntry({ provider: 'gateway' }), onChange);
+
+    fireEvent.click(screen.getByLabelText(/local cli/i));
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0]?.[0].provider).toBe('cli-bridge');
+  });
+});
+
+describe('ProviderEntry — gateway provider', () => {
+  it('shows Gateway URL and Gateway Token inputs', () => {
+    renderEntry(createEntry({ provider: 'gateway', model: 'auto' }));
+
+    expect(screen.getByLabelText(/gateway url/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/enter gateway bearer token/i)).toBeInTheDocument();
+  });
+
+  it('renders a "Validate" button that is disabled when no API key and no existing key', () => {
+    renderEntry(createEntry({ provider: 'gateway', apiKey: '', hasExistingKey: false }));
 
     const button = screen.getByRole('button', { name: /validate/i });
     expect(button).toBeDisabled();
   });
 
-  it('shows "Valid ✓" text when entry is validated', () => {
-    renderEntry(createEntry({ provider: 'openai', apiKey: 'sk-test', validated: true }));
+  it('renders an enabled "Validate" button when an API key has been entered', () => {
+    renderEntry(createEntry({ provider: 'gateway', apiKey: 'sk-test' }));
 
-    expect(screen.getByText(/valid ✓/i)).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: /validate/i });
+    expect(button).toBeEnabled();
   });
 
-  it('renders model dropdown when availableModels are present', () => {
+  it('shows the validated status message when entry.validated is true', () => {
+    renderEntry(createEntry({ provider: 'gateway', apiKey: 'sk-test', validated: true }));
+
+    // The button flips its label and the inline status note is rendered below.
+    expect(screen.getByText(/gateway token validated successfully/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /valid/i })).toBeInTheDocument();
+  });
+});
+
+describe('ProviderEntry — cli-bridge provider', () => {
+  it('renders the CLI tool dropdown with the expected options', () => {
+    const { container } = renderEntry(
+      createEntry({ provider: 'cli-bridge', model: 'auto', validated: true }),
+    );
+
+    // The CLI tool selector is the only native <select> in the component
+    // (a hidden datalist-backed input has role="combobox" but is not a <select>).
+    const select = container.querySelector('select');
+    expect(select).not.toBeNull();
+    if (!select) return;
+
+    expect(within(select).getByRole('option', { name: /auto-detect/i })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: /opencode/i })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: /copilot/i })).toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: /gemini/i })).toBeInTheDocument();
+  });
+
+  it('shows the OpenCode model input when the opencode CLI is selected', () => {
+    renderEntry(createEntry({ provider: 'cli-bridge', model: 'opencode' }));
+
+    expect(screen.getByLabelText(/opencode model/i)).toBeInTheDocument();
+  });
+
+  it('warns when opencode is selected but cliModel is missing', () => {
+    renderEntry(createEntry({ provider: 'cli-bridge', model: 'opencode', cliModel: '' }));
+
+    expect(screen.getByText(/model is required when using opencode/i)).toBeInTheDocument();
+  });
+
+  it('shows the free-model banner for opencode/* models', () => {
     renderEntry(
       createEntry({
-        provider: 'openai',
+        provider: 'cli-bridge',
+        model: 'opencode',
+        cliModel: 'opencode/gpt-5-nano',
         validated: true,
-        availableModels: ['gpt-4o', 'gpt-4o-mini'],
-        model: 'gpt-4o',
       }),
     );
 
-    const modelSelect = screen.getByDisplayValue('gpt-4o');
-    expect(modelSelect).toBeInTheDocument();
+    expect(screen.getByText(/free model/i)).toBeInTheDocument();
+  });
+});
+
+describe('ProviderEntry — ollama provider', () => {
+  it('renders a free-text model input with suggestions', () => {
+    renderEntry(createEntry({ provider: 'ollama', model: '' }));
+
+    expect(
+      screen.getByPlaceholderText(/llama3, codellama, qwen2\.5-coder/i),
+    ).toBeInTheDocument();
   });
 
-  it('shows "Primary" label for index 0', () => {
-    renderEntry(createEntry());
+  it('hides the API-key block for the keyless ollama provider', () => {
+    const { container } = renderEntry(createEntry({ provider: 'ollama', model: '' }));
+
+    // The credential block keeps its DOM but adds the `hidden` class for ollama
+    // (and for free opencode models). The contract: every password input is
+    // inside a hidden container, so the credential UI is invisible.
+    const passwordInputs = container.querySelectorAll('input[type="password"]');
+    expect(passwordInputs.length).toBeGreaterThan(0);
+    passwordInputs.forEach((input) => {
+      const hiddenAncestor = input.closest('.hidden');
+      expect(hiddenAncestor).not.toBeNull();
+    });
+  });
+
+  it('propagates ollama model changes via onChange', () => {
+    const onChange = vi.fn();
+    renderEntry(createEntry({ provider: 'ollama', model: '' }), onChange);
+
+    fireEvent.change(screen.getByPlaceholderText(/llama3, codellama/i), {
+      target: { value: 'codellama' },
+    });
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0]?.[0].model).toBe('codellama');
+  });
+});
+
+describe('ProviderEntry — index labels and reorder controls', () => {
+  it('shows "Primary" label for the first entry (index 0)', () => {
+    renderEntry(createEntry(), noop, {}, { index: 0 });
     expect(screen.getByText('Primary')).toBeInTheDocument();
   });
 
-  it('calls onChange when provider dropdown changes', () => {
-    const onChange = vi.fn();
-    renderEntry(createEntry({ provider: 'anthropic' }), onChange);
-
-    const select = screen.getByDisplayValue('Anthropic');
-    fireEvent.change(select, { target: { value: 'openai' } });
-
-    expect(onChange).toHaveBeenCalledOnce();
-    expect(onChange.mock.calls[0]?.[0].provider).toBe('openai');
+  it('shows "Fallback" label for non-primary entries', () => {
+    renderEntry(createEntry(), noop, {}, { index: 1, totalEntries: 2 });
+    expect(screen.getByText('Fallback')).toBeInTheDocument();
   });
 
-  // ── Key Selector (Bug 1) ──────────────────────────────────────
+  it('hides reorder controls when there is only one entry', () => {
+    renderEntry(createEntry(), noop, {}, { index: 0, totalEntries: 1 });
 
-  it('shows key selector button when a saved key exists for the provider', () => {
-    const availableKeys: AvailableKeysMap = {
-      anthropic: { maskedApiKey: 'sk-...wxyz', source: 'global' },
-    };
-    renderEntry(createEntry({ provider: 'anthropic' }), noop, availableKeys);
-
-    // Should render a button showing the masked key, not the password input
-    expect(screen.getByText(/sk-...wxyz.*click to use/i)).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/enter api key/i)).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Move up')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Move down')).not.toBeInTheDocument();
   });
 
-  it('shows "Use a different key" toggle when saved key is available', () => {
+  it('shows reorder controls when there are multiple entries', () => {
+    renderEntry(createEntry(), noop, {}, { index: 0, totalEntries: 2 });
+
+    expect(screen.getByTitle('Move up')).toBeInTheDocument();
+    expect(screen.getByTitle('Move down')).toBeInTheDocument();
+  });
+});
+
+// ── Key-reuse selector (saved keys from installation/global settings) ──
+
+describe('ProviderEntry — key-reuse selector', () => {
+  it('shows the key selector button when a saved key exists for the gateway provider', () => {
     const availableKeys: AvailableKeysMap = {
-      openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
+      gateway: { maskedApiKey: 'sk-...wxyz', source: 'global' },
     };
-    renderEntry(createEntry({ provider: 'openai' }), noop, availableKeys);
+    renderEntry(createEntry({ provider: 'gateway' }), noop, availableKeys);
+
+    // Should render a button with the masked key, NOT the password input
+    expect(screen.getByText(/sk-\.\.\.wxyz.*click to use/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/enter gateway bearer token/i)).not.toBeInTheDocument();
+  });
+
+  it('shows "Use a different key" toggle when a saved key is available', () => {
+    const availableKeys: AvailableKeysMap = {
+      gateway: { maskedApiKey: 'sk-...abcd', source: 'global' },
+    };
+    renderEntry(createEntry({ provider: 'gateway' }), noop, availableKeys);
 
     expect(screen.getByText(/use a different key/i)).toBeInTheDocument();
   });
 
   it('switches to manual input when "Use a different key" is clicked', () => {
     const availableKeys: AvailableKeysMap = {
-      openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
+      gateway: { maskedApiKey: 'sk-...abcd', source: 'global' },
     };
-    renderEntry(createEntry({ provider: 'openai' }), noop, availableKeys);
+    renderEntry(createEntry({ provider: 'gateway' }), noop, availableKeys);
 
     fireEvent.click(screen.getByText(/use a different key/i));
 
     // After switching, the password input should be visible
-    expect(screen.getByPlaceholderText(/enter api key/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/enter gateway bearer token/i)).toBeInTheDocument();
     expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
   });
 
-  it('calls onChange with hasExistingKey=true when saved key button is clicked', () => {
+  it('calls onChange with hasExistingKey=true when the saved-key button is clicked', () => {
     const onChange = vi.fn();
     const availableKeys: AvailableKeysMap = {
-      openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
+      gateway: { maskedApiKey: 'sk-...abcd', source: 'global' },
     };
-    renderEntry(createEntry({ provider: 'openai' }), onChange, availableKeys);
+    renderEntry(createEntry({ provider: 'gateway' }), onChange, availableKeys);
 
-    // Click the "click to use" button
-    fireEvent.click(screen.getByText(/sk-...abcd.*click to use/i));
+    // Click the "click to use" button — it contains the masked key
+    fireEvent.click(screen.getByText(/sk-\.\.\.abcd.*click to use/i));
 
     expect(onChange).toHaveBeenCalledOnce();
     const updated = onChange.mock.calls[0]?.[0] as ProviderEntryState;
@@ -189,30 +320,30 @@ describe('ProviderEntry', () => {
     expect(updated.availableModels.length).toBeGreaterThan(0);
   });
 
-  it('does NOT show key selector when entry already has its own key (hasExistingKey=true)', () => {
+  it('does NOT show the key selector when the entry already has its own saved key', () => {
     const availableKeys: AvailableKeysMap = {
-      openai: { maskedApiKey: 'sk-...abcd', source: 'global' },
+      gateway: { maskedApiKey: 'sk-...abcd', source: 'global' },
     };
     renderEntry(
-      createEntry({ provider: 'openai', hasExistingKey: true, maskedApiKey: 'sk-...repo' }),
+      createEntry({ provider: 'gateway', hasExistingKey: true, maskedApiKey: 'sk-...repo' }),
       noop,
       availableKeys,
     );
 
-    // Should show the manual input (not the selector) — placeholder uses the maskedApiKey
+    // The reuse button must not appear — the entry already has a key of its own
     expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
     // The password input shows the repo's own masked key as placeholder
     expect(screen.getByPlaceholderText('sk-...repo')).toBeInTheDocument();
   });
 
-  it('does NOT show key selector when no saved key exists for the provider', () => {
+  it('does NOT show the key selector when no saved key exists for the current provider', () => {
     const availableKeys: AvailableKeysMap = {
-      anthropic: { maskedApiKey: 'sk-...wxyz', source: 'global' },
+      'cli-bridge': { maskedApiKey: 'token-...wxyz', source: 'global' },
     };
-    // openai entry but only anthropic is in availableKeys
-    renderEntry(createEntry({ provider: 'openai' }), noop, availableKeys);
+    // gateway entry but only cli-bridge has a saved key
+    renderEntry(createEntry({ provider: 'gateway' }), noop, availableKeys);
 
     expect(screen.queryByText(/click to use/i)).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/enter api key/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/enter gateway bearer token/i)).toBeInTheDocument();
   });
 });

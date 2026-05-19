@@ -109,9 +109,12 @@ export function ConfirmDialog({
   }
 
   return createPortal(
+    // Outer wrapper handles backdrop positioning + Escape key delegation.
+    // It is NOT the dialog itself — the inner div carries role="dialog".
+    // `role="presentation"` keeps the wrapper out of the a11y tree so screen
+    // readers only announce a single dialog (fixes dual-role ARIA violation).
     <div
-      role="dialog"
-      aria-modal="true"
+      role="presentation"
       className="fixed inset-0 z-50 flex items-center justify-center"
       onKeyDown={handleKeyDown}
     >
