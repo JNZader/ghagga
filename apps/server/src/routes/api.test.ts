@@ -741,8 +741,8 @@ describe('GET /api/installation-settings', () => {
     });
     mockGetInstallationSettings.mockResolvedValueOnce({
       providerChain: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-key' },
-        { provider: 'github', model: 'gpt-4o', encryptedApiKey: null },
+        { provider: 'gateway', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-key' },
+        { provider: 'cli-bridge', model: 'gpt-4o', encryptedApiKey: null },
       ],
       aiReviewEnabled: true,
       reviewMode: 'consensus',
@@ -1577,8 +1577,8 @@ describe('GET /api/providers/keys', () => {
     mockGetInstallationSettingsBatch.mockResolvedValueOnce([
       {
         providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
-          { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
+          { provider: 'gateway', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-gw' },
+          { provider: 'cli-bridge', model: 'gpt-4o', encryptedApiKey: 'enc-cli' },
         ],
       },
     ]);
@@ -1588,11 +1588,11 @@ describe('GET /api/providers/keys', () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data).toHaveProperty('anthropic');
-    expect(json.data).toHaveProperty('openai');
+    expect(json.data).toHaveProperty('gateway');
+    expect(json.data).toHaveProperty('cli-bridge');
     // Keys must be masked, not raw/encrypted
-    expect(json.data.anthropic.maskedApiKey).toMatch(/\.\.\./);
-    expect(json.data.anthropic.source).toBe('global');
+    expect(json.data.gateway.maskedApiKey).toMatch(/\.\.\./);
+    expect(json.data.gateway.source).toBe('global');
     // Verify single batch query was called (not N individual queries)
     expect(mockGetInstallationSettingsBatch).toHaveBeenCalledOnce();
     expect(mockGetInstallationSettings).not.toHaveBeenCalled();
@@ -1609,12 +1609,12 @@ describe('GET /api/providers/keys', () => {
     expect(json.data).toEqual({});
   });
 
-  it('skips providers without encrypted keys (e.g., github)', async () => {
+  it('skips providers without encrypted keys (e.g., cli-bridge)', async () => {
     mockGetInstallationSettingsBatch.mockResolvedValueOnce([
       {
         providerChain: [
-          { provider: 'github', model: 'gpt-4o-mini', encryptedApiKey: null },
-          { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc-oai' },
+          { provider: 'cli-bridge', model: 'gpt-4o-mini', encryptedApiKey: null },
+          { provider: 'gateway', model: 'gpt-4o', encryptedApiKey: 'enc-gw' },
         ],
       },
     ]);
@@ -1624,15 +1624,15 @@ describe('GET /api/providers/keys', () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data).not.toHaveProperty('github');
-    expect(json.data).toHaveProperty('openai');
+    expect(json.data).not.toHaveProperty('cli-bridge');
+    expect(json.data).toHaveProperty('gateway');
   });
 
   it('never exposes raw or encrypted key values', async () => {
     mockGetInstallationSettingsBatch.mockResolvedValueOnce([
       {
         providerChain: [
-          { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-ant' },
+          { provider: 'gateway', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc-gw' },
         ],
       },
     ]);
@@ -1642,8 +1642,8 @@ describe('GET /api/providers/keys', () => {
     const json = await res.json();
 
     const body = JSON.stringify(json);
-    expect(body).not.toContain('enc-ant');
-    expect(json.data.anthropic.maskedApiKey).toBeDefined();
+    expect(body).not.toContain('enc-gw');
+    expect(json.data.gateway.maskedApiKey).toBeDefined();
   });
 });
 
@@ -1871,7 +1871,7 @@ describe('maskApiKey (via GET /api/settings)', () => {
     mockGetRepoByFullName.mockResolvedValueOnce({
       ...FAKE_REPO,
       providerChain: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc' },
+        { provider: 'gateway', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc' },
       ],
     });
     mockGetInstallationSettings.mockResolvedValueOnce(null);
@@ -1892,7 +1892,7 @@ describe('maskApiKey (via GET /api/settings)', () => {
     mockGetRepoByFullName.mockResolvedValueOnce({
       ...FAKE_REPO,
       providerChain: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc' },
+        { provider: 'gateway', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc' },
       ],
     });
     mockGetInstallationSettings.mockResolvedValueOnce(null);
@@ -1910,7 +1910,7 @@ describe('maskApiKey (via GET /api/settings)', () => {
     mockGetRepoByFullName.mockResolvedValueOnce({
       ...FAKE_REPO,
       providerChain: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc' },
+        { provider: 'gateway', model: 'claude-sonnet-4-20250514', encryptedApiKey: 'enc' },
       ],
     });
     mockGetInstallationSettings.mockResolvedValueOnce(null);

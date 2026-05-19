@@ -772,40 +772,59 @@ Deletes all sessions that have zero observations.
 POST /api/providers/validate
 ```
 
-Tests whether a provider API key is valid. Returns the list of available models if the key works.
+Validates a SaaS dashboard provider configuration. Returns the list of available models when the configuration is reachable.
+
+The dashboard only supports two runtime targets:
+
+- `gateway` — a self-hosted LLM gateway. Validation pings `${gatewayUrl}/health`.
+- `cli-bridge` — local CLI tools (Claude Code, OpenCode, etc.) running on the user's machine. Validation enumerates available CLIs; no API key is required.
+
+The `ollama` provider is intentionally rejected by this endpoint — it is only available via the CLI and Action runtimes, not the SaaS dashboard.
 
 **Body**:
 
 ```json
 {
-  "provider": "anthropic",
-  "apiKey": "sk-ant-api03-..."
+  "provider": "gateway",
+  "gatewayUrl": "https://gateway.example.com"
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
-| `apiKey` | `string` | Conditional | Required for all providers except `github` (which uses the session token) |
+| `provider` | `string` | Yes | One of: `gateway`, `cli-bridge` |
+| `gatewayUrl` | `string` | Conditional | Required for `gateway` to perform a `/health` probe. If omitted, the response is `valid: true` with `models: ["auto"]` so the dashboard can defer the URL prompt. |
+| `apiKey` | `string` | No | Accepted in the body for forward compatibility but ignored by both runtime targets (gateway uses the URL, cli-bridge uses local CLIs). |
 
-**Response** `200` (valid key):
+**Response** `200` (valid configuration):
 
 ```json
 {
   "valid": true,
-  "models": ["claude-sonnet-4-20250514", "claude-haiku-4-20250414"]
+  "models": ["auto"]
 }
 ```
 
-**Response** `200` (invalid key):
+**Response** `200` (invalid configuration):
 
 ```json
 {
   "valid": false,
   "models": [],
-  "error": "Validation request failed"
+  "error": "Gateway health check failed (HTTP 503)"
 }
 ```
+
+**Response** `400` (validation error):
+
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Unknown provider: anthropic"
+}
+```
+
+Returned when `provider` is missing, equals `ollama`, or is not one of `gateway` / `cli-bridge`.
 
 ---
 

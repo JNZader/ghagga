@@ -118,7 +118,7 @@ export const repositories = pgTable(
 
     // ── Old columns (kept for rollback safety, will be dropped in a future migration) ──
     encryptedApiKey: text('encrypted_api_key'),
-    llmProvider: varchar('llm_provider', { length: 50 }).default('github').notNull(),
+    llmProvider: varchar('llm_provider', { length: 50 }).default('gateway').notNull(),
     llmModel: varchar('llm_model', { length: 100 }),
 
     // ── Inline workflow (Phase: inline-workflow-migration) ──

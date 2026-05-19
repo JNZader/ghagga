@@ -6,7 +6,7 @@ import { calculateConsensus, parseVote } from './consensus.js';
 
 function makeVote(overrides: Partial<ConsensusVote> = {}): ConsensusVote {
   return {
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     stance: 'neutral',
     decision: 'approve',
@@ -19,10 +19,10 @@ function makeVote(overrides: Partial<ConsensusVote> = {}): ConsensusVote {
 // ─── parseVote ──────────────────────────────────────────────────
 
 describe('parseVote', () => {
-  const defaults = {
-    provider: 'anthropic' as LLMProvider,
+  const defaults: { provider: LLMProvider; model: string; stance: ConsensusStance } = {
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
-    stance: 'neutral' as ConsensusStance,
+    stance: 'neutral',
   };
 
   function call(text: string, overrides: Partial<typeof defaults> = {}) {
