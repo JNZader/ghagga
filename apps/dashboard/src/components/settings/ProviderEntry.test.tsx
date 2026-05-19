@@ -129,13 +129,14 @@ describe('ProviderEntry — provider selector', () => {
   });
 
   it('propagates provider=ollama via onChange and resets transient state', () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(entry: ProviderEntryState) => void>();
     renderEntry(createEntry({ provider: 'gateway', apiKey: 'sk-test' }), { onChange });
 
     fireEvent.click(screen.getByLabelText(/ollama/i));
 
     expect(onChange).toHaveBeenCalledOnce();
-    const next = onChange.mock.calls[0]?.[0] as ProviderEntryState;
+    const next = onChange.mock.calls[0]?.[0];
+    if (!next) throw new Error('onChange not called');
     expect(next.provider).toBe('ollama');
     expect(next.apiKey).toBe('');
     expect(next.model).toBe('');
@@ -143,13 +144,14 @@ describe('ProviderEntry — provider selector', () => {
   });
 
   it('propagates provider=cli-bridge and starts the entry pre-validated', () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(entry: ProviderEntryState) => void>();
     renderEntry(createEntry({ provider: 'gateway' }), { onChange });
 
     fireEvent.click(screen.getByLabelText(/local cli/i));
 
     expect(onChange).toHaveBeenCalledOnce();
-    const next = onChange.mock.calls[0]?.[0] as ProviderEntryState;
+    const next = onChange.mock.calls[0]?.[0];
+    if (!next) throw new Error('onChange not called');
     expect(next.provider).toBe('cli-bridge');
     expect(next.model).toBe('auto');
     // cli-bridge starts validated=true because there's no validation flow for the
@@ -164,7 +166,7 @@ describe('ProviderEntry — cli-bridge tool switching', () => {
   // ProviderEntry.tsx:135-145). Switching the CLI tool must wipe tool-specific
   // credentials and recompute `validated` based on the new tool.
   it('resets cliModel, apiKey, hasExistingKey, maskedApiKey and recomputes validated when the CLI tool changes', () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(entry: ProviderEntryState) => void>();
     const { container } = renderEntry(
       createEntry({
         provider: 'cli-bridge',
@@ -186,7 +188,8 @@ describe('ProviderEntry — cli-bridge tool switching', () => {
     fireEvent.change(cliToolSelect, { target: { value: 'auto' } });
 
     expect(onChange).toHaveBeenCalledOnce();
-    const next = onChange.mock.calls[0]?.[0] as ProviderEntryState;
+    const next = onChange.mock.calls[0]?.[0];
+    if (!next) throw new Error('onChange not called');
     expect(next.model).toBe('auto');
     expect(next.cliModel).toBeUndefined();
     expect(next.apiKey).toBe('');
@@ -276,7 +279,7 @@ describe('ProviderEntry — credential block + validate button', () => {
   it('calls onChange with availableModels + validated=true on successful validation', async () => {
     mockValidationOk({ valid: true, models: ['model-x', 'model-y'] });
 
-    const onChange = vi.fn();
+    const onChange = vi.fn<(entry: ProviderEntryState) => void>();
     renderEntry(
       createEntry({ provider: 'gateway', apiKey: 'sk-good', gatewayUrl: 'https://gw.test' }),
       { onChange },
@@ -289,7 +292,8 @@ describe('ProviderEntry — credential block + validate button', () => {
     await waitFor(() => {
       expect(onChange).toHaveBeenCalled();
     });
-    const next = onChange.mock.calls[0]?.[0] as ProviderEntryState;
+    const next = onChange.mock.calls[0]?.[0];
+    if (!next) throw new Error('onChange not called');
     expect(next.validated).toBe(true);
     expect(next.availableModels).toEqual(['model-x', 'model-y']);
   });
@@ -299,7 +303,7 @@ describe('ProviderEntry — credential block + validate button', () => {
   it('shows the server error and onChange with validated=false when validation fails', async () => {
     mockValidationOk({ valid: false, models: [], error: 'Invalid bearer token' });
 
-    const onChange = vi.fn();
+    const onChange = vi.fn<(entry: ProviderEntryState) => void>();
     renderEntry(
       createEntry({ provider: 'gateway', apiKey: 'sk-bad', gatewayUrl: 'https://gw.test' }),
       { onChange },
@@ -312,7 +316,8 @@ describe('ProviderEntry — credential block + validate button', () => {
     await waitFor(() => {
       expect(screen.getByText(/invalid bearer token/i)).toBeInTheDocument();
     });
-    const next = onChange.mock.calls.at(-1)?.[0] as ProviderEntryState;
+    const next = onChange.mock.calls.at(-1)?.[0];
+    if (!next) throw new Error('onChange not called');
     expect(next.validated).toBe(false);
     expect(next.availableModels).toEqual([]);
   });
@@ -331,13 +336,14 @@ describe('ProviderEntry — key-reuse selector', () => {
   });
 
   it('calls onChange with hasExistingKey=true when the saved-key button is clicked', () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(entry: ProviderEntryState) => void>();
     renderEntry(createEntry({ provider: 'gateway' }), { onChange }, availableKeys);
 
     fireEvent.click(screen.getByText(/sk-\.\.\.wxyz.*click to use/i));
 
     expect(onChange).toHaveBeenCalledOnce();
-    const next = onChange.mock.calls[0]?.[0] as ProviderEntryState;
+    const next = onChange.mock.calls[0]?.[0];
+    if (!next) throw new Error('onChange not called');
     expect(next.hasExistingKey).toBe(true);
     expect(next.maskedApiKey).toBe('sk-...wxyz');
     expect(next.apiKey).toBe('');

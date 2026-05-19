@@ -7,10 +7,6 @@ import { GatewayFields } from './provider-fields/GatewayFields';
 import { OllamaFields } from './provider-fields/OllamaFields';
 import { getCliCredentialLabel, KNOWN_MODELS } from './provider-fields/shared';
 
-// Re-export shared constants for backwards compatibility with parent pages
-// (Settings.tsx, GlobalSettings.tsx) that import KNOWN_MODELS from here.
-export { KNOWN_MODELS };
-
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface ProviderEntryState {

@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { Card, CardHeader } from '@/components/Card';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
-import { KNOWN_MODELS, type ProviderEntryState } from '@/components/settings/ProviderEntry';
+import { type ProviderEntryState } from '@/components/settings/ProviderEntry';
+import { KNOWN_MODELS } from '@/components/settings/provider-fields/shared';
 import { ToolGrid } from '@/components/settings/ToolGrid';
 import {
   useInstallationSettings,
