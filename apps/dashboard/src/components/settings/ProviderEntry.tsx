@@ -3,9 +3,10 @@ import type { AvailableKeysMap } from '@/lib/api';
 import { useValidateProvider } from '@/lib/api';
 import type { SaaSProvider } from '@/lib/types';
 import { CliBridgeFields } from './provider-fields/CliBridgeFields';
+import { CredentialBlock } from './provider-fields/CredentialBlock';
 import { GatewayFields } from './provider-fields/GatewayFields';
 import { OllamaFields } from './provider-fields/OllamaFields';
-import { getCliCredentialLabel, KNOWN_MODELS } from './provider-fields/shared';
+import { KNOWN_MODELS } from './provider-fields/shared';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -55,8 +56,6 @@ export function ProviderEntry({
 }: ProviderEntryProps) {
   const validateProvider = useValidateProvider();
   const [validationError, setValidationError] = useState<string | null>(null);
-  // 'new' means the user wants to type a new key; 'reuse' means picking a saved one
-  const [keyMode, setKeyMode] = useState<'reuse' | 'new'>('reuse');
 
   const isCLIBridge = entry.provider === 'cli-bridge';
   const isGateway = entry.provider === 'gateway';
@@ -68,16 +67,8 @@ export function ProviderEntry({
     isOllama || isCLIBridge || entry.apiKey.trim().length > 0 || entry.hasExistingKey;
   // For opencode: cliModel is required to validate / show free banner
   const isOpencode = isCLIBridge && entry.model === 'opencode';
-  // Free opencode/* models don't need API keys — used by the credential block below
+  // Free opencode/* models don't need API keys — used to hide the credential block
   const isFreeModel = isOpencode && entry.cliModel?.startsWith('opencode/');
-
-  // Saved key for the current provider (from global/installation settings)
-  const savedKeyInfo = availableKeys[entry.provider];
-  const hasSavedKey = !!savedKeyInfo;
-  // Show the selector when there is a saved key AND the user hasn't explicitly chosen 'new'
-  const showReuseSelector = needsApiKey && hasSavedKey && !entry.hasExistingKey;
-  // Effective mode: if the entry already has its own key, always show the input
-  const effectiveMode = entry.hasExistingKey ? 'new' : keyMode;
 
   // Effective model list: prefer entry's availableModels, fall back to KNOWN_MODELS.
   // This ensures the dropdown is always populated for entries with saved keys,
@@ -106,7 +97,7 @@ export function ProviderEntry({
    *   - ollama:     model '',      validated=false (keyless but model required)
    */
   const handleProviderChange = (provider: SaaSProvider) => {
-    setKeyMode('reuse'); // reset so the selector shows if a saved key exists
+    // CredentialBlock uses key={entry.provider} → re-mounts and resets keyMode to 'reuse'.
     const isNewGateway = provider === 'gateway';
     const isNewCli = provider === 'cli-bridge';
     onChange({
@@ -299,118 +290,27 @@ export function ProviderEntry({
         <GatewayFields
           index={index}
           entry={entry}
-          onUrlChange={(gatewayUrl) =>
-            onChange({ ...entry, gatewayUrl, validated: false })
-          }
+          onUrlChange={(gatewayUrl) => onChange({ ...entry, gatewayUrl, validated: false })}
           onModelChange={(model) => onChange({ ...entry, model: model || 'auto' })}
         />
       )}
 
       {/* API Key / Credential Input + Validate Button */}
       {/* Hidden for ollama (no key needed) and free opencode models */}
-      <div className={`mb-3 ${isOllama || isFreeModel ? 'hidden' : ''}`}>
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-medium text-text-secondary">
-            {isGateway
-              ? 'Gateway Token'
-              : isCLIBridge
-                ? getCliCredentialLabel(entry.model, entry.cliModel)
-                : 'API Key'}
-          </span>
-          {/* Toggle between reusing a saved key and entering a new one */}
-          {showReuseSelector && !isCLIBridge && (
-            <button
-              type="button"
-              onClick={() => setKeyMode((m) => (m === 'reuse' ? 'new' : 'reuse'))}
-              className="text-xs text-primary-400 underline hover:text-primary-300"
-            >
-              {effectiveMode === 'reuse' ? '+ Use a different key' : '↩ Use saved key'}
-            </button>
-          )}
-        </div>
-
-        {showReuseSelector && effectiveMode === 'reuse' ? (
-          /* ── Key Selector: reuse a saved key ── */
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                // One-click to apply the saved key — no dropdown needed when there's only one option.
-                const knownModels = KNOWN_MODELS[entry.provider] ?? [];
-                onChange({
-                  ...entry,
-                  apiKey: '',
-                  hasExistingKey: true,
-                  maskedApiKey: savedKeyInfo?.maskedApiKey,
-                  validated: true,
-                  availableModels: knownModels,
-                  model: entry.model || knownModels[0] || '',
-                });
-              }}
-              className="input-field flex-1 cursor-pointer text-left text-text-secondary hover:border-primary-600/50 hover:text-text-primary"
-            >
-              {savedKeyInfo?.maskedApiKey ?? 'Saved key'} — click to use
-            </button>
-            <button
-              type="button"
-              onClick={handleValidate}
-              disabled={!canValidate || validateProvider.isPending}
-              className="btn-secondary whitespace-nowrap text-sm"
-            >
-              {validateProvider.isPending
-                ? 'Checking...'
-                : entry.validated
-                  ? 'Valid ✓'
-                  : 'Validate'}
-            </button>
-          </div>
-        ) : (
-          /* ── Manual input: enter or replace a key ── */
-          <div className="flex items-center gap-3">
-            <input
-              type="password"
-              value={entry.apiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-              placeholder={
-                entry.hasExistingKey
-                  ? entry.maskedApiKey || 'Key saved (enter new to replace)'
-                  : isGateway
-                    ? 'Enter gateway bearer token...'
-                    : isCLIBridge
-                      ? `Enter ${getCliCredentialLabel(entry.model, entry.cliModel).toLowerCase()}...`
-                      : 'Enter API key...'
-              }
-              className="input-field flex-1"
-            />
-            {/* Only show validate button for gateway (bearer token validation) */}
-            {isGateway && (
-              <button
-                type="button"
-                onClick={handleValidate}
-                disabled={!canValidate || validateProvider.isPending}
-                className="btn-secondary whitespace-nowrap text-sm"
-              >
-                {validateProvider.isPending
-                  ? 'Checking...'
-                  : entry.validated
-                    ? 'Valid \u2713'
-                    : 'Validate'}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Validation status */}
-        {validationError && <p className="mt-1 text-xs text-red-400">{validationError}</p>}
-        {isGateway && entry.validated && !validationError && (
-          <p className="mt-1 text-xs text-green-400">Gateway token validated successfully</p>
-        )}
-        {entry.hasExistingKey && !entry.apiKey && !entry.validated && (
-          <p className="mt-1 text-xs text-text-secondary">
-            Existing key will be preserved. Enter a new key to replace it.
-          </p>
-        )}
-      </div>
+      {!isOllama && !isFreeModel && (
+        <CredentialBlock
+          key={entry.provider}
+          index={index}
+          entry={entry}
+          availableKeys={availableKeys}
+          isPending={validateProvider.isPending}
+          canValidate={canValidate}
+          validationError={validationError}
+          onApiKeyChange={handleApiKeyChange}
+          onChange={onChange}
+          onValidate={handleValidate}
+        />
+      )}
 
       {/* Model Selector — hidden for CLI Bridge (uses CLI dropdown) and Gateway (always 'auto') */}
       <div className={isCLIBridge || isGateway ? 'hidden' : ''}>
