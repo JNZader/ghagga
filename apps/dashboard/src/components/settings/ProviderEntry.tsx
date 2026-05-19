@@ -5,6 +5,7 @@ import type { SaaSProvider } from '@/lib/types';
 import { CliBridgeFields } from './provider-fields/CliBridgeFields';
 import { CredentialBlock } from './provider-fields/CredentialBlock';
 import { GatewayFields } from './provider-fields/GatewayFields';
+import { ModelSelector } from './provider-fields/ModelSelector';
 import { OllamaFields } from './provider-fields/OllamaFields';
 import { KNOWN_MODELS } from './provider-fields/shared';
 
@@ -314,41 +315,12 @@ export function ProviderEntry({
 
       {/* Model Selector — hidden for CLI Bridge (uses CLI dropdown) and Gateway (always 'auto') */}
       <div className={isCLIBridge || isGateway ? 'hidden' : ''}>
-        <label
-          htmlFor={`model-selector-${index}`}
-          className="mb-1 block text-xs font-medium text-text-secondary"
-        >
-          Model
-        </label>
-        {effectiveModels.length > 0 || entry.model ? (
-          <div>
-            <input
-              id={`model-selector-${index}`}
-              type="text"
-              list={`models-${entry.provider}-${effectiveModels.length}`}
-              value={entry.model}
-              onChange={(e) => handleModelChange(e.target.value)}
-              placeholder="Type or select a model..."
-              className="input-field w-full"
-            />
-            <datalist id={`models-${entry.provider}-${effectiveModels.length}`}>
-              {effectiveModels.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </div>
-        ) : entry.model ? (
-          <div className="flex items-center gap-2">
-            <span className="flex-1 rounded-md border border-surface-border bg-surface-bg px-3 py-2 text-sm text-text-primary">
-              {entry.model}
-            </span>
-            <span className="text-xs text-text-secondary">Validate to see all models</span>
-          </div>
-        ) : (
-          <div className="rounded-md border border-surface-border bg-surface-bg px-3 py-2 text-sm text-text-secondary">
-            Validate your API key first to see available models
-          </div>
-        )}
+        <ModelSelector
+          index={index}
+          entry={entry}
+          effectiveModels={effectiveModels}
+          onModelChange={handleModelChange}
+        />
       </div>
     </div>
   );
