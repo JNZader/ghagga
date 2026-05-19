@@ -92,7 +92,8 @@ export function Settings() {
 
       // Map server chain view to local entry state
       setProviderChain(
-        settings.providerChain.map((entry: ProviderChainView) => ({
+        settings.providerChain.map((entry: ProviderChainView, index: number) => ({
+          id: `${entry.provider}-${index}`,
           provider: entry.provider,
           model: entry.model,
           apiKey: '',
@@ -121,7 +122,8 @@ export function Settings() {
     // If switching to custom and the repo has no chain yet, pre-fill from global
     if (!useGlobal && settings?.globalSettings && providerChain.length === 0) {
       setProviderChain(
-        settings.globalSettings.providerChain.map((entry: ProviderChainView) => ({
+        settings.globalSettings.providerChain.map((entry: ProviderChainView, index: number) => ({
+          id: `${entry.provider}-${index}`,
           provider: entry.provider,
           model: entry.model,
           apiKey: '',

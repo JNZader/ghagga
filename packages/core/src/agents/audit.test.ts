@@ -9,7 +9,7 @@ function makeAuditInput(overrides: Partial<AuditInput> = {}): AuditInput {
   return {
     repoPath: '/repo',
     staticContext: 'Found 3 semgrep findings in src/auth.ts',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     apiKey: 'test-key',
     ...overrides,
@@ -44,7 +44,7 @@ describe('runAuditReport', () => {
     const generateFn = vi.fn().mockResolvedValue({
       text: 'audit report here',
       tokensUsed: 100,
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
     });
 
@@ -72,7 +72,7 @@ describe('runAuditReport', () => {
     const generateFn = vi.fn().mockResolvedValue({
       text: 'report',
       tokensUsed: 50,
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
     });
 
@@ -87,7 +87,7 @@ describe('runAuditReport', () => {
     const generateFn = vi.fn().mockResolvedValue({
       text: 'report',
       tokensUsed: 50,
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
     });
 
@@ -105,7 +105,7 @@ describe('runAuditReport', () => {
     const generateFn = vi.fn().mockResolvedValue({
       text: 'report',
       tokensUsed: 50,
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
     });
 

@@ -303,7 +303,7 @@ describe('upsertInstallationSettings', () => {
     const existing = {
       id: 1,
       installationId: 10,
-      providerChain: [{ provider: 'openai', model: 'gpt-4o', encryptedApiKey: null }],
+      providerChain: [{ provider: 'gateway', model: 'auto', encryptedApiKey: null }],
       aiReviewEnabled: true,
       reviewMode: 'simple',
       settings: DEFAULT_REPO_SETTINGS,
@@ -347,7 +347,7 @@ describe('getInstallationById', () => {
 
 describe('getEffectiveRepoSettings', () => {
   const repoProviderChain: DbProviderChainEntry[] = [
-    { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'enc1' },
+    { provider: 'gateway', model: 'auto', encryptedApiKey: 'enc1' },
   ];
   const repoSettings: RepoSettings = {
     ...DEFAULT_REPO_SETTINGS,
@@ -399,8 +399,8 @@ describe('getEffectiveRepoSettings', () => {
       installationId: 5,
       providerChain: [
         {
-          provider: 'anthropic' as const,
-          model: 'claude-sonnet-4-20250514',
+          provider: 'gateway' as const,
+          model: 'auto',
           encryptedApiKey: null,
         },
       ],

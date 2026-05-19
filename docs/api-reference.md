@@ -407,7 +407,7 @@ Returns the settings for a specific repository, including its resolved global se
     "reviewMode": "simple",
     "providerChain": [
       {
-        "provider": "anthropic",
+        "provider": "gateway",
         "model": "claude-sonnet-4-20250514",
         "hasApiKey": true,
         "maskedApiKey": "sk-...xYzW"
@@ -425,8 +425,8 @@ Returns the settings for a specific repository, including its resolved global se
     "globalSettings": {
       "providerChain": [
         {
-          "provider": "github",
-          "model": "gpt-4o-mini",
+          "provider": "cli-bridge",
+          "model": "auto",
           "hasApiKey": false
         }
       ],
@@ -466,8 +466,8 @@ Updates configuration for a repository. Supports partial updates — only includ
   "aiReviewEnabled": true,
   "reviewMode": "workflow",
   "providerChain": [
-    { "provider": "anthropic", "model": "claude-sonnet-4-20250514", "apiKey": "sk-ant-..." },
-    { "provider": "github", "model": "gpt-4o-mini" }
+    { "provider": "gateway", "model": "claude-sonnet-4-20250514", "apiKey": "sk-gateway-..." },
+    { "provider": "cli-bridge", "model": "auto" }
   ],
   "enableSemgrep": true,
   "enableTrivy": true,
@@ -502,18 +502,18 @@ Updates configuration for a repository. Supports partial updates — only includ
 **Provider Chain Entries**:
 
 ```json
-{ "provider": "anthropic", "model": "claude-sonnet-4-20250514", "apiKey": "sk-ant-..." }
+{ "provider": "gateway", "model": "claude-sonnet-4-20250514", "apiKey": "sk-gateway-..." }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
-| `model` | `string` | Yes | Model identifier (e.g., `gpt-4o-mini`, `claude-sonnet-4-20250514`) |
-| `apiKey` | `string` | No | API key (omit to keep existing key; `github` provider never needs one) |
+| `provider` | `string` | Yes | One of: `gateway`, `cli-bridge`, `ollama` |
+| `model` | `string` | Yes | Model identifier (e.g., `auto`, `claude-sonnet-4-20250514`). Use `auto` to let the provider select the best available model |
+| `apiKey` | `string` | No | API key (omit to keep existing key; `cli-bridge` and `ollama` do not require one) |
 
-> **API Key Behavior**: When you send a `providerChain` entry without an `apiKey`, the server preserves the previously stored encrypted key for that provider. Send a new `apiKey` to rotate it. The `github` provider uses the user's session token and never requires an API key.
+> **API Key Behavior**: When you send a `providerChain` entry without an `apiKey`, the server preserves the previously stored encrypted key for that provider. Send a new `apiKey` to rotate it. The `cli-bridge` and `ollama` providers do not require an API key.
 
-> **Valid Providers**: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter`. The `ollama` provider is **not** available in the SaaS dashboard — use the CLI or GitHub Action instead.
+> **Valid Providers**: `gateway`, `cli-bridge`, `ollama`. Pre-v2 legacy provider values are automatically remapped to `gateway` for backward compatibility. The `ollama` provider is stored as a valid setting but is **not** accepted by `POST /api/providers/validate` — see that endpoint for runtime restrictions.
 
 **Response** `200`:
 
@@ -544,8 +544,8 @@ Returns the global (installation-level) settings that apply as defaults to all r
     "accountLogin": "my-org",
     "providerChain": [
       {
-        "provider": "github",
-        "model": "gpt-4o-mini",
+        "provider": "cli-bridge",
+        "model": "auto",
         "hasApiKey": false
       }
     ],
@@ -578,7 +578,7 @@ Updates the global settings for an installation. These settings apply to all rep
 {
   "installationId": 123,
   "providerChain": [
-    { "provider": "github", "model": "gpt-4o-mini" }
+    { "provider": "cli-bridge", "model": "auto" }
   ],
   "aiReviewEnabled": true,
   "reviewMode": "simple",
@@ -772,40 +772,59 @@ Deletes all sessions that have zero observations.
 POST /api/providers/validate
 ```
 
-Tests whether a provider API key is valid. Returns the list of available models if the key works.
+Validates a SaaS dashboard provider configuration. Returns the list of available models when the configuration is reachable.
+
+The dashboard only supports two runtime targets:
+
+- `gateway` — a self-hosted LLM gateway. Validation pings `${gatewayUrl}/health`.
+- `cli-bridge` — local CLI tools (Claude Code, OpenCode, etc.) running on the user's machine. Validation enumerates available CLIs; no API key is required.
+
+The `ollama` provider is intentionally rejected by this endpoint — it is only available via the CLI and Action runtimes, not the SaaS dashboard.
 
 **Body**:
 
 ```json
 {
-  "provider": "anthropic",
-  "apiKey": "sk-ant-api03-..."
+  "provider": "gateway",
+  "gatewayUrl": "https://gateway.example.com"
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `github`, `anthropic`, `openai`, `google`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
-| `apiKey` | `string` | Conditional | Required for all providers except `github` (which uses the session token) |
+| `provider` | `string` | Yes | One of: `gateway`, `cli-bridge` |
+| `gatewayUrl` | `string` | Conditional | Required for `gateway` to perform a `/health` probe. If omitted, the response is `valid: true` with `models: ["auto"]` so the dashboard can defer the URL prompt. |
+| `apiKey` | `string` | No | Accepted in the body for forward compatibility but ignored by both runtime targets (gateway uses the URL, cli-bridge uses local CLIs). |
 
-**Response** `200` (valid key):
+**Response** `200` (valid configuration):
 
 ```json
 {
   "valid": true,
-  "models": ["claude-sonnet-4-20250514", "claude-haiku-4-20250414"]
+  "models": ["auto"]
 }
 ```
 
-**Response** `200` (invalid key):
+**Response** `200` (invalid configuration):
 
 ```json
 {
   "valid": false,
   "models": [],
-  "error": "Validation request failed"
+  "error": "Gateway health check failed (HTTP 503)"
 }
 ```
+
+**Response** `400` (validation error):
+
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Unknown provider: invalid"
+}
+```
+
+Returned when `provider` is missing, equals `ollama`, or is not one of `gateway` / `cli-bridge`.
 
 ---
 

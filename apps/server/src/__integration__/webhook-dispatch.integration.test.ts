@@ -61,7 +61,7 @@ const TRACKED_REPO = {
   githubRepoId: 12345,
   installationId: 1,
   fullName: 'acme/webapp',
-  llmProvider: 'anthropic',
+  llmProvider: 'gateway',
   llmModel: 'claude-sonnet-4-20250514',
   reviewMode: 'simple',
   encryptedApiKey: 'encrypted-key-abc',
@@ -79,7 +79,7 @@ const TRACKED_REPO = {
 const EFFECTIVE_SETTINGS = {
   providerChain: [
     {
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       encryptedApiKey: 'encrypted-key-abc',
     },

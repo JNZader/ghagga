@@ -61,22 +61,16 @@ export const DEFAULT_REPO_SETTINGS: RepoSettings = {
 /**
  * Shape of each entry stored in the provider_chain JSONB column.
  * Encrypted API keys are stored here (one per provider entry).
+ *
+ * Provider union mirrors `SaaSProvider` from `@ghagga/types`: only the v3
+ * runtime targets (gateway / cli-bridge / ollama) are valid. Legacy entries
+ * (anthropic/openai/google/etc.) are remapped at the runtime boundary by
+ * `normalizeLegacyProvider` in `apps/server/src/queues/review.ts`.
  */
 export interface DbProviderChainEntry {
-  provider:
-    | 'anthropic'
-    | 'openai'
-    | 'google'
-    | 'github'
-    | 'qwen'
-    | 'groq'
-    | 'cerebras'
-    | 'deepseek'
-    | 'openrouter'
-    | 'cli-bridge'
-    | 'gateway';
+  provider: 'gateway' | 'cli-bridge' | 'ollama';
   model: string;
-  encryptedApiKey: string | null; // null for GitHub Models (uses session token)
+  encryptedApiKey: string | null;
   /** OpenCode model in `provider/model` format. Only meaningful when provider === 'cli-bridge'. */
   cliModel?: string;
 
@@ -124,7 +118,7 @@ export const repositories = pgTable(
 
     // ── Old columns (kept for rollback safety, will be dropped in a future migration) ──
     encryptedApiKey: text('encrypted_api_key'),
-    llmProvider: varchar('llm_provider', { length: 50 }).default('github').notNull(),
+    llmProvider: varchar('llm_provider', { length: 50 }).default('gateway').notNull(),
     llmModel: varchar('llm_model', { length: 100 }),
 
     // ── Inline workflow (Phase: inline-workflow-migration) ──

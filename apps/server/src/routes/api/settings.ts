@@ -247,19 +247,7 @@ export function createSettingsRouter(db: Database) {
         gatewayUrl?: string;
       }>;
 
-      const VALID_SAAS_PROVIDERS = [
-        'anthropic',
-        'openai',
-        'google',
-        'github',
-        'qwen',
-        'groq',
-        'cerebras',
-        'deepseek',
-        'openrouter',
-        'cli-bridge',
-        'gateway',
-      ];
+      const VALID_SAAS_PROVIDERS = ['cli-bridge', 'gateway'];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {
           return c.json(
@@ -355,18 +343,19 @@ export function createSettingsRouter(db: Database) {
       }
 
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry) => {
+        const provider = entry.provider as SaaSProvider;
         // Resolve cliModel: only meaningful for cli-bridge entries
-        const cliModel = entry.provider === 'cli-bridge' ? entry.cliModel : undefined;
+        const cliModel = provider === 'cli-bridge' ? entry.cliModel : undefined;
         // Resolve gatewayUrl: only meaningful for gateway entries
-        const gatewayUrl = entry.provider === 'gateway' ? entry.gatewayUrl : undefined;
+        const gatewayUrl = provider === 'gateway' ? entry.gatewayUrl : undefined;
 
         if (entry.apiKey) {
           // New key provided → encrypt it and also update the lookup
           // so subsequent entries of the same provider can reuse it
           const encrypted = encrypt(entry.apiKey);
-          keysByProvider.set(entry.provider, encrypted);
+          keysByProvider.set(provider, encrypted);
           const result: DbProviderChainEntry = {
-            provider: entry.provider as SaaSProvider,
+            provider,
             model: entry.model,
             encryptedApiKey: encrypted,
           };
@@ -375,19 +364,11 @@ export function createSettingsRouter(db: Database) {
           return result;
         }
 
-        if (entry.provider === 'github') {
-          return {
-            provider: entry.provider as SaaSProvider,
-            model: entry.model,
-            encryptedApiKey: null,
-          };
-        }
-
         // No key provided → resolve from lookup (repo > global > null)
         const result: DbProviderChainEntry = {
-          provider: entry.provider as SaaSProvider,
+          provider,
           model: entry.model,
-          encryptedApiKey: keysByProvider.get(entry.provider) ?? null,
+          encryptedApiKey: keysByProvider.get(provider) ?? null,
         };
         if (cliModel) result.cliModel = cliModel;
         if (gatewayUrl) result.gatewayUrl = gatewayUrl;
@@ -615,19 +596,7 @@ export function createSettingsRouter(db: Database) {
       );
     }
 
-    const validProviders = [
-      'anthropic',
-      'openai',
-      'google',
-      'github',
-      'qwen',
-      'groq',
-      'cerebras',
-      'deepseek',
-      'openrouter',
-      'cli-bridge',
-      'gateway',
-    ];
+    const validProviders = ['cli-bridge', 'gateway'];
     if (!validProviders.includes(provider)) {
       return c.json({ error: 'VALIDATION_ERROR', message: `Unknown provider: ${provider}` }, 400);
     }
@@ -675,39 +644,8 @@ export function createSettingsRouter(db: Database) {
       }
     }
 
-    // For GitHub Models, use the user's session token
-    let apiKey = body.apiKey;
-    if (provider === 'github') {
-      const authHeader = c.req.header('Authorization') ?? '';
-      apiKey = authHeader.replace(/^Bearer\s+/i, '');
-    } else if (!apiKey) {
-      // No key provided — try to resolve from the user's saved installation chain.
-      // This allows re-validation (to fetch available models) without re-entering the key.
-      const rows = await getInstallationSettingsBatch(db, user.installationIds);
-      for (const row of rows) {
-        const chain = (row.providerChain ?? []) as DbProviderChainEntry[];
-        const entry = chain.find((e) => e.provider === provider);
-        if (entry?.encryptedApiKey) {
-          apiKey = decrypt(entry.encryptedApiKey);
-          break;
-        }
-      }
-
-      if (!apiKey) {
-        return c.json(
-          { error: 'VALIDATION_ERROR', message: 'Missing apiKey for non-GitHub provider' },
-          400,
-        );
-      }
-    }
-
-    try {
-      const result = await validateProviderKey(provider as SaaSProvider, apiKey ?? '');
-      return c.json(result);
-    } catch (err) {
-      logger.error({ err, provider, user: user.githubLogin }, 'Provider validation error');
-      return c.json({ valid: false, models: [], error: 'Validation request failed' });
-    }
+    // No other providers remain — guard against future drift
+    return c.json({ error: 'VALIDATION_ERROR', message: `Unknown provider: ${provider}` }, 400);
   });
 
   return router;

@@ -602,7 +602,7 @@
           "type": "varchar(50)",
           "primaryKey": false,
           "notNull": true,
-          "default": "'github'"
+          "default": "'gateway'"
         },
         "llm_model": {
           "name": "llm_model",

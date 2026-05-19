@@ -168,19 +168,7 @@ export function createInstallationsRouter(db: Database) {
         gatewayUrl?: string;
       }>;
 
-      const VALID_SAAS_PROVIDERS = [
-        'anthropic',
-        'openai',
-        'google',
-        'github',
-        'qwen',
-        'groq',
-        'cerebras',
-        'deepseek',
-        'openrouter',
-        'cli-bridge',
-        'gateway',
-      ];
+      const VALID_SAAS_PROVIDERS = ['cli-bridge', 'gateway'];
       for (const entry of incomingChain) {
         if (!VALID_SAAS_PROVIDERS.includes(entry.provider)) {
           return c.json(
@@ -276,17 +264,18 @@ export function createInstallationsRouter(db: Database) {
       );
 
       const mergedChain: DbProviderChainEntry[] = incomingChain.map((entry, idx) => {
+        const provider = entry.provider as SaaSProvider;
         // Resolve cliModel: only meaningful for cli-bridge entries
-        const cliModel = entry.provider === 'cli-bridge' ? entry.cliModel : undefined;
+        const cliModel = provider === 'cli-bridge' ? entry.cliModel : undefined;
         // Resolve gatewayUrl: only meaningful for gateway entries
-        const gatewayUrl = entry.provider === 'gateway' ? entry.gatewayUrl : undefined;
+        const gatewayUrl = provider === 'gateway' ? entry.gatewayUrl : undefined;
 
         if (entry.apiKey) {
           const encrypted = encrypt(entry.apiKey);
-          keysByProvider.set(entry.provider, encrypted);
-          logger.info({ idx, provider: entry.provider, action: 'NEW_KEY' }, 'Chain entry: new key');
+          keysByProvider.set(provider, encrypted);
+          logger.info({ idx, provider, action: 'NEW_KEY' }, 'Chain entry: new key');
           const result: DbProviderChainEntry = {
-            provider: entry.provider as SaaSProvider,
+            provider,
             model: entry.model,
             encryptedApiKey: encrypted,
           };
@@ -294,20 +283,13 @@ export function createInstallationsRouter(db: Database) {
           if (gatewayUrl) result.gatewayUrl = gatewayUrl;
           return result;
         }
-        if (entry.provider === 'github') {
-          return {
-            provider: entry.provider as SaaSProvider,
-            model: entry.model,
-            encryptedApiKey: null,
-          };
-        }
-        const resolved = keysByProvider.get(entry.provider) ?? null;
+        const resolved = keysByProvider.get(provider) ?? null;
         logger.info(
-          { idx, provider: entry.provider, action: resolved ? 'RESOLVED_FROM_MAP' : 'NULL_KEY' },
+          { idx, provider, action: resolved ? 'RESOLVED_FROM_MAP' : 'NULL_KEY' },
           'Chain entry: resolved',
         );
         const result: DbProviderChainEntry = {
-          provider: entry.provider as SaaSProvider,
+          provider,
           model: entry.model,
           encryptedApiKey: resolved,
         };

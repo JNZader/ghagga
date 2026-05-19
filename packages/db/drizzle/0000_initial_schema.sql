@@ -69,7 +69,7 @@ CREATE TABLE "repositories" (
 	"provider_chain" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"ai_review_enabled" boolean DEFAULT true NOT NULL,
 	"encrypted_api_key" text,
-	"llm_provider" varchar(50) DEFAULT 'github' NOT NULL,
+	"llm_provider" varchar(50) DEFAULT 'gateway' NOT NULL,
 	"llm_model" varchar(100),
 	"workflow_installed_at" timestamp,
 	"workflow_sha" text,

@@ -63,7 +63,8 @@ export function GlobalSettings() {
       setRegisteredTools(settings.registeredTools ?? []);
 
       setProviderChain(
-        settings.providerChain.map((entry: ProviderChainView) => ({
+        settings.providerChain.map((entry: ProviderChainView, index: number) => ({
+          id: `${entry.provider}-${index}`,
           provider: entry.provider,
           model: entry.model,
           apiKey: '',

@@ -52,8 +52,10 @@ export function ObservationDetailModal({ observation, onClose }: ObservationDeta
   // Trap focus within the dialog while open
   useFocusTrap(dialogRef, observation !== null);
 
+  // `HTMLElement` covers both the dialog `<div>` and the backdrop `<button>` —
+  // both attach this handler.
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLDivElement>) => {
+    (e: KeyboardEvent<HTMLElement>) => {
       if (e.key === 'Escape') {
         onClose();
       }
