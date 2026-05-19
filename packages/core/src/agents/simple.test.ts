@@ -5,7 +5,7 @@ import { parseFindingsBlock, parseReviewResponse } from './simple.js';
 
 describe('parseReviewResponse', () => {
   const defaultArgs = {
-    provider: 'anthropic' as const,
+    provider: 'gateway' as const,
     model: 'claude-sonnet-4-20250514',
     tokensUsed: 150,
     executionTimeMs: 1200,
@@ -52,7 +52,7 @@ describe('parseReviewResponse', () => {
   it('sets metadata correctly', () => {
     const text = 'STATUS: PASSED\nSUMMARY: Looks good.\nFINDINGS:\n';
     const result = callParse(text, {
-      provider: 'openai',
+      provider: 'cli-bridge',
       model: 'gpt-4o',
       tokensUsed: 250,
       executionTimeMs: 3000,
@@ -61,7 +61,7 @@ describe('parseReviewResponse', () => {
     expect(result.metadata).toEqual(
       expect.objectContaining({
         mode: 'simple',
-        provider: 'openai',
+        provider: 'cli-bridge',
         model: 'gpt-4o',
         tokensUsed: 250,
         executionTimeMs: 3000,

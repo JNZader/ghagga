@@ -26,7 +26,7 @@ function mockResult(findings: ReviewFinding[] = []): ReviewResult {
     metadata: {
       mode: 'simple',
       model: 'gpt-4o-mini',
-      provider: 'github',
+      provider: 'gateway',
       executionTimeMs: 1000,
       tokensUsed: 100,
       toolsRun: ['semgrep'],

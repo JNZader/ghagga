@@ -64,7 +64,7 @@ function makeResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     memoryContext: null,
     metadata: {
       mode: 'simple',
-      provider: 'github',
+      provider: 'gateway',
       model: 'gpt-4o-mini',
       tokensUsed: 500,
       executionTimeMs: 3200,

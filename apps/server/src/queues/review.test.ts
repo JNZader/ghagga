@@ -259,7 +259,8 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     expect(mockReviewPipeline).toHaveBeenCalledOnce();
     const input = mockReviewPipeline.mock.calls[0][0];
     expect(input.aiReviewEnabled).toBe(true);
-    expect(input.provider).toBe('openai');
+    // Legacy 'openai' is normalized to 'gateway' before reaching the pipeline.
+    expect(input.provider).toBe('gateway');
     expect(input.apiKey).toBe('sk-test-key');
   });
 
@@ -276,7 +277,8 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     expect(mockReviewPipeline).toHaveBeenCalledOnce();
     const input = mockReviewPipeline.mock.calls[0][0];
     expect(input.aiReviewEnabled).toBe(true);
-    expect(input.provider).toBe('openai');
+    // Legacy 'openai' is normalized to 'gateway' before reaching the pipeline.
+    expect(input.provider).toBe('gateway');
     expect(input.apiKey).toBe('decrypted-encrypted-key-123');
   });
 

@@ -8,7 +8,7 @@ function createMockGenerateFn(responseText: string): GenerateTextFn {
   return async (_system: string, _prompt: string) => ({
     text: responseText,
     tokensUsed: 100,
-    provider: 'openai',
+    provider: 'gateway',
     model: 'gpt-4o-mini',
   });
 }

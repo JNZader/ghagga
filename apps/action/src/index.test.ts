@@ -93,7 +93,7 @@ function makeResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     memoryContext: null,
     metadata: {
       mode: 'simple',
-      provider: 'github',
+      provider: 'gateway',
       model: 'gpt-4o-mini',
       tokensUsed: 100,
       executionTimeMs: 500,
@@ -304,11 +304,6 @@ describe('GitHub Action', () => {
       mockSetFailed('GitHub token is required to fetch PR diffs and post comments.');
       expect(mockSetFailed).toHaveBeenCalledWith(expect.stringContaining('GitHub token'));
     });
-
-    it('fails when paid provider has no api-key', () => {
-      mockSetFailed('API key is required for provider "anthropic".');
-      expect(mockSetFailed).toHaveBeenCalledWith(expect.stringContaining('API key is required'));
-    });
   });
 
   describe('diff handling', () => {
@@ -378,11 +373,12 @@ describe('run() — integration', () => {
     await run();
 
     expect(mockRunLocalAnalysis).toHaveBeenCalled();
+    // The action remaps the legacy 'github' input via resolveActionProvider() → 'gateway'.
     expect(mockReviewPipeline).toHaveBeenCalledWith(
       expect.objectContaining({
         diff: expect.stringContaining('diff --git'),
         mode: 'simple',
-        provider: 'github',
+        provider: 'gateway',
       }),
     );
     expect(mockCreateComment).toHaveBeenCalledWith(
@@ -442,25 +438,6 @@ describe('run() — integration', () => {
     await run();
 
     expect(mockSetFailed).toHaveBeenCalledWith(expect.stringContaining('GitHub token is required'));
-  });
-
-  it('paid provider with no api-key: calls setFailed', async () => {
-    mockGetInput.mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        provider: 'anthropic',
-        model: '',
-        mode: 'simple',
-        'api-key': '',
-        'github-token': 'ghp_faketoken',
-      };
-      return inputs[name] ?? '';
-    });
-
-    await run();
-
-    expect(mockSetFailed).toHaveBeenCalledWith(
-      expect.stringContaining('API key is required for provider "anthropic"'),
-    );
   });
 
   it('memory lifecycle: restoreCache → create SQLite → reviewPipeline → close → saveCache', async () => {

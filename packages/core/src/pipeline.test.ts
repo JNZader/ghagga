@@ -168,7 +168,12 @@ describe('reviewPipeline', () => {
     });
 
     it('throws on missing API key', async () => {
-      await expect(reviewPipeline(makeInput({ apiKey: '' }))).rejects.toThrow('API key');
+      // After Cluster A (gateway-only): apiKey is no longer validated for 'gateway' provider
+      // because mcp-llm-bridge handles upstream auth. resolvePrimaryProvider() now rejects
+      // inputs without a provider chain AND without all single-provider fields.
+      await expect(reviewPipeline(makeInput({ apiKey: '' }))).rejects.toThrow(
+        'No provider chain and no single provider configured',
+      );
     });
 
     it('throws on missing provider', async () => {
@@ -177,7 +182,10 @@ describe('reviewPipeline', () => {
     });
 
     it('throws on missing model', async () => {
-      await expect(reviewPipeline(makeInput({ model: '' }))).rejects.toThrow('model');
+      // After Cluster A: see "throws on missing API key" — same migration message applies.
+      await expect(reviewPipeline(makeInput({ model: '' }))).rejects.toThrow(
+        'No provider chain and no single provider configured',
+      );
     });
   });
 

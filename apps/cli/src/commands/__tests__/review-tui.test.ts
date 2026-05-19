@@ -28,7 +28,7 @@ function mockResult(overrides?: Partial<ReviewResult>): ReviewResult {
     metadata: {
       mode: 'simple',
       model: 'gpt-4o-mini',
-      provider: 'github',
+      provider: 'gateway',
       executionTimeMs: 2500,
       tokensUsed: 150,
       toolsRun: ['semgrep', 'trivy'],
@@ -91,7 +91,7 @@ describe('formatBoxSummary', () => {
       metadata: {
         mode: 'simple',
         model: 'gpt-4o-mini',
-        provider: 'github',
+        provider: 'gateway',
         executionTimeMs: 1000,
         tokensUsed: 50,
         toolsRun: [],

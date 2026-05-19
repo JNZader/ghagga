@@ -101,7 +101,7 @@ const mockReviewPipeline = vi.mocked(reviewPipeline);
 function defaultOptions(overrides: Partial<ReviewOptions> = {}): ReviewOptions {
   return {
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     apiKey: 'test-key',
     semgrep: true,
@@ -122,7 +122,7 @@ function makeReviewResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     findings: [],
     metadata: {
       mode: 'simple',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 100,
       executionTimeMs: 1500,

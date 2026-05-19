@@ -21,7 +21,7 @@ function makeOpts(
 ): CommitMsgReviewOptions {
   return {
     message,
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     apiKey: 'test-key',
     quick: true,
@@ -124,7 +124,7 @@ describe('reviewCommitMessage — heuristic validation', () => {
   it('records actual provider and model when quick is false', async () => {
     const result = await reviewCommitMessage(makeOpts('feat: valid commit', { quick: false }));
 
-    expect(result.metadata.provider).toBe('anthropic');
+    expect(result.metadata.provider).toBe('gateway');
     expect(result.metadata.model).toBe('claude-sonnet-4-20250514');
   });
 

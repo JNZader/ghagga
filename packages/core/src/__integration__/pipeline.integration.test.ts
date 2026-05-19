@@ -117,7 +117,7 @@ const AI_REVIEW_RESULT: ReviewResult = {
   memoryContext: null,
   metadata: {
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     tokensUsed: 1250,
     executionTimeMs: 800,
@@ -155,7 +155,7 @@ function makeInput(overrides: Partial<ReviewInput> = {}): ReviewInput {
   return {
     diff: REALISTIC_DIFF,
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     apiKey: 'test-api-key',
     settings: {
@@ -225,7 +225,7 @@ describe('integration: core review pipeline', () => {
 
     // Metadata reflects the full pipeline
     expect(result.metadata.mode).toBe('simple');
-    expect(result.metadata.provider).toBe('anthropic');
+    expect(result.metadata.provider).toBe('gateway');
     expect(result.metadata.executionTimeMs).toBeGreaterThanOrEqual(0);
     expect(result.metadata.toolsRun).toContain('semgrep');
 
@@ -233,7 +233,7 @@ describe('integration: core review pipeline', () => {
     expect(runSimpleReview).toHaveBeenCalledWith(
       expect.objectContaining({
         staticContext: expect.stringContaining('Semgrep'),
-        provider: 'anthropic',
+        provider: 'gateway',
         model: 'claude-sonnet-4-20250514',
         apiKey: 'test-api-key',
       }),

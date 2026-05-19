@@ -80,7 +80,7 @@ const SIMPLE_RESULT: ReviewResult = {
   memoryContext: null,
   metadata: {
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     tokensUsed: 100,
     executionTimeMs: 500,
@@ -139,7 +139,7 @@ function makeInput(overrides: Partial<ReviewInput> = {}): ReviewInput {
   return {
     diff: MINIMAL_DIFF,
     mode: 'simple',
-    provider: 'anthropic',
+    provider: 'gateway',
     model: 'claude-sonnet-4-20250514',
     apiKey: 'test-api-key',
     settings: {

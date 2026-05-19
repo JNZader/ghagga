@@ -30,7 +30,7 @@ function makeResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     memoryContext: null,
     metadata: {
       mode: 'simple',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 1000,
       executionTimeMs: 2000,
@@ -279,7 +279,7 @@ describe('formatMarkdownResult', () => {
       makeResult({
         metadata: {
           mode: 'simple',
-          provider: 'anthropic',
+          provider: 'gateway',
           model: 'claude-sonnet-4-20250514',
           tokensUsed: 1000,
           executionTimeMs: 2000,

@@ -31,7 +31,7 @@ function makeResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     memoryContext: null,
     metadata: {
       mode: 'simple',
-      provider: 'anthropic',
+      provider: 'gateway',
       model: 'claude-sonnet-4-20250514',
       tokensUsed: 1000,
       executionTimeMs: 2000,
@@ -119,7 +119,7 @@ describe('formatReviewComment', () => {
       ],
       metadata: {
         mode: 'standard',
-        provider: 'anthropic',
+        provider: 'gateway',
         model: 'claude-sonnet-4-20250514',
         tokensUsed: 2000,
         executionTimeMs: 5000,
@@ -188,7 +188,7 @@ describe('formatReviewComment', () => {
       findings: [],
       metadata: {
         mode: 'simple',
-        provider: 'anthropic',
+        provider: 'gateway',
         model: 'claude-sonnet-4-20250514',
         tokensUsed: 500,
         executionTimeMs: 1000,
@@ -282,7 +282,7 @@ describe('formatReviewComment', () => {
     const result = makeResult({
       metadata: {
         mode: 'standard',
-        provider: 'anthropic',
+        provider: 'gateway',
         model: 'claude-sonnet-4-20250514',
         tokensUsed: 1500,
         executionTimeMs: 3000,
