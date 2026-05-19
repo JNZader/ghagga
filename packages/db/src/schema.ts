@@ -89,7 +89,7 @@ export interface DbProviderChainEntry {
 export const installationSettings = pgTable('installation_settings', {
   id: serial('id').primaryKey(),
   installationId: integer('installation_id')
-    .references(() => installations.id)
+    .references(() => installations.id, { onDelete: 'cascade' })
     .unique()
     .notNull(),
   providerChain: jsonb('provider_chain').$type<DbProviderChainEntry[]>().default([]).notNull(),
@@ -184,7 +184,7 @@ export const memorySessions = pgTable(
 
 // ─── Memory: Observations ───────────────────────────────────────
 // Note: tsvector column + GIN index + update trigger are created
-// via a raw SQL migration (see migrations/0001_add_tsvector.sql)
+// via a raw SQL migration (see drizzle/_custom_tsvector.sql)
 
 export const memoryObservations = pgTable(
   'memory_observations',

@@ -9,9 +9,11 @@ ALTER TABLE memory_observations
 CREATE INDEX IF NOT EXISTS idx_observations_search
   ON memory_observations USING GIN (search_observations);
 
--- Populate existing rows
+-- Populate existing rows (idempotent: only touches rows not yet backfilled,
+-- avoiding a full table scan on every boot)
 UPDATE memory_observations
-SET search_observations = to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''));
+SET search_observations = to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''))
+WHERE search_observations IS NULL;
 
 -- Create trigger function to auto-update tsvector on insert/update
 CREATE OR REPLACE FUNCTION update_observations_search()
