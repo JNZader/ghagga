@@ -25,7 +25,7 @@ interface DatabaseWithParams extends Database {
   ): Array<{ columns: string[]; values: unknown[][] }>;
 }
 
-import { chunkProjectMemory, extractTopics, shouldCompact } from './chunker.js';
+import { chunkProjectMemory, shouldCompact } from './chunker.js';
 
 export class ProjectPageIndexService {
   private db: DatabaseWithParams;
@@ -95,7 +95,7 @@ export class ProjectPageIndexService {
     const pageIds: number[] = [];
 
     for (const chunk of chunks) {
-      const result = this.db.exec(insertSql, [
+      this.db.exec(insertSql, [
         chunk.projectId,
         chunk.pageNum,
         chunk.totalPages,
@@ -224,7 +224,7 @@ export class ProjectPageIndexService {
 
     // Score pages by keyword matches
     const scored = pages.map((page) => {
-      const content = (page.content + ' ' + page.topics.join(' ')).toLowerCase();
+      const content = `${page.content} ${page.topics.join(' ')}`.toLowerCase();
       const score = keywords.reduce((sum, kw) => {
         const matches = (content.match(new RegExp(kw, 'g')) || []).length;
         return sum + matches;

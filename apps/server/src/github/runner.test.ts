@@ -412,7 +412,6 @@ describe('verifyCallbackSignature', () => {
   });
 });
 
-
 // ─── Group 4: dispatchWorkflow ──────────────────────────────────
 
 describe('dispatchWorkflow', () => {
@@ -634,5 +633,3 @@ describe('dispatchWorkflow', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });
-
-

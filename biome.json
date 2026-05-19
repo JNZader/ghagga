@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!.next", "!*.min.js", "!pnpm-lock.yaml"]
+    "includes": ["**", "!.next", "!*.min.js", "!pnpm-lock.yaml", "!packages/db/drizzle/meta"]
   },
   "formatter": {
     "enabled": true,
