@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772474059456,
-      "tag": "0000_regular_beyonder",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1772560459456,
-      "tag": "0006_add_severity_column",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1741305600000,
-      "tag": "0007_add_observations_created_at_index",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1741392000000,
-      "tag": "0008_fix_cascade_delete_remaining",
+      "when": 1779165269247,
+      "tag": "0000_initial_schema",
       "breakpoints": true
     }
   ]

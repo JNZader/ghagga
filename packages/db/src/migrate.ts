@@ -34,21 +34,13 @@ async function main() {
   console.log('✅ Drizzle migrations complete');
 
   // Step 2: Run custom SQL (tsvector, triggers)
-  const customSqlPath = join(__dirname, '..', 'drizzle', '0001_add_tsvector.sql');
-  try {
-    const customSql = readFileSync(customSqlPath, 'utf-8');
-    console.log('🔄 Running custom SQL (tsvector + triggers)...');
-    await pool.query(customSql);
-    console.log('✅ Custom SQL complete');
-  } catch (error) {
-    // If the file doesn't exist or SQL fails on "already exists", that's fine
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('ENOENT')) {
-      console.log('⏭️  No custom SQL file found, skipping');
-    } else {
-      console.warn('⚠️  Custom SQL warning (may be safe to ignore):', message);
-    }
-  }
+  // The file is idempotent (IF NOT EXISTS, CREATE OR REPLACE, DROP TRIGGER IF EXISTS),
+  // so any error here is a real failure and MUST surface — do not swallow.
+  const customSqlPath = join(__dirname, '..', 'drizzle', '_custom_tsvector.sql');
+  const customSql = readFileSync(customSqlPath, 'utf-8');
+  console.log('🔄 Running custom SQL (tsvector + triggers)...');
+  await pool.query(customSql);
+  console.log('✅ Custom SQL complete');
 
   await pool.end();
   console.log('🎉 Database ready');
