@@ -47,19 +47,13 @@ describe('DEFAULT_SETTINGS', () => {
 // ─── DEFAULT_MODELS ─────────────────────────────────────────────
 
 describe('DEFAULT_MODELS', () => {
-  it('should have entries for all 10 LLM providers', () => {
-    const providers = [
-      'anthropic',
-      'openai',
-      'google',
-      'github',
-      'ollama',
-      'qwen',
-      'groq',
-      'cerebras',
-      'deepseek',
-      'openrouter',
-    ] as const;
+  it('should have an entry for every LLMProvider', () => {
+    // The provider model was collapsed to a 3-type chain
+    // (gateway / cli-bridge / ollama) in the mcp-llm-bridge refactor
+    // (types.ts:25). DEFAULT_MODELS is typed `Record<LLMProvider, string>`,
+    // so it must carry exactly these keys — the legacy per-vendor providers
+    // (anthropic/openai/…) no longer exist as first-class provider types.
+    const providers = ['gateway', 'cli-bridge', 'ollama'] as const;
     for (const provider of providers) {
       expect(DEFAULT_MODELS).toHaveProperty(provider);
       expect(typeof DEFAULT_MODELS[provider]).toBe('string');
