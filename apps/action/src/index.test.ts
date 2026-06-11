@@ -34,6 +34,7 @@ const mockPullsGet = vi.fn();
 vi.mock('@actions/github', () => ({
   context: {
     repo: { owner: 'test-owner', repo: 'test-repo' },
+    runId: 12345,
     payload: {
       pull_request: { number: 42 },
     },
@@ -422,5 +423,29 @@ describe('run() — integration', () => {
     // After pipeline: close, then save cache
     expect(mockMemoryStorage.close).toHaveBeenCalled();
     expect(mockSaveCache).toHaveBeenCalled();
+  });
+
+  it('memory cache: restores with prefix fallback and bare base key (old-format caches)', async () => {
+    await run();
+
+    expect(mockRestoreCache).toHaveBeenCalledWith(
+      ['/tmp/ghagga-memory.db'],
+      'ghagga-memory-test-owner-test-repo-12345',
+      ['ghagga-memory-test-owner-test-repo-', 'ghagga-memory-test-owner-test-repo'],
+    );
+  });
+
+  it('memory cache: saves with a run-unique key (Actions caches are write-once)', async () => {
+    await run();
+
+    expect(mockSaveCache).toHaveBeenCalledWith(
+      ['/tmp/ghagga-memory.db'],
+      'ghagga-memory-test-owner-test-repo-12345',
+    );
+    // The save key must differ from the immutable base key
+    expect(mockSaveCache).not.toHaveBeenCalledWith(
+      ['/tmp/ghagga-memory.db'],
+      'ghagga-memory-test-owner-test-repo',
+    );
   });
 });
