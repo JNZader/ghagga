@@ -339,7 +339,10 @@ describe('pull_request event handling', () => {
     expect(jobData.settings.enableCpd).toBe(false);
     expect(jobData.settings.enableMemory).toBe(true);
     expect(jobData.settings.ignorePatterns).toEqual(['*.md']);
-    expect(jobData.encryptedApiKey).toBe('encrypted-key-123');
+    // SECURITY: encrypted credentials must NOT be enqueued — the worker
+    // re-fetches them from the DB by repositoryId at processing time.
+    expect(jobData.encryptedApiKey).toBeUndefined();
+    expect(jobData.providerChain).toBeUndefined();
     expect(jobData.llmProvider).toBe('anthropic');
   });
 });

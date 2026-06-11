@@ -216,8 +216,10 @@ describe('integration: webhook -> review dispatch', () => {
         enableMemory: true,
       },
     });
-    expect(jobData.providerChain).toBeDefined();
-    expect(jobData.providerChain.length).toBeGreaterThan(0);
+    // SECURITY: encrypted credentials must NOT be enqueued — the worker
+    // re-fetches them from the DB by repositoryId at processing time.
+    expect(jobData.providerChain).toBeUndefined();
+    expect(jobData.encryptedApiKey).toBeUndefined();
   });
 
   // S1.2: Invalid signature rejects and does NOT dispatch

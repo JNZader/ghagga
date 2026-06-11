@@ -303,14 +303,14 @@ async function handlePullRequest(
     headSha: payload.pull_request.head.sha,
     baseBranch: payload.pull_request.base.ref,
     prAuthor: payload.pull_request.user.login,
-    // Resolved provider chain (from global or repo)
-    providerChain: effective.providerChain,
     aiReviewEnabled: effective.aiReviewEnabled,
     // Legacy flat fields (kept for backward compat during transition)
     llmProvider: repo.llmProvider,
     llmModel: repo.llmModel ?? 'gpt-4o-mini',
     reviewMode: effective.reviewMode,
-    encryptedApiKey: repo.encryptedApiKey,
+    // SECURITY: encrypted credentials (providerChain entries + encryptedApiKey)
+    // are intentionally NOT enqueued. The worker re-fetches them from the DB by
+    // repositoryId at processing time so secrets never live in the Redis payload.
     settings: {
       enableSemgrep: effective.settings.enableSemgrep,
       enableTrivy: effective.settings.enableTrivy,
@@ -455,12 +455,13 @@ async function handleIssueComment(
     baseBranch,
     prAuthor,
     reviewTriggeredBy: payload.comment.user.login,
-    providerChain: effective.providerChain,
     aiReviewEnabled: effective.aiReviewEnabled,
     llmProvider: repo.llmProvider,
     llmModel: repo.llmModel ?? 'gpt-4o-mini',
     reviewMode: parsed.reviewMode ?? effective.reviewMode,
-    encryptedApiKey: repo.encryptedApiKey,
+    // SECURITY: encrypted credentials (providerChain entries + encryptedApiKey)
+    // are intentionally NOT enqueued. The worker re-fetches them from the DB by
+    // repositoryId at processing time so secrets never live in the Redis payload.
     settings: {
       enableSemgrep: effective.settings.enableSemgrep,
       enableTrivy: effective.settings.enableTrivy,
