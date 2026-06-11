@@ -1,0 +1,4 @@
+This is definitely not a unified diff.
+It is arbitrary prose that an ACP adapter might receive.
+{"findings": [{"file": "x.ts", "line": 3, "message": "fake"}], "ok": true}
+Even a line mentioning +++ or --- or @@ should not crash anything.

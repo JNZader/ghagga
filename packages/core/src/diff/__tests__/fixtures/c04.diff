@@ -1,0 +1,20 @@
+diff --git a/old1.ts b/renamed1.ts
+similarity index 100%
+rename from old1.ts
+rename to renamed1.ts
+diff --git a/old2.ts b/renamed2.ts
+similarity index 86%
+rename from old2.ts
+rename to renamed2.ts
+index 18a6c9f..2e851fe 100644
+--- a/old2.ts
++++ b/renamed2.ts
+@@ -3,7 +3,7 @@ other line 2
+ other line 3
+ other line 4
+ other line 5
+-other line 6
++other line six EDITED
+ other line 7
+ other line 8
+ other line 9

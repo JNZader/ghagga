@@ -1,0 +1,10 @@
+diff --git a/zc.ts b/zc.ts
+index ed02ee0..9662b35 100644
+--- a/zc.ts
++++ b/zc.ts
+@@ -5,0 +6,2 @@ zline 5
++inserted A
++inserted B
+@@ -10 +12 @@ zline 9
+-zline 10
++zline 10 CHANGED

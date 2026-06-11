@@ -1,0 +1,45 @@
+diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
+ export const alpha6 = 6;
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;
+diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+ export const beta8 = 8;
+@@ -27,7 +27,7 @@ export const beta26 = 26;
+ export const beta27 = 27;
+ export const beta28 = 28;
+ export const beta29 = 29;
+-export const beta30 = 30;
++export const beta30 = 3000; // changed
+ export const beta31 = 31;
+ export const beta32 = 32;
+ export const beta33 = 33;
+diff --git a/src/ga

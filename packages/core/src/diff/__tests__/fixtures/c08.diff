@@ -1,0 +1,10 @@
+diff --git a/crlf.ts b/crlf.ts
+index 6c45140..e1b1baa 100644
+--- a/crlf.ts
++++ b/crlf.ts
+@@ -1,4 +1,4 @@
+ crlf line 1
+-crlf line 2
++crlf line 2 CHANGED
+ crlf line 3
+ crlf line 4
