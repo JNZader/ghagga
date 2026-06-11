@@ -1241,6 +1241,59 @@ describe('PUT /api/settings', () => {
     expect(updates.settings.ignorePatterns).toEqual(['*.md', '*.txt']);
   });
 
+  it('rejects persisting a gateway entry with a private gatewayUrl (SSRF guard)', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [
+          {
+            provider: 'gateway',
+            model: 'auto',
+            apiKey: 'sk-new-gw-key',
+            gatewayUrl: 'http://127.0.0.1:6379',
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('VALIDATION_ERROR');
+    // Generic message only — no IP/range details leaked to the client
+    expect(json.message).toBe('Gateway URL not allowed');
+    expect(mockUpdateRepoSettings).not.toHaveBeenCalled();
+  });
+
+  it('accepts persisting a gateway entry with a public gatewayUrl', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [
+          {
+            provider: 'gateway',
+            model: 'auto',
+            apiKey: 'sk-new-gw-key',
+            gatewayUrl: 'https://8.8.8.8/v1',
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateRepoSettings).toHaveBeenCalledOnce();
+  });
+
   it('preserves existing encrypted key when no new key provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
@@ -1733,6 +1786,66 @@ describe('POST /api/providers/validate', () => {
     expect(json.message).toContain('Unknown provider');
   });
 
+  // ── SSRF guard on gateway health check ──
+
+  it('rejects a private gateway URL without fetching it (SSRF guard)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'gateway',
+        gatewayUrl: 'http://169.254.169.254/latest/meta-data',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway URL not allowed');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('returns generic "Gateway unreachable" on fetch failure (no err.message echo)', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new Error('connect ECONNREFUSED 8.8.8.8:443 internal-details'));
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'gateway', gatewayUrl: 'https://8.8.8.8' }),
+    });
+
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway unreachable');
+    expect(JSON.stringify(json)).not.toContain('ECONNREFUSED');
+    fetchSpy.mockRestore();
+  });
+
+  it('returns generic "Gateway unreachable" on non-OK health status (no status echo)', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('forbidden', { status: 403 }));
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'gateway', gatewayUrl: 'https://8.8.8.8' }),
+    });
+
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway unreachable');
+    expect(JSON.stringify(json)).not.toContain('403');
+    fetchSpy.mockRestore();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
