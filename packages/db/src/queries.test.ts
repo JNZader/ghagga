@@ -47,6 +47,7 @@ function createMockDb(terminalValue: unknown = []): MockDB & { _resolve: (v: unk
 // We import the module under test AFTER defining helpers because the module
 // itself only has side-effect-free function declarations.
 import {
+  buildTsQuery,
   clearAllMemoryObservations,
   clearEmptyMemorySessions,
   clearMemoryObservationsByProject,
@@ -910,6 +911,30 @@ describe('saveObservation', () => {
 
     // The key assertion is that it doesn't throw
     expect(true).toBe(true);
+  });
+});
+
+describe('buildTsQuery', () => {
+  it('joins terms with OR (|), matching the SQLite backend', () => {
+    expect(buildTsQuery('auth token rotation')).toBe("'auth' | 'token' | 'rotation'");
+  });
+
+  it('returns empty string for blank input', () => {
+    expect(buildTsQuery('')).toBe('');
+    expect(buildTsQuery('   ')).toBe('');
+  });
+
+  it('escapes single quotes inside lexemes', () => {
+    expect(buildTsQuery("it's")).toBe("'it''s'");
+  });
+
+  it('escapes backslashes so a trailing backslash cannot break the closing quote', () => {
+    expect(buildTsQuery('path\\')).toBe("'path\\\\'");
+    expect(buildTsQuery('a\\b')).toBe("'a\\\\b'");
+  });
+
+  it('collapses repeated whitespace between terms', () => {
+    expect(buildTsQuery('  foo   bar  ')).toBe("'foo' | 'bar'");
   });
 });
 

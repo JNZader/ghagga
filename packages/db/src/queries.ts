@@ -612,6 +612,27 @@ export async function saveObservation(
 }
 
 /**
+ * Build a sanitized tsquery string from free-text input.
+ *
+ * Each word is quoted as a lexeme and terms are joined with OR ('|') —
+ * matching the SQLite backend's behavior. AND ('&') made multi-file diff
+ * queries (5-8 unrelated terms) return ~nothing, killing server memory recall.
+ *
+ * Backslashes are escaped first: inside a quoted lexeme, a trailing '\\' would
+ * otherwise escape the closing quote and produce a tsquery syntax error.
+ *
+ * Exported for unit testing (no live PG needed).
+ */
+export function buildTsQuery(query: string): string {
+  return query
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0)
+    .map((w) => `'${w.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`)
+    .join(' | ');
+}
+
+/**
  * Full-text search observations using PostgreSQL tsvector.
  * The search_observations SQL column is maintained by a trigger.
  *
@@ -636,13 +657,7 @@ export async function searchObservations(
 ) {
   const { limit = 10, type, embedFn } = options;
 
-  // Sanitize query: wrap each word in quotes for tsquery
-  const sanitizedQuery = query
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w.length > 0)
-    .map((w) => `'${w.replace(/'/g, "''")}'`)
-    .join(' & ');
+  const sanitizedQuery = buildTsQuery(query);
 
   if (!sanitizedQuery) return [];
 
