@@ -244,4 +244,4 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
 }
 
 // Re-export the parser for use in workflow and consensus modes
-export { parseReviewResponse, parseFindingsBlock };
+export { parseFindingsBlock, parseReviewResponse };

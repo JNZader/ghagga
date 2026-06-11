@@ -301,19 +301,22 @@ export function GlobalSettings() {
             {aiReviewEnabled && (
               <div className="mt-4 space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text-primary">
+                  {/* Section caption, not a form label: ProviderChainEditor is a
+                      composite widget, there is no single control to label. */}
+                  <div className="mb-2 block text-sm font-medium text-text-primary">
                     Provider Chain
                     <span className="ml-2 font-normal text-text-secondary">
                       (ordered by priority — primary first, fallbacks below)
                     </span>
-                  </label>
+                  </div>
                   <ProviderChainEditor chain={providerChain} onChange={setProviderChain} />
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text-primary">
+                  {/* Group caption: each radio below carries its own <label>. */}
+                  <div className="mb-2 block text-sm font-medium text-text-primary">
                     Review Mode
-                  </label>
+                  </div>
                   <div className="flex gap-4">
                     {(['simple', 'workflow', 'consensus'] as const).map((mode) => (
                       <label key={mode} className="flex cursor-pointer items-center gap-2">

@@ -7,14 +7,13 @@
 
 import type { FindingSeverity, ReviewFinding, StaticAnalysisResult, ToolResult } from 'ghagga-core';
 
-// Re-export core types for convenience
-export type { ToolResult, StaticAnalysisResult, ReviewFinding, FindingSeverity };
-
 /**
  * Tool names matching the keys in StaticAnalysisResult.
  * Re-exported from @ghagga/core for consistency across all distribution modes.
  */
 export type { ToolName } from 'ghagga-core';
+// Re-export core types for convenience
+export type { FindingSeverity, ReviewFinding, StaticAnalysisResult, ToolResult };
 
 /**
  * Pinned tool versions — bump these to invalidate cache.

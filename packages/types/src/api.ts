@@ -10,6 +10,7 @@
 // wire contract cannot drift from the runtime enum. Adding a new status to
 // core is automatically reflected in @ghagga/types — no manual sync needed.
 import type { ReviewStatus } from 'ghagga-core';
+
 export type { ReviewStatus };
 
 export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'fan-out';
