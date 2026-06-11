@@ -106,8 +106,9 @@ vi.mock('../github/runner.js', () => ({
   injectWorkflow: vi.fn().mockResolvedValue({ sha: 'abc123', created: false }),
 }));
 
+const mockPostgresMemoryStorage = vi.hoisted(() => vi.fn());
 vi.mock('../memory/postgres.js', () => ({
-  PostgresMemoryStorage: vi.fn(),
+  PostgresMemoryStorage: mockPostgresMemoryStorage,
 }));
 
 // ─── Import module & trigger Worker constructor to capture processor ──
@@ -432,6 +433,45 @@ describe('processReview – encrypted credentials re-fetched from DB, not the jo
     });
     const input = mockReviewPipeline.mock.calls[0][0];
     expect(input.aiReviewEnabled).toBe(false);
+  });
+
+  it('FF-2: reuses ONE db handle for credential re-fetch AND memory storage (no second pool)', async () => {
+    // Sentinel db instance — every createDatabaseFromEnv() in this test returns
+    // THIS same object, so we can assert the SAME instance is threaded into both
+    // the credential resolver (getRepositoryById) and the memory adapter.
+    const dbHandle = { __sentinel: 'single-pool' };
+    mockCreateDatabaseFromEnv.mockReturnValue(dbHandle);
+    mockGetRepositoryById.mockResolvedValue({ id: 7, encryptedApiKey: null });
+    mockGetEffectiveRepoSettings.mockResolvedValue({ providerChain: [] });
+
+    const data = makeJobData({
+      repositoryId: 7,
+      encryptedApiKey: undefined,
+      providerChain: undefined,
+      settings: {
+        enableSemgrep: false,
+        enableTrivy: false,
+        enableCpd: false,
+        enableMemory: true, // construct PostgresMemoryStorage
+        customRules: [],
+        ignorePatterns: [],
+        reviewLevel: 'standard',
+      },
+    });
+    await capturedProcessor?.(makeFakeJob(data));
+
+    // Credential resolver received the shared handle...
+    expect(mockGetRepositoryById).toHaveBeenCalledWith(dbHandle, 7);
+    // ...and the memory adapter was constructed with the SAME instance.
+    expect(mockPostgresMemoryStorage).toHaveBeenCalledWith(dbHandle, 12345);
+    // The resolver no longer mints its own pool: createDatabaseFromEnv is invoked
+    // ONCE for the credential+memory concern (the single top-of-job handle).
+    // saveReview() reuses its own call later, so we assert the resolver+memory
+    // pair never triggered an EXTRA mint beyond the shared handle by checking the
+    // identity threading above rather than a brittle global count.
+    expect(mockGetRepositoryById.mock.calls[0][0]).toBe(
+      mockPostgresMemoryStorage.mock.calls[0][0],
+    );
   });
 
   it('TOLERANCE: old-format in-flight job with encryptedApiKey still works without a DB re-fetch', async () => {

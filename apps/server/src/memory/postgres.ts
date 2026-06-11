@@ -60,8 +60,12 @@ export class PostgresMemoryStorage implements MemoryStorage {
   ): Promise<MemoryObservationRow[]> {
     // Capture the provider locally so the closure does not need to re-narrow `this.X`.
     const provider = this.embeddingProvider;
+    const limit = options?.limit ?? 10;
+    // Over-fetch by 3x (matching the SQLite backend, sqlite.ts:276) so that
+    // dropping decayed rows below does not under-deliver fewer than `limit`.
     const rows = await searchObservations(this.db, project, query, {
       ...options,
+      fetchLimit: limit * 3,
       // Pass the embed function for hybrid search when provider is available
       embedFn: provider ? (text: string) => provider.embed(text) : undefined,
     });
@@ -86,6 +90,9 @@ export class PostgresMemoryStorage implements MemoryStorage {
         severity: row.severity ?? null,
         strength,
       });
+      // Cap at the originally-requested limit: we over-fetched only to absorb
+      // decay drops, never to return MORE than the caller asked for.
+      if (result.length >= limit) break;
     }
     return result;
   }

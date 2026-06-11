@@ -285,6 +285,7 @@ interface EncryptedCredentials {
 async function resolveEncryptedCredentials(
   data: ReviewJobData,
   log: { warn: (obj: unknown, msg?: string) => void },
+  db: Database | undefined,
 ): Promise<EncryptedCredentials> {
   // Old-format in-flight job tolerance: use whatever the payload carries.
   if (data.providerChain !== undefined || data.encryptedApiKey != null) {
@@ -294,9 +295,17 @@ async function resolveEncryptedCredentials(
     };
   }
 
+  // No usable DB handle (creation failed upstream) — degrade to static-only.
+  if (!db) {
+    log.warn(
+      { repositoryId: data.repositoryId },
+      'No database handle available when resolving credentials — falling back to static-analysis-only',
+    );
+    return { providerChain: undefined, encryptedApiKey: null };
+  }
+
   // New path: re-fetch encrypted settings from the DB by identifier.
   try {
-    const db = createDatabaseFromEnv();
     const repo = await getRepositoryById(db, data.repositoryId);
 
     if (!repo) {
@@ -351,11 +360,22 @@ async function processReview(
 
   const log = logger.child({ reviewId, repoFullName, prNumber });
 
+  // Create ONE database handle for the whole job — reused for credential
+  // re-fetch and memory storage. Each createDatabaseFromEnv() spins up a fresh
+  // pg.Pool, so calling it twice per job leaked a pool. Degrade gracefully when
+  // the DB is unavailable (both consumers tolerate a missing handle).
+  let db: Database | undefined;
+  try {
+    db = createDatabaseFromEnv();
+  } catch {
+    log.warn('Database unavailable — credential re-fetch and memory features disabled');
+  }
+
   // SECURITY: encrypted credentials are NOT in the job payload — re-fetch them
   // from the DB by identifier (with old-format in-flight tolerance + graceful
   // degradation when settings were deleted). See resolveEncryptedCredentials.
   const { providerChain: rawProviderChain, encryptedApiKey } =
-    await resolveEncryptedCredentials(data, log);
+    await resolveEncryptedCredentials(data, log, db);
   const [owner, repo] = repoFullName.split('/') as [string, string];
 
   log.info(`Starting review processing for ${repoFullName}#${prNumber}`);
@@ -576,13 +596,8 @@ async function processReview(
       log.info('No LLM provider available — AI review disabled, static analysis only');
     }
 
-    let db: Database | undefined;
-    try {
-      db = createDatabaseFromEnv();
-    } catch {
-      log.warn('Database unavailable for memory features');
-    }
-
+    // Reuse the single db handle created at the top of processReview — do NOT
+    // create another pool here (that was the per-job connection leak).
     const memoryStorage = db ? new PostgresMemoryStorage(db, installationId) : undefined;
 
     // Fetch dependency graph for blast-radius analysis (if enabled)
@@ -648,9 +663,11 @@ async function processReview(
 
   await job.updateProgress(60);
 
-  // Step 5: Save review to database
-  const db = createDatabaseFromEnv();
-  await saveReview(db, {
+  // Step 5: Save review to database. Reuse the job-level handle when available;
+  // fall back to minting one (preserving the original throw-on-missing-DB
+  // behavior) only if the top-of-job creation degraded to undefined.
+  const persistDb = db ?? createDatabaseFromEnv();
+  await saveReview(persistDb, {
     repositoryId,
     prNumber,
     status: reviewResult.status,

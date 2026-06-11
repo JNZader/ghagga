@@ -73,12 +73,12 @@ describe('PostgresMemoryStorage — core methods', () => {
 
       const result = await storage.searchObservations('owner/repo', 'search query');
 
-      expect(mockSearchObservations).toHaveBeenCalledWith(
-        fakeDb,
-        'owner/repo',
-        'search query',
-        undefined,
-      );
+      // Adapter over-fetches (fetchLimit = limit*3, default limit 10 → 30) so
+      // decay filtering never under-delivers; embedFn is undefined (no provider).
+      expect(mockSearchObservations).toHaveBeenCalledWith(fakeDb, 'owner/repo', 'search query', {
+        fetchLimit: 30,
+        embedFn: undefined,
+      });
       expect(result).toEqual([
         {
           id: 1,
@@ -101,7 +101,7 @@ describe('PostgresMemoryStorage — core methods', () => {
       ]);
     });
 
-    it('passes options (limit, type) to ghagga-db', async () => {
+    it('passes options (limit, type) plus over-fetch (fetchLimit = limit*3) to ghagga-db', async () => {
       mockSearchObservations.mockResolvedValueOnce([]);
 
       await storage.searchObservations('owner/repo', 'query', { limit: 5, type: 'pattern' });
@@ -109,6 +109,8 @@ describe('PostgresMemoryStorage — core methods', () => {
       expect(mockSearchObservations).toHaveBeenCalledWith(fakeDb, 'owner/repo', 'query', {
         limit: 5,
         type: 'pattern',
+        fetchLimit: 15,
+        embedFn: undefined,
       });
     });
 
@@ -144,23 +146,76 @@ describe('PostgresMemoryStorage — core methods', () => {
       expect(result).toHaveLength(0);
     });
 
-    it('computes strength identically to the SQLite backend (computeStrength parity)', async () => {
-      // Parity table: same ageDays → same strength via the shared computeStrength.
-      // DEFAULT_DECAY_CONFIG: dormancy=7, clearance=90, decay window = 83 days.
-      const now = Date.now();
+    it('drives the REAL class path: returned strengths follow the decay curve AND stale rows are excluded', async () => {
+      // Exercise PostgresMemoryStorage.searchObservations end-to-end (NOT the bare
+      // computeStrength function) so the test would FAIL if postgres.ts passed the
+      // wrong field/clock into computeStrength. DEFAULT_DECAY_CONFIG: dormancy=7,
+      // clearance=90, decay window = 83 days.
       const day = 24 * 60 * 60 * 1000;
-      const cases = [
-        { ageDays: 0, expected: 1 }, // active
-        { ageDays: 7, expected: 1 }, // dormancy boundary
-        { ageDays: 48.5, expected: computeStrength(new Date(now - 48.5 * day), new Date(now)) }, // mid-decay
-        { ageDays: 90, expected: 0 }, // clearance → cleared
-      ] as const;
+      const now = Date.now();
+      const ages = [
+        { id: 1, ageDays: 0 }, // active → strength 1
+        { id: 2, ageDays: 7 }, // dormancy boundary → strength 1
+        { id: 3, ageDays: 48.5 }, // mid-decay → 0 < s < 1
+        { id: 4, ageDays: 200 }, // well past clearance → below minStrength, EXCLUDED
+      ];
+      mockSearchObservations.mockResolvedValueOnce(
+        ages.map(({ id, ageDays }) => ({
+          id,
+          type: 'pattern',
+          title: `obs-${id}`,
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: new Date(now - ageDays * day),
+        })),
+      );
 
-      for (const { ageDays, expected } of cases) {
-        const lastAccessedAt = new Date(now - ageDays * day);
-        const direct = computeStrength(lastAccessedAt, new Date(now), DEFAULT_DECAY_CONFIG);
-        expect(direct).toBeCloseTo(expected, 10);
+      const result = await storage.searchObservations('proj', 'q');
+
+      // Stale row (id 4) dropped by the real class-path strength filter.
+      expect(result.map((r) => r.id)).toEqual([1, 2, 3]);
+      // Each returned row's strength matches the shared decay curve at its age,
+      // proving the class threaded (lastAccessedAt, now, decayConfig) correctly.
+      for (const { id, ageDays } of ages.filter((a) => a.id !== 4)) {
+        const expected = computeStrength(
+          new Date(now - ageDays * day),
+          new Date(now),
+          DEFAULT_DECAY_CONFIG,
+        );
+        const got = result.find((r) => r.id === id)?.strength;
+        expect(got).toBeCloseTo(expected, 6);
       }
+      // Mid-decay row sits strictly between cleared and fresh.
+      const mid = result.find((r) => r.id === 3)?.strength ?? -1;
+      expect(mid).toBeGreaterThan(0);
+      expect(mid).toBeLessThan(1);
+    });
+
+    it('FF-1: over-fetching absorbs decay drops — returns up to `limit` live rows, never more', async () => {
+      // Caller asks for limit 2. The db (driven by fetchLimit=6) returns 5
+      // candidates where the top 2 are decayed-out; the adapter must still
+      // deliver 2 LIVE rows (not fewer) and never MORE than the requested limit.
+      const fresh = new Date();
+      const stale = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000); // cleared
+      mockSearchObservations.mockResolvedValueOnce([
+        { id: 1, type: 'pattern', title: 'decayed-top', content: 'C', filePaths: null, lastAccessedAt: stale },
+        { id: 2, type: 'pattern', title: 'decayed-2', content: 'C', filePaths: null, lastAccessedAt: stale },
+        { id: 3, type: 'pattern', title: 'live-1', content: 'C', filePaths: null, lastAccessedAt: fresh },
+        { id: 4, type: 'pattern', title: 'live-2', content: 'C', filePaths: null, lastAccessedAt: fresh },
+        { id: 5, type: 'pattern', title: 'live-3', content: 'C', filePaths: null, lastAccessedAt: fresh },
+      ]);
+
+      const result = await storage.searchObservations('proj', 'q', { limit: 2 });
+
+      // Over-fetch requested: limit*3 = 6.
+      expect(mockSearchObservations).toHaveBeenCalledWith(fakeDb, 'proj', 'q', {
+        limit: 2,
+        fetchLimit: 6,
+        embedFn: undefined,
+      });
+      // Exactly `limit` live rows — not 1 (under-delivery), not 3 (over-delivery).
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.id)).toEqual([3, 4]);
     });
   });
 
