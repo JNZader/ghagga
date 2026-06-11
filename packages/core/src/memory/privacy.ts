@@ -85,9 +85,15 @@ const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   // Private keys (PEM format). Broad label match covers RSA/EC/DSA as well as
   // OPENSSH, PKCS8 ("PRIVATE KEY"), ENCRYPTED, and PGP ("PRIVATE KEY BLOCK")
   // variants — the previous allowlist (RSA|EC|DSA) let modern formats through.
+  //
+  // The between-markers span is BOUNDED to {0,8192} (was an unbounded
+  // `[\s\S]*?`). A real PEM body is a few KB at most; an UNTERMINATED header
+  // in a large diff would otherwise make the lazy match scan all the way to
+  // EOF before failing. The bound makes an unterminated header fail fast while
+  // still covering every legitimate key. (4096-bit RSA PEM ≈ 3.2KB.)
   {
     pattern:
-      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----/g,
+      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]{0,8192}?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----/g,
     replacement: '[REDACTED_PRIVATE_KEY]',
   },
 

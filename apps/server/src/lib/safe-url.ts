@@ -23,6 +23,7 @@
 
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { logger } from './logger.js';
 
 export type OutboundUrlValidation = { ok: true; url: URL } | { ok: false; reason: string };
 
@@ -157,8 +158,27 @@ function forbiddenIpReason(ip: string): string | null {
   return 'not an IP address';
 }
 
+/**
+ * Whether the private-IP escape hatch is enabled.
+ *
+ * When enabled, the first time the bypass is actually TAKEN we emit a single
+ * WARN so operators have an audit trail that SSRF IP-range protection is off —
+ * without spamming one line per request. The protocol and userinfo checks are
+ * still enforced even under the escape hatch (see validateOutboundUrl).
+ */
+let escapeHatchWarned = false;
+
 function privateGatewayAllowed(): boolean {
-  return process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY === 'true';
+  if (process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY === 'true') {
+    if (!escapeHatchWarned) {
+      escapeHatchWarned = true;
+      logger.warn(
+        'GHAGGA_ALLOW_PRIVATE_GATEWAY=true — SSRF private-IP range checks are DISABLED for gateway URLs (protocol/userinfo checks still enforced)',
+      );
+    }
+    return true;
+  }
+  return false;
 }
 
 /**

@@ -66,7 +66,18 @@ export function sanitizeMarkdownText(
   s = s.replace(/\r\n?/g, '\n');
 
   if (s.length > maxLength) {
-    s = `${s.slice(0, maxLength)}…`;
+    let truncated = s.slice(0, maxLength);
+    // s.slice operates on UTF-16 code units, so the cut can land in the
+    // MIDDLE of a surrogate pair (e.g. an emoji like 😀 = U+1F600), leaving a
+    // lone high surrogate at the end. A lone surrogate renders as � and can
+    // corrupt downstream consumers. If the last code unit is a high surrogate
+    // (0xD800–0xDBFF) with no matching low surrogate following, drop it before
+    // appending the ellipsis.
+    const lastUnit = truncated.charCodeAt(truncated.length - 1);
+    if (lastUnit >= 0xd800 && lastUnit <= 0xdbff) {
+      truncated = truncated.slice(0, -1);
+    }
+    s = `${truncated}…`;
   }
 
   return s;

@@ -13,6 +13,11 @@ vi.mock('node:dns/promises', () => ({
   lookup: (...args: unknown[]) => mockLookup(...args),
 }));
 
+const mockLoggerWarn = vi.fn();
+vi.mock('./logger.js', () => ({
+  logger: { warn: (...args: unknown[]) => mockLoggerWarn(...args) },
+}));
+
 import { validateOutboundUrl } from './safe-url.js';
 
 beforeEach(() => {
@@ -186,5 +191,48 @@ describe('validateOutboundUrl', () => {
     process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY = '1';
     const result = await validateOutboundUrl('http://127.0.0.1/');
     expect(result.ok).toBe(false);
+  });
+
+  it('escape hatch still rejects ftp: and userinfo (protocol/userinfo always enforced)', async () => {
+    process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY = 'true';
+    expect((await validateOutboundUrl('ftp://10.0.0.5/')).ok).toBe(false);
+    expect((await validateOutboundUrl('http://user:pass@10.0.0.5/')).ok).toBe(false);
+  });
+});
+
+// The escape-hatch WARN fires only ONCE per process (module-level flag). To
+// observe that first firing deterministically, this block re-imports the
+// module fresh (vi.resetModules) so the flag starts unset, independent of
+// whatever the tests above already triggered.
+describe('escape-hatch audit warning (fresh module)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockLoggerWarn.mockClear();
+    delete process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY;
+  });
+
+  afterEach(() => {
+    delete process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY;
+  });
+
+  it('emits a single WARN (mentioning the env var + DISABLED) the first time the hatch is taken', async () => {
+    process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY = 'true';
+    const fresh = await import('./safe-url.js');
+
+    expect((await fresh.validateOutboundUrl('http://10.0.0.5:8080/')).ok).toBe(true);
+    // Take the hatch again — must NOT log a second time.
+    expect((await fresh.validateOutboundUrl('http://127.0.0.1:4000/')).ok).toBe(true);
+
+    expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+    const msg = String(mockLoggerWarn.mock.calls[0]?.[0]);
+    expect(msg).toContain('GHAGGA_ALLOW_PRIVATE_GATEWAY');
+    expect(msg).toContain('DISABLED');
+  });
+
+  it('does NOT warn when the escape hatch is disabled', async () => {
+    const fresh = await import('./safe-url.js');
+    // 8.8.8.8 is public → ok without the hatch, and no hatch warning.
+    expect((await fresh.validateOutboundUrl('https://8.8.8.8/')).ok).toBe(true);
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
   });
 });

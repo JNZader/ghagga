@@ -95,6 +95,33 @@ describe('stripPrivateData', () => {
     expect(result).not.toContain('MIIEpAIBAAKCAQEA');
   });
 
+  it('fails fast on an UNTERMINATED PEM header in a large body (bounded scan)', () => {
+    // A BEGIN marker with no matching END, followed by a large body. The
+    // between-markers span is bounded to {0,8192}, so the lazy match cannot
+    // scan to EOF. We assert: (1) no false redaction, (2) it returns quickly.
+    const big = `-----BEGIN RSA PRIVATE KEY-----\n${'A'.repeat(500_000)}`;
+    const start = Date.now();
+    const result = stripPrivateData(big);
+    const elapsedMs = Date.now() - start;
+
+    // No END marker → nothing to redact for the PEM pattern.
+    expect(result).not.toContain('[REDACTED_PRIVATE_KEY]');
+    // Bounded scan: comfortably fast even on a 500KB unterminated header.
+    expect(elapsedMs).toBeLessThan(1000);
+  });
+
+  it('still redacts a valid PEM whose body is within the bound', () => {
+    // ~4KB body — well under the 8192 bound — must redact end-to-end.
+    const pem = [
+      '-----BEGIN OPENSSH PRIVATE KEY-----',
+      'b3BlbnNzaC1rZXktdjEAAAAA'.repeat(160),
+      '-----END OPENSSH PRIVATE KEY-----',
+    ].join('\n');
+    const result = stripPrivateData(pem);
+    expect(result).toContain('[REDACTED_PRIVATE_KEY]');
+    expect(result).not.toContain('b3BlbnNzaC1rZXktdjEAAAAA');
+  });
+
   it('redacts JWT tokens (eyJ...eyJ...xxx)', () => {
     const jwt =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';

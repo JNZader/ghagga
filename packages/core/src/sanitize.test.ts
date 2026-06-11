@@ -53,6 +53,30 @@ describe('sanitizeMarkdownText', () => {
     const text = 'All good. The function `add()` handles edge cases correctly.';
     expect(sanitizeMarkdownText(text)).toBe(text);
   });
+
+  it('does not split a surrogate pair when truncating (no lone surrogate)', () => {
+    // '😀' (U+1F600) is two UTF-16 code units. With maxLength=5 the raw slice
+    // would cut the THIRD emoji in half, leaving a lone high surrogate.
+    const input = '😀'.repeat(10); // 20 code units
+    const result = sanitizeMarkdownText(input, 5);
+
+    // Result must end with the ellipsis and contain NO lone surrogate.
+    expect(result.endsWith('…')).toBe(true);
+    const beforeEllipsis = result.slice(0, -1);
+    const lastUnit = beforeEllipsis.charCodeAt(beforeEllipsis.length - 1);
+    expect(lastUnit >= 0xd800 && lastUnit <= 0xdbff).toBe(false);
+    // The lone high surrogate was dropped, so we keep 2 whole emojis (4 units).
+    expect(beforeEllipsis).toBe('😀😀');
+    // The Unicode replacement char must NOT appear (sign of a broken pair).
+    expect(result).not.toContain('�');
+  });
+
+  it('keeps a whole surrogate pair when the cut lands on a pair boundary', () => {
+    const input = '😀'.repeat(10); // 20 code units
+    // maxLength=4 lands exactly between the 2nd and 3rd emoji — no split.
+    const result = sanitizeMarkdownText(input, 4);
+    expect(result).toBe('😀😀…');
+  });
 });
 
 describe('sanitizeTableCell', () => {
