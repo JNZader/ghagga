@@ -7,6 +7,7 @@
  * output setting, and error handling.
  */
 
+import * as github from '@actions/github';
 import type { ReviewResult, ReviewStatus } from 'ghagga-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -35,6 +36,7 @@ vi.mock('@actions/github', () => ({
   context: {
     repo: { owner: 'test-owner', repo: 'test-repo' },
     runId: 12345,
+    runAttempt: 1,
     payload: {
       pull_request: { number: 42 },
     },
@@ -430,22 +432,41 @@ describe('run() — integration', () => {
 
     expect(mockRestoreCache).toHaveBeenCalledWith(
       ['/tmp/ghagga-memory.db'],
-      'ghagga-memory-test-owner-test-repo-12345',
+      'ghagga-memory-test-owner-test-repo-12345-1',
       ['ghagga-memory-test-owner-test-repo-', 'ghagga-memory-test-owner-test-repo'],
     );
   });
 
-  it('memory cache: saves with a run-unique key (Actions caches are write-once)', async () => {
+  it('memory cache: saves with an attempt-unique key (Actions caches are write-once)', async () => {
     await run();
 
     expect(mockSaveCache).toHaveBeenCalledWith(
       ['/tmp/ghagga-memory.db'],
-      'ghagga-memory-test-owner-test-repo-12345',
+      'ghagga-memory-test-owner-test-repo-12345-1',
     );
     // The save key must differ from the immutable base key
     expect(mockSaveCache).not.toHaveBeenCalledWith(
       ['/tmp/ghagga-memory.db'],
       'ghagga-memory-test-owner-test-repo',
     );
+  });
+
+  it('memory cache: save key includes BOTH runId and runAttempt so re-runs can save', async () => {
+    // runId is stable across re-runs of the same workflow run — only the
+    // attempt number changes. A key without runAttempt would collide with
+    // the write-once cache entry from the first attempt.
+    const mutableContext = github.context as unknown as { runAttempt: number };
+    mutableContext.runAttempt = 2;
+
+    try {
+      await run();
+
+      expect(mockSaveCache).toHaveBeenCalledWith(
+        ['/tmp/ghagga-memory.db'],
+        'ghagga-memory-test-owner-test-repo-12345-2',
+      );
+    } finally {
+      mutableContext.runAttempt = 1;
+    }
   });
 });
