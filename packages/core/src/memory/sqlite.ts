@@ -167,6 +167,22 @@ export interface SqliteMemoryStorageOptions {
   embeddingProvider?: EmbeddingProvider;
 }
 
+/**
+ * Runs an ADD COLUMN migration idempotently.
+ * Swallows 'duplicate column name' (migration already ran) and rethrows
+ * anything else so real schema failures are not silently swallowed.
+ */
+function runIdempotentAlter(db: DatabaseWithParams, sql: string): void {
+  try {
+    db.run(sql);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('duplicate column name')) {
+      throw error;
+    }
+  }
+}
+
 export class SqliteMemoryStorage implements MemoryStorage {
   private dedupWindowMinutes: number;
   private decayConfig: DecayConfig;
@@ -222,27 +238,13 @@ export class SqliteMemoryStorage implements MemoryStorage {
     db.run(SCHEMA_SQL);
 
     // Migration: add severity column to existing databases
-    try {
-      db.run('ALTER TABLE memory_observations ADD COLUMN severity TEXT');
-    } catch {
-      // Column already exists — idempotent migration
-    }
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN severity TEXT');
 
     // Migration: add last_accessed_at column for decay tracking.
     // SQLite forbids non-constant defaults (e.g. datetime('now')) in
     // ALTER TABLE ADD COLUMN once the table has rows — so add the column
     // WITHOUT a default and backfill explicitly below.
-    try {
-      db.run('ALTER TABLE memory_observations ADD COLUMN last_accessed_at TEXT');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // Only 'duplicate column name' means the migration already ran.
-      // Anything else is a real failure — surface it instead of silently
-      // leaving the schema broken (every later SELECT would fail).
-      if (!message.includes('duplicate column name')) {
-        throw error;
-      }
-    }
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN last_accessed_at TEXT');
     // Backfill runs unconditionally: covers freshly added columns AND rows
     // left NULL/empty by the previously broken migration.
     db.run(
@@ -254,11 +256,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
     );
 
     // Migration: add embedding column for hybrid search (NULL when no embedding provider)
-    try {
-      db.run('ALTER TABLE memory_observations ADD COLUMN embedding BLOB');
-    } catch {
-      // Column already exists — idempotent migration
-    }
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN embedding BLOB');
 
     return new SqliteMemoryStorage(db, filePath, options);
   }
