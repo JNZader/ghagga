@@ -227,6 +227,65 @@ describe('Reviews — empty state', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Error state (query failed — NOT the same as empty success)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — error state', () => {
+  it('shows an error message instead of "No reviews found." when the query fails', () => {
+    mockUseReviews.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    renderReviews();
+
+    expect(screen.getByText('Failed to load reviews. Please try again.')).toBeInTheDocument();
+    expect(screen.queryByText('No reviews found.')).not.toBeInTheDocument();
+  });
+
+  it('still shows "No reviews found." for a successful empty response', () => {
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [], total: 0, page: 1, pageSize: 20 },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderReviews();
+
+    expect(screen.getByText('No reviews found.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to load reviews. Please try again.'),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// All repositories (no repo selected → cross-installation listing)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — All repositories', () => {
+  it('queries without a repo and renders each row with its repo label', () => {
+    mockUseSelectedRepo.mockReturnValue({
+      selectedRepo: '',
+      setSelectedRepo: vi.fn(),
+    });
+    mockReviewsData(MULTI_REVIEWS);
+
+    renderReviews();
+
+    // No repo selected → useReviews is called with undefined repo (no-repo endpoint)
+    expect(mockUseReviews).toHaveBeenCalledWith(undefined, 1);
+
+    // Every row shows the repo it belongs to (mapped from the server fullName)
+    expect(screen.getByText('acme/app')).toBeInTheDocument();
+    expect(screen.getByText('acme/api')).toBeInTheDocument();
+    expect(screen.getByText('acme/web')).toBeInTheDocument();
+    expect(screen.getByText('acme/lib')).toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Table rendering with multiple reviews
 // ═══════════════════════════════════════════════════════════════════
 

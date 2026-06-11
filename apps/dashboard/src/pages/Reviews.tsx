@@ -139,7 +139,7 @@ export function Reviews() {
 
   const { addToast } = useToast();
   const { data: repos } = useRepositories();
-  const { data, isLoading } = useReviews(selectedRepo || undefined, page);
+  const { data, isLoading, isError } = useReviews(selectedRepo || undefined, page);
   const deleteReviews = useDeleteRepoReviews();
   const batchDeleteReviews = useBatchDeleteReviews();
   const deleteReview = useDeleteReview();
@@ -325,6 +325,12 @@ export function Reviews() {
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center">
                     <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+                  </td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-red-400">
+                    Failed to load reviews. Please try again.
                   </td>
                 </tr>
               ) : filteredReviews.length === 0 ? (
