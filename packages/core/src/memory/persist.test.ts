@@ -236,9 +236,8 @@ describe('persistReviewObservations', () => {
   it('redacts a secret smuggled into finding.file (real stripPrivateData)', async () => {
     // Use the REAL implementation for this case so we exercise the actual
     // redaction patterns, not the [STRIPPED] stub.
-    const { stripPrivateData: realStrip } = await vi.importActual<typeof import('./privacy.js')>(
-      './privacy.js',
-    );
+    const { stripPrivateData: realStrip } =
+      await vi.importActual<typeof import('./privacy.js')>('./privacy.js');
     mockStripPrivateData.mockImplementation(realStrip);
 
     const secret = 'sk-ant-abcdefghijklmnopqrstuvwxyz0123456789';
@@ -419,9 +418,18 @@ describe('persistReviewObservations', () => {
     await persistReviewObservations(storage, 'project', 1, result);
 
     const savedObs = vi.mocked(storage.saveObservation).mock.calls[0]?.[0];
-    // Title format: "category: sanitized_message.slice(0, 80)"
-    // The sanitized message is [STRIPPED] + longMessage
-    expect(savedObs.title?.length).toBeLessThanOrEqual('bug: '.length + 80);
+    // Title format: "[CATEGORY_LABEL] category: sanitized_message.slice(0, 80)"
+    // — the persist layer prepends a taxonomy [CATEGORY_LABEL] tag (added with
+    // the taxonomy feature) ahead of the "category: message" body. The message
+    // portion itself is what must be capped at 80 chars, so we assert the
+    // sanitized message inside the title is truncated rather than measuring the
+    // (prefix-dependent) total length.
+    const title = savedObs.title ?? '';
+    // The message body follows the last "bug: " separator.
+    const messagePortion = title.slice(title.lastIndexOf('bug: ') + 'bug: '.length);
+    expect(messagePortion.length).toBeLessThanOrEqual(80);
+    // And the long message must NOT survive in full.
+    expect(messagePortion).not.toContain('A'.repeat(81));
   });
 
   // ── Summary observation ──

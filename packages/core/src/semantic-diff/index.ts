@@ -52,19 +52,21 @@ const DECLARATION_PATTERNS: Array<{
   kind: 'function' | 'class' | 'method' | 'import' | 'export' | 'type';
   pattern: RegExp;
 }> = [
+  // NOTE: ORDER MATTERS. The generic "export <name>" pattern is intentionally
+  // listed LAST so that more specific declarations — `export function foo`,
+  // `export class Foo`, `export const fn = () => …`, `export type Foo` — are
+  // classified by their real entity kind (function/class/type) instead of being
+  // swallowed by a catch-all `export` rule. Only plain value re-exports
+  // (e.g. `export const VERSION = '1.0'`, `export default expr`) fall through
+  // to the `export` kind.
+
   // import statements — match before export/function to avoid conflicts
   {
     kind: 'import',
     pattern:
       /^\s*import\s+(?:type\s+)?(?:\{[^}]*\}|[\w*]+(?:\s+as\s+\w+)?)\s+from\s+['"][^'"]+['"]/,
   },
-  // export default / named
-  {
-    kind: 'export',
-    pattern:
-      /^\s*export\s+(?:default\s+)?(?:const|let|var|function\*?|async\s+function\*?)\s+(\w+)/,
-  },
-  // export type / interface
+  // export type / interface / enum (before the generic export rule)
   {
     kind: 'type',
     pattern: /^\s*export\s+(?:type|interface|enum)\s+(\w+)/,
@@ -74,31 +76,32 @@ const DECLARATION_PATTERNS: Array<{
     kind: 'type',
     pattern: /^\s*(?:type|interface|enum)\s+(\w+)/,
   },
-  // class declaration
+  // class declaration (handles `export class` and `export abstract class`)
   {
     kind: 'class',
-    pattern: /^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/,
+    pattern: /^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+(\w+)/,
+  },
+  // top-level function declaration (handles `export function` / `export async function`)
+  {
+    kind: 'function',
+    pattern: /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\*?\s+(\w+)\s*\(/,
+  },
+  // arrow / function-expression assigned to const/let/var (handles `export const fn = () =>`,
+  // optionally typed: `export const fn: Foo = async () =>`)
+  {
+    kind: 'function',
+    pattern:
+      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[\w<>,\s|[\]]+?)?\s*=\s*(?:async\s+)?(?:function\b|\()/,
   },
   // method inside class (indented + no leading "function" keyword, has "()")
   {
     kind: 'method',
     pattern: /^[ \t]+(?:(?:public|private|protected|static|async|override|readonly)\s+)*(\w+)\s*\(/,
   },
-  // top-level function declaration
+  // generic export of a plain value — LAST so the rules above win first
   {
-    kind: 'function',
-    pattern: /^\s*(?:export\s+)?(?:async\s+)?function\*?\s+(\w+)\s*\(/,
-  },
-  // arrow function / const fn = ...
-  {
-    kind: 'function',
-    pattern: /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
-  },
-  // const fn = async () => or const fn = () =>
-  {
-    kind: 'function',
-    pattern:
-      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*\w[\w<>,\s]*?)?\s*=\s*(?:async\s+)?\(/,
+    kind: 'export',
+    pattern: /^\s*export\s+(?:default\s+)?(?:const|let|var)\s+(\w+)/,
   },
 ];
 

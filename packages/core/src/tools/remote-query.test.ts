@@ -6,11 +6,14 @@ import { fetchRemoteFile, searchRemoteCode } from './remote-query.js';
 const mockFetch = vi.fn();
 
 beforeEach(() => {
+  mockFetch.mockClear();
   vi.stubGlobal('fetch', mockFetch);
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // restoreAllMocks does NOT revert vi.stubGlobal — undo the fetch stub too.
+  vi.unstubAllGlobals();
 });
 
 // ─── Helpers ────────────────────────────────────────────────────

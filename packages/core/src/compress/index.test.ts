@@ -17,9 +17,15 @@ function makeFinding(
 
 describe('compressToolFindings — deduplication', () => {
   it('removes findings with identical 60-char message prefixes', () => {
+    // Dedup keys on the first 60 chars of the message (message.slice(0, 60)).
+    // `sharedPrefix` is EXACTLY 60 chars, and the first two findings diverge at
+    // char 61 ('X' vs 'Y') — so their dedup keys are identical and they collapse
+    // to one; the third has a distinct prefix and survives.
+    const sharedPrefix = 'no-unused-vars: a variable is declared but its value is neve';
+    expect(sharedPrefix.length).toBe(60);
     const findings: ToolFinding[] = [
-      makeFinding('eslint', 'a.ts', "no-unused-vars: variable 'x' is defined but never used"),
-      makeFinding('eslint', 'b.ts', "no-unused-vars: variable 'y' is defined but never used"),
+      makeFinding('eslint', 'a.ts', `${sharedPrefix}X (unused: x)`),
+      makeFinding('eslint', 'b.ts', `${sharedPrefix}Y (unused: y)`),
       makeFinding('eslint', 'c.ts', 'no-console: unexpected console statement'),
     ];
     const { findings: out } = compressToolFindings(findings, { deduplicateMessages: true });
@@ -122,10 +128,13 @@ describe('compressToolFindings — stats', () => {
 
 describe('compressStaticAnalysisBlock — similar line collapsing', () => {
   it('collapses consecutive lines differing only by number', () => {
+    // Lines that are identical once line numbers are normalized away collapse
+    // into one canonical line plus a "... and N similar issue(s)" marker.
+    // (The fixture must differ ONLY by numbers — letters survive normalization.)
     const raw = [
-      "src/foo.ts:10: unused variable 'x'",
-      "src/foo.ts:20: unused variable 'y'",
-      "src/foo.ts:30: unused variable 'z'",
+      'src/foo.ts:10: maximum line length exceeded',
+      'src/foo.ts:20: maximum line length exceeded',
+      'src/foo.ts:30: maximum line length exceeded',
       'src/bar.ts:5: missing semicolon',
     ].join('\n');
 

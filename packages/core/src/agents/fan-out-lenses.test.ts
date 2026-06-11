@@ -391,7 +391,11 @@ describe('runFanOutReview', () => {
     const result = await runFanOutReview(makeInput({ generateFns: [fn], lenses: ['security'] }));
 
     expect(result.metadata.mode).toBe('fan-out');
-    expect(result.metadata.modelsUsed).toEqual(['security:anthropic/claude-sonnet-4-20250514']);
+    // modelsUsed echoes the input provider/model as `lens:provider/model`.
+    // makeInput uses provider 'gateway' (the post-refactor provider type), so
+    // the entry is gateway/… — the old hardcoded 'anthropic' was a stale
+    // leftover from before the legacy-provider → provider-chain rename.
+    expect(result.metadata.modelsUsed).toEqual(['security:gateway/claude-sonnet-4-20250514']);
   });
 });
 

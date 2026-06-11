@@ -118,7 +118,12 @@ const CATEGORY_RULES: CategoryRule[] = [
     keywords: [
       'depends on',
       'calls',
-      'uses',
+      // NOTE: the bare verb 'uses' is intentionally NOT a relationship keyword.
+      // "X uses Y" is a factual statement ("the auth module uses JWT"), not a
+      // structural relationship. It lived in BOTH this rule and 'fact', and
+      // since rules are evaluated in order, relationship (higher up) wrongly
+      // won every factual "uses" sentence. Relationship keywords are reserved
+      // for explicit structural verbs (inherits/extends/imports/…).
       'inherits',
       'extends',
       'implements',
