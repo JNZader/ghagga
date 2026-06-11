@@ -2003,6 +2003,34 @@ describe('GET /api/runner/install-workflow/status/:owner/:repo', () => {
 
     expect(res.status).toBe(404);
   });
+
+  it('returns 404 (identical to not-tracked) when repo belongs to another installation', async () => {
+    // Anti-enumeration: a foreign repo must be indistinguishable from an
+    // untracked repo, so the guard returns 404 instead of 403.
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'victim/repo',
+      installationId: 999, // NOT in DEFAULT_USER.installationIds ([100])
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/status/victim/repo', {
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(404);
+    const forbiddenBody = await res.json();
+
+    // Body must be byte-identical to the genuine not-found response
+    mockGetRepoByFullName.mockResolvedValueOnce(null);
+    const notFoundRes = await app.request('/api/runner/install-workflow/status/unknown/repo', {
+      headers: { Authorization: 'Bearer test-token' },
+    });
+    expect(notFoundRes.status).toBe(404);
+    expect(forbiddenBody).toEqual(await notFoundRes.json());
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2053,6 +2081,65 @@ describe('POST /api/runner/install-workflow/:owner/:repo', () => {
     });
 
     expect(res.status).toBe(404);
+  });
+
+  it('returns 404 (identical to not-tracked) when repo belongs to another installation', async () => {
+    // Cross-tenant attack: user from installation 100 tries to inject a
+    // workflow into a repo owned by installation 999. The guard must block
+    // BEFORE any token is minted or workflow injected, and the response must
+    // be indistinguishable from "repo not tracked" (anti-enumeration 404).
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'victim/repo',
+      installationId: 999, // NOT in DEFAULT_USER.installationIds ([100])
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/victim/repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(404);
+    const forbiddenBody = await res.json();
+
+    // No installation token minted, no workflow injected, no DB write
+    expect(mockGetInstallationToken).not.toHaveBeenCalled();
+    expect(mockInjectWorkflow).not.toHaveBeenCalled();
+    expect(mockUpdateWorkflowStatus).not.toHaveBeenCalled();
+
+    // Body must be byte-identical to the genuine not-found response
+    mockGetRepoByFullName.mockResolvedValueOnce(null);
+    const notFoundRes = await app.request('/api/runner/install-workflow/unknown/repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+    expect(notFoundRes.status).toBe(404);
+    expect(forbiddenBody).toEqual(await notFoundRes.json());
+  });
+
+  it('allows an authorized user from the repo installation', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/test-repo',
+      installationId: 100, // matches DEFAULT_USER.installationIds
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+    mockGetInstallationToken.mockResolvedValueOnce('ghp_installation-token');
+    mockInjectWorkflow.mockResolvedValueOnce({ sha: 'authzsha', created: true });
+    mockUpdateWorkflowStatus.mockResolvedValueOnce(undefined);
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/testuser/test-repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockInjectWorkflow).toHaveBeenCalled();
   });
 
   it('returns 403 when branch protection blocks injection', async () => {

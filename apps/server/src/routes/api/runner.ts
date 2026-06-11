@@ -17,6 +17,7 @@ export function createRunnerRouter(db: Database) {
 
   // ── GET /api/runner/install-workflow/status/:owner/:repo ────────
   router.get('/api/runner/install-workflow/status/:owner/:repo', async (c) => {
+    const user = c.get('user') as AuthUser;
     const owner = c.req.param('owner');
     const repo = c.req.param('repo');
     const fullName = `${owner}/${repo}`;
@@ -25,6 +26,15 @@ export function createRunnerRouter(db: Database) {
       const dbRepo = await getRepoByFullName(db, fullName);
 
       if (!dbRepo) {
+        return c.json({ error: 'NOT_FOUND', message: 'Repository not found' }, 404);
+      }
+
+      // Installation-scope guard: only users belonging to the repo's GitHub App
+      // installation may query workflow status. We deliberately return 404 (the
+      // exact same response as "repo not tracked") instead of the 403 used by
+      // sibling routes — a 403 here would be an existence oracle letting any
+      // authenticated user enumerate which repos are tracked by GHAGGA.
+      if (!user.installationIds.includes(dbRepo.installationId)) {
         return c.json({ error: 'NOT_FOUND', message: 'Repository not found' }, 404);
       }
 
@@ -59,6 +69,15 @@ export function createRunnerRouter(db: Database) {
       const dbRepo = await getRepoByFullName(db, fullName);
 
       if (!dbRepo) {
+        return c.json({ error: 'NOT_FOUND', message: 'Repository not tracked' }, 404);
+      }
+
+      // Installation-scope guard: without this, ANY authenticated user could
+      // commit .github/workflows/ghagga.yml to ANY tracked repo using the
+      // victim installation's token. We deliberately return 404 (identical to
+      // the "repo not tracked" response) instead of the 403 used by sibling
+      // routes — a 403 would be an existence oracle for tracked repos.
+      if (!user.installationIds.includes(dbRepo.installationId)) {
         return c.json({ error: 'NOT_FOUND', message: 'Repository not tracked' }, 404);
       }
 
