@@ -653,4 +653,45 @@ describe('revalidateGatewayChain', () => {
     expect(result).toEqual(chain);
     expect(log.warn).not.toHaveBeenCalled();
   });
+
+  // ─── per-entry bypass: gatewayUrl on a non-gateway provider ─────
+  // The runtime mapping loop assigns `entry.gatewayUrl` onto the provider chain
+  // unconditionally (regardless of provider). A non-gateway entry that still
+  // carries a gatewayUrl (legacy/tampered DB row) must NOT skip the SSRF guard.
+
+  it('drops a NON-gateway entry whose gatewayUrl resolves to a private/loopback IP', async () => {
+    const chain = [
+      // provider !== 'gateway' but a gatewayUrl is present — must still be validated.
+      { provider: 'cli-bridge', gatewayUrl: 'http://127.0.0.1:6379/', model: 'opencode' },
+      { provider: 'gateway', gatewayUrl: 'https://8.8.8.8/', model: 'auto' },
+    ];
+
+    const result = await revalidateGatewayChain(chain, log);
+
+    // Loopback entry dropped despite its non-gateway provider; public one kept.
+    expect(result).toHaveLength(1);
+    expect(result.map((e) => e.provider)).toEqual(['gateway']);
+    expect(log.warn).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a NON-gateway entry whose gatewayUrl points at a public IP', async () => {
+    const chain = [{ provider: 'ollama', gatewayUrl: 'https://8.8.8.8/v1', model: 'llama3' }];
+    const result = await revalidateGatewayChain(chain, log);
+    expect(result).toEqual(chain);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('never echoes the rejected URL of a non-gateway entry', async () => {
+    const secretUrl = 'http://192.168.1.42:8080/internal-admin';
+    await revalidateGatewayChain(
+      [{ provider: 'cli-bridge', gatewayUrl: secretUrl, model: 'opencode' }],
+      log,
+    );
+
+    const payloads = log.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const p of payloads) {
+      expect(p).not.toContain('internal-admin');
+      expect(p).not.toContain('192.168.1.42');
+    }
+  });
 });
