@@ -5,11 +5,14 @@
  * and basic useAuth behavior.
  */
 
-import { act, renderHook } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRepositories } from './api';
 import { AuthProvider, useAuth } from './auth';
+import { SESSION_EXPIRED_EVENT } from './session-expired';
 
 // ─── Mock oauth module ──────────────────────────────────────────
 
@@ -229,6 +232,90 @@ describe('reAuthenticate', () => {
     });
 
     expect(locationHref).toBe('https://api.javierzader.com/auth/login');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// session expiry (401 → SESSION_EXPIRED_EVENT)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('session expiry', () => {
+  it('clears auth state when SESSION_EXPIRED_EVENT is dispatched', () => {
+    store.ghagga_token = 'stale-token';
+    store.ghagga_user = JSON.stringify({
+      githubLogin: 'testuser',
+      githubUserId: 1,
+      avatarUrl: '',
+    });
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: createAuthWrapper(),
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+
+    act(() => {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.token).toBeNull();
+    expect(result.current.user).toBeNull();
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('ghagga_token');
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('ghagga_user');
+  });
+
+  it('clears auth state when fetchApi receives a 401, breaking the redirect loop', async () => {
+    store.ghagga_token = 'stale-token';
+    store.ghagga_user = JSON.stringify({
+      githubLogin: 'testuser',
+      githubUserId: 1,
+      avatarUrl: '',
+    });
+
+    // Writable location so the global 401 handler can set the hash redirect
+    Object.defineProperty(window, 'location', {
+      value: { href: '', pathname: '/', search: '', hash: '#/dashboard', hostname: 'localhost' },
+      writable: true,
+      configurable: true,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('Unauthorized', { status: 401 })),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <MemoryRouter>
+          <AuthProvider>
+            <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    }
+
+    const { result } = renderHook(() => ({ auth: useAuth(), repos: useRepositories() }), {
+      wrapper: Wrapper,
+    });
+
+    // Starts "authenticated" with stale credentials
+    expect(result.current.auth.isAuthenticated).toBe(true);
+
+    await waitFor(() => expect(result.current.repos.isError).toBe(true));
+
+    // Auth state cleared → ProtectedRoute redirects and Login no longer
+    // sees isAuthenticated === true (no bounce back to "/")
+    await waitFor(() => expect(result.current.auth.isAuthenticated).toBe(false));
+    expect(result.current.auth.token).toBeNull();
+    expect(result.current.auth.user).toBeNull();
+
+    // The redirect target still carries the expired banner param
+    expect(window.location.hash).toBe('#/login?expired=1');
   });
 });
 

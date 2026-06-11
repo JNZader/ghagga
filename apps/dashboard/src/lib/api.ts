@@ -14,6 +14,7 @@ import type {
   WorkflowInstallResult,
   WorkflowStatus,
 } from './types';
+import { notifySessionExpired } from './session-expired';
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -48,12 +49,16 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    // ── Global 401 handler: clear token and redirect to login ──
+    // ── Global 401 handler: clear auth state and redirect to login ──
     if (response.status === 401) {
       const currentPath = window.location.hash;
       if (!currentPath.includes('/login') && !currentPath.includes('/auth/callback')) {
         localStorage.removeItem('ghagga_token');
         localStorage.removeItem('ghagga_user');
+        // Clear the in-memory auth state too (AuthProvider listens for this
+        // event). Without it, React still considers the user authenticated,
+        // Login bounces back to "/", queries refetch, 401 again → loop.
+        notifySessionExpired();
         window.location.hash = '#/login?expired=1';
       }
       throw new ApiError(401, 'Session expired');

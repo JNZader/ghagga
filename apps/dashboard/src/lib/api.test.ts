@@ -32,6 +32,7 @@ import {
   useUpdateSettings,
   useValidateProvider,
 } from './api';
+import { SESSION_EXPIRED_EVENT } from './session-expired';
 
 // ─── Mocks ──────────────────────────────────────────────────────
 
@@ -129,6 +130,48 @@ describe('fetchApi 401 handler', () => {
     // Should NOT redirect
     expect(mockLocalStorage.removeItem).not.toHaveBeenCalled();
     expect(window.location.hash).toBe('#/auth/callback?token=abc');
+  });
+
+  it('dispatches the session-expired event so AuthProvider clears React state', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/dashboard' },
+      writable: true,
+    });
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: SESSION_EXPIRED_EVENT }),
+    );
+    dispatchSpy.mockRestore();
+  });
+
+  it('does NOT dispatch the session-expired event when already on the login page', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/login' },
+      writable: true,
+    });
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(dispatchSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: SESSION_EXPIRED_EVENT }),
+    );
+    dispatchSpy.mockRestore();
   });
 
   it('throws ApiError with status 401 and "Session expired" message', async () => {
