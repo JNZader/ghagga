@@ -3,7 +3,10 @@
  * unified-diff parsers BEFORE any migration to the unified parser.
  *
  * ⚠️ These snapshots freeze behavior AS-IS, including known bugs:
- *   - CORE-M6: quoted paths (c03) are silently dropped by parseDiffFiles.
+ *   - CORE-M6: quoted paths (c03) were silently dropped by parseDiffFiles.
+ *     FIXED in Phase 3 (adapter over parseUnifiedDiff) — the c03
+ *     parseDiffFiles snapshot reflects the new documented behavior; the
+ *     other 4 parsers still freeze the pre-M6 behavior until their phases.
  *   - CORE-M9: extractEntityDiffLines attributes deletions by old-side line
  *     against new-side symbol ranges.
  *   - recursive off-by-N on iteration 2+ (see recursive-golden.test.ts).
@@ -157,8 +160,15 @@ describe.each(CASES)('baseline %s', (name) => {
 // ─── Documented current-behavior assertions (explicit, not snapshot) ───
 
 describe('frozen known behaviors', () => {
-  it('CORE-M6 baseline: quoted paths (c03) are DROPPED by parseDiffFiles today', () => {
-    expect(parseDiffFiles(fixture('c03'))).toEqual([]);
+  it('CORE-M6 FIXED (Phase 3, documented delta): quoted paths (c03) are now parsed', () => {
+    // Pre-adapter baseline was `[]` (file silently dropped). The Phase 3
+    // adapter over parseUnifiedDiff fixes M6: the quoted file appears with
+    // its path unescaped. Both faces of the delta (file appears + previous
+    // file no longer absorbs its lines) are gated byte-by-byte in
+    // parity-parse-diff-files.test.ts.
+    const files = parseDiffFiles(fixture('c03'));
+    expect(files).toHaveLength(1);
+    expect(files[0]?.path).toBe('café.ts');
   });
 
   it('non-diff input (c13) and empty input (c14) parse to []', () => {

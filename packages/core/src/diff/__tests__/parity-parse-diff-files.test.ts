@@ -14,11 +14,6 @@
  *      its `content`/counters (today: contamination of the previous section).
  *
  * One undocumented byte of difference anywhere else = parity break = NO COMMIT.
- *
- * NOTE (task 3.1 state): the adapter has not landed yet, so this suite runs
- * the live implementation against its own frozen copy — trivially green by
- * construction — and freezes the M6 contamination behavior explicitly. Task
- * 3.3 flips the c03 assertions to the documented delta.
  */
 
 import { readFileSync } from 'node:fs';
@@ -163,29 +158,63 @@ describe('GATE 3.3 aggregate', () => {
   });
 });
 
-// ─── C3/CORE-M6 — frozen baseline behavior (flips in task 3.3) ──
+// ─── C3/CORE-M6 — the single documented delta, BOTH faces ──────
 
-describe('C3/M6 quoted paths — baseline behavior frozen (task 3.3 flips this)', () => {
-  it('standalone quoted file (c03) is dropped entirely', () => {
-    expect(parseDiffFiles(fixture('c03'))).toEqual([]);
+describe('C3/M6 quoted paths — documented delta vs baseline (changelog: minor)', () => {
+  it('face 1: standalone quoted file (c03) now appears (baseline dropped it)', () => {
+    // Baseline behavior, kept as evidence of the delta:
     expect(baselineParseDiffFiles(fixture('c03'))).toEqual([]);
+
+    // New behavior: one DiffFile, unescaped path, byte-exact content
+    // (the section is the ENTIRE c03 fixture — preamble is empty).
+    const files = parseDiffFiles(fixture('c03'));
+    expect(files).toHaveLength(1);
+    // biome-ignore lint/style/noNonNullAssertion: length asserted above
+    const quoted = files[0]!;
+    expect(quoted.path).toBe('café.ts');
+    expect(quoted.additions).toBe(1);
+    expect(quoted.deletions).toBe(1);
+    expectByteEqual(quoted.content, fixture('c03'), 'c03 quoted file content');
   });
 
-  it('quoted file after a plain file is dropped AND contaminates the previous file', () => {
+  it('face 2: a preceding file no longer absorbs the quoted section (exact byte redistribution)', () => {
     // Composite: c01 (3 plain files) followed by c03 (1 quoted file).
     const composite = fixture('c01') + fixture('c03');
-    const files = parseDiffFiles(composite);
+    const baseline = baselineParseDiffFiles(composite);
+    const current = parseDiffFiles(composite);
 
-    // The quoted file does NOT appear…
-    expect(files.map((f) => f.path)).toEqual(['src/alpha.ts', 'src/beta.ts', 'src/gamma.ts']);
+    // Baseline: quoted file missing, its lines glued to gamma (the previous file).
+    expect(baseline.map((f) => f.path)).toEqual(['src/alpha.ts', 'src/beta.ts', 'src/gamma.ts']);
+    // New: quoted file is its own DiffFile.
+    expect(current.map((f) => f.path)).toEqual([
+      'src/alpha.ts',
+      'src/beta.ts',
+      'src/gamma.ts',
+      'café.ts',
+    ]);
 
-    // …and its entire section is absorbed by the PREVIOUS file (gamma):
-    // biome-ignore lint/style/noNonNullAssertion: length asserted above
-    const gamma = files[2]!;
-    expect(gamma.content).toContain('diff --git "a/caf');
-    expect(gamma.content).toContain('+contenido dos CAMBIADO');
-    // contamination also inflates the previous file's counters (+1/-1 from c03)
-    expect(gamma.additions).toBe(3);
-    expect(gamma.deletions).toBe(3);
+    // Files untouched by the delta stay byte-identical.
+    for (const i of [0, 1] as const) {
+      // biome-ignore lint/style/noNonNullAssertion: lengths asserted above
+      expectByteEqual(current[i]!.content, baseline[i]!.content, `composite file[${i}]`);
+      expect(current[i]).toEqual(baseline[i]);
+    }
+
+    // biome-ignore lint/style/noNonNullAssertion: lengths asserted above
+    const [gammaBaseline, gammaCurrent, quoted] = [baseline[2]!, current[2]!, current[3]!];
+
+    // Gamma no longer carries the quoted section…
+    expect(gammaCurrent.content).not.toContain('caf');
+    // …and the bytes are EXACTLY redistributed, none lost, none invented:
+    // baseline gamma === current gamma + '\n' + quoted file section.
+    expectByteEqual(
+      gammaBaseline.content,
+      `${gammaCurrent.content}\n${quoted.content}`,
+      'composite gamma+quoted byte redistribution',
+    );
+    // Counters move with the bytes: gamma loses c03's +1/-1, the quoted file gains them.
+    expect(gammaCurrent.additions).toBe(gammaBaseline.additions - 1);
+    expect(gammaCurrent.deletions).toBe(gammaBaseline.deletions - 1);
+    expect(quoted).toMatchObject({ path: 'café.ts', additions: 1, deletions: 1 });
   });
 });
