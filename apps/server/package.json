@@ -15,7 +15,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.11",
+    "@hono/node-server": "^2.0.4",
     "@octokit/rest": "^22.0.1",
     "bullmq": "^5.76.10",
     "dotenv": "^17.4.2",
