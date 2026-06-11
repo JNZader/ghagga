@@ -72,8 +72,8 @@ describe('statusCommand', () => {
     mockLoadConfig.mockReturnValue({
       githubToken: 'gho_valid',
       githubLogin: 'validuser',
-      defaultProvider: 'anthropic',
-      defaultModel: 'claude-sonnet-4-20250514',
+      defaultProvider: 'ollama',
+      defaultModel: 'mistral',
     });
     mockFetchGitHubUser.mockResolvedValue({
       login: 'validuser',
@@ -84,10 +84,8 @@ describe('statusCommand', () => {
     await statusCommand();
 
     expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('Logged in as validuser'));
-    expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('anthropic'));
-    expect(tui.log.message).toHaveBeenCalledWith(
-      expect.stringContaining('claude-sonnet-4-20250514'),
-    );
+    expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('ollama'));
+    expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('mistral'));
     expect(tui.log.success).toHaveBeenCalledWith(expect.stringContaining('Valid (validuser)'));
     expect(tui.outro).toHaveBeenCalledWith('Done');
   });
@@ -97,8 +95,8 @@ describe('statusCommand', () => {
     mockLoadConfig.mockReturnValue({
       githubToken: 'gho_expired',
       githubLogin: 'expireduser',
-      defaultProvider: 'github',
-      defaultModel: 'gpt-4o-mini',
+      defaultProvider: 'gateway',
+      defaultModel: 'auto',
     });
     mockFetchGitHubUser.mockRejectedValue(new Error('401 Unauthorized'));
 
@@ -109,7 +107,7 @@ describe('statusCommand', () => {
     expect(tui.outro).not.toHaveBeenCalled();
   });
 
-  it('shows default provider/model when not explicitly set', async () => {
+  it('shows gateway/auto defaults when provider and model are not set', async () => {
     mockIsLoggedIn.mockReturnValue(true);
     mockLoadConfig.mockReturnValue({
       githubToken: 'gho_tok',
@@ -123,9 +121,35 @@ describe('statusCommand', () => {
 
     await statusCommand();
 
-    // Uses nullish coalescing defaults
-    expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('github'));
-    expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('gpt-4o-mini'));
+    expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('gateway'));
+    expect(tui.log.message).toHaveBeenCalledWith(expect.stringMatching(/Model:\s+auto/));
+    expect(tui.outro).toHaveBeenCalledWith('Done');
+  });
+
+  it('remaps a legacy stored provider for display with a migration hint', async () => {
+    mockIsLoggedIn.mockReturnValue(true);
+    mockLoadConfig.mockReturnValue({
+      githubToken: 'gho_tok',
+      githubLogin: 'legacyuser',
+      defaultProvider: 'github',
+      defaultModel: 'gpt-4o-mini',
+    });
+    mockFetchGitHubUser.mockResolvedValue({
+      login: 'legacyuser',
+      id: 3,
+      avatar_url: '',
+    });
+
+    await statusCommand();
+
+    // Shows the value review/audit will actually use, with a hint
+    expect(tui.log.message).toHaveBeenCalledWith(
+      expect.stringContaining("gateway (migrated from 'github'"),
+    );
+    expect(tui.log.message).toHaveBeenCalledWith(expect.stringContaining('ghagga login'));
+    // Stored model belongs to the legacy provider — gateway default shown instead
+    expect(tui.log.message).toHaveBeenCalledWith(expect.stringMatching(/Model:\s+auto/));
+    expect(tui.log.message).not.toHaveBeenCalledWith(expect.stringContaining('gpt-4o-mini'));
     expect(tui.outro).toHaveBeenCalledWith('Done');
   });
 });
