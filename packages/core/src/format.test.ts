@@ -434,6 +434,53 @@ describe('formatReviewComment', () => {
     expect(output).not.toContain('### Files Changed');
   });
 
+  // ── Sanitization of LLM-derived content (Sprint 2) ──
+
+  it('mentions the PR author when the login is valid', () => {
+    const output = formatReviewComment(makeResult(), { prAuthor: 'octocat' });
+    expect(output).toContain('— @octocat');
+  });
+
+  it('omits the mention entirely when the login is invalid', () => {
+    const output = formatReviewComment(makeResult(), { prAuthor: 'org/everyone' });
+    expect(output).not.toContain('@org/everyone');
+    expect(output).not.toContain('org/everyone');
+  });
+
+  it('neutralizes @-mentions and HTML in the LLM summary', () => {
+    const output = formatReviewComment(
+      makeResult({
+        summary: 'cc @everyone <script>alert(1)</script><!-- hidden instruction -->',
+      }),
+    );
+    expect(output).not.toContain('@everyone');
+    expect(output).not.toContain('<script>');
+    expect(output).not.toContain('hidden instruction');
+  });
+
+  it('truncates an oversized LLM summary', () => {
+    const output = formatReviewComment(makeResult({ summary: 'z'.repeat(10_000) }));
+    expect(output).not.toContain('z'.repeat(2002));
+  });
+
+  it('sanitizes table-breaking content in finding file/category fields', () => {
+    const output = formatReviewComment(
+      makeResult({
+        status: 'FAILED',
+        findings: [
+          makeFinding({
+            file: 'a|b.ts\n| injected | row |',
+            category: 'bug | <img src=x>',
+            message: 'msg',
+            source: 'ai',
+          }),
+        ],
+      }),
+    );
+    expect(output).not.toContain('| injected | row |');
+    expect(output).not.toContain('<img');
+  });
+
   it('shows +N more when category has more than 3 files', () => {
     const result = makeResult();
     const output = formatReviewComment(result, {

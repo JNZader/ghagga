@@ -202,6 +202,7 @@ export {
   SEVERITY_EMOJI,
   STATUS_EMOJI,
 } from './format.js';
+export { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 
 // ─── Extensible Tool System ─────────────────────────────────────
 
