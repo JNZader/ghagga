@@ -17,13 +17,15 @@ function makeFinding(
 
 describe('compressToolFindings — deduplication', () => {
   it('removes findings with identical 60-char message prefixes', () => {
-    // Dedup keys on the first 60 chars of the message. The first two findings
-    // share an identical 60-char prefix and only diverge afterwards, so they
-    // collapse to one; the third has a distinct prefix and survives.
-    const sharedPrefix = 'no-unused-vars: this rule reports a variable that is never';
+    // Dedup keys on the first 60 chars of the message (message.slice(0, 60)).
+    // `sharedPrefix` is EXACTLY 60 chars, and the first two findings diverge at
+    // char 61 ('X' vs 'Y') — so their dedup keys are identical and they collapse
+    // to one; the third has a distinct prefix and survives.
+    const sharedPrefix = 'no-unused-vars: a variable is declared but its value is neve';
+    expect(sharedPrefix.length).toBe(60);
     const findings: ToolFinding[] = [
-      makeFinding('eslint', 'a.ts', `${sharedPrefix} read — variable 'x'`),
-      makeFinding('eslint', 'b.ts', `${sharedPrefix} read — variable 'y'`),
+      makeFinding('eslint', 'a.ts', `${sharedPrefix}X (unused: x)`),
+      makeFinding('eslint', 'b.ts', `${sharedPrefix}Y (unused: y)`),
       makeFinding('eslint', 'c.ts', 'no-console: unexpected console statement'),
     ];
     const { findings: out } = compressToolFindings(findings, { deduplicateMessages: true });

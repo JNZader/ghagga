@@ -59,6 +59,181 @@ const cliFiles = safeGetTsFiles(join(monorepoRoot, 'apps', 'cli', 'src'));
 const dbFiles = safeGetTsFiles(join(monorepoRoot, 'packages', 'db', 'src'));
 const allSourceFiles = [...coreFiles, ...serverFiles, ...cliFiles, ...dbFiles];
 
+// ─── Lexical scanner ────────────────────────────────────────────
+
+/**
+ * Neutralize comments, string literals, and regex literals so that a downstream
+ * scan only sees real code. Stripped spans are replaced with spaces (offsets and
+ * line numbers are preserved, so error messages keep pointing at the right place).
+ *
+ * Implemented as a SINGLE left-to-right pass with explicit lexical state, because
+ * the naive multi-`.replace` approach is order-dependent and unsound:
+ *   - stripping `//` line comments before strings turns
+ *     `const url = "https://x"; eval(payload)` into `const url = ` (the `//`
+ *     inside the URL is wrongly treated as a comment → the real `eval()` is lost);
+ *   - a single-quote string regex that stops at `\n` misses line-continuation
+ *     strings (`'\` + newline), so code after the (still open) string leaks
+ *     through as if it were code.
+ *
+ * States handled: line comment, block comment, single/double/template string
+ * (with `\\.` escapes and, for templates, basic nesting of `${ ... }`), and
+ * regex literals (disambiguated from division by the previous significant char).
+ */
+export function stripNonCode(src: string): string {
+  const out: string[] = [];
+  const n = src.length;
+  let i = 0;
+
+  // Last significant (non-whitespace, non-stripped) code char emitted. Used to
+  // decide whether a `/` starts a regex literal or is a division operator.
+  let lastSignificant = '';
+
+  // Emit a char verbatim; track it as the last significant code char.
+  const emit = (ch: string): void => {
+    out.push(ch);
+    if (ch.trim() !== '') lastSignificant = ch;
+  };
+  // Replace a span [start, end) with spaces, preserving newlines for line counts.
+  const blank = (start: number, end: number): void => {
+    for (let k = start; k < end; k++) out.push(src[k] === '\n' ? '\n' : ' ');
+  };
+
+  // A `/` begins a regex literal when the previous significant char is one that
+  // cannot end an expression (so a `/` after it must be a regex, not division).
+  const regexAllowedAfter = (ch: string): boolean => {
+    if (ch === '') return true; // start of file
+    // Identifiers, numbers, and closing brackets/parens end an expression →
+    // a following `/` is division, not a regex.
+    if (/[A-Za-z0-9_$)\]}]/.test(ch)) return false;
+    return true;
+  };
+
+  while (i < n) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    // Line comment
+    if (ch === '/' && next === '/') {
+      let j = i + 2;
+      while (j < n && src[j] !== '\n') j++;
+      blank(i, j);
+      i = j;
+      continue;
+    }
+
+    // Block comment
+    if (ch === '/' && next === '*') {
+      let j = i + 2;
+      while (j < n && !(src[j] === '*' && src[j + 1] === '/')) j++;
+      j = Math.min(n, j + 2); // consume closing */
+      blank(i, j);
+      i = j;
+      continue;
+    }
+
+    // Single- or double-quoted string (handles `\\.` escapes incl. line
+    // continuation `\` + newline; an unterminated string blanks to EOF).
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      let j = i + 1;
+      while (j < n) {
+        if (src[j] === '\\') {
+          j += 2; // skip escaped char (covers `\` + newline line-continuation)
+          continue;
+        }
+        if (src[j] === quote) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      blank(i, j);
+      lastSignificant = quote; // a string is an expression value
+      i = j;
+      continue;
+    }
+
+    // Template literal (handles escapes + basic `${ ... }` nesting).
+    if (ch === '`') {
+      let j = i + 1;
+      let depth = 0;
+      while (j < n) {
+        const c = src[j];
+        if (c === '\\') {
+          j += 2;
+          continue;
+        }
+        if (depth === 0 && c === '`') {
+          j++;
+          break;
+        }
+        if (depth === 0 && c === '$' && src[j + 1] === '{') {
+          depth++;
+          j += 2;
+          continue;
+        }
+        if (depth > 0 && c === '{') {
+          depth++;
+          j++;
+          continue;
+        }
+        if (depth > 0 && c === '}') {
+          depth--;
+          j++;
+          continue;
+        }
+        j++;
+      }
+      blank(i, j);
+      lastSignificant = '`';
+      i = j;
+      continue;
+    }
+
+    // Regex literal (only when context says a `/` cannot be division).
+    if (ch === '/' && regexAllowedAfter(lastSignificant)) {
+      let j = i + 1;
+      let inClass = false;
+      let closed = false;
+      while (j < n) {
+        const c = src[j];
+        if (c === '\\') {
+          j += 2;
+          continue;
+        }
+        if (c === '\n') break; // regex literals can't span newlines → not a regex
+        if (c === '[') {
+          inClass = true;
+        } else if (c === ']') {
+          inClass = false;
+        } else if (c === '/' && !inClass) {
+          j++;
+          closed = true;
+          break;
+        }
+        j++;
+      }
+      if (closed) {
+        // consume trailing flags
+        while (j < n && /[a-z]/i.test(src[j])) j++;
+        blank(i, j);
+        lastSignificant = '/'; // regex is an expression value
+        i = j;
+        continue;
+      }
+      // Not actually a regex (no closing slash on this line): treat as division.
+      emit(ch);
+      i++;
+      continue;
+    }
+
+    emit(ch);
+    i++;
+  }
+
+  return out.join('');
+}
+
 // ─── Tests ──────────────────────────────────────────────────────
 
 describe('Security Audit', () => {
@@ -270,29 +445,15 @@ describe('Security Audit', () => {
 
     it('should not contain eval() calls in source code', () => {
       // eval() is a security risk — arbitrary code execution.
-      // We only flag REAL call sites: `eval(` preceded by start-of-expression
-      // context. We must NOT match `eval` when it appears as an alternation
-      // branch inside a RegExp literal (e.g. the AISVS rule catalog in
-      // aisvs.ts uses `/(?:eval|exec|...)\s*\(/` to *detect* this very
-      // pattern). Strip line comments, string literals, and regex literals
-      // before scanning so rule definitions are not counted as call sites.
-      const stripNonCode = (src: string): string =>
-        src
-          // line comments
-          .replace(/\/\/[^\n]*/g, '')
-          // block comments
-          .replace(/\/\*[\s\S]*?\*\//g, '')
-          // template/single/double quoted strings
-          .replace(/`(?:\\.|[^`\\])*`/g, '""')
-          .replace(/'(?:\\.|[^'\\])*'/g, '""')
-          .replace(/"(?:\\.|[^"\\])*"/g, '""')
-          // regex literals: a slash not immediately following an identifier,
-          // number, or closing paren/bracket, through the closing slash.
-          .replace(
-            /([=(,:[!&|?{};\n]\s*)\/(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[gimsuy]*/g,
-            '$1//',
-          );
-
+      // We only flag REAL call sites. Comments, string literals, and regex
+      // literals must be neutralized first, otherwise the AISVS rule catalog
+      // in aisvs.ts (which uses `/(?:eval|exec|...)\s*\(/` regex literals and
+      // descriptions containing the literal text `eval()`) would trip a false
+      // positive. The naive multi-pass `.replace` approach is order-dependent
+      // and unsound: stripping `//` comments before strings deletes the real
+      // `eval()` in `const url = "https://x"; eval(payload)` because the `//`
+      // inside the URL string is mistaken for a comment. So we scan once,
+      // left-to-right, tracking lexical state. See the unit tests below.
       const evalPattern = /\beval\s*\(/;
 
       for (const file of allSourceFiles) {
@@ -332,5 +493,52 @@ describe('Security Audit', () => {
       expect(coreFileNames).toContain('types.ts');
       expect(coreFileNames).toContain('privacy.ts');
     });
+  });
+});
+
+// ─── Scanner unit tests ─────────────────────────────────────────
+
+describe('stripNonCode (eval-scan lexer)', () => {
+  const hasEval = (src: string): boolean => /\beval\s*\(/.test(stripNonCode(src));
+
+  it('(a) keeps a real eval() that follows a string containing "//"', () => {
+    // The `//` inside the URL string must NOT be treated as a comment, so the
+    // real eval() after the statement must survive and be detected.
+    const src = 'const url = "https://x"; eval(payload)';
+    expect(hasEval(src)).toBe(true);
+  });
+
+  it('(b) ignores eval( that lives inside a line-continuation string', () => {
+    // A single-quoted string with a `\` line continuation spanning a newline:
+    // the `eval(` is part of the string body, not real code.
+    const src = "const s = 'prefix \\\n eval( still inside the string';";
+    expect(hasEval(src)).toBe(false);
+  });
+
+  it('(c) ignores eval inside regex literals and strings (aisvs.ts shape)', () => {
+    // Mirrors the AISVS catalog: a regex literal alternation `eval|exec` plus a
+    // description string mentioning `eval()`. Neither is a real call site.
+    const src = [
+      'const rule = {',
+      '  description: "LLM response passed to eval(), exec(), or shell execution",',
+      '  pattern: /(?:eval|exec|execSync|spawn|fork)\\s*\\(\\s*(?:result|response)\\b/i,',
+      '};',
+    ].join('\n');
+    expect(hasEval(src)).toBe(false);
+  });
+
+  it('preserves line count when blanking spans (offset stability)', () => {
+    const src = 'a\n// comment\n"str\\ning"\nb';
+    expect(stripNonCode(src).split('\n').length).toBe(src.split('\n').length);
+  });
+
+  it('still detects a plain eval() call', () => {
+    expect(hasEval('eval(userInput)')).toBe(true);
+  });
+
+  it('treats / as division (not regex) after an identifier', () => {
+    // `a / b` is division; the trailing `eval(` is a genuine call site.
+    const src = 'const x = a / b; eval(x)';
+    expect(hasEval(src)).toBe(true);
   });
 });
