@@ -2,6 +2,11 @@
  * AI Enhance prompt template and serialization utilities.
  */
 
+import {
+  STATIC_ANALYSIS_UNTRUSTED_LABEL,
+  UNTRUSTED_CONTENT_POLICY,
+  wrapUntrusted,
+} from '../agents/prompts.js';
 import type { ReviewFinding } from '../types.js';
 import type { EnhanceFindingSummary } from './types.js';
 
@@ -26,10 +31,16 @@ Rules:
 - Priority scores: 10=critical security flaw, 7-9=high impact, 4-6=moderate, 1-3=low impact/noise
 - Only suggest fixes for findings with priority >= 7
 - Only filter findings you are >90% confident are false positives
-- Keep suggestions concise (1-2 sentences)`;
+- Keep suggestions concise (1-2 sentences)
+
+${UNTRUSTED_CONTENT_POLICY}`;
 
 /**
  * Build the user prompt with serialized findings.
+ *
+ * The serialized findings carry tool output + file paths from the target repo,
+ * which are attacker-influenceable — fence them as untrusted DATA so an injected
+ * "message" field cannot redirect the enhance model.
  */
 export function buildEnhancePrompt(findings: EnhanceFindingSummary[]): string {
   const serialized = findings
@@ -39,7 +50,7 @@ export function buildEnhancePrompt(findings: EnhanceFindingSummary[]): string {
     )
     .join('\n');
 
-  return `Analyze these ${findings.length} static analysis findings:\n\n${serialized}`;
+  return `Analyze these ${findings.length} static analysis findings:\n\n${wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, serialized)}`;
 }
 
 /**

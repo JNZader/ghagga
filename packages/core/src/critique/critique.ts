@@ -6,6 +6,12 @@
  * vague findings, producing a higher-quality final review.
  */
 
+import {
+  SPECIALIST_OUTPUT_UNTRUSTED_LABEL,
+  UNTRUSTED_CONTENT_POLICY,
+  wrapUntrusted,
+  wrapUntrustedDiff,
+} from '../agents/prompts.js';
 import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type { FindingSeverity, ProgressCallback, ReviewFinding, ReviewResult } from '../types.js';
 import { REFINED_REVIEW_SYSTEM, SELF_CRITIQUE_SYSTEM } from './prompts.js';
@@ -204,9 +210,13 @@ export async function runDualCritique(
     message: `Running self-critique on ${initialFindings.length} AI finding(s)...`,
   });
 
-  const critiquePrompt = `Here is the code diff:\n\n${input.diff}\n\nHere is the initial review with ${initialFindings.length} findings:\n\n${serializeFindingsForCritique(initialFindings)}\n\nPlease critique each finding.`;
+  // The diff is untrusted user input; the serialized findings are model-generated
+  // text derived from that diff. Fence both as untrusted DATA so an injected
+  // "finding message" or diff line cannot redirect the critique agent.
+  const critiquePrompt = `Here is the code diff:\n\n${wrapUntrustedDiff(input.diff)}\n\nHere is the initial review with ${initialFindings.length} findings:\n\n${wrapUntrusted(SPECIALIST_OUTPUT_UNTRUSTED_LABEL, serializeFindingsForCritique(initialFindings))}\n\nPlease critique each finding.`;
 
-  const critiqueResponse = await generateFn(SELF_CRITIQUE_SYSTEM, critiquePrompt);
+  const critiqueSystem = `${SELF_CRITIQUE_SYSTEM}\n${UNTRUSTED_CONTENT_POLICY}`;
+  const critiqueResponse = await generateFn(critiqueSystem, critiquePrompt);
   const critiqueResult = parseCritiqueResponse(critiqueResponse.text);
 
   emit({
@@ -229,9 +239,10 @@ export async function runDualCritique(
 
   // ── Step 3: Refined Summary ──────────────────────────────────
   // Ask the LLM to produce a refined summary based on the surviving findings
-  const refinedPrompt = `Here is the code diff:\n\n${input.diff}\n\nInitial review summary: ${initialReview.summary}\n\nSelf-critique assessment: ${critiqueResult.overallAssessment}\n\nRemaining findings after critique (${refined.length}):\n${serializeFindingsForCritique(refined)}\n\nPlease produce the refined review.`;
+  const refinedPrompt = `Here is the code diff:\n\n${wrapUntrustedDiff(input.diff)}\n\nInitial review summary: ${initialReview.summary}\n\nSelf-critique assessment: ${critiqueResult.overallAssessment}\n\nRemaining findings after critique (${refined.length}):\n${wrapUntrusted(SPECIALIST_OUTPUT_UNTRUSTED_LABEL, serializeFindingsForCritique(refined))}\n\nPlease produce the refined review.`;
 
-  const refinedResponse = await generateFn(REFINED_REVIEW_SYSTEM, refinedPrompt);
+  const refinedSystem = `${REFINED_REVIEW_SYSTEM}\n${UNTRUSTED_CONTENT_POLICY}`;
+  const refinedResponse = await generateFn(refinedSystem, refinedPrompt);
 
   // Extract refined status and summary from response
   const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED)/i.exec(

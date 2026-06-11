@@ -22,7 +22,9 @@ import {
   buildReviewLevelInstruction,
   REVIEW_CALIBRATION,
   SIMPLE_REVIEW_SYSTEM,
+  STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
+  wrapUntrusted,
   wrapUntrustedDiff,
 } from './prompts.js';
 
@@ -179,11 +181,13 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
 
   const startTime = Date.now();
 
-  // Build the full system prompt with all context layers
+  // Build the full system prompt with all context layers.
+  // staticContext is attacker-influenceable tool/data output → fence as untrusted.
+  // memoryContext is fenced inside buildMemoryContext().
   const system = [
     SIMPLE_REVIEW_SYSTEM,
     UNTRUSTED_CONTENT_POLICY,
-    staticContext,
+    staticContext ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext) : '',
     buildMemoryContext(memoryContext),
     stackHints,
     input.checklistContext ?? '',
