@@ -405,6 +405,13 @@ export async function getReviewsByInstallationIds(
     })
     .from(reviews)
     .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+    // SECURITY (cross-tenant isolation): the early-return above guards the
+    // empty-installationIds path, but `inArray(col, [])` is ALSO safe at the SQL
+    // layer — drizzle renders it as `WHERE false` (zero rows), never an
+    // unconstrained query that would leak every tenant's reviews. Do NOT
+    // "optimize away" the guard above OR assume a future drizzle upgrade keeps
+    // this semantic: queries.test.ts locks the generated SQL via .toSQL() so an
+    // upgrade that drops the WHERE clause fails the suite instead of leaking.
     .where(inArray(repositories.installationId, installationIds))
     .orderBy(desc(reviews.createdAt))
     .limit(limit)
@@ -426,6 +433,10 @@ export async function countReviewsByInstallationIds(
     .select({ total: sql<number>`count(*)::int` })
     .from(reviews)
     .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+    // SECURITY (cross-tenant isolation): same empty-array safety as
+    // getReviewsByInstallationIds — `inArray(col, [])` renders `WHERE false`
+    // (count 0), not an unconstrained count over every tenant. Guard above +
+    // .toSQL() lock in queries.test.ts must both stay. See that function's note.
     .where(inArray(repositories.installationId, installationIds));
   return row?.total ?? 0;
 }
