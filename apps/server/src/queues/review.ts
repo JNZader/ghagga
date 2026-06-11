@@ -83,7 +83,7 @@ export async function revalidateGatewayChain<T extends { provider: string; gatew
         // Generic warn — never echo the URL (it is the SSRF target itself).
         log.warn(
           { reason: check.reason },
-          'Dropping gateway chain entry: URL failed SSRF re-validation at execution time',
+          'Dropping provider chain entry with invalid gatewayUrl: failed SSRF re-validation at execution time',
         );
         continue;
       }
@@ -587,6 +587,19 @@ async function processReview(
     // revalidateGatewayChain). Gateway entries whose URL now resolves to a
     // private/loopback/metadata address are dropped before we fetch them.
     const dbChain = await revalidateGatewayChain(rawDbChain, log);
+    // Observability: if a non-empty chain was fully emptied by SSRF
+    // re-validation, the worker silently falls through to the legacy/no-key
+    // path below and the AI review can degrade to static-analysis-only. The
+    // degradation semantics are intentional (sprint 2, same pattern as
+    // decrypt-failure) — we only make the all-dropped case VISIBLE so an
+    // operator can tell "no AI key" apart from "every gateway URL got dropped
+    // by SSRF re-validation".
+    if (rawDbChain.length > 0 && dbChain.length === 0) {
+      log.warn(
+        { entriesIn: rawDbChain.length },
+        'All provider chain entries dropped by SSRF re-validation — AI review may degrade to static-analysis-only',
+      );
+    }
     let providerChain: ProviderChainEntry[] | undefined;
 
     if (dbChain.length > 0) {
