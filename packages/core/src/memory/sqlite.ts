@@ -77,7 +77,9 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_obs_project ON memory_observations(project);
   CREATE INDEX IF NOT EXISTS idx_obs_topic_key ON memory_observations(topic_key);
   CREATE INDEX IF NOT EXISTS idx_obs_content_hash ON memory_observations(content_hash);
-  CREATE INDEX IF NOT EXISTS idx_obs_last_accessed ON memory_observations(last_accessed_at);
+  -- NOTE: idx_obs_last_accessed is created in create() AFTER the
+  -- last_accessed_at migration — on legacy DBs the column does not exist
+  -- yet when this schema runs, and CREATE INDEX would fail.
 
   CREATE VIRTUAL TABLE IF NOT EXISTS memory_observations_fts
     USING fts5(title, content, content='memory_observations', content_rowid='id');
@@ -165,6 +167,22 @@ export interface SqliteMemoryStorageOptions {
   embeddingProvider?: EmbeddingProvider;
 }
 
+/**
+ * Runs an ADD COLUMN migration idempotently.
+ * Swallows 'duplicate column name' (migration already ran) and rethrows
+ * anything else so real schema failures are not silently swallowed.
+ */
+function runIdempotentAlter(db: DatabaseWithParams, sql: string): void {
+  try {
+    db.run(sql);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('duplicate column name')) {
+      throw error;
+    }
+  }
+}
+
 export class SqliteMemoryStorage implements MemoryStorage {
   private dedupWindowMinutes: number;
   private decayConfig: DecayConfig;
@@ -220,31 +238,25 @@ export class SqliteMemoryStorage implements MemoryStorage {
     db.run(SCHEMA_SQL);
 
     // Migration: add severity column to existing databases
-    try {
-      db.run('ALTER TABLE memory_observations ADD COLUMN severity TEXT');
-    } catch {
-      // Column already exists — idempotent migration
-    }
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN severity TEXT');
 
-    // Migration: add last_accessed_at column for decay tracking
-    try {
-      db.run(
-        "ALTER TABLE memory_observations ADD COLUMN last_accessed_at TEXT NOT NULL DEFAULT (datetime('now'))",
-      );
-      // Backfill: set last_accessed_at = updated_at for existing rows
-      db.run(
-        'UPDATE memory_observations SET last_accessed_at = updated_at WHERE last_accessed_at IS NULL OR last_accessed_at = ""',
-      );
-    } catch {
-      // Column already exists — idempotent migration
-    }
+    // Migration: add last_accessed_at column for decay tracking.
+    // SQLite forbids non-constant defaults (e.g. datetime('now')) in
+    // ALTER TABLE ADD COLUMN once the table has rows — so add the column
+    // WITHOUT a default and backfill explicitly below.
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN last_accessed_at TEXT');
+    // Backfill runs unconditionally: covers freshly added columns AND rows
+    // left NULL/empty by the previously broken migration.
+    db.run(
+      "UPDATE memory_observations SET last_accessed_at = COALESCE(updated_at, datetime('now')) WHERE last_accessed_at IS NULL OR last_accessed_at = ''",
+    );
+    // Index deferred from SCHEMA_SQL: must run after the column exists
+    db.run(
+      'CREATE INDEX IF NOT EXISTS idx_obs_last_accessed ON memory_observations(last_accessed_at)',
+    );
 
     // Migration: add embedding column for hybrid search (NULL when no embedding provider)
-    try {
-      db.run('ALTER TABLE memory_observations ADD COLUMN embedding BLOB');
-    } catch {
-      // Column already exists — idempotent migration
-    }
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN embedding BLOB');
 
     return new SqliteMemoryStorage(db, filePath, options);
   }
@@ -397,7 +409,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
       filePaths: string[] | null;
       severity: string | null;
       lastAccessed: Date;
-      embedding: Buffer | null;
+      /** sql.js returns BLOB columns as Uint8Array (not Buffer) */
+      embedding: Buffer | Uint8Array | null;
       bm25Score: number;
     }
 
@@ -412,7 +425,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
         filePaths: row.file_paths ? JSON.parse(row.file_paths as string) : null,
         severity: (row.severity as string) ?? null,
         lastAccessed: row.last_accessed_at ? new Date(row.last_accessed_at as string) : new Date(),
-        embedding: row.embedding ? (row.embedding as Buffer) : null,
+        embedding: row.embedding ? (row.embedding as Buffer | Uint8Array) : null,
         bm25Score: row.bm25_score as number,
       });
     }
@@ -438,15 +451,20 @@ export class SqliteMemoryStorage implements MemoryStorage {
       const strength = computeStrength(candidate.lastAccessed, now, this.decayConfig);
       if (strength < this.decayConfig.minStrength) continue;
 
-      // Normalize BM25: invert (less negative = better) → [0, 1]
-      const normalizedBm25 = bm25Range === 0 ? 1 : (candidate.bm25Score - minBm25) / bm25Range;
+      // Normalize BM25 to [0, 1]. FTS5 bm25() is MORE NEGATIVE = BETTER match,
+      // so the best candidate (minBm25) must map to 1 and the worst (maxBm25) to 0.
+      const normalizedBm25 = bm25Range === 0 ? 1 : (maxBm25 - candidate.bm25Score) / bm25Range;
 
       // Cosine similarity from stored embedding (0 if not present)
       let cosineSim = 0;
       if (candidate.embedding) {
         try {
           const storedVec = deserializeEmbedding(candidate.embedding);
-          cosineSim = cosineSimilarity(queryVec, storedVec);
+          // Dimension guard: a stored vector from a different embedding model
+          // is meaningless against this query — skip cosine (mirror queries.ts)
+          if (storedVec.length === queryVec.length) {
+            cosineSim = cosineSimilarity(queryVec, storedVec);
+          }
         } catch {
           // Malformed embedding — treat as 0
         }
@@ -603,8 +621,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
     const inserted = this.db.exec(
       `
       INSERT INTO memory_observations
-        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash, embedding)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash, embedding, last_accessed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       RETURNING id, type, title, content, file_paths, severity
     `,
       [

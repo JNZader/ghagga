@@ -407,6 +407,35 @@ describe('integration: review modes through pipeline', () => {
     expect(steps.some((s) => s.step === 'mode-fallback')).toBe(true);
   });
 
+  it('diagnostic mode dispatches the diagnostic path for ollama (no fallback)', async () => {
+    // runDiagnosticReview builds its own generate fn from providers/ollama.js
+    const { createOllamaGenerateFn: ollamaModuleGen } = await import('../providers/ollama.js');
+    const { createOllamaGenerateFn: factoryGen } = await import('../providers/generate-fn.js');
+    const gen = fakeGenerateFn(DIAGNOSTIC_RESPONSE);
+    vi.mocked(ollamaModuleGen).mockReturnValue(gen);
+    // resolveGenerateTextFns also builds an (unused-by-diagnostic) ollama fn
+    vi.mocked(factoryGen).mockReturnValue(fakeGenerateFn(SIMPLE_RESPONSE));
+
+    const steps: Array<{ step: string; message: string }> = [];
+    const result = await reviewPipeline(
+      makeInput({
+        mode: 'diagnostic',
+        provider: 'ollama',
+        model: 'llama3',
+        apiKey: 'ollama',
+        onProgress: (e) => steps.push(e),
+      }),
+    );
+
+    // Diagnostic must actually run — not downgrade to simple
+    expect(result.metadata.mode).toBe('diagnostic');
+    expect(steps.some((s) => s.step === 'mode-fallback')).toBe(false);
+    expect(steps.some((s) => s.step === 'diagnostic-call')).toBe(true);
+    expect(gen).toHaveBeenCalledOnce();
+    // The hypothesis block from the response must be parsed
+    expect(result.hypotheses?.length).toBeGreaterThan(0);
+  });
+
   // ── resolveAiEnabled edge case ──────────────────────────────────
 
   it('aiReviewEnabled=false with valid key still skips AI', async () => {

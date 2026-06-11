@@ -19,7 +19,8 @@ import {
   runTools,
   toolRegistry,
 } from 'ghagga-core';
-import { getConfigDir, loadConfig } from '../lib/config.js';
+import { getConfigDir, getStoredToken, loadConfig } from '../lib/config.js';
+import { isLegacyProvider, remapLegacyStoredProvider } from '../lib/providers.js';
 import { resolveProjectId } from '../lib/git.js';
 import { formatSeverityLine } from '../ui/format.js';
 import * as tui from '../ui/tui.js';
@@ -66,25 +67,57 @@ export async function auditCommand(targetPath: string, options: AuditOptions): P
     if (!options.quick) {
       const config = loadConfig();
 
+      // Explicit legacy values (--provider flag / env var) are a hard error —
+      // same behavior as "ghagga review". Only STORED CONFIG values are
+      // remapped (read-time migration below).
+      if (isLegacyProvider(provider)) {
+        tui.log.error(
+          `\n❌ Provider '${provider}' is no longer supported directly.\n` +
+            `  → Set --provider gateway and configure credentials in mcp-llm-bridge.\n` +
+            `  → See: https://github.com/JNZader/mcp-llm-bridge\n\n` +
+            `  Or use --provider cli-bridge for local CLI tools (Claude Code, OpenCode, Copilot).\n`,
+        );
+        process.exit(1);
+      }
+
+      let providerRemapped = false;
       if (!provider) {
-        provider = config.defaultProvider ?? 'github';
-      }
+        provider = config.defaultProvider ?? 'gateway';
 
-      if (!model) {
-        model = config.defaultModel ?? DEFAULT_MODELS[provider as LLMProvider];
-      }
-
-      if (!apiKey) {
-        if (provider === 'github') {
-          apiKey = process.env.GITHUB_TOKEN ?? undefined;
-        } else {
-          apiKey = process.env.GHAGGA_API_KEY ?? undefined;
+        // Read-time migration: legacy provider stored by an old "ghagga login"
+        const remap = remapLegacyStoredProvider(provider);
+        if (remap.remapped) {
+          tui.log.warn(
+            `⚠️  Stored provider '${provider}' is no longer supported — using 'gateway' instead.\n` +
+              `   Run "ghagga login" again to refresh your saved config.`,
+          );
+          provider = remap.provider;
+          providerRemapped = true;
         }
       }
 
-      if (!apiKey && provider !== 'ollama') {
+      if (!model) {
+        // A stored model belongs to the legacy provider — ignore it after remap
+        model =
+          (providerRemapped ? undefined : config.defaultModel) ??
+          DEFAULT_MODELS[provider as LLMProvider];
+      }
+
+      if (!apiKey) {
+        apiKey = process.env.GHAGGA_API_KEY ?? undefined;
+        // gateway / cli-bridge can use the stored GitHub token (same as review)
+        if (!apiKey && (provider === 'gateway' || provider === 'cli-bridge')) {
+          apiKey = getStoredToken() ?? undefined;
+        }
+      }
+
+      // ollama, cli-bridge, and gateway (when self-hosted) don't require a key
+      const noKeyRequired =
+        provider === 'ollama' || provider === 'cli-bridge' || provider === 'gateway';
+
+      if (!apiKey && !noKeyRequired) {
         tui.log.error('❌ No API key available.\n');
-        tui.log.error('   Quick fix: run "ghagga login" to authenticate with GitHub (free!)');
+        tui.log.error('   Quick fix: run "ghagga login" to authenticate.');
         tui.log.error('   Or pass --api-key <key> or set GHAGGA_API_KEY.');
         tui.log.error('   Or use --provider ollama for local models (no key needed).');
         tui.log.error('   Or use --quick to run static analysis only.\n');
@@ -174,8 +207,8 @@ export async function auditCommand(targetPath: string, options: AuditOptions): P
       auditResult = await runAuditReport({
         repoPath,
         staticContext,
-        provider: provider ?? 'github',
-        model: model ?? DEFAULT_MODELS[(provider ?? 'github') as LLMProvider],
+        provider: provider ?? 'gateway',
+        model: model ?? DEFAULT_MODELS[(provider ?? 'gateway') as LLMProvider],
         apiKey: apiKey ?? '',
         onProgress: options.output
           ? undefined

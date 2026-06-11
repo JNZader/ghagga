@@ -643,13 +643,13 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     // Step 1: Build GenerateTextFn(s) for the detected backend
     const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway, isOllama);
 
-    // Step 2: Resolve effective mode (diagnostic → simple for non-SDK backends)
-    const effectiveMode = resolveEffectiveMode(resolvedInputMode, isCliBridge, isGateway, isOllama);
+    // Step 2: Resolve effective mode (diagnostic → simple for non-SDK backends; ollama keeps it)
+    const effectiveMode = resolveEffectiveMode(resolvedInputMode, isCliBridge, isGateway);
 
     if (effectiveMode !== resolvedInputMode) {
       emit({
         step: 'mode-fallback',
-        message: `Diagnostic mode not supported with ${isCliBridge ? 'CLI bridge' : isOllama ? 'Ollama' : 'gateway'} — falling back to simple mode`,
+        message: `Diagnostic mode not supported with ${isCliBridge ? 'CLI bridge' : 'gateway'} — falling back to simple mode`,
       });
     }
 
@@ -1244,16 +1244,12 @@ function resolveGenerateTextFns(
 /**
  * Resolve the effective review mode.
  *
- * Diagnostic mode requires direct model access (not available in non-SDK backends).
- * For CLI bridge, gateway, and Ollama, fall back to simple mode.
+ * Diagnostic mode requires direct model access. Ollama provides it
+ * (runDiagnosticReview uses createOllamaGenerateFn); CLI bridge and
+ * gateway do not, so they fall back to simple mode.
  */
-function resolveEffectiveMode(
-  mode: ReviewMode,
-  isCliBridge: boolean,
-  isGateway: boolean,
-  isOllama: boolean,
-): ReviewMode {
-  if (mode === 'diagnostic' && (isCliBridge || isGateway || isOllama)) {
+function resolveEffectiveMode(mode: ReviewMode, isCliBridge: boolean, isGateway: boolean): ReviewMode {
+  if (mode === 'diagnostic' && (isCliBridge || isGateway)) {
     return 'simple';
   }
   // Fan-out works with all backends (uses generateFns like workflow/consensus)

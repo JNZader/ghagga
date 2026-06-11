@@ -13,6 +13,9 @@ import { createApiRouter } from './api.js';
 
 const mockGetReviewsByDay = vi.fn();
 const mockGetReviewsByRepoId = vi.fn();
+const mockCountReviewsByRepoId = vi.fn();
+const mockGetReviewsByInstallationIds = vi.fn();
+const mockCountReviewsByInstallationIds = vi.fn();
 const mockGetReviewStats = vi.fn();
 const mockGetRepoByFullName = vi.fn();
 const mockGetReposByInstallationId = vi.fn();
@@ -41,6 +44,9 @@ const mockUpdateWorkflowStatus = vi.fn();
 vi.mock('ghagga-db', () => ({
   getReviewsByDay: (...args: unknown[]) => mockGetReviewsByDay(...args),
   getReviewsByRepoId: (...args: unknown[]) => mockGetReviewsByRepoId(...args),
+  countReviewsByRepoId: (...args: unknown[]) => mockCountReviewsByRepoId(...args),
+  getReviewsByInstallationIds: (...args: unknown[]) => mockGetReviewsByInstallationIds(...args),
+  countReviewsByInstallationIds: (...args: unknown[]) => mockCountReviewsByInstallationIds(...args),
   getReviewStats: (...args: unknown[]) => mockGetReviewStats(...args),
   getRepoByFullName: (...args: unknown[]) => mockGetRepoByFullName(...args),
   getReposByInstallationId: (...args: unknown[]) => mockGetReposByInstallationId(...args),
@@ -206,6 +212,7 @@ describe('GET /api/reviews', () => {
       { id: 2, prNumber: 11, status: 'FAILED' },
     ];
     mockGetReviewsByRepoId.mockResolvedValueOnce(fakeReviews);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(2);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&page=1&limit=10');
@@ -213,26 +220,50 @@ describe('GET /api/reviews', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data).toEqual(fakeReviews);
-    expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0 });
+    expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0, total: 2 });
 
     expect(mockGetReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42, { limit: 10, offset: 0 });
+    expect(mockCountReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42);
   });
 
   it('uses default pagination when params not provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo');
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0 });
+    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0, total: 0 });
+  });
+
+  // FIX A (DSH-A2): pagination.total reflects the FULL count, not the page
+  // length. With more reviews than fit on a page, total must exceed data.length
+  // so the dashboard can compute totalPages and reach pages beyond the first.
+  it('returns pagination.total reflecting full count beyond the current page', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockGetReviewsByRepoId.mockResolvedValueOnce([
+      { id: 1, prNumber: 10, status: 'PASSED' },
+      { id: 2, prNumber: 11, status: 'FAILED' },
+    ]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(137);
+
+    const app = createApp();
+    const res = await app.request('/api/reviews?repo=owner/repo&page=1&limit=50');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveLength(2);
+    expect(json.pagination.total).toBe(137);
+    expect(json.pagination.total).not.toBe(json.data.length);
   });
 
   it('caps limit at 100', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&limit=500');
@@ -245,23 +276,14 @@ describe('GET /api/reviews', () => {
   it('calculates correct offset for page 3', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&page=3&limit=20');
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.pagination).toEqual({ page: 3, limit: 20, offset: 40 });
-  });
-
-  it('returns 400 when repo param is missing', async () => {
-    const app = createApp();
-    const res = await app.request('/api/reviews');
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe('VALIDATION_ERROR');
-    expect(json.message).toContain('Missing required query parameter: repo');
+    expect(json.pagination).toEqual({ page: 3, limit: 20, offset: 40, total: 0 });
   });
 
   it('returns 404 when repo is not found', async () => {
@@ -319,6 +341,7 @@ describe('GET /api/reviews', () => {
       summary: 'Static analysis ran but the AI agent failed midway.',
     };
     mockGetReviewsByRepoId.mockResolvedValueOnce([partialReview]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(1);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo');
@@ -328,6 +351,91 @@ describe('GET /api/reviews', () => {
     expect(json.data).toHaveLength(1);
     expect(json.data[0].status).toBe('PARTIAL');
     expect(json.data[0]).toEqual(partialReview);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// GET /api/reviews — "All repositories" (no repo param)  [FIX B / DSH-A3]
+// ═══════════════════════════════════════════════════════════════════
+
+describe('GET /api/reviews (no repo → all caller installations)', () => {
+  it('lists reviews across the caller installations and never another tenant', async () => {
+    // Caller owns installations 100 and 200. The query layer is responsible
+    // for excluding foreign tenants; we assert the route passes EXACTLY the
+    // caller's installationIds down and returns the scoped rows unchanged.
+    const user = { ...DEFAULT_USER, installationIds: [100, 200] };
+    const ownReviews = [
+      { id: 1, repositoryId: 42, prNumber: 10, status: 'PASSED', fullName: 'owner/repo-a' },
+      { id: 2, repositoryId: 77, prNumber: 11, status: 'FAILED', fullName: 'owner/repo-b' },
+    ];
+    mockGetReviewsByInstallationIds.mockResolvedValueOnce(ownReviews);
+    mockCountReviewsByInstallationIds.mockResolvedValueOnce(2);
+
+    const app = createApp(user);
+    const res = await app.request('/api/reviews');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toEqual(ownReviews);
+    // Authz: the query layer is invoked with the caller's installations ONLY.
+    expect(mockGetReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100, 200], {
+      limit: 50,
+      offset: 0,
+    });
+    expect(mockCountReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100, 200]);
+    // The per-repo single-repo path must NOT have been touched.
+    expect(mockGetRepoByFullName).not.toHaveBeenCalled();
+    expect(mockGetReviewsByRepoId).not.toHaveBeenCalled();
+    // No row belongs to a foreign tenant repo.
+    expect(json.data.every((r: { fullName: string }) => r.fullName.startsWith('owner/'))).toBe(true);
+  });
+
+  it('returns pagination.total reflecting the full cross-installation count', async () => {
+    const user = { ...DEFAULT_USER, installationIds: [100] };
+    mockGetReviewsByInstallationIds.mockResolvedValueOnce([
+      { id: 1, repositoryId: 42, prNumber: 10, status: 'PASSED', fullName: 'owner/repo-a' },
+    ]);
+    mockCountReviewsByInstallationIds.mockResolvedValueOnce(83);
+
+    const app = createApp(user);
+    const res = await app.request('/api/reviews?page=2&limit=50');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pagination).toEqual({ page: 2, limit: 50, offset: 50, total: 83 });
+    expect(json.pagination.total).not.toBe(json.data.length);
+    expect(mockGetReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100], {
+      limit: 50,
+      offset: 50,
+    });
+  });
+
+  it('returns 200 with empty data + total 0 when caller has no installations', async () => {
+    const user = { ...DEFAULT_USER, installationIds: [] };
+
+    const app = createApp(user);
+    const res = await app.request('/api/reviews');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toEqual([]);
+    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0, total: 0 });
+    // No query should run for an empty-installation caller.
+    expect(mockGetReviewsByInstallationIds).not.toHaveBeenCalled();
+    expect(mockCountReviewsByInstallationIds).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 with errorId when the cross-installation query fails', async () => {
+    mockGetReviewsByInstallationIds.mockRejectedValueOnce(new Error('DB error'));
+
+    const app = createApp();
+    const res = await app.request('/api/reviews');
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('FETCH_FAILED');
+    expect(json.message).toBe('Failed to fetch reviews');
+    expect(json.errorId).toHaveLength(8);
   });
 });
 
@@ -1241,6 +1349,59 @@ describe('PUT /api/settings', () => {
     expect(updates.settings.ignorePatterns).toEqual(['*.md', '*.txt']);
   });
 
+  it('rejects persisting a gateway entry with a private gatewayUrl (SSRF guard)', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [
+          {
+            provider: 'gateway',
+            model: 'auto',
+            apiKey: 'sk-new-gw-key',
+            gatewayUrl: 'http://127.0.0.1:6379',
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('VALIDATION_ERROR');
+    // Generic message only — no IP/range details leaked to the client
+    expect(json.message).toBe('Gateway URL not allowed');
+    expect(mockUpdateRepoSettings).not.toHaveBeenCalled();
+  });
+
+  it('accepts persisting a gateway entry with a public gatewayUrl', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [
+          {
+            provider: 'gateway',
+            model: 'auto',
+            apiKey: 'sk-new-gw-key',
+            gatewayUrl: 'https://8.8.8.8/v1',
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateRepoSettings).toHaveBeenCalledOnce();
+  });
+
   it('preserves existing encrypted key when no new key provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
@@ -1733,6 +1894,66 @@ describe('POST /api/providers/validate', () => {
     expect(json.message).toContain('Unknown provider');
   });
 
+  // ── SSRF guard on gateway health check ──
+
+  it('rejects a private gateway URL without fetching it (SSRF guard)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'gateway',
+        gatewayUrl: 'http://169.254.169.254/latest/meta-data',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway URL not allowed');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('returns generic "Gateway unreachable" on fetch failure (no err.message echo)', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new Error('connect ECONNREFUSED 8.8.8.8:443 internal-details'));
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'gateway', gatewayUrl: 'https://8.8.8.8' }),
+    });
+
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway unreachable');
+    expect(JSON.stringify(json)).not.toContain('ECONNREFUSED');
+    fetchSpy.mockRestore();
+  });
+
+  it('returns generic "Gateway unreachable" on non-OK health status (no status echo)', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('forbidden', { status: 403 }));
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'gateway', gatewayUrl: 'https://8.8.8.8' }),
+    });
+
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway unreachable');
+    expect(JSON.stringify(json)).not.toContain('403');
+    fetchSpy.mockRestore();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2003,6 +2224,34 @@ describe('GET /api/runner/install-workflow/status/:owner/:repo', () => {
 
     expect(res.status).toBe(404);
   });
+
+  it('returns 404 (identical to not-tracked) when repo belongs to another installation', async () => {
+    // Anti-enumeration: a foreign repo must be indistinguishable from an
+    // untracked repo, so the guard returns 404 instead of 403.
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'victim/repo',
+      installationId: 999, // NOT in DEFAULT_USER.installationIds ([100])
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/status/victim/repo', {
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(404);
+    const forbiddenBody = await res.json();
+
+    // Body must be byte-identical to the genuine not-found response
+    mockGetRepoByFullName.mockResolvedValueOnce(null);
+    const notFoundRes = await app.request('/api/runner/install-workflow/status/unknown/repo', {
+      headers: { Authorization: 'Bearer test-token' },
+    });
+    expect(notFoundRes.status).toBe(404);
+    expect(forbiddenBody).toEqual(await notFoundRes.json());
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2053,6 +2302,65 @@ describe('POST /api/runner/install-workflow/:owner/:repo', () => {
     });
 
     expect(res.status).toBe(404);
+  });
+
+  it('returns 404 (identical to not-tracked) when repo belongs to another installation', async () => {
+    // Cross-tenant attack: user from installation 100 tries to inject a
+    // workflow into a repo owned by installation 999. The guard must block
+    // BEFORE any token is minted or workflow injected, and the response must
+    // be indistinguishable from "repo not tracked" (anti-enumeration 404).
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'victim/repo',
+      installationId: 999, // NOT in DEFAULT_USER.installationIds ([100])
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/victim/repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(404);
+    const forbiddenBody = await res.json();
+
+    // No installation token minted, no workflow injected, no DB write
+    expect(mockGetInstallationToken).not.toHaveBeenCalled();
+    expect(mockInjectWorkflow).not.toHaveBeenCalled();
+    expect(mockUpdateWorkflowStatus).not.toHaveBeenCalled();
+
+    // Body must be byte-identical to the genuine not-found response
+    mockGetRepoByFullName.mockResolvedValueOnce(null);
+    const notFoundRes = await app.request('/api/runner/install-workflow/unknown/repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+    expect(notFoundRes.status).toBe(404);
+    expect(forbiddenBody).toEqual(await notFoundRes.json());
+  });
+
+  it('allows an authorized user from the repo installation', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/test-repo',
+      installationId: 100, // matches DEFAULT_USER.installationIds
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+    mockGetInstallationToken.mockResolvedValueOnce('ghp_installation-token');
+    mockInjectWorkflow.mockResolvedValueOnce({ sha: 'authzsha', created: true });
+    mockUpdateWorkflowStatus.mockResolvedValueOnce(undefined);
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/testuser/test-repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockInjectWorkflow).toHaveBeenCalled();
   });
 
   it('returns 403 when branch protection blocks injection', async () => {

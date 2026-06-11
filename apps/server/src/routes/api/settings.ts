@@ -23,6 +23,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { validateProviderKey } from '../../lib/provider-models.js';
+import { validateOutboundUrl } from '../../lib/safe-url.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import { buildProviderChainView, generateErrorId, logger, maskApiKey } from './utils.js';
 
@@ -266,6 +267,23 @@ export function createSettingsRouter(db: Database) {
           entry.cliModel = undefined;
         } else {
           entry.gatewayUrl = undefined;
+        }
+      }
+
+      // SSRF guard: reject gateway URLs pointing at internal/private network
+      // space BEFORE they are persisted — the review worker later fetches the
+      // stored URL server-side with no user in the loop. Detailed reason goes
+      // to the server log only; the client gets a generic message.
+      for (const entry of incomingChain) {
+        if (entry.provider === 'gateway' && entry.gatewayUrl) {
+          const urlCheck = await validateOutboundUrl(entry.gatewayUrl);
+          if (!urlCheck.ok) {
+            logger.warn(
+              { repo: repoFullName, user: user.githubLogin, reason: urlCheck.reason },
+              'Rejected gateway URL at persist time (SSRF guard)',
+            );
+            return c.json({ error: 'VALIDATION_ERROR', message: 'Gateway URL not allowed' }, 400);
+          }
         }
       }
 
@@ -605,26 +623,44 @@ export function createSettingsRouter(db: Database) {
     if (provider === 'gateway') {
       const gatewayUrl = (body as Record<string, unknown>).gatewayUrl as string | undefined;
       if (gatewayUrl) {
+        // SSRF guard: a fully user-controlled URL fetched server-side is an
+        // internal port/host scanning oracle. Validate before fetching, and
+        // never echo status codes or error internals back to the client.
+        const urlCheck = await validateOutboundUrl(gatewayUrl);
+        if (!urlCheck.ok) {
+          logger.warn(
+            { reason: urlCheck.reason, user: user.githubLogin },
+            'Gateway URL rejected by SSRF guard',
+          );
+          return c.json({ valid: false, models: [], error: 'Gateway URL not allowed' });
+        }
+
         try {
           const healthUrl = `${gatewayUrl.replace(/\/+$/, '')}/health`;
           const healthResp = await fetch(healthUrl, {
             signal: AbortSignal.timeout(10_000),
+            // SSRF defense: do NOT follow redirects. validateOutboundUrl only
+            // vetted the ORIGINAL host; a 3xx Location could point the fetch at
+            // a private/loopback/metadata address that was never validated.
+            // With redirect:'manual', a 3xx surfaces as a non-ok response below
+            // and is treated as unreachable (generic message).
+            redirect: 'manual',
           });
+          // Treat ONLY 2xx as reachable. A 3xx (now non-ok) is a redirect we
+          // refuse to follow — report unreachable, never the status code.
           if (healthResp.ok) {
             return c.json({ valid: true, models: ['auto'] });
           }
-          return c.json({
-            valid: false,
-            models: [],
-            error: `Gateway health check failed (HTTP ${healthResp.status})`,
-          });
+          // Generic message — do NOT echo the HTTP status (port-scan oracle).
+          return c.json({ valid: false, models: [], error: 'Gateway unreachable' });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           logger.warn(
             { err: msg, gatewayUrl, user: user.githubLogin },
             'Gateway health check failed',
           );
-          return c.json({ valid: false, models: [], error: `Cannot reach gateway: ${msg}` });
+          // Generic message — do NOT echo err.message (internal-network oracle).
+          return c.json({ valid: false, models: [], error: 'Gateway unreachable' });
         }
       }
       // No URL provided yet — still valid (URL will be set in the dashboard)

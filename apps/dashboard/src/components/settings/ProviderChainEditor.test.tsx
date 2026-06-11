@@ -7,6 +7,7 @@
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AvailableKeysMap } from '@/lib/api';
 import { createTestQueryClient } from '@/test/test-utils';
@@ -88,6 +89,113 @@ describe('ProviderChainEditor', () => {
     renderWithQuery(<ProviderChainEditor chain={chain} onChange={onChange} />);
 
     expect(screen.getByText(/add fallback provider/i)).toBeInTheDocument();
+  });
+
+  it('generates a distinct id for each added provider entry', () => {
+    const chains: ProviderEntryState[][] = [];
+
+    function Harness() {
+      const [chain, setChain] = useState<ProviderEntryState[]>([]);
+      return (
+        <ProviderChainEditor
+          chain={chain}
+          onChange={(next) => {
+            chains.push(next);
+            setChain(next);
+          }}
+        />
+      );
+    }
+
+    renderWithQuery(<Harness />);
+
+    // First add (empty state), then a fallback add
+    fireEvent.click(screen.getByText('+ Add Provider'));
+    fireEvent.click(screen.getByText('+ Add Fallback Provider'));
+
+    const finalChain = chains[chains.length - 1];
+    expect(finalChain).toHaveLength(2);
+    expect(finalChain?.[0]?.id).toBeTruthy();
+    expect(finalChain?.[1]?.id).toBeTruthy();
+    // Duplicate ids cross-wire entry state via duplicate React keys
+    expect(finalChain?.[0]?.id).not.toBe(finalChain?.[1]?.id);
+  });
+
+  it('still generates ids when crypto.randomUUID is unavailable (non-secure context)', () => {
+    // Self-hosters on HTTP staging have no crypto.randomUUID — it throws there.
+    // The genId fallback must keep producing truthy, distinct ids.
+    const originalRandomUUID = globalThis.crypto?.randomUUID;
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+
+    try {
+      const chains: ProviderEntryState[][] = [];
+
+      function Harness() {
+        const [chain, setChain] = useState<ProviderEntryState[]>([]);
+        return (
+          <ProviderChainEditor
+            chain={chain}
+            onChange={(next) => {
+              chains.push(next);
+              setChain(next);
+            }}
+          />
+        );
+      }
+
+      renderWithQuery(<Harness />);
+
+      fireEvent.click(screen.getByText('+ Add Provider'));
+      fireEvent.click(screen.getByText('+ Add Fallback Provider'));
+
+      const finalChain = chains[chains.length - 1];
+      expect(finalChain).toHaveLength(2);
+      expect(finalChain?.[0]?.id).toBeTruthy();
+      expect(finalChain?.[1]?.id).toBeTruthy();
+      expect(finalChain?.[0]?.id).not.toBe(finalChain?.[1]?.id);
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'randomUUID', {
+        value: originalRandomUUID,
+        configurable: true,
+        writable: true,
+      });
+    }
+  });
+
+  it('removing the first entry leaves the second entry intact', () => {
+    const chains: ProviderEntryState[][] = [];
+
+    function Harness() {
+      const [chain, setChain] = useState<ProviderEntryState[]>([
+        createEntry({ id: 'entry-a', provider: 'gateway', model: 'auto' }),
+        createEntry({ id: 'entry-b', provider: 'ollama', model: 'llama3' }),
+      ]);
+      return (
+        <ProviderChainEditor
+          chain={chain}
+          onChange={(next) => {
+            chains.push(next);
+            setChain(next);
+          }}
+        />
+      );
+    }
+
+    renderWithQuery(<Harness />);
+
+    const removeButtons = screen.getAllByTitle('Remove provider');
+    // biome-ignore lint/style/noNonNullAssertion: two entries → two remove buttons
+    fireEvent.click(removeButtons[0]!);
+
+    const finalChain = chains[chains.length - 1];
+    expect(finalChain).toHaveLength(1);
+    expect(finalChain?.[0]?.id).toBe('entry-b');
+    expect(finalChain?.[0]?.provider).toBe('ollama');
+    expect(finalChain?.[0]?.model).toBe('llama3');
   });
 
   it('propagates availableKeys to child ProviderEntry components', () => {

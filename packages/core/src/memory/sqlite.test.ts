@@ -1,7 +1,8 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { EmbeddingProvider } from '../embed.js';
 import { SqliteMemoryStorage } from './sqlite.js';
 
 // ─── Test Setup ─────────────────────────────────────────────────
@@ -74,6 +75,70 @@ describe('SqliteMemoryStorage', () => {
         "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_obs_%'",
       );
       expect(indexes[0]?.values.length).toBeGreaterThanOrEqual(3);
+
+      await storage.close();
+    });
+
+    it('migrates a legacy DB (no last_accessed_at column) that already has rows', async () => {
+      // Build a pre-migration database: observations table WITHOUT severity /
+      // last_accessed_at / embedding, with the FTS index populated via trigger,
+      // and one existing row. SQLite forbids non-constant defaults in
+      // ALTER TABLE ADD COLUMN, so the old migration always failed here.
+      const sqlJsModule = (await import('fts5-sql-bundle')).default;
+      const initSqlJs =
+        typeof sqlJsModule === 'function'
+          ? sqlJsModule
+          : (sqlJsModule as unknown as { initSqlJs: typeof sqlJsModule }).initSqlJs;
+      const SQL = await initSqlJs();
+      const legacy = new SQL.Database();
+      legacy.run(`
+        CREATE TABLE memory_observations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER,
+          project TEXT NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          topic_key TEXT,
+          file_paths TEXT DEFAULT '[]',
+          content_hash TEXT,
+          revision_count INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE VIRTUAL TABLE memory_observations_fts
+          USING fts5(title, content, content='memory_observations', content_rowid='id');
+        CREATE TRIGGER obs_fts_insert AFTER INSERT ON memory_observations BEGIN
+          INSERT INTO memory_observations_fts(rowid, title, content)
+            VALUES (new.id, new.title, new.content);
+        END;
+        INSERT INTO memory_observations (project, type, title, content, updated_at)
+          VALUES ('owner/repo', 'pattern', 'Legacy auth note',
+                  'JWT auth validation pattern.', datetime('now', '-1 day'));
+      `);
+      writeFileSync(dbPath, Buffer.from(legacy.export()));
+      legacy.close();
+
+      // Opening with the current backend must add the column and backfill it
+      const storage = await SqliteMemoryStorage.create(dbPath);
+      // biome-ignore lint/suspicious/noExplicitAny: test access to private db
+      const db = (storage as any).db;
+
+      const col = db.exec(
+        "SELECT name FROM pragma_table_info('memory_observations') WHERE name = 'last_accessed_at'",
+      );
+      expect(col).toHaveLength(1);
+
+      // Backfill: last_accessed_at must equal updated_at for the legacy row
+      const row = db.exec('SELECT last_accessed_at, updated_at FROM memory_observations')[0]
+        ?.values[0];
+      expect(row?.[0]).not.toBeNull();
+      expect(row?.[0]).toBe(row?.[1]);
+
+      // Queries referencing the migrated column must work (this used to throw)
+      const results = await storage.searchObservations('owner/repo', 'auth');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.title).toBe('Legacy auth note');
 
       await storage.close();
     });
@@ -451,6 +516,138 @@ describe('SqliteMemoryStorage', () => {
       });
 
       await storage.close();
+    });
+  });
+
+  // ── Hybrid Search (BM25 + semantic) ──
+  //
+  // Real round-trip tests: no DB mocks. Embeddings are serialized into the
+  // sql.js BLOB column on save and deserialized from Uint8Array on search,
+  // so these tests cover both the deserialization path and the BM25
+  // normalization (FTS5 bm25() is MORE NEGATIVE = BETTER).
+
+  describe('hybrid search (real round-trip)', () => {
+    /** Deterministic embedding provider: vector depends only on the text */
+    function makeEmbeddingProvider(vectorFor: (text: string) => number[]): EmbeddingProvider {
+      const dimension = vectorFor('probe').length;
+      return {
+        dimension,
+        embed: async (text: string) => vectorFor(text),
+        embedBatch: async (texts: string[]) => texts.map(vectorFor),
+      };
+    }
+
+    it('semantic match outranks a stronger keyword match (cosine contributes)', async () => {
+      // Texts containing 'rotate' (and the query itself) share one vector;
+      // everything else is orthogonal — so cosine only rewards the rotate doc.
+      const vectorFor = (text: string) => (text.includes('rotate') ? [1, 0, 0] : [0, 1, 0]);
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(vectorFor),
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Credential rotation policy',
+          content: 'We rotate secrets regularly.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'token validation',
+          content: 'token token token token parsing and token checks.',
+        }),
+      );
+      // Unrelated filler so FTS5 idf is non-degenerate
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Database indexing notes',
+          content: 'Indexes speed up reads.',
+        }),
+      );
+
+      // Query matches 'token' (keyword-best doc) AND embeds to the rotate vector
+      const hybridResults = await storage.searchObservations('owner/repo', 'token rotate');
+
+      expect(hybridResults.length).toBeGreaterThanOrEqual(2);
+      // 0.7 * cosine dominates: the semantic match must rank first even though
+      // the token-spam doc is the far better keyword match
+      expect(hybridResults[0]?.title).toBe('Credential rotation policy');
+
+      await storage.close();
+
+      // Control: keyword-only search over the SAME data ranks the token doc
+      // first — proving cosine (i.e. embedding deserialization) changed the order
+      const keywordStorage = await SqliteMemoryStorage.create(dbPath);
+      const keywordResults = await keywordStorage.searchObservations('owner/repo', 'token rotate');
+      expect(keywordResults[0]?.title).toBe('token validation');
+      await keywordStorage.close();
+    });
+
+    it('best BM25 match ranks first when cosine ties (normalization not inverted)', async () => {
+      // All texts embed to the same vector → cosine is 1 everywhere and
+      // ranking is decided purely by normalized BM25
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0]),
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'token heavy',
+          content: 'token token token token token everywhere.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'token light',
+          content: 'a single token mention.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Unrelated filler',
+          content: 'Nothing relevant here.',
+        }),
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'token');
+
+      expect(results.length).toBe(2);
+      // FTS5 bm25() is MORE NEGATIVE = BETTER: the heavy doc must map to 1,
+      // not 0 (the old formula gave the best match the WORST normalized score)
+      expect(results[0]?.title).toBe('token heavy');
+      expect(results[1]?.title).toBe('token light');
+
+      await storage.close();
+    });
+
+    it('skips cosine on dimension mismatch and falls back to BM25 order', async () => {
+      // Save with a 3-dim provider...
+      const storage3d = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0]),
+      });
+      await storage3d.saveObservation(
+        makeObservationData({
+          title: 'token heavy',
+          content: 'token token token token token everywhere.',
+        }),
+      );
+      await storage3d.saveObservation(
+        makeObservationData({
+          title: 'token light',
+          content: 'a single token mention.',
+        }),
+      );
+      await storage3d.close();
+
+      // ...then search with a 4-dim provider: stored vectors must be skipped
+      const storage4d = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0, 0]),
+      });
+      const results = await storage4d.searchObservations('owner/repo', 'token');
+
+      // No throw, and order falls back to BM25 (cosine contributed 0 for all)
+      expect(results[0]?.title).toBe('token heavy');
+      await storage4d.close();
     });
   });
 

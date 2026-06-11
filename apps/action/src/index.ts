@@ -205,14 +205,26 @@ async function run(): Promise<void> {
     );
 
     // Step 5.6: Initialize review memory (SQLite + @actions/cache)
+    // GitHub Actions caches are immutable (write-once per key), so saving with
+    // a fixed key only works on the very first run. runId alone is NOT unique
+    // either: it stays the same across re-runs of a workflow run, so a re-run
+    // would hit the already-written key and the save would fail. Include
+    // runAttempt to make the key unique per attempt, and restore via prefix
+    // fallback to pick up the most recent snapshot.
     const MEMORY_DB_PATH = '/tmp/ghagga-memory.db';
-    const cacheKey = `ghagga-memory-${repoFullName.replace('/', '-')}`;
+    const memoryCacheBaseKey = `ghagga-memory-${repoFullName.replace('/', '-')}`;
+    const runAttempt = context.runAttempt ?? Number(process.env.GITHUB_RUN_ATTEMPT ?? '1');
+    const memoryCacheSaveKey = `${memoryCacheBaseKey}-${context.runId}-${runAttempt}`;
     let memoryStorage: MemoryStorage | undefined;
 
     if (enableMemory) {
-      // Restore cached database file
+      // Restore cached database file. Fallbacks: newest run-suffixed key first,
+      // then the bare base key (old-format caches from existing users).
       try {
-        const hitKey = await cache.restoreCache([MEMORY_DB_PATH], cacheKey, [cacheKey]);
+        const hitKey = await cache.restoreCache([MEMORY_DB_PATH], memoryCacheSaveKey, [
+          `${memoryCacheBaseKey}-`,
+          memoryCacheBaseKey,
+        ]);
         if (hitKey) {
           core.info(`🧠 Memory cache hit (key: ${hitKey})`);
         } else {
@@ -314,7 +326,7 @@ async function run(): Promise<void> {
       }
 
       try {
-        await cache.saveCache([MEMORY_DB_PATH], cacheKey);
+        await cache.saveCache([MEMORY_DB_PATH], memoryCacheSaveKey);
         core.info('🧠 Memory cache saved');
       } catch (error) {
         core.warning(

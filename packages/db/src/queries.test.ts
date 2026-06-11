@@ -10,9 +10,17 @@
  *  - edge cases like empty results, missing settings, etc.
  */
 
+import { desc, eq, inArray } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { describe, expect, it, vi } from 'vitest';
 import type { Database } from './client.js';
-import { type DbProviderChainEntry, DEFAULT_REPO_SETTINGS, type RepoSettings } from './schema.js';
+import {
+  type DbProviderChainEntry,
+  DEFAULT_REPO_SETTINGS,
+  type RepoSettings,
+  repositories,
+  reviews,
+} from './schema.js';
 
 // ─── Helper: chainable mock db ─────────────────────────────────
 
@@ -47,9 +55,12 @@ function createMockDb(terminalValue: unknown = []): MockDB & { _resolve: (v: unk
 // We import the module under test AFTER defining helpers because the module
 // itself only has side-effect-free function declarations.
 import {
+  buildTsQuery,
   clearAllMemoryObservations,
   clearEmptyMemorySessions,
   clearMemoryObservationsByProject,
+  countReviewsByInstallationIds,
+  countReviewsByRepoId,
   createMemorySession,
   deactivateInstallation,
   deleteMappingsByInstallationId,
@@ -75,6 +86,7 @@ import {
   getRepoByGithubId,
   getReposByInstallationId,
   getReviewStats,
+  getReviewsByInstallationIds,
   getReviewsByRepoId,
   getSessionsByProject,
   listMemoryObservations,
@@ -694,6 +706,168 @@ describe('getReviewStats', () => {
   });
 });
 
+describe('countReviewsByRepoId', () => {
+  it('should return the count from the aggregate row', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([{ total: 137 }]);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByRepoId(db, 42);
+    expect(result).toBe(137);
+  });
+
+  it('should return 0 when the aggregate row is missing', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([]);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByRepoId(db, 42);
+    expect(result).toBe(0);
+  });
+});
+
+describe('getReviewsByInstallationIds', () => {
+  it('should short-circuit to [] for empty installationIds (no query)', async () => {
+    const mockSelect = vi.fn();
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await getReviewsByInstallationIds(db, []);
+    expect(result).toEqual([]);
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it('should join repositories and apply default limit=50/offset=0', async () => {
+    const rows = [{ id: 1, repositoryId: 42, fullName: 'owner/repo-a' }];
+    const mockOffset = vi.fn().mockResolvedValue(rows);
+    const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await getReviewsByInstallationIds(db, [100, 200]);
+
+    expect(result).toEqual(rows);
+    expect(mockInnerJoin).toHaveBeenCalled();
+    expect(mockLimit).toHaveBeenCalledWith(50);
+    expect(mockOffset).toHaveBeenCalledWith(0);
+  });
+
+  it('should respect custom limit and offset', async () => {
+    const mockOffset = vi.fn().mockResolvedValue([]);
+    const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    await getReviewsByInstallationIds(db, [100], { limit: 25, offset: 50 });
+
+    expect(mockLimit).toHaveBeenCalledWith(25);
+    expect(mockOffset).toHaveBeenCalledWith(50);
+  });
+});
+
+describe('countReviewsByInstallationIds', () => {
+  it('should return 0 for empty installationIds (no query)', async () => {
+    const mockSelect = vi.fn();
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByInstallationIds(db, []);
+    expect(result).toBe(0);
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it('should return the joined aggregate count', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([{ total: 83 }]);
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByInstallationIds(db, [100, 200]);
+    expect(result).toBe(83);
+    expect(mockInnerJoin).toHaveBeenCalled();
+  });
+
+  it('should return 0 when the aggregate row is missing', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([]);
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByInstallationIds(db, [100]);
+    expect(result).toBe(0);
+  });
+});
+
+// ─── SECURITY REGRESSION LOCK: cross-tenant isolation via inArray([]) ──
+//
+// getReviewsByInstallationIds / countReviewsByInstallationIds scope the
+// cross-tenant review listing with `inArray(repositories.installationId, ids)`.
+// On drizzle-orm 0.45.x, `inArray(col, [])` renders `WHERE false` (zero rows),
+// so an empty installationIds list (a caller with no installations) leaks NOTHING
+// even if the function-level early-return guards were removed.
+//
+// THE RISK these tests lock: every OTHER test in this file mocks past the real
+// SQL generation, so a future drizzle upgrade that changed empty-array semantics
+// (e.g. dropping the WHERE clause → unconstrained query returning ALL tenants'
+// rows) would silently reintroduce a cross-tenant leak with NO failing test.
+//
+// We assert the ACTUAL generated SQL via drizzle's `.toSQL()` on a REAL query
+// builder (no DB connection — `drizzle({}, { schema })` builds queries lazily and
+// `.toSQL()` renders without executing). This directly locks the drizzle behavior:
+// an upgrade that stops emitting a falsy WHERE for the empty case fails here.
+describe('SECURITY: inArray empty-array renders WHERE false (cross-tenant lock)', () => {
+  // Real drizzle builder, no live connection. toSQL() renders, never executes.
+  const sqlDb = drizzle({} as never, { schema: { reviews, repositories } });
+
+  // Mirrors the WHERE/JOIN shape of getReviewsByInstallationIds.
+  function buildReviewsQuery(installationIds: number[]) {
+    return sqlDb
+      .select({ id: reviews.id, fullName: repositories.fullName })
+      .from(reviews)
+      .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+      .where(inArray(repositories.installationId, installationIds))
+      .orderBy(desc(reviews.createdAt))
+      .limit(50)
+      .offset(0);
+  }
+
+  it('empty installationIds → WHERE false (zero rows), NOT an unconstrained query', () => {
+    const { sql, params } = buildReviewsQuery([]).toSQL();
+    const normalized = sql.toLowerCase();
+
+    // LOCKED ASSERTION: the WHERE renders as a literal false condition.
+    expect(normalized).toContain('where false');
+    // It must NOT degrade into an unconstrained `installation_id in (...)` filter
+    // or drop the WHERE entirely (which would return EVERY tenant's reviews).
+    expect(normalized).not.toContain('installation_id" in');
+    expect(normalized).not.toContain('installation_id in');
+    // No installationId is bound when the array is empty (only limit param remains).
+    expect(params).not.toContain(undefined);
+    expect(params).toEqual([50]);
+  });
+
+  it('non-empty installationIds → constrained `installation_id in (...)` with bound params', () => {
+    const { sql, params } = buildReviewsQuery([100, 200]).toSQL();
+    const normalized = sql.toLowerCase();
+
+    // Sanity: the SAME builder DOES emit a real tenant filter for a populated list.
+    expect(normalized).toContain('installation_id" in (');
+    expect(normalized).not.toContain('where false');
+    // The two installationIds are bound as parameters (plus the limit=50).
+    expect(params).toEqual([100, 200, 50]);
+  });
+});
+
 describe('deleteReviewsByRepoId', () => {
   it('should return count of deleted rows when reviews exist', async () => {
     const deletedRows = [{ id: 1 }, { id: 2 }, { id: 3 }];
@@ -910,6 +1084,30 @@ describe('saveObservation', () => {
 
     // The key assertion is that it doesn't throw
     expect(true).toBe(true);
+  });
+});
+
+describe('buildTsQuery', () => {
+  it('joins terms with OR (|), matching the SQLite backend', () => {
+    expect(buildTsQuery('auth token rotation')).toBe("'auth' | 'token' | 'rotation'");
+  });
+
+  it('returns empty string for blank input', () => {
+    expect(buildTsQuery('')).toBe('');
+    expect(buildTsQuery('   ')).toBe('');
+  });
+
+  it('escapes single quotes inside lexemes', () => {
+    expect(buildTsQuery("it's")).toBe("'it''s'");
+  });
+
+  it('escapes backslashes so a trailing backslash cannot break the closing quote', () => {
+    expect(buildTsQuery('path\\')).toBe("'path\\\\'");
+    expect(buildTsQuery('a\\b')).toBe("'a\\\\b'");
+  });
+
+  it('collapses repeated whitespace between terms', () => {
+    expect(buildTsQuery('  foo   bar  ')).toBe("'foo' | 'bar'");
   });
 });
 

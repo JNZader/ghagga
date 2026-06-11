@@ -29,7 +29,12 @@ worker.on('completed', (job) => {
 });
 
 worker.on('failed', (job, err) => {
-  logger.error({ jobId: job?.id, error: err }, `❌ Review job ${job?.id} failed`);
+  // Log only the message — serializing the full error object can leak job
+  // data attached to it (BullMQ jobs carry encryptedApiKey in their payload).
+  logger.error(
+    { jobId: job?.id, error: err instanceof Error ? err.message : String(err) },
+    `❌ Review job ${job?.id} failed`,
+  );
 });
 
 worker.on('progress', (job, progress) => {

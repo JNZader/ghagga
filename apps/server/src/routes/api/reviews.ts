@@ -9,12 +9,15 @@
 import type { Database } from 'ghagga-db';
 import {
   clearMemoryObservationsByProject,
+  countReviewsByInstallationIds,
+  countReviewsByRepoId,
   deleteReviewById,
   deleteReviewsByIds,
   deleteReviewsByRepoId,
   getRepoByFullName,
   getReviewStats,
   getReviewsByDay,
+  getReviewsByInstallationIds,
   getReviewsByRepoId,
 } from 'ghagga-db';
 import { Hono } from 'hono';
@@ -33,14 +36,26 @@ export function createReviewsRouter(db: Database) {
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 100);
     const offset = (page - 1) * limit;
 
-    if (!repoFullName) {
-      return c.json(
-        { error: 'VALIDATION_ERROR', message: 'Missing required query parameter: repo' },
-        400,
-      );
-    }
-
     try {
+      // ── No repo specified → "All repositories": list reviews across every
+      // repository belonging to the caller's installations. Strictly scoped by
+      // user.installationIds so a caller never sees another tenant's reviews.
+      if (!repoFullName) {
+        if (user.installationIds.length === 0) {
+          return c.json({ data: [], pagination: { page, limit, offset, total: 0 } });
+        }
+
+        const [reviews, total] = await Promise.all([
+          getReviewsByInstallationIds(db, user.installationIds, { limit, offset }),
+          countReviewsByInstallationIds(db, user.installationIds),
+        ]);
+
+        return c.json({
+          data: reviews,
+          pagination: { page, limit, offset, total },
+        });
+      }
+
       const repo = await getRepoByFullName(db, repoFullName);
 
       if (!repo) {
@@ -51,11 +66,14 @@ export function createReviewsRouter(db: Database) {
         return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
       }
 
-      const reviews = await getReviewsByRepoId(db, repo.id, { limit, offset });
+      const [reviews, total] = await Promise.all([
+        getReviewsByRepoId(db, repo.id, { limit, offset }),
+        countReviewsByRepoId(db, repo.id),
+      ]);
 
       return c.json({
         data: reviews,
-        pagination: { page, limit, offset },
+        pagination: { page, limit, offset, total },
       });
     } catch (err) {
       const errorId = generateErrorId();

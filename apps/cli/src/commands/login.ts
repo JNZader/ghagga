@@ -79,12 +79,12 @@ export async function loginCommand(): Promise<void> {
       ...config,
       githubToken: tokenResponse.access_token,
       githubLogin: user.login,
-      defaultProvider: 'github',
-      defaultModel: 'gpt-4o-mini',
+      defaultProvider: 'gateway',
+      defaultModel: 'auto',
     });
 
     tui.log.success(`\n✅ Logged in as ${user.login}`);
-    tui.log.info('   Provider: github (gpt-4o-mini) — free tier');
+    tui.log.info('   Provider: gateway (auto)');
     tui.outro('Run "ghagga review ." to review your code!');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

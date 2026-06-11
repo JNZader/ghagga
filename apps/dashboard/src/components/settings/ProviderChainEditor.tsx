@@ -9,8 +9,18 @@ interface ProviderChainEditorProps {
   availableKeys?: AvailableKeysMap;
 }
 
-const DEFAULT_ENTRY: ProviderEntryState = {
-  id: crypto.randomUUID(),
+// Template for new entries. `id` is intentionally NOT part of the template:
+// a module-level crypto.randomUUID() is evaluated ONCE at load time, so every
+// added entry would share the same id → duplicate React keys → cross-wired
+// entry state on add/remove/reorder. Generate a fresh id per add instead.
+// crypto.randomUUID() throws in non-secure contexts (HTTP staging without TLS —
+// self-hosters). Fall back to a sufficiently-unique id when it is unavailable.
+const genId = (): string =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const DEFAULT_ENTRY: Omit<ProviderEntryState, 'id'> = {
   provider: 'gateway' as SaaSProvider,
   model: 'auto',
   apiKey: '',
@@ -76,7 +86,7 @@ export function ProviderChainEditor({
     // Always allow adding a new entry — same provider with different model is valid.
     // Default to gateway as the standard starting point; user can change to cli-bridge or ollama.
     const defaultProvider: SaaSProvider = 'gateway';
-    onChange([...chain, { ...DEFAULT_ENTRY, provider: defaultProvider }]);
+    onChange([...chain, { ...DEFAULT_ENTRY, id: genId(), provider: defaultProvider }]);
   };
 
   return (

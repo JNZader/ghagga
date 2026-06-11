@@ -113,7 +113,7 @@ vi.mock('../memory/postgres.js', () => ({
 
 // ─── Import module & trigger Worker constructor to capture processor ──
 
-import { createReviewWorker, type ReviewJobData } from './review.js';
+import { createReviewWorker, type ReviewJobData, revalidateGatewayChain } from './review.js';
 
 // Call createReviewWorker so the Worker constructor mock captures the processor
 createReviewWorker(1);
@@ -306,6 +306,104 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     expect(input.aiReviewEnabled).toBe(true);
     expect(input.providerChain).toBeDefined();
     expect(input.providerChain).toHaveLength(1);
+  });
+
+  // ── Decrypt failure degradation (Sprint 2) ──
+
+  describe('decrypt failure degradation', () => {
+    afterEach(() => {
+      // Restore the default decrypt implementation — vi.clearAllMocks()
+      // clears call history but NOT implementations set in these tests.
+      mockDecrypt.mockImplementation((v: string) => `decrypted-${v}`);
+    });
+
+  it('skips a chain entry whose encryptedApiKey fails to decrypt, keeps the rest', async () => {
+    mockDecrypt.mockImplementation((v: string) => {
+      if (v === 'garbage-key') throw new Error('Unsupported state or unable to authenticate data');
+      return `decrypted-${v}`;
+    });
+
+    const data = makeJobData({
+      providerChain: [
+        { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'garbage-key' },
+        { provider: 'gateway', model: 'auto', encryptedApiKey: 'good-key' },
+      ],
+    });
+    const job = makeFakeJob(data);
+
+    await expect(capturedProcessor?.(job)).resolves.toEqual({
+      success: true,
+      reviewId: 'rev-001',
+    });
+
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.providerChain).toHaveLength(1);
+    expect(input.providerChain[0].provider).toBe('gateway');
+    expect(input.providerChain[0].apiKey).toBe('decrypted-good-key');
+
+    // Warning mentions only the provider name — never the encrypted value
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      { provider: 'openai' },
+      expect.stringContaining('credential decryption failed'),
+    );
+    const warnPayloads = mockLogger.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const payload of warnPayloads) {
+      expect(payload).not.toContain('garbage-key');
+    }
+  });
+
+  it('degrades to the no-key fallback when ALL chain entries fail to decrypt', async () => {
+    mockDecrypt.mockImplementation(() => {
+      throw new Error('bad decrypt');
+    });
+
+    const data = makeJobData({
+      llmProvider: 'openai',
+      encryptedApiKey: null,
+      providerChain: [{ provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'corrupt-1' }],
+    });
+    const job = makeFakeJob(data);
+
+    await expect(capturedProcessor?.(job)).resolves.toEqual({
+      success: true,
+      reviewId: 'rev-001',
+    });
+
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.providerChain).toBeUndefined();
+    expect(input.aiReviewEnabled).toBe(false);
+  });
+
+  it('treats a corrupt legacy encryptedApiKey as absent (static-analysis fallback)', async () => {
+    mockDecrypt.mockImplementation(() => {
+      throw new Error('bad decrypt');
+    });
+
+    const data = makeJobData({
+      llmProvider: 'openai',
+      encryptedApiKey: 'corrupt-legacy-key',
+      providerChain: undefined,
+    });
+    const job = makeFakeJob(data);
+
+    await expect(capturedProcessor?.(job)).resolves.toEqual({
+      success: true,
+      reviewId: 'rev-001',
+    });
+
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.aiReviewEnabled).toBe(false);
+    expect(input.apiKey).toBeUndefined();
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      { provider: 'openai' },
+      expect.stringContaining('credential decryption failed'),
+    );
+    const warnPayloads = mockLogger.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const payload of warnPayloads) {
+      expect(payload).not.toContain('corrupt-legacy-key');
+    }
+  });
   });
 
   it('does NOT set aiReviewEnabled when user explicitly disabled it, even with provider', async () => {
@@ -501,5 +599,58 @@ describe('processReview – encrypted credentials re-fetched from DB, not the jo
     const input = mockReviewPipeline.mock.calls[0][0];
     expect(input.providerChain).toHaveLength(1);
     expect(input.providerChain[0].apiKey).toBe('decrypted-old-chain-key');
+  });
+});
+
+// ─── SSRF re-validation at execution time (DNS-rebinding TOCTOU) ──
+
+describe('revalidateGatewayChain', () => {
+  const log = { warn: vi.fn() };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY;
+  });
+
+  it('drops a gateway entry whose URL now resolves to a metadata/private IP', async () => {
+    const chain = [
+      { provider: 'gateway', gatewayUrl: 'http://169.254.169.254/', model: 'auto' },
+      { provider: 'gateway', gatewayUrl: 'https://8.8.8.8/', model: 'auto' },
+      { provider: 'cli-bridge', model: 'opencode' },
+    ];
+
+    const result = await revalidateGatewayChain(chain, log);
+
+    // Metadata entry dropped; public gateway + non-gateway entries kept.
+    expect(result).toHaveLength(2);
+    expect(result.map((e) => e.gatewayUrl)).toEqual(['https://8.8.8.8/', undefined]);
+    expect(log.warn).toHaveBeenCalledOnce();
+  });
+
+  it('never echoes the rejected URL in the warning payload', async () => {
+    const secretUrl = 'http://10.0.0.7:6379/secret-internal-path';
+    await revalidateGatewayChain([{ provider: 'gateway', gatewayUrl: secretUrl, model: 'auto' }], log);
+
+    const payloads = log.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const p of payloads) {
+      expect(p).not.toContain('secret-internal-path');
+      expect(p).not.toContain('10.0.0.7');
+    }
+  });
+
+  it('keeps a gateway entry pointing at a public IP literal', async () => {
+    const result = await revalidateGatewayChain(
+      [{ provider: 'gateway', gatewayUrl: 'https://8.8.8.8/v1', model: 'auto' }],
+      log,
+    );
+    expect(result).toHaveLength(1);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves non-gateway entries untouched (no URL to validate)', async () => {
+    const chain = [{ provider: 'cli-bridge', model: 'opencode' }];
+    const result = await revalidateGatewayChain(chain, log);
+    expect(result).toEqual(chain);
+    expect(log.warn).not.toHaveBeenCalled();
   });
 });

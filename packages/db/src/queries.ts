@@ -354,6 +354,93 @@ export async function getReviewsByRepoId(
     .offset(offset);
 }
 
+/**
+ * Count all reviews for a specific repository.
+ * Used to compute pagination.total for the per-repo review listing.
+ */
+export async function countReviewsByRepoId(db: Database, repositoryId: number): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(reviews)
+    .where(eq(reviews.repositoryId, repositoryId));
+  return row?.total ?? 0;
+}
+
+/**
+ * A review row enriched with its repository's full name, for cross-repository
+ * listings where the caller needs to label which repo each review belongs to.
+ */
+export type ReviewWithRepo = typeof reviews.$inferSelect & { fullName: string };
+
+/**
+ * List reviews across ALL repositories belonging to the given installation IDs,
+ * ordered by createdAt desc, with limit/offset pagination.
+ *
+ * Each row carries the repository `fullName` (via the join) so the caller can
+ * label reviews by repo. Returns an empty array when installationIds is empty
+ * (authz: a caller with no installations sees nothing).
+ */
+export async function getReviewsByInstallationIds(
+  db: Database,
+  installationIds: number[],
+  options: { limit?: number; offset?: number } = {},
+): Promise<ReviewWithRepo[]> {
+  if (installationIds.length === 0) return [];
+
+  const { limit = 50, offset = 0 } = options;
+  return db
+    .select({
+      id: reviews.id,
+      repositoryId: reviews.repositoryId,
+      prNumber: reviews.prNumber,
+      status: reviews.status,
+      mode: reviews.mode,
+      summary: reviews.summary,
+      findings: reviews.findings,
+      tokensUsed: reviews.tokensUsed,
+      executionTimeMs: reviews.executionTimeMs,
+      metadata: reviews.metadata,
+      createdAt: reviews.createdAt,
+      fullName: repositories.fullName,
+    })
+    .from(reviews)
+    .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+    // SECURITY (cross-tenant isolation): the early-return above guards the
+    // empty-installationIds path, but `inArray(col, [])` is ALSO safe at the SQL
+    // layer — drizzle renders it as `WHERE false` (zero rows), never an
+    // unconstrained query that would leak every tenant's reviews. Do NOT
+    // "optimize away" the guard above OR assume a future drizzle upgrade keeps
+    // this semantic: queries.test.ts locks the generated SQL via .toSQL() so an
+    // upgrade that drops the WHERE clause fails the suite instead of leaking.
+    .where(inArray(repositories.installationId, installationIds))
+    .orderBy(desc(reviews.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+/**
+ * Count all reviews across the repositories owned by the given installation IDs.
+ * Used to compute pagination.total for the cross-installation review listing.
+ * Returns 0 when installationIds is empty.
+ */
+export async function countReviewsByInstallationIds(
+  db: Database,
+  installationIds: number[],
+): Promise<number> {
+  if (installationIds.length === 0) return 0;
+
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(reviews)
+    .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+    // SECURITY (cross-tenant isolation): same empty-array safety as
+    // getReviewsByInstallationIds — `inArray(col, [])` renders `WHERE false`
+    // (count 0), not an unconstrained count over every tenant. Guard above +
+    // .toSQL() lock in queries.test.ts must both stay. See that function's note.
+    .where(inArray(repositories.installationId, installationIds));
+  return row?.total ?? 0;
+}
+
 export async function getReviewStats(db: Database, repositoryId: number) {
   const result = await db
     .select({
@@ -612,6 +699,27 @@ export async function saveObservation(
 }
 
 /**
+ * Build a sanitized tsquery string from free-text input.
+ *
+ * Each word is quoted as a lexeme and terms are joined with OR ('|') —
+ * matching the SQLite backend's behavior. AND ('&') made multi-file diff
+ * queries (5-8 unrelated terms) return ~nothing, killing server memory recall.
+ *
+ * Backslashes are escaped first: inside a quoted lexeme, a trailing '\\' would
+ * otherwise escape the closing quote and produce a tsquery syntax error.
+ *
+ * Exported for unit testing (no live PG needed).
+ */
+export function buildTsQuery(query: string): string {
+  return query
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0)
+    .map((w) => `'${w.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`)
+    .join(' | ');
+}
+
+/**
  * Full-text search observations using PostgreSQL tsvector.
  * The search_observations SQL column is maintained by a trigger.
  *
@@ -645,13 +753,7 @@ export async function searchObservations(
   // How many ranked rows the caller wants back (>= limit when post-filtering).
   const returnLimit = Math.max(options.fetchLimit ?? limit, limit);
 
-  // Sanitize query: wrap each word in quotes for tsquery
-  const sanitizedQuery = query
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w.length > 0)
-    .map((w) => `'${w.replace(/'/g, "''")}'`)
-    .join(' & ');
+  const sanitizedQuery = buildTsQuery(query);
 
   if (!sanitizedQuery) return [];
 
