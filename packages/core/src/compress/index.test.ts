@@ -17,9 +17,13 @@ function makeFinding(
 
 describe('compressToolFindings — deduplication', () => {
   it('removes findings with identical 60-char message prefixes', () => {
+    // Dedup keys on the first 60 chars of the message. The first two findings
+    // share an identical 60-char prefix and only diverge afterwards, so they
+    // collapse to one; the third has a distinct prefix and survives.
+    const sharedPrefix = 'no-unused-vars: this rule reports a variable that is never';
     const findings: ToolFinding[] = [
-      makeFinding('eslint', 'a.ts', "no-unused-vars: variable 'x' is defined but never used"),
-      makeFinding('eslint', 'b.ts', "no-unused-vars: variable 'y' is defined but never used"),
+      makeFinding('eslint', 'a.ts', `${sharedPrefix} read — variable 'x'`),
+      makeFinding('eslint', 'b.ts', `${sharedPrefix} read — variable 'y'`),
       makeFinding('eslint', 'c.ts', 'no-console: unexpected console statement'),
     ];
     const { findings: out } = compressToolFindings(findings, { deduplicateMessages: true });
@@ -122,10 +126,13 @@ describe('compressToolFindings — stats', () => {
 
 describe('compressStaticAnalysisBlock — similar line collapsing', () => {
   it('collapses consecutive lines differing only by number', () => {
+    // Lines that are identical once line numbers are normalized away collapse
+    // into one canonical line plus a "... and N similar issue(s)" marker.
+    // (The fixture must differ ONLY by numbers — letters survive normalization.)
     const raw = [
-      "src/foo.ts:10: unused variable 'x'",
-      "src/foo.ts:20: unused variable 'y'",
-      "src/foo.ts:30: unused variable 'z'",
+      'src/foo.ts:10: maximum line length exceeded',
+      'src/foo.ts:20: maximum line length exceeded',
+      'src/foo.ts:30: maximum line length exceeded',
       'src/bar.ts:5: missing semicolon',
     ].join('\n');
 
