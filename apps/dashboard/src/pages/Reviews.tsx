@@ -139,7 +139,8 @@ export function Reviews() {
 
   const { addToast } = useToast();
   const { data: repos } = useRepositories();
-  const { data, isLoading, isError } = useReviews(selectedRepo || undefined, page);
+  // Defensive: never send a page < 1 to the server (negative offset → 500).
+  const { data, isLoading, isError } = useReviews(selectedRepo || undefined, Math.max(1, page));
   const deleteReviews = useDeleteRepoReviews();
   const batchDeleteReviews = useBatchDeleteReviews();
   const deleteReview = useDeleteReview();
@@ -148,6 +149,24 @@ export function Reviews() {
   const total = data?.total ?? 0;
   const pageSize = data?.pageSize ?? 20;
   const totalPages = Math.ceil(total / pageSize);
+
+  // ── Reset to page 1 whenever the selected repo changes ────────
+  // The repo <select> onChange also calls setPage(1), but selectedRepo can
+  // change by other paths (sidebar, deep link). This effect is the source of
+  // truth so we never land on a stale page after switching repos.
+  useEffect(() => {
+    setPage(1);
+  }, [selectedRepo]);
+
+  // ── Clamp page when totalPages shrinks (e.g. after deletes) ───
+  // On page 3 with deletions dropping total to 1 page, the user would be stuck
+  // on an empty ghost page ("No reviews found."). Clamp down to the last valid
+  // page. Guard against totalPages === 0 (empty result) forcing page to 0.
+  useEffect(() => {
+    if (totalPages >= 1 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
 
   // Client-side filtering for status and search
   const filteredReviews = reviews.filter((review: Review) => {
@@ -239,8 +258,8 @@ export function Reviews() {
         <select
           value={selectedRepo}
           onChange={(e) => {
+            // Page reset is handled by the effect on [selectedRepo] (source of truth).
             setSelectedRepo(e.target.value);
-            setPage(1);
           }}
           className="select-field w-56"
         >

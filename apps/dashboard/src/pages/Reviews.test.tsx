@@ -627,6 +627,135 @@ describe('Reviews — pagination', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Page reset & clamp (FF-1)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — page reset & clamp', () => {
+  it('resets to page 1 when the selected repo changes', () => {
+    const setSelectedRepo = vi.fn();
+    mockUseSelectedRepo.mockReturnValue({ selectedRepo: '', setSelectedRepo });
+    mockUseRepositories.mockReturnValue({
+      data: [{ id: 1, fullName: 'acme/app' }],
+      isLoading: false,
+    });
+    mockUseReviews.mockReturnValue({
+      data: { reviews: MULTI_REVIEWS, total: 120, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    const queryClient = createTestQueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // Advance to page 2
+    fireEvent.click(screen.getByText('Next'));
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(2);
+
+    // Selected repo changes by an external path (context update)
+    mockUseSelectedRepo.mockReturnValue({ selectedRepo: 'acme/app', setSelectedRepo });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // The effect on [selectedRepo] resets page → useReviews called with page 1
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(1);
+  });
+
+  it('clamps the page when totalPages shrinks below the current page', () => {
+    // Start on a multi-page result; navigate to page 3.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: MULTI_REVIEWS, total: 120, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    const queryClient = createTestQueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByText('Next')); // → page 2
+    fireEvent.click(screen.getByText('Next')); // → page 3
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(3);
+
+    // A delete drops the total to a single page. The clamp effect must pull
+    // page back to totalPages (1) instead of leaving an empty ghost page.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [makeReview()], total: 1, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // Clamped to page 1 (valid), not stuck on page 3
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(1);
+    // And the row is rendered, not the empty state
+    expect(screen.queryByText('No reviews found.')).not.toBeInTheDocument();
+  });
+
+  it('does not force page to 0 when the result is empty (totalPages === 0)', () => {
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [makeReview()], total: 120, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    const queryClient = createTestQueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByText('Next')); // → page 2
+
+    // Result becomes empty (total 0 → totalPages 0). Guard prevents page → 0.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [], total: 0, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // page param sent to the server must stay >= 1 (never 0)
+    const lastPage =
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1];
+    expect(lastPage).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Review detail modal
 // ═══════════════════════════════════════════════════════════════════
 

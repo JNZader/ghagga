@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { API_URL, fetchGitHubUser, type GitHubUser } from './oauth';
-import { SESSION_EXPIRED_EVENT } from './session-expired';
+import { consumeSessionExpired, SESSION_EXPIRED_EVENT } from './session-expired';
 import type { User } from './types';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -98,6 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    // Drain any 401 that fired before this listener was registered (cold-boot
+    // race). The sticky flag in session-expired.ts ensures the signal is not lost.
+    if (consumeSessionExpired()) {
+      handleSessionExpired();
+    }
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
   }, []);
 

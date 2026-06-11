@@ -12,7 +12,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRepositories } from './api';
 import { AuthProvider, useAuth } from './auth';
-import { SESSION_EXPIRED_EVENT } from './session-expired';
+import {
+  consumeSessionExpired,
+  notifySessionExpired,
+  SESSION_EXPIRED_EVENT,
+} from './session-expired';
 
 // ─── Mock oauth module ──────────────────────────────────────────
 
@@ -57,6 +61,9 @@ let locationHref = '';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Drain any latched session-expired signal so the sticky module-level flag
+  // from a prior test does not bleed into the next AuthProvider mount.
+  consumeSessionExpired();
   // Clear stores
   for (const key of Object.keys(store)) delete store[key];
   for (const key of Object.keys(sessionStore)) delete sessionStore[key];
@@ -258,6 +265,31 @@ describe('session expiry', () => {
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     });
 
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.token).toBeNull();
+    expect(result.current.user).toBeNull();
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('ghagga_token');
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('ghagga_user');
+  });
+
+  it('drains a 401 that fired BEFORE the provider mounted (cold-boot race)', () => {
+    store.ghagga_token = 'stale-token';
+    store.ghagga_user = JSON.stringify({
+      githubLogin: 'testuser',
+      githubUserId: 1,
+      avatarUrl: '',
+    });
+
+    // 401 fires (latches the sticky flag) BEFORE AuthProvider renders — the
+    // live event listener does not exist yet, so without the sticky flag this
+    // signal would be lost and auth state would stay stale.
+    notifySessionExpired();
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: createAuthWrapper(),
+    });
+
+    // The mount effect drains the latched signal → auth state ends cleared.
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.token).toBeNull();
     expect(result.current.user).toBeNull();

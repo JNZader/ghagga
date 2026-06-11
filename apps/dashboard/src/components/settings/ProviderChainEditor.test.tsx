@@ -121,6 +121,51 @@ describe('ProviderChainEditor', () => {
     expect(finalChain?.[0]?.id).not.toBe(finalChain?.[1]?.id);
   });
 
+  it('still generates ids when crypto.randomUUID is unavailable (non-secure context)', () => {
+    // Self-hosters on HTTP staging have no crypto.randomUUID — it throws there.
+    // The genId fallback must keep producing truthy, distinct ids.
+    const originalRandomUUID = globalThis.crypto?.randomUUID;
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+
+    try {
+      const chains: ProviderEntryState[][] = [];
+
+      function Harness() {
+        const [chain, setChain] = useState<ProviderEntryState[]>([]);
+        return (
+          <ProviderChainEditor
+            chain={chain}
+            onChange={(next) => {
+              chains.push(next);
+              setChain(next);
+            }}
+          />
+        );
+      }
+
+      renderWithQuery(<Harness />);
+
+      fireEvent.click(screen.getByText('+ Add Provider'));
+      fireEvent.click(screen.getByText('+ Add Fallback Provider'));
+
+      const finalChain = chains[chains.length - 1];
+      expect(finalChain).toHaveLength(2);
+      expect(finalChain?.[0]?.id).toBeTruthy();
+      expect(finalChain?.[1]?.id).toBeTruthy();
+      expect(finalChain?.[0]?.id).not.toBe(finalChain?.[1]?.id);
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'randomUUID', {
+        value: originalRandomUUID,
+        configurable: true,
+        writable: true,
+      });
+    }
+  });
+
   it('removing the first entry leaves the second entry intact', () => {
     const chains: ProviderEntryState[][] = [];
 
