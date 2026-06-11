@@ -106,7 +106,7 @@ vi.mock('../memory/postgres.js', () => ({
 
 // ─── Import module & trigger Worker constructor to capture processor ──
 
-import { createReviewWorker, type ReviewJobData } from './review.js';
+import { createReviewWorker, type ReviewJobData, revalidateGatewayChain } from './review.js';
 
 // Call createReviewWorker so the Worker constructor mock captures the processor
 createReviewWorker(1);
@@ -411,5 +411,58 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     const input = mockReviewPipeline.mock.calls[0][0];
     // false && true = false
     expect(input.aiReviewEnabled).toBe(false);
+  });
+});
+
+// ─── SSRF re-validation at execution time (DNS-rebinding TOCTOU) ──
+
+describe('revalidateGatewayChain', () => {
+  const log = { warn: vi.fn() };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY;
+  });
+
+  it('drops a gateway entry whose URL now resolves to a metadata/private IP', async () => {
+    const chain = [
+      { provider: 'gateway', gatewayUrl: 'http://169.254.169.254/', model: 'auto' },
+      { provider: 'gateway', gatewayUrl: 'https://8.8.8.8/', model: 'auto' },
+      { provider: 'cli-bridge', model: 'opencode' },
+    ];
+
+    const result = await revalidateGatewayChain(chain, log);
+
+    // Metadata entry dropped; public gateway + non-gateway entries kept.
+    expect(result).toHaveLength(2);
+    expect(result.map((e) => e.gatewayUrl)).toEqual(['https://8.8.8.8/', undefined]);
+    expect(log.warn).toHaveBeenCalledOnce();
+  });
+
+  it('never echoes the rejected URL in the warning payload', async () => {
+    const secretUrl = 'http://10.0.0.7:6379/secret-internal-path';
+    await revalidateGatewayChain([{ provider: 'gateway', gatewayUrl: secretUrl, model: 'auto' }], log);
+
+    const payloads = log.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const p of payloads) {
+      expect(p).not.toContain('secret-internal-path');
+      expect(p).not.toContain('10.0.0.7');
+    }
+  });
+
+  it('keeps a gateway entry pointing at a public IP literal', async () => {
+    const result = await revalidateGatewayChain(
+      [{ provider: 'gateway', gatewayUrl: 'https://8.8.8.8/v1', model: 'auto' }],
+      log,
+    );
+    expect(result).toHaveLength(1);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves non-gateway entries untouched (no URL to validate)', async () => {
+    const chain = [{ provider: 'cli-bridge', model: 'opencode' }];
+    const result = await revalidateGatewayChain(chain, log);
+    expect(result).toEqual(chain);
+    expect(log.warn).not.toHaveBeenCalled();
   });
 });

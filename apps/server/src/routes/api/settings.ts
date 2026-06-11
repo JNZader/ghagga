@@ -639,7 +639,15 @@ export function createSettingsRouter(db: Database) {
           const healthUrl = `${gatewayUrl.replace(/\/+$/, '')}/health`;
           const healthResp = await fetch(healthUrl, {
             signal: AbortSignal.timeout(10_000),
+            // SSRF defense: do NOT follow redirects. validateOutboundUrl only
+            // vetted the ORIGINAL host; a 3xx Location could point the fetch at
+            // a private/loopback/metadata address that was never validated.
+            // With redirect:'manual', a 3xx surfaces as a non-ok response below
+            // and is treated as unreachable (generic message).
+            redirect: 'manual',
           });
+          // Treat ONLY 2xx as reachable. A 3xx (now non-ok) is a redirect we
+          // refuse to follow — report unreachable, never the status code.
           if (healthResp.ok) {
             return c.json({ valid: true, models: ['auto'] });
           }

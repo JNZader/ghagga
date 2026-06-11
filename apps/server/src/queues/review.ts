@@ -35,9 +35,47 @@ import {
 import { deriveCallbackSecret, dispatchWorkflow, injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
 import { callbackResultKey, redis } from '../lib/redis.js';
+import { validateOutboundUrl } from '../lib/safe-url.js';
 import { PostgresMemoryStorage } from '../memory/postgres.js';
 
 const logger = rootLogger.child({ module: 'review-queue' });
+
+// ─── SSRF re-validation (DNS-rebinding TOCTOU defense) ──────────
+//
+// gatewayUrl is validated at PERSIST time (PUT /api/settings and
+// /api/installation-settings), but the worker fetches the stored hostname
+// LATER — potentially hours after persist. An attacker who controls the
+// gateway hostname's DNS can pass validation at persist time (resolving to a
+// public IP) and then re-point the record at an internal/metadata address
+// before the worker runs (classic DNS-rebinding TOCTOU).
+//
+// Re-validating here, immediately before the URL is handed to the pipeline,
+// narrows the rebind window from hours to milliseconds. Entries whose URL now
+// fails validation are DROPPED from the chain (logged generically, never
+// echoing the URL). The policy lives in the server worker — the right trust
+// boundary — because packages/core (gateway.ts) cannot import the server's
+// safe-url module.
+export async function revalidateGatewayChain<T extends { provider: string; gatewayUrl?: string }>(
+  chain: T[],
+  log: { warn: (obj: object, msg: string) => void } = logger,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (const entry of chain) {
+    if (entry.provider === 'gateway' && entry.gatewayUrl) {
+      const check = await validateOutboundUrl(entry.gatewayUrl);
+      if (!check.ok) {
+        // Generic warn — never echo the URL (it is the SSRF target itself).
+        log.warn(
+          { reason: check.reason },
+          'Dropping gateway chain entry: URL failed SSRF re-validation at execution time',
+        );
+        continue;
+      }
+    }
+    out.push(entry);
+  }
+  return out;
+}
 
 // ─── Redis Connection ───────────────────────────────────────────
 
@@ -405,7 +443,11 @@ async function processReview(
     const stepStart = Date.now();
 
     // Build the provider chain (decrypt API keys)
-    const dbChain = (rawProviderChain ?? []) as DbProviderChainEntry[];
+    const rawDbChain = (rawProviderChain ?? []) as DbProviderChainEntry[];
+    // SSRF re-validation at EXECUTION time (DNS-rebinding TOCTOU defense — see
+    // revalidateGatewayChain). Gateway entries whose URL now resolves to a
+    // private/loopback/metadata address are dropped before we fetch them.
+    const dbChain = await revalidateGatewayChain(rawDbChain, log);
     let providerChain: ProviderChainEntry[] | undefined;
 
     if (dbChain.length > 0) {

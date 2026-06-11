@@ -16,6 +16,7 @@ import {
   upsertInstallationSettings,
 } from 'ghagga-db';
 import { Hono } from 'hono';
+import { validateOutboundUrl } from '../../lib/safe-url.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import { buildProviderChainView, generateErrorId, logger } from './utils.js';
 
@@ -187,6 +188,25 @@ export function createInstallationsRouter(db: Database) {
           entry.cliModel = undefined;
         } else {
           entry.gatewayUrl = undefined;
+        }
+      }
+
+      // SSRF guard: reject gateway URLs pointing at internal/private network
+      // space BEFORE they are persisted into the installation (global) chain —
+      // the review worker later fetches the stored URL server-side with no user
+      // in the loop. This mirrors the guard in the repo-level PUT /api/settings.
+      // The detailed reason goes to the server log only; the client gets a
+      // generic message (an echoed status/reason is a port-scan oracle).
+      for (const entry of incomingChain) {
+        if (entry.provider === 'gateway' && entry.gatewayUrl) {
+          const urlCheck = await validateOutboundUrl(entry.gatewayUrl);
+          if (!urlCheck.ok) {
+            logger.warn(
+              { installationId, user: user.githubLogin, reason: urlCheck.reason },
+              'Rejected gateway URL at persist time (SSRF guard)',
+            );
+            return c.json({ error: 'VALIDATION_ERROR', message: 'Gateway URL not allowed' }, 400);
+          }
         }
       }
 
