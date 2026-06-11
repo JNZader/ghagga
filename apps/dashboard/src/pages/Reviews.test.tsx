@@ -227,6 +227,65 @@ describe('Reviews — empty state', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// Error state (query failed — NOT the same as empty success)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — error state', () => {
+  it('shows an error message instead of "No reviews found." when the query fails', () => {
+    mockUseReviews.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    renderReviews();
+
+    expect(screen.getByText('Failed to load reviews. Please try again.')).toBeInTheDocument();
+    expect(screen.queryByText('No reviews found.')).not.toBeInTheDocument();
+  });
+
+  it('still shows "No reviews found." for a successful empty response', () => {
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [], total: 0, page: 1, pageSize: 20 },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderReviews();
+
+    expect(screen.getByText('No reviews found.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to load reviews. Please try again.'),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// All repositories (no repo selected → cross-installation listing)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — All repositories', () => {
+  it('queries without a repo and renders each row with its repo label', () => {
+    mockUseSelectedRepo.mockReturnValue({
+      selectedRepo: '',
+      setSelectedRepo: vi.fn(),
+    });
+    mockReviewsData(MULTI_REVIEWS);
+
+    renderReviews();
+
+    // No repo selected → useReviews is called with undefined repo (no-repo endpoint)
+    expect(mockUseReviews).toHaveBeenCalledWith(undefined, 1);
+
+    // Every row shows the repo it belongs to (mapped from the server fullName)
+    expect(screen.getByText('acme/app')).toBeInTheDocument();
+    expect(screen.getByText('acme/api')).toBeInTheDocument();
+    expect(screen.getByText('acme/web')).toBeInTheDocument();
+    expect(screen.getByText('acme/lib')).toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // Table rendering with multiple reviews
 // ═══════════════════════════════════════════════════════════════════
 
@@ -476,6 +535,32 @@ describe('Reviews — pagination', () => {
     expect(screen.getByText('Page 1 of 3 (50 total)')).toBeInTheDocument();
   });
 
+  it('renders controls from server total (120/50) and Next advances the page param', () => {
+    mockUseReviews.mockReturnValue({
+      data: {
+        reviews: [makeReview()],
+        total: 120,
+        page: 1,
+        pageSize: 50,
+      },
+      isLoading: false,
+    });
+
+    renderReviews();
+
+    // ceil(120 / 50) = 3 pages — controls must render
+    expect(screen.getByText('Page 1 of 3 (120 total)')).toBeInTheDocument();
+    expect(screen.getByText('Previous')).toBeInTheDocument();
+    expect(screen.getByText('Next')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Next'));
+
+    // The page state drives the page param sent to useReviews → refetch
+    const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
+    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
+    expect(lastCall![1]).toBe(2);
+  });
+
   it('Previous button is disabled on the first page', () => {
     mockUseReviews.mockReturnValue({
       data: {
@@ -538,6 +623,135 @@ describe('Reviews — pagination', () => {
     const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
     // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     expect(lastCall![1]).toBe(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Page reset & clamp (FF-1)
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — page reset & clamp', () => {
+  it('resets to page 1 when the selected repo changes', () => {
+    const setSelectedRepo = vi.fn();
+    mockUseSelectedRepo.mockReturnValue({ selectedRepo: '', setSelectedRepo });
+    mockUseRepositories.mockReturnValue({
+      data: [{ id: 1, fullName: 'acme/app' }],
+      isLoading: false,
+    });
+    mockUseReviews.mockReturnValue({
+      data: { reviews: MULTI_REVIEWS, total: 120, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    const queryClient = createTestQueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // Advance to page 2
+    fireEvent.click(screen.getByText('Next'));
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(2);
+
+    // Selected repo changes by an external path (context update)
+    mockUseSelectedRepo.mockReturnValue({ selectedRepo: 'acme/app', setSelectedRepo });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // The effect on [selectedRepo] resets page → useReviews called with page 1
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(1);
+  });
+
+  it('clamps the page when totalPages shrinks below the current page', () => {
+    // Start on a multi-page result; navigate to page 3.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: MULTI_REVIEWS, total: 120, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    const queryClient = createTestQueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByText('Next')); // → page 2
+    fireEvent.click(screen.getByText('Next')); // → page 3
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(3);
+
+    // A delete drops the total to a single page. The clamp effect must pull
+    // page back to totalPages (1) instead of leaving an empty ghost page.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [makeReview()], total: 1, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // Clamped to page 1 (valid), not stuck on page 3
+    expect(
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1],
+    ).toBe(1);
+    // And the row is rendered, not the empty state
+    expect(screen.queryByText('No reviews found.')).not.toBeInTheDocument();
+  });
+
+  it('does not force page to 0 when the result is empty (totalPages === 0)', () => {
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [makeReview()], total: 120, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    const queryClient = createTestQueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByText('Next')); // → page 2
+
+    // Result becomes empty (total 0 → totalPages 0). Guard prevents page → 0.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: [], total: 0, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <Reviews />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    // page param sent to the server must stay >= 1 (never 0)
+    const lastPage =
+      mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1]?.[1];
+    expect(lastPage).toBeGreaterThanOrEqual(1);
   });
 });
 

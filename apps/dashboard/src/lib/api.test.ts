@@ -32,6 +32,7 @@ import {
   useUpdateSettings,
   useValidateProvider,
 } from './api';
+import { SESSION_EXPIRED_EVENT } from './session-expired';
 
 // ─── Mocks ──────────────────────────────────────────────────────
 
@@ -129,6 +130,48 @@ describe('fetchApi 401 handler', () => {
     // Should NOT redirect
     expect(mockLocalStorage.removeItem).not.toHaveBeenCalled();
     expect(window.location.hash).toBe('#/auth/callback?token=abc');
+  });
+
+  it('dispatches the session-expired event so AuthProvider clears React state', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/dashboard' },
+      writable: true,
+    });
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: SESSION_EXPIRED_EVENT }),
+    );
+    dispatchSpy.mockRestore();
+  });
+
+  it('does NOT dispatch the session-expired event when already on the login page', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/login' },
+      writable: true,
+    });
+
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(dispatchSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: SESSION_EXPIRED_EVENT }),
+    );
+    dispatchSpy.mockRestore();
   });
 
   it('throws ApiError with status 401 and "Session expired" message', async () => {
@@ -386,7 +429,7 @@ describe('useReviews', () => {
     mockFetch.mockResolvedValueOnce(
       mockJsonResponse({
         data: reviews,
-        pagination: { page: 1, limit: 20, offset: 0 },
+        pagination: { page: 1, limit: 20, offset: 0, total: 1 },
       }),
     );
 
@@ -404,9 +447,109 @@ describe('useReviews', () => {
     });
   });
 
+  it('omits the repo param and maps fullName into repo for "All repositories"', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockJsonResponse({
+        data: [
+          {
+            id: 1,
+            prNumber: 10,
+            status: 'PASSED',
+            mode: 'simple',
+            summary: 'ok',
+            findings: [],
+            createdAt: '2026-01-01',
+            fullName: 'acme/app',
+          },
+          {
+            id: 2,
+            prNumber: 20,
+            status: 'FAILED',
+            mode: 'workflow',
+            summary: 'issues',
+            findings: [],
+            createdAt: '2026-01-02',
+            fullName: 'acme/api',
+          },
+        ],
+        pagination: { page: 1, limit: 50, offset: 0, total: 2 },
+      }),
+    );
+
+    const { result } = renderHook(() => useReviews(undefined, 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // No repo param → cross-installation listing endpoint
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).not.toContain('repo=');
+
+    // Each row is labeled with its repository fullName
+    expect(result.current.data?.reviews.map((r) => r.repo)).toEqual(['acme/app', 'acme/api']);
+  });
+
+  it('falls back to the requested repo when rows carry no fullName', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockJsonResponse({
+        data: [
+          {
+            id: 1,
+            prNumber: 10,
+            status: 'PASSED',
+            mode: 'simple',
+            summary: 'ok',
+            findings: [],
+            createdAt: '2026-01-01',
+          },
+        ],
+        pagination: { page: 1, limit: 50, offset: 0, total: 1 },
+      }),
+    );
+
+    const { result } = renderHook(() => useReviews('acme/app', 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data?.reviews[0]?.repo).toBe('acme/app');
+  });
+
+  it('maps total from the server pagination, not the page row count', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockJsonResponse({
+        data: [
+          {
+            id: 1,
+            repo: 'acme/app',
+            prNumber: 42,
+            status: 'PASSED',
+            mode: 'simple',
+            summary: 'All good',
+            findings: [],
+            createdAt: '2026-01-01',
+          },
+        ],
+        pagination: { page: 1, limit: 50, offset: 0, total: 120 },
+      }),
+    );
+
+    const { result } = renderHook(() => useReviews('acme/app', 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // total must come from pagination.total (120), NOT data.length (1)
+    expect(result.current.data?.total).toBe(120);
+    expect(result.current.data?.pageSize).toBe(50);
+  });
+
   it('passes repo filter param in URL', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockJsonResponse({ data: [], pagination: { page: 1, limit: 20, offset: 0 } }),
+      mockJsonResponse({ data: [], pagination: { page: 1, limit: 20, offset: 0, total: 0 } }),
     );
 
     const { result } = renderHook(() => useReviews('acme/app'), {
@@ -421,7 +564,7 @@ describe('useReviews', () => {
 
   it('passes page param in URL', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockJsonResponse({ data: [], pagination: { page: 3, limit: 20, offset: 40 } }),
+      mockJsonResponse({ data: [], pagination: { page: 3, limit: 20, offset: 40, total: 0 } }),
     );
 
     const { result } = renderHook(() => useReviews(undefined, 3), {

@@ -14,6 +14,7 @@ import type {
   WorkflowInstallResult,
   WorkflowStatus,
 } from './types';
+import { notifySessionExpired } from './session-expired';
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -48,12 +49,16 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    // ── Global 401 handler: clear token and redirect to login ──
+    // ── Global 401 handler: clear auth state and redirect to login ──
     if (response.status === 401) {
       const currentPath = window.location.hash;
       if (!currentPath.includes('/login') && !currentPath.includes('/auth/callback')) {
         localStorage.removeItem('ghagga_token');
         localStorage.removeItem('ghagga_user');
+        // Clear the in-memory auth state too (AuthProvider listens for this
+        // event). Without it, React still considers the user authenticated,
+        // Login bounces back to "/", queries refetch, 401 again → loop.
+        notifySessionExpired();
         window.location.hash = '#/login?expired=1';
       }
       throw new ApiError(401, 'Session expired');
@@ -85,6 +90,12 @@ async function fetchData<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ─── Reviews ──────────────────────────────────────────────
 
+/**
+ * Server review row. Cross-installation listings (no `repo` param) also carry
+ * the repository `fullName` per row so the caller can label each review.
+ */
+type ReviewListRow = Review & { fullName?: string };
+
 export function useReviews(repo?: string, page: number = 1) {
   const params = new URLSearchParams();
   if (repo) params.set('repo', repo);
@@ -94,12 +105,17 @@ export function useReviews(repo?: string, page: number = 1) {
     queryKey: ['reviews', repo, page],
     queryFn: async () => {
       const result = await fetchApi<{
-        data: Review[];
-        pagination: { page: number; limit: number; offset: number };
+        data: ReviewListRow[];
+        pagination: { page: number; limit: number; offset: number; total: number };
       }>(`/api/reviews?${params.toString()}`);
       return {
-        reviews: result.data,
-        total: result.data.length,
+        reviews: result.data.map(({ fullName, ...review }) => ({
+          ...review,
+          // "All repositories" rows are labeled with their repo fullName;
+          // per-repo rows fall back to the requested repo.
+          repo: fullName ?? review.repo ?? repo ?? '',
+        })),
+        total: result.pagination.total,
         page: result.pagination.page,
         pageSize: result.pagination.limit,
       };

@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { API_URL, fetchGitHubUser, type GitHubUser } from './oauth';
+import { consumeSessionExpired, SESSION_EXPIRED_EVENT } from './session-expired';
 import type { User } from './types';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -84,6 +85,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
     }
   }, [token, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear auth state when the API layer reports an expired session (401).
+  // api.ts is not a React module, so it signals via a window event; clearing
+  // React state here makes ProtectedRoute redirect naturally and prevents
+  // Login from bouncing a stale "authenticated" user back into the app.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setToken(null);
+      setUser(null);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    // Drain any 401 that fired before this listener was registered (cold-boot
+    // race). The sticky flag in session-expired.ts ensures the signal is not lost.
+    if (consumeSessionExpired()) {
+      handleSessionExpired();
+    }
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+  }, []);
 
   // ── Web Flow Callback Login ─────────────────────────────────
 

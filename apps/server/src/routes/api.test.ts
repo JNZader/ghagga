@@ -13,6 +13,9 @@ import { createApiRouter } from './api.js';
 
 const mockGetReviewsByDay = vi.fn();
 const mockGetReviewsByRepoId = vi.fn();
+const mockCountReviewsByRepoId = vi.fn();
+const mockGetReviewsByInstallationIds = vi.fn();
+const mockCountReviewsByInstallationIds = vi.fn();
 const mockGetReviewStats = vi.fn();
 const mockGetRepoByFullName = vi.fn();
 const mockGetReposByInstallationId = vi.fn();
@@ -41,6 +44,9 @@ const mockUpdateWorkflowStatus = vi.fn();
 vi.mock('ghagga-db', () => ({
   getReviewsByDay: (...args: unknown[]) => mockGetReviewsByDay(...args),
   getReviewsByRepoId: (...args: unknown[]) => mockGetReviewsByRepoId(...args),
+  countReviewsByRepoId: (...args: unknown[]) => mockCountReviewsByRepoId(...args),
+  getReviewsByInstallationIds: (...args: unknown[]) => mockGetReviewsByInstallationIds(...args),
+  countReviewsByInstallationIds: (...args: unknown[]) => mockCountReviewsByInstallationIds(...args),
   getReviewStats: (...args: unknown[]) => mockGetReviewStats(...args),
   getRepoByFullName: (...args: unknown[]) => mockGetRepoByFullName(...args),
   getReposByInstallationId: (...args: unknown[]) => mockGetReposByInstallationId(...args),
@@ -206,6 +212,7 @@ describe('GET /api/reviews', () => {
       { id: 2, prNumber: 11, status: 'FAILED' },
     ];
     mockGetReviewsByRepoId.mockResolvedValueOnce(fakeReviews);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(2);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&page=1&limit=10');
@@ -213,26 +220,50 @@ describe('GET /api/reviews', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data).toEqual(fakeReviews);
-    expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0 });
+    expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0, total: 2 });
 
     expect(mockGetReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42, { limit: 10, offset: 0 });
+    expect(mockCountReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42);
   });
 
   it('uses default pagination when params not provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo');
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0 });
+    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0, total: 0 });
+  });
+
+  // FIX A (DSH-A2): pagination.total reflects the FULL count, not the page
+  // length. With more reviews than fit on a page, total must exceed data.length
+  // so the dashboard can compute totalPages and reach pages beyond the first.
+  it('returns pagination.total reflecting full count beyond the current page', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockGetReviewsByRepoId.mockResolvedValueOnce([
+      { id: 1, prNumber: 10, status: 'PASSED' },
+      { id: 2, prNumber: 11, status: 'FAILED' },
+    ]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(137);
+
+    const app = createApp();
+    const res = await app.request('/api/reviews?repo=owner/repo&page=1&limit=50');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveLength(2);
+    expect(json.pagination.total).toBe(137);
+    expect(json.pagination.total).not.toBe(json.data.length);
   });
 
   it('caps limit at 100', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&limit=500');
@@ -245,23 +276,14 @@ describe('GET /api/reviews', () => {
   it('calculates correct offset for page 3', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&page=3&limit=20');
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.pagination).toEqual({ page: 3, limit: 20, offset: 40 });
-  });
-
-  it('returns 400 when repo param is missing', async () => {
-    const app = createApp();
-    const res = await app.request('/api/reviews');
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe('VALIDATION_ERROR');
-    expect(json.message).toContain('Missing required query parameter: repo');
+    expect(json.pagination).toEqual({ page: 3, limit: 20, offset: 40, total: 0 });
   });
 
   it('returns 404 when repo is not found', async () => {
@@ -319,6 +341,7 @@ describe('GET /api/reviews', () => {
       summary: 'Static analysis ran but the AI agent failed midway.',
     };
     mockGetReviewsByRepoId.mockResolvedValueOnce([partialReview]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(1);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo');
@@ -328,6 +351,91 @@ describe('GET /api/reviews', () => {
     expect(json.data).toHaveLength(1);
     expect(json.data[0].status).toBe('PARTIAL');
     expect(json.data[0]).toEqual(partialReview);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// GET /api/reviews — "All repositories" (no repo param)  [FIX B / DSH-A3]
+// ═══════════════════════════════════════════════════════════════════
+
+describe('GET /api/reviews (no repo → all caller installations)', () => {
+  it('lists reviews across the caller installations and never another tenant', async () => {
+    // Caller owns installations 100 and 200. The query layer is responsible
+    // for excluding foreign tenants; we assert the route passes EXACTLY the
+    // caller's installationIds down and returns the scoped rows unchanged.
+    const user = { ...DEFAULT_USER, installationIds: [100, 200] };
+    const ownReviews = [
+      { id: 1, repositoryId: 42, prNumber: 10, status: 'PASSED', fullName: 'owner/repo-a' },
+      { id: 2, repositoryId: 77, prNumber: 11, status: 'FAILED', fullName: 'owner/repo-b' },
+    ];
+    mockGetReviewsByInstallationIds.mockResolvedValueOnce(ownReviews);
+    mockCountReviewsByInstallationIds.mockResolvedValueOnce(2);
+
+    const app = createApp(user);
+    const res = await app.request('/api/reviews');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toEqual(ownReviews);
+    // Authz: the query layer is invoked with the caller's installations ONLY.
+    expect(mockGetReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100, 200], {
+      limit: 50,
+      offset: 0,
+    });
+    expect(mockCountReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100, 200]);
+    // The per-repo single-repo path must NOT have been touched.
+    expect(mockGetRepoByFullName).not.toHaveBeenCalled();
+    expect(mockGetReviewsByRepoId).not.toHaveBeenCalled();
+    // No row belongs to a foreign tenant repo.
+    expect(json.data.every((r: { fullName: string }) => r.fullName.startsWith('owner/'))).toBe(true);
+  });
+
+  it('returns pagination.total reflecting the full cross-installation count', async () => {
+    const user = { ...DEFAULT_USER, installationIds: [100] };
+    mockGetReviewsByInstallationIds.mockResolvedValueOnce([
+      { id: 1, repositoryId: 42, prNumber: 10, status: 'PASSED', fullName: 'owner/repo-a' },
+    ]);
+    mockCountReviewsByInstallationIds.mockResolvedValueOnce(83);
+
+    const app = createApp(user);
+    const res = await app.request('/api/reviews?page=2&limit=50');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pagination).toEqual({ page: 2, limit: 50, offset: 50, total: 83 });
+    expect(json.pagination.total).not.toBe(json.data.length);
+    expect(mockGetReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100], {
+      limit: 50,
+      offset: 50,
+    });
+  });
+
+  it('returns 200 with empty data + total 0 when caller has no installations', async () => {
+    const user = { ...DEFAULT_USER, installationIds: [] };
+
+    const app = createApp(user);
+    const res = await app.request('/api/reviews');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toEqual([]);
+    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0, total: 0 });
+    // No query should run for an empty-installation caller.
+    expect(mockGetReviewsByInstallationIds).not.toHaveBeenCalled();
+    expect(mockCountReviewsByInstallationIds).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 with errorId when the cross-installation query fails', async () => {
+    mockGetReviewsByInstallationIds.mockRejectedValueOnce(new Error('DB error'));
+
+    const app = createApp();
+    const res = await app.request('/api/reviews');
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe('FETCH_FAILED');
+    expect(json.message).toBe('Failed to fetch reviews');
+    expect(json.errorId).toHaveLength(8);
   });
 });
 
