@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- **Quoted diff paths no longer dropped (CORE-M6)** — `parseDiffFiles` now parses `core.quotepath`-quoted headers (`diff --git "a/caf\303\251.ts" "b/caf\303\251.ts"`), unescaping C-style and octal UTF-8 escapes into the real path (`café.ts`). Previously these files were silently dropped from the review AND their diff lines were absorbed into the previous file's `content`, polluting both per-file stats and the diff sent to the LLM. Behavior change in a public API (semver minor); all other inputs remain byte-identical (gated by a golden-corpus byte-parity suite).
+
 ## [2.8.1] - 2026-03-31
 
 ### Fixed
