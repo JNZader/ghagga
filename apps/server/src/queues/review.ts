@@ -69,13 +69,21 @@ export async function revalidateGatewayChain<T extends { provider: string; gatew
 ): Promise<T[]> {
   const out: T[] = [];
   for (const entry of chain) {
-    if (entry.provider === 'gateway' && entry.gatewayUrl) {
+    // Validate ANY entry that carries a gatewayUrl, regardless of provider.
+    // gatewayUrl is "only meaningful when provider === 'gateway'" (see
+    // DbProviderChainEntry), but the field is set per-entry and later re-assigned
+    // unconditionally onto the runtime chain (`if (entry.gatewayUrl) mapped.gatewayUrl = ...`).
+    // Gating on `provider === 'gateway'` here would let a non-gateway entry that
+    // still carries a gatewayUrl (legacy/tampered DB row, or a provider value that
+    // didn't equal the literal 'gateway' at this point) smuggle an unvalidated URL
+    // past the SSRF guard. Validating on presence closes that per-entry bypass.
+    if (entry.gatewayUrl) {
       const check = await validateOutboundUrl(entry.gatewayUrl);
       if (!check.ok) {
         // Generic warn — never echo the URL (it is the SSRF target itself).
         log.warn(
           { reason: check.reason },
-          'Dropping gateway chain entry: URL failed SSRF re-validation at execution time',
+          'Dropping provider chain entry with invalid gatewayUrl: failed SSRF re-validation at execution time',
         );
         continue;
       }
@@ -579,6 +587,19 @@ async function processReview(
     // revalidateGatewayChain). Gateway entries whose URL now resolves to a
     // private/loopback/metadata address are dropped before we fetch them.
     const dbChain = await revalidateGatewayChain(rawDbChain, log);
+    // Observability: if a non-empty chain was fully emptied by SSRF
+    // re-validation, the worker silently falls through to the legacy/no-key
+    // path below and the AI review can degrade to static-analysis-only. The
+    // degradation semantics are intentional (sprint 2, same pattern as
+    // decrypt-failure) — we only make the all-dropped case VISIBLE so an
+    // operator can tell "no AI key" apart from "every gateway URL got dropped
+    // by SSRF re-validation".
+    if (rawDbChain.length > 0 && dbChain.length === 0) {
+      log.warn(
+        { entriesIn: rawDbChain.length },
+        'All provider chain entries dropped by SSRF re-validation — AI review may degrade to static-analysis-only',
+      );
+    }
     let providerChain: ProviderChainEntry[] | undefined;
 
     if (dbChain.length > 0) {
@@ -610,12 +631,11 @@ async function processReview(
           apiKey,
         };
         if (entry.cliModel) mapped.cliModel = entry.cliModel;
-        // SECURITY TODO(sprint-2 merge): this gatewayUrl is re-fetched from the DB
-        // (resolveEncryptedCredentials) and BYPASSES sprint-2's SSRF guard
-        // (revalidateGatewayChain / validateOutboundUrl), which does not exist on
-        // this branch. Once sprint-2 merges, re-validate every entry.gatewayUrl here
-        // (call validateOutboundUrl before assigning) so the worker's DB-rebuilt
-        // provider chain cannot point at an internal/loopback endpoint.
+        // SSRF: safe to assign — `dbChain` was produced by revalidateGatewayChain
+        // above, which re-validates the gatewayUrl of EVERY entry that carries one
+        // (not just provider === 'gateway') against validateOutboundUrl. Any entry
+        // whose URL resolves to a private/loopback/metadata address was already
+        // dropped, so no unvalidated URL can reach the runtime provider chain here.
         if (entry.gatewayUrl) mapped.gatewayUrl = entry.gatewayUrl;
         mappedChain.push(mapped);
       }

@@ -49,6 +49,14 @@ vi.mock('ioredis', () => {
   return { default: RedisMock };
 });
 
+// safe-url's validateOutboundUrl resolves hostnames via node:dns/promises.
+// IP-literal cases never touch DNS, but the hostname (DNS-rebinding) cases
+// below need a controllable resolver so no real DNS traffic happens.
+const mockLookup = vi.hoisted(() => vi.fn());
+vi.mock('node:dns/promises', () => ({
+  lookup: (...args: unknown[]) => mockLookup(...args),
+}));
+
 vi.mock('../lib/logger.js', () => ({
   logger: {
     child: (...args: unknown[]) => mockRootChildFn(...args),
@@ -423,6 +431,49 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     // false && true = false
     expect(input.aiReviewEnabled).toBe(false);
   });
+
+  // ── All-dropped visibility (SSRF re-validation) ──
+  // When a non-empty chain is fully emptied by SSRF re-validation, the worker
+  // degrades to the no-key path. That degradation is intentional, but it must
+  // be VISIBLE so an operator can tell it apart from "no AI key configured".
+  it('logs an explicit warning when SSRF re-validation drops the ENTIRE chain', async () => {
+    // Both gateway URLs resolve (by hostname) to a private/metadata address →
+    // validateOutboundUrl rejects both → revalidateGatewayChain returns [].
+    mockLookup.mockResolvedValue([{ address: '169.254.169.254', family: 4 }]);
+
+    const data = makeJobData({
+      llmProvider: 'openai',
+      encryptedApiKey: null,
+      providerChain: [
+        { provider: 'gateway', model: 'auto', encryptedApiKey: null, gatewayUrl: 'https://rebind-a.example/' },
+        { provider: 'gateway', model: 'auto', encryptedApiKey: null, gatewayUrl: 'https://rebind-b.example/' },
+      ] as ReviewJobData['providerChain'],
+    });
+    const job = makeFakeJob(data);
+
+    await expect(capturedProcessor?.(job)).resolves.toEqual({
+      success: true,
+      reviewId: 'rev-001',
+    });
+
+    // The explicit all-dropped visibility warning fired with the entry count.
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      { entriesIn: 2 },
+      expect.stringContaining('All provider chain entries dropped by SSRF re-validation'),
+    );
+
+    // Degradation semantics preserved: no provider reaches the pipeline.
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.providerChain).toBeUndefined();
+    expect(input.aiReviewEnabled).toBe(false);
+
+    // No-echo invariant holds across the whole degradation path.
+    const warnPayloads = mockLogger.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const payload of warnPayloads) {
+      expect(payload).not.toContain('rebind-a.example');
+      expect(payload).not.toContain('rebind-b.example');
+    }
+  });
 });
 
 // ─── Credential re-fetch (secrets out of the Redis payload) ─────────
@@ -639,11 +690,10 @@ describe('revalidateGatewayChain', () => {
   });
 
   it('keeps a gateway entry pointing at a public IP literal', async () => {
-    const result = await revalidateGatewayChain(
-      [{ provider: 'gateway', gatewayUrl: 'https://8.8.8.8/v1', model: 'auto' }],
-      log,
-    );
-    expect(result).toHaveLength(1);
+    const chain = [{ provider: 'gateway', gatewayUrl: 'https://8.8.8.8/v1', model: 'auto' }];
+    const result = await revalidateGatewayChain(chain, log);
+    // Object integrity: the kept entry is returned untouched, not just counted.
+    expect(result).toEqual(chain);
     expect(log.warn).not.toHaveBeenCalled();
   });
 
@@ -652,5 +702,85 @@ describe('revalidateGatewayChain', () => {
     const result = await revalidateGatewayChain(chain, log);
     expect(result).toEqual(chain);
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  // ─── per-entry bypass: gatewayUrl on a non-gateway provider ─────
+  // The runtime mapping loop assigns `entry.gatewayUrl` onto the provider chain
+  // unconditionally (regardless of provider). A non-gateway entry that still
+  // carries a gatewayUrl (legacy/tampered DB row) must NOT skip the SSRF guard.
+
+  it('drops a NON-gateway entry whose gatewayUrl resolves to a private/loopback IP', async () => {
+    const chain = [
+      // provider !== 'gateway' but a gatewayUrl is present — must still be validated.
+      { provider: 'cli-bridge', gatewayUrl: 'http://127.0.0.1:6379/', model: 'opencode' },
+      { provider: 'gateway', gatewayUrl: 'https://8.8.8.8/', model: 'auto' },
+    ];
+
+    const result = await revalidateGatewayChain(chain, log);
+
+    // Loopback entry dropped despite its non-gateway provider; public one kept.
+    expect(result).toHaveLength(1);
+    expect(result.map((e) => e.provider)).toEqual(['gateway']);
+    expect(log.warn).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a NON-gateway entry whose gatewayUrl points at a public IP', async () => {
+    const chain = [{ provider: 'ollama', gatewayUrl: 'https://8.8.8.8/v1', model: 'llama3' }];
+    const result = await revalidateGatewayChain(chain, log);
+    expect(result).toEqual(chain);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('never echoes the rejected URL of a non-gateway entry', async () => {
+    const secretUrl = 'http://192.168.1.42:8080/internal-admin';
+    await revalidateGatewayChain(
+      [{ provider: 'cli-bridge', gatewayUrl: secretUrl, model: 'opencode' }],
+      log,
+    );
+
+    const payloads = log.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const p of payloads) {
+      expect(p).not.toContain('internal-admin');
+      expect(p).not.toContain('192.168.1.42');
+    }
+  });
+
+  // ─── all-dropped (function-level) ───────────────────────────────
+  // When EVERY entry of a non-empty chain fails re-validation, the pure
+  // function returns []. (The "AI review may degrade to static-only"
+  // visibility warning lives at the call-site in processReview — see the
+  // SSRF re-validation all-dropped test in the processReview describe.)
+  it('returns [] and warns per entry when ALL entries fail re-validation', async () => {
+    const chain = [
+      { provider: 'gateway', gatewayUrl: 'http://169.254.169.254/', model: 'auto' },
+      { provider: 'cli-bridge', gatewayUrl: 'http://127.0.0.1:6379/', model: 'opencode' },
+    ];
+
+    const result = await revalidateGatewayChain(chain, log);
+
+    expect(result).toEqual([]);
+    // One drop warning per invalid entry.
+    expect(log.warn).toHaveBeenCalledTimes(2);
+  });
+
+  // ─── no-echo with a DNS-based (hostname) rejection ──────────────
+  // The IP-literal no-echo tests above never hit DNS. This exercises the
+  // hostname → private-IP rebind path: the attacker hostname must NOT appear
+  // in the logged reason (safe-url returns a generic reason with no host).
+  it('never echoes the attacker HOSTNAME on a DNS-rebind rejection', async () => {
+    mockLookup.mockResolvedValueOnce([{ address: '10.0.0.7', family: 4 }]);
+    const attackerHost = 'rebind-attacker.internal.example';
+
+    await revalidateGatewayChain(
+      [{ provider: 'gateway', gatewayUrl: `https://${attackerHost}/v1`, model: 'auto' }],
+      log,
+    );
+
+    expect(log.warn).toHaveBeenCalledOnce();
+    const payloads = log.warn.mock.calls.map((c) => JSON.stringify(c));
+    for (const p of payloads) {
+      expect(p).not.toContain(attackerHost);
+      expect(p).not.toContain('10.0.0.7');
+    }
   });
 });

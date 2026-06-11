@@ -227,17 +227,21 @@ export async function validateOutboundUrl(raw: string): Promise<OutboundUrlValid
   try {
     addresses = await lookup(hostname, { all: true });
   } catch {
-    return { ok: false, reason: `DNS resolution failed for ${hostname}` };
+    // SECURITY: never echo the hostname — it IS the SSRF target. The rejection
+    // category alone is enough for a server-side audit trail.
+    return { ok: false, reason: 'DNS resolution failed' };
   }
 
   if (addresses.length === 0) {
-    return { ok: false, reason: `DNS resolution returned no addresses for ${hostname}` };
+    return { ok: false, reason: 'DNS resolution returned no addresses' };
   }
 
   for (const { address } of addresses) {
     const reason = forbiddenIpReason(address);
     if (reason) {
-      return { ok: false, reason: `${hostname} resolves to ${reason}` };
+      // SECURITY: never echo the hostname or its resolved address — both leak
+      // the SSRF target. The forbidden-range category is the only thing logged.
+      return { ok: false, reason: `hostname resolves to ${reason}` };
     }
   }
 
