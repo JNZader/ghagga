@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -75,6 +75,70 @@ describe('SqliteMemoryStorage', () => {
         "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_obs_%'",
       );
       expect(indexes[0]?.values.length).toBeGreaterThanOrEqual(3);
+
+      await storage.close();
+    });
+
+    it('migrates a legacy DB (no last_accessed_at column) that already has rows', async () => {
+      // Build a pre-migration database: observations table WITHOUT severity /
+      // last_accessed_at / embedding, with the FTS index populated via trigger,
+      // and one existing row. SQLite forbids non-constant defaults in
+      // ALTER TABLE ADD COLUMN, so the old migration always failed here.
+      const sqlJsModule = (await import('fts5-sql-bundle')).default;
+      const initSqlJs =
+        typeof sqlJsModule === 'function'
+          ? sqlJsModule
+          : (sqlJsModule as unknown as { initSqlJs: typeof sqlJsModule }).initSqlJs;
+      const SQL = await initSqlJs();
+      const legacy = new SQL.Database();
+      legacy.run(`
+        CREATE TABLE memory_observations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER,
+          project TEXT NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          topic_key TEXT,
+          file_paths TEXT DEFAULT '[]',
+          content_hash TEXT,
+          revision_count INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE VIRTUAL TABLE memory_observations_fts
+          USING fts5(title, content, content='memory_observations', content_rowid='id');
+        CREATE TRIGGER obs_fts_insert AFTER INSERT ON memory_observations BEGIN
+          INSERT INTO memory_observations_fts(rowid, title, content)
+            VALUES (new.id, new.title, new.content);
+        END;
+        INSERT INTO memory_observations (project, type, title, content, updated_at)
+          VALUES ('owner/repo', 'pattern', 'Legacy auth note',
+                  'JWT auth validation pattern.', datetime('now', '-1 day'));
+      `);
+      writeFileSync(dbPath, Buffer.from(legacy.export()));
+      legacy.close();
+
+      // Opening with the current backend must add the column and backfill it
+      const storage = await SqliteMemoryStorage.create(dbPath);
+      // biome-ignore lint/suspicious/noExplicitAny: test access to private db
+      const db = (storage as any).db;
+
+      const col = db.exec(
+        "SELECT name FROM pragma_table_info('memory_observations') WHERE name = 'last_accessed_at'",
+      );
+      expect(col).toHaveLength(1);
+
+      // Backfill: last_accessed_at must equal updated_at for the legacy row
+      const row = db.exec('SELECT last_accessed_at, updated_at FROM memory_observations')[0]
+        ?.values[0];
+      expect(row?.[0]).not.toBeNull();
+      expect(row?.[0]).toBe(row?.[1]);
+
+      // Queries referencing the migrated column must work (this used to throw)
+      const results = await storage.searchObservations('owner/repo', 'auth');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.title).toBe('Legacy auth note');
 
       await storage.close();
     });

@@ -77,7 +77,9 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_obs_project ON memory_observations(project);
   CREATE INDEX IF NOT EXISTS idx_obs_topic_key ON memory_observations(topic_key);
   CREATE INDEX IF NOT EXISTS idx_obs_content_hash ON memory_observations(content_hash);
-  CREATE INDEX IF NOT EXISTS idx_obs_last_accessed ON memory_observations(last_accessed_at);
+  -- NOTE: idx_obs_last_accessed is created in create() AFTER the
+  -- last_accessed_at migration — on legacy DBs the column does not exist
+  -- yet when this schema runs, and CREATE INDEX would fail.
 
   CREATE VIRTUAL TABLE IF NOT EXISTS memory_observations_fts
     USING fts5(title, content, content='memory_observations', content_rowid='id');
@@ -226,18 +228,30 @@ export class SqliteMemoryStorage implements MemoryStorage {
       // Column already exists — idempotent migration
     }
 
-    // Migration: add last_accessed_at column for decay tracking
+    // Migration: add last_accessed_at column for decay tracking.
+    // SQLite forbids non-constant defaults (e.g. datetime('now')) in
+    // ALTER TABLE ADD COLUMN once the table has rows — so add the column
+    // WITHOUT a default and backfill explicitly below.
     try {
-      db.run(
-        "ALTER TABLE memory_observations ADD COLUMN last_accessed_at TEXT NOT NULL DEFAULT (datetime('now'))",
-      );
-      // Backfill: set last_accessed_at = updated_at for existing rows
-      db.run(
-        'UPDATE memory_observations SET last_accessed_at = updated_at WHERE last_accessed_at IS NULL OR last_accessed_at = ""',
-      );
-    } catch {
-      // Column already exists — idempotent migration
+      db.run('ALTER TABLE memory_observations ADD COLUMN last_accessed_at TEXT');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Only 'duplicate column name' means the migration already ran.
+      // Anything else is a real failure — surface it instead of silently
+      // leaving the schema broken (every later SELECT would fail).
+      if (!message.includes('duplicate column name')) {
+        throw error;
+      }
     }
+    // Backfill runs unconditionally: covers freshly added columns AND rows
+    // left NULL/empty by the previously broken migration.
+    db.run(
+      "UPDATE memory_observations SET last_accessed_at = COALESCE(updated_at, datetime('now')) WHERE last_accessed_at IS NULL OR last_accessed_at = ''",
+    );
+    // Index deferred from SCHEMA_SQL: must run after the column exists
+    db.run(
+      'CREATE INDEX IF NOT EXISTS idx_obs_last_accessed ON memory_observations(last_accessed_at)',
+    );
 
     // Migration: add embedding column for hybrid search (NULL when no embedding provider)
     try {
@@ -609,8 +623,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
     const inserted = this.db.exec(
       `
       INSERT INTO memory_observations
-        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash, embedding)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash, embedding, last_accessed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       RETURNING id, type, title, content, file_paths, severity
     `,
       [
