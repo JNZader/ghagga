@@ -19,7 +19,15 @@ import type {
 } from 'ghagga-core';
 import { formatReviewComment, PreloadedGraphLoader, reviewPipeline } from 'ghagga-core';
 import type { Database, DbProviderChainEntry } from 'ghagga-db';
-import { createDatabaseFromEnv, decrypt, eq, repositories, saveReview } from 'ghagga-db';
+import {
+  createDatabaseFromEnv,
+  decrypt,
+  eq,
+  getEffectiveRepoSettings,
+  getRepositoryById,
+  repositories,
+  saveReview,
+} from 'ghagga-db';
 import Redis from 'ioredis';
 import {
   addCommentReaction,
@@ -103,7 +111,19 @@ export interface ReviewJobData {
   headSha?: string;
   /** Base branch name */
   baseBranch?: string;
-  /** Ordered provider chain from DB (entries have encrypted keys) */
+  /**
+   * Ordered provider chain with encrypted keys.
+   *
+   * SECURITY: This field is NO LONGER written into the job payload by the
+   * enqueue path — encrypted credentials are re-fetched from the DB inside
+   * the worker (see resolveEncryptedCredentials) so they never live in Redis.
+   *
+   * It remains OPTIONAL only for backward tolerance: in-flight jobs already
+   * sitting in Redis at deploy time carry the old shape. When present, the
+   * worker uses it directly instead of hitting the DB.
+   *
+   * TOLERANCE: remove this field once the queue has drained post-deploy.
+   */
   providerChain?: Array<{
     provider: string;
     model: string;
@@ -127,8 +147,19 @@ export interface ReviewJobData {
   llmModel: string;
   /** Review mode */
   reviewMode: string;
-  /** Encrypted API key (will be decrypted at runtime) */
-  encryptedApiKey: string | null;
+  /**
+   * Legacy single encrypted API key.
+   *
+   * SECURITY: This field is NO LONGER written into the job payload by the
+   * enqueue path — it is re-fetched from the DB inside the worker (see
+   * resolveEncryptedCredentials) so the secret never lives in Redis.
+   *
+   * It remains OPTIONAL only for backward tolerance with in-flight jobs that
+   * still carry the old shape. When present, the worker uses it directly.
+   *
+   * TOLERANCE: remove this field once the queue has drained post-deploy.
+   */
+  encryptedApiKey?: string | null;
   /** Review settings from repo configuration */
   settings: {
     enableSemgrep: boolean;
@@ -256,6 +287,91 @@ function normalizeLegacyProvider(
   return 'gateway';
 }
 
+// ─── Credential Resolution ─────────────────────────────────────
+
+/**
+ * The encrypted credentials a review needs, kept OUT of the Redis job payload.
+ *
+ * `providerChain` mirrors the v3 chain (entries carry encrypted keys).
+ * `encryptedApiKey` is the legacy single-key fallback.
+ */
+interface EncryptedCredentials {
+  providerChain: DbProviderChainEntry[] | undefined;
+  encryptedApiKey: string | null;
+}
+
+/**
+ * Resolve the encrypted provider chain + legacy key for a review job.
+ *
+ * SECURITY: Encrypted credentials are NOT carried in the BullMQ/Redis job
+ * payload anymore. The producer enqueues only identifiers; the worker
+ * re-fetches the SAME settings from the DB at processing time using
+ * `repositoryId`. This reproduces exactly what the webhook resolved at
+ * enqueue time (getRepositoryById → getEffectiveRepoSettings →
+ * effective.providerChain, plus repo.encryptedApiKey).
+ *
+ * TOLERANCE (remove after queue drains post-deploy): in-flight jobs enqueued
+ * before this change still carry `providerChain` / `encryptedApiKey` in their
+ * payload. If either is present on the job, we honour the old shape and skip
+ * the DB round-trip rather than risk resolving a different chain.
+ *
+ * Graceful degradation: if the repo/settings were deleted between enqueue and
+ * processing (installation uninstalled, repo removed), the lookup returns an
+ * empty chain + null key. The existing no-key / static-only fallback path in
+ * processReview then takes over — the worker never crashes.
+ */
+async function resolveEncryptedCredentials(
+  data: ReviewJobData,
+  log: { warn: (obj: unknown, msg?: string) => void },
+  db: Database | undefined,
+): Promise<EncryptedCredentials> {
+  // Old-format in-flight job tolerance: use whatever the payload carries.
+  if (data.providerChain !== undefined || data.encryptedApiKey != null) {
+    return {
+      providerChain: data.providerChain as DbProviderChainEntry[] | undefined,
+      encryptedApiKey: data.encryptedApiKey ?? null,
+    };
+  }
+
+  // No usable DB handle (creation failed upstream) — degrade to static-only.
+  if (!db) {
+    log.warn(
+      { repositoryId: data.repositoryId },
+      'No database handle available when resolving credentials — falling back to static-analysis-only',
+    );
+    return { providerChain: undefined, encryptedApiKey: null };
+  }
+
+  // New path: re-fetch encrypted settings from the DB by identifier.
+  try {
+    const repo = await getRepositoryById(db, data.repositoryId);
+
+    if (!repo) {
+      // Repo deleted between enqueue and processing — degrade to static-only.
+      log.warn(
+        { repositoryId: data.repositoryId },
+        'Repository not found when resolving credentials — falling back to static-analysis-only',
+      );
+      return { providerChain: undefined, encryptedApiKey: null };
+    }
+
+    const effective = await getEffectiveRepoSettings(db, repo);
+    const chain = effective.providerChain;
+
+    return {
+      providerChain: chain.length > 0 ? chain : undefined,
+      encryptedApiKey: repo.encryptedApiKey ?? null,
+    };
+  } catch (error) {
+    // DB unavailable or settings vanished — degrade gracefully, never crash.
+    log.warn(
+      { repositoryId: data.repositoryId, error: String(error) },
+      'Failed to fetch credentials from DB — falling back to static-analysis-only',
+    );
+    return { providerChain: undefined, encryptedApiKey: null };
+  }
+}
+
 // ─── Job Processor ──────────────────────────────────────────────
 
 async function processReview(
@@ -273,16 +389,31 @@ async function processReview(
     headSha: eventHeadSha,
     baseBranch: eventBaseBranch,
     triggerCommentId,
-    providerChain: rawProviderChain,
     aiReviewEnabled,
     llmProvider,
     llmModel,
     reviewMode,
-    encryptedApiKey,
     settings,
   } = data;
 
   const log = logger.child({ reviewId, repoFullName, prNumber });
+
+  // Create ONE database handle for the whole job — reused for credential
+  // re-fetch and memory storage. Each createDatabaseFromEnv() spins up a fresh
+  // pg.Pool, so calling it twice per job leaked a pool. Degrade gracefully when
+  // the DB is unavailable (both consumers tolerate a missing handle).
+  let db: Database | undefined;
+  try {
+    db = createDatabaseFromEnv();
+  } catch {
+    log.warn('Database unavailable — credential re-fetch and memory features disabled');
+  }
+
+  // SECURITY: encrypted credentials are NOT in the job payload — re-fetch them
+  // from the DB by identifier (with old-format in-flight tolerance + graceful
+  // degradation when settings were deleted). See resolveEncryptedCredentials.
+  const { providerChain: rawProviderChain, encryptedApiKey } =
+    await resolveEncryptedCredentials(data, log, db);
   const [owner, repo] = repoFullName.split('/') as [string, string];
 
   log.info(`Starting review processing for ${repoFullName}#${prNumber}`);
@@ -479,6 +610,12 @@ async function processReview(
           apiKey,
         };
         if (entry.cliModel) mapped.cliModel = entry.cliModel;
+        // SECURITY TODO(sprint-2 merge): this gatewayUrl is re-fetched from the DB
+        // (resolveEncryptedCredentials) and BYPASSES sprint-2's SSRF guard
+        // (revalidateGatewayChain / validateOutboundUrl), which does not exist on
+        // this branch. Once sprint-2 merges, re-validate every entry.gatewayUrl here
+        // (call validateOutboundUrl before assigning) so the worker's DB-rebuilt
+        // provider chain cannot point at an internal/loopback endpoint.
         if (entry.gatewayUrl) mapped.gatewayUrl = entry.gatewayUrl;
         mappedChain.push(mapped);
       }
@@ -533,13 +670,8 @@ async function processReview(
       log.info('No LLM provider available — AI review disabled, static analysis only');
     }
 
-    let db: Database | undefined;
-    try {
-      db = createDatabaseFromEnv();
-    } catch {
-      log.warn('Database unavailable for memory features');
-    }
-
+    // Reuse the single db handle created at the top of processReview — do NOT
+    // create another pool here (that was the per-job connection leak).
     const memoryStorage = db ? new PostgresMemoryStorage(db, installationId) : undefined;
 
     // Fetch dependency graph for blast-radius analysis (if enabled)
@@ -605,9 +737,11 @@ async function processReview(
 
   await job.updateProgress(60);
 
-  // Step 5: Save review to database
-  const db = createDatabaseFromEnv();
-  await saveReview(db, {
+  // Step 5: Save review to database. Reuse the job-level handle when available;
+  // fall back to minting one (preserving the original throw-on-missing-DB
+  // behavior) only if the top-of-job creation degraded to undefined.
+  const persistDb = db ?? createDatabaseFromEnv();
+  await saveReview(persistDb, {
     repositoryId,
     prNumber,
     status: reviewResult.status,

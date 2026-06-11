@@ -12,8 +12,14 @@ vi.mock('./prompts.js', () => ({
   REVIEW_CALIBRATION: 'REVIEW_CALIBRATION_BLOCK',
   COMPACT_CALIBRATION: 'COMPACT_CALIBRATION_BLOCK',
   UNTRUSTED_CONTENT_POLICY: 'UNTRUSTED_CONTENT_POLICY_BLOCK',
+  STATIC_ANALYSIS_UNTRUSTED_LABEL: 'STATIC ANALYSIS OUTPUT (untrusted tool/data)',
+  SPECIALIST_OUTPUT_UNTRUSTED_LABEL: 'SPECIALIST OUTPUT (untrusted, model-generated)',
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
   buildReviewLevelInstruction: vi.fn((level: string) => `REVIEW_LEVEL:${level}`),
+  wrapUntrusted: vi.fn(
+    (label: string, content: string) =>
+      `<UNTRUSTED label="${label}">\n${content}\n</UNTRUSTED>`,
+  ),
   wrapUntrustedDiff: vi.fn(
     (diff: string) => `<USER_DIFF>\n\`\`\`diff\n${diff}\n\`\`\`\n</USER_DIFF>`,
   ),
@@ -586,5 +592,35 @@ describe('runWorkflowReview', () => {
     await runWorkflowReview(makeInput({ generateFns: [fn] }));
 
     expect(calls[5]?.system).toContain('REVIEW_CALIBRATION_BLOCK');
+  });
+
+  // ── Untrusted framing (prompt-injection trust boundary) ──
+
+  it('wraps staticContext in an untrusted fence for the security specialist', async () => {
+    const { fn, calls } = makeMockGenerateFn();
+    await runWorkflowReview(
+      makeInput({ staticContext: 'STATIC_CONTEXT_DATA', generateFns: [fn] }),
+    );
+
+    // Security specialist is index 3 and is the only one receiving staticContext.
+    expect(calls[3]?.system).toContain('<UNTRUSTED label="STATIC ANALYSIS OUTPUT');
+    expect(calls[3]?.system).toContain('STATIC_CONTEXT_DATA');
+    expect(calls[3]?.system).toContain('</UNTRUSTED>');
+  });
+
+  it('wraps each specialist output as untrusted in the synthesis prompt', async () => {
+    const { fn, calls } = makeMockGenerateFn();
+    await runWorkflowReview(makeInput({ generateFns: [fn] }));
+
+    // Synthesis is call index 5.
+    expect(calls[5]?.prompt).toContain('<UNTRUSTED label="SPECIALIST OUTPUT');
+    expect(calls[5]?.prompt).toContain('</UNTRUSTED>');
+  });
+
+  it('includes the untrusted-content policy in the synthesis system prompt', async () => {
+    const { fn, calls } = makeMockGenerateFn();
+    await runWorkflowReview(makeInput({ generateFns: [fn] }));
+
+    expect(calls[5]?.system).toContain('UNTRUSTED_CONTENT_POLICY_BLOCK');
   });
 });

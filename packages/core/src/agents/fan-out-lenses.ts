@@ -29,7 +29,9 @@ import {
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
   REVIEW_CALIBRATION,
+  STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
+  wrapUntrusted,
   wrapUntrustedDiff,
 } from './prompts.js';
 import { parseFindingsBlock } from './simple.js';
@@ -491,6 +493,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   const { diff, provider, model, staticContext, memoryContext, stackHints, reviewLevel } = input;
   const emit = input.onProgress ?? (() => {});
 
+  // staticContext is attacker-influenceable tool/data output → fence as untrusted
+  // DATA. Only the first lens receives full context (others get compact calibration).
+  const fencedStaticContext = staticContext
+    ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext)
+    : '';
+
   // ── Resolve lenses ──────────────────────────────────────────
   const lensNames = input.lenses ?? DEFAULT_LENSES.slice(0, 3).map((l) => l.name);
   const resolvedLenses: ReviewLens[] = [];
@@ -544,7 +552,7 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       const system = [
         lens.system,
         UNTRUSTED_CONTENT_POLICY,
-        isFirst ? staticContext : '',
+        isFirst ? fencedStaticContext : '',
         isFirst ? buildMemoryContext(memoryContext) : '',
         isFirst ? stackHints : '',
         input.checklistContext ?? '',

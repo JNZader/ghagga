@@ -1,4 +1,5 @@
 import type {
+  DecayConfig,
   EmbeddingProvider,
   ListObservationsOptions,
   MemoryObservationDetail,
@@ -6,6 +7,7 @@ import type {
   MemoryStats,
   MemoryStorage,
 } from 'ghagga-core';
+import { DEFAULT_DECAY_CONFIG, computeStrength } from 'ghagga-core';
 import type { Database, memoryObservations } from 'ghagga-db';
 import {
   clearAllMemoryObservations,
@@ -44,6 +46,11 @@ export class PostgresMemoryStorage implements MemoryStorage {
      * keyword-only tsvector search (original behavior).
      */
     private embeddingProvider?: EmbeddingProvider,
+    /**
+     * Decay thresholds. Defaults to DEFAULT_DECAY_CONFIG — the SAME source the
+     * SQLite backend uses — so the two backends never diverge on strength math.
+     */
+    private decayConfig: DecayConfig = DEFAULT_DECAY_CONFIG,
   ) {}
 
   async searchObservations(
@@ -53,19 +60,41 @@ export class PostgresMemoryStorage implements MemoryStorage {
   ): Promise<MemoryObservationRow[]> {
     // Capture the provider locally so the closure does not need to re-narrow `this.X`.
     const provider = this.embeddingProvider;
+    const limit = options?.limit ?? 10;
+    // Over-fetch by 3x (matching the SQLite backend, sqlite.ts:276) so that
+    // dropping decayed rows below does not under-deliver fewer than `limit`.
     const rows = await searchObservations(this.db, project, query, {
       ...options,
+      fetchLimit: limit * 3,
       // Pass the embed function for hybrid search when provider is available
       embedFn: provider ? (text: string) => provider.embed(text) : undefined,
     });
-    return rows.map((row: ObservationRow) => ({
-      id: row.id,
-      type: row.type,
-      title: row.title,
-      content: row.content,
-      filePaths: row.filePaths ?? null,
-      severity: row.severity ?? null,
-    }));
+
+    // Apply strength decay identically to the SQLite backend (sqlite.ts:304-323):
+    // compute strength from lastAccessedAt, drop rows below minStrength, and
+    // attach the strength field so formatMemoryContext renders consistently.
+    // NOTE: queries.ts updates lastAccessedAt AFTER selecting, but the returned
+    // rows still carry the pre-update timestamp, so this mirrors SQLite's
+    // "compute on old value, then bump" ordering.
+    const now = new Date();
+    const result: MemoryObservationRow[] = [];
+    for (const row of rows) {
+      const strength = computeStrength(row.lastAccessedAt, now, this.decayConfig);
+      if (strength < this.decayConfig.minStrength) continue;
+      result.push({
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        content: row.content,
+        filePaths: row.filePaths ?? null,
+        severity: row.severity ?? null,
+        strength,
+      });
+      // Cap at the originally-requested limit: we over-fetched only to absorb
+      // decay drops, never to return MORE than the caller asked for.
+      if (result.length >= limit) break;
+    }
+    return result;
   }
 
   async saveObservation(data: {

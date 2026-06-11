@@ -26,7 +26,9 @@ import {
   buildReviewLevelInstruction,
   DIAGNOSTIC_SYSTEM,
   REVIEW_CALIBRATION,
+  STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
+  wrapUntrusted,
   wrapUntrustedDiff,
 } from './prompts.js';
 import { parseReviewResponse } from './simple.js';
@@ -144,11 +146,17 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
 
   const startTime = Date.now();
 
+  // staticContext is attacker-influenceable tool/data output → fence as untrusted DATA.
+  // memoryContext is fenced inside buildMemoryContext().
+  const fencedStaticContext = staticContext
+    ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext)
+    : '';
+
   // Build the full system prompt with all context layers
   const system = [
     DIAGNOSTIC_SYSTEM,
     UNTRUSTED_CONTENT_POLICY,
-    staticContext,
+    fencedStaticContext,
     buildMemoryContext(memoryContext),
     stackHints,
     input.checklistContext ?? '',

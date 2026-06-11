@@ -32,7 +32,10 @@ import {
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
   REVIEW_CALIBRATION,
+  SPECIALIST_OUTPUT_UNTRUSTED_LABEL,
+  STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
+  wrapUntrusted,
   WORKFLOW_ERRORS_SYSTEM,
   WORKFLOW_PERFORMANCE_SYSTEM,
   WORKFLOW_SCOPE_SYSTEM,
@@ -180,9 +183,13 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // Build the user prompt (same for all specialists, wrapped in untrusted-content delimiters)
   const userPrompt = `Review the following code changes:\n\n${wrapUntrustedDiff(diff)}`;
 
-  // Context sources keyed for lookup by the specialist context map
+  // Context sources keyed for lookup by the specialist context map.
+  // staticContext is attacker-influenceable tool/data → fence as untrusted.
+  // memoryContext is fenced inside buildMemoryContext(). stackHints is trusted (static).
   const contextSources: Record<SpecialistContextKey, string> = {
-    staticContext,
+    staticContext: staticContext
+      ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext)
+      : '',
     memoryContext: buildMemoryContext(memoryContext),
     stackHints,
   };
@@ -292,14 +299,22 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     ? (chain[0] as ProviderChainEntry)
     : { provider: provider as ProviderChainEntry['provider'], model, apiKey };
 
+  // Each specialist output is model-generated text derived from the (untrusted)
+  // diff — a malicious diff can induce a specialist to emit injected instructions.
+  // Fence every block as untrusted DATA before feeding it into the synthesis call.
+  const wrappedSpecialistOutputs = specialistOutputs.map((output) =>
+    wrapUntrusted(SPECIALIST_OUTPUT_UNTRUSTED_LABEL, output),
+  );
+
   const synthesisPrompt = [
     'Below are the findings from 5 specialist reviewers. Synthesize them into a final review.\n',
-    ...specialistOutputs,
+    ...wrappedSpecialistOutputs,
     '\n\n---\n\nNow provide the unified review in the required format.',
   ].join('\n\n');
 
   const synthesisSystem = [
     WORKFLOW_SYNTHESIS_SYSTEM,
+    UNTRUSTED_CONTENT_POLICY,
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,
   ]

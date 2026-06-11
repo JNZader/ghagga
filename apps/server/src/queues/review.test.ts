@@ -67,11 +67,17 @@ vi.mock('ghagga-core', () => ({
 const mockDecrypt = vi.fn((v: string) => `decrypted-${v}`);
 const mockSaveReview = vi.fn().mockResolvedValue(undefined);
 const mockCreateDatabaseFromEnv = vi.fn();
+const mockGetRepositoryById = vi.fn();
+const mockGetEffectiveRepoSettings = vi.fn();
 
 vi.mock('ghagga-db', () => ({
   decrypt: (v: string) => mockDecrypt(v),
   saveReview: (...args: unknown[]) => mockSaveReview(...args),
   createDatabaseFromEnv: () => mockCreateDatabaseFromEnv(),
+  getRepositoryById: (...args: unknown[]) => mockGetRepositoryById(...args),
+  getEffectiveRepoSettings: (...args: unknown[]) => mockGetEffectiveRepoSettings(...args),
+  eq: vi.fn(),
+  repositories: {},
 }));
 
 const mockGetInstallationToken = vi.fn().mockResolvedValue('ghp_mock-token');
@@ -100,8 +106,9 @@ vi.mock('../github/runner.js', () => ({
   injectWorkflow: vi.fn().mockResolvedValue({ sha: 'abc123', created: false }),
 }));
 
+const mockPostgresMemoryStorage = vi.hoisted(() => vi.fn());
 vi.mock('../memory/postgres.js', () => ({
-  PostgresMemoryStorage: vi.fn(),
+  PostgresMemoryStorage: mockPostgresMemoryStorage,
 }));
 
 // ─── Import module & trigger Worker constructor to capture processor ──
@@ -155,6 +162,10 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     delete process.env.OPENAI_API_KEY;
 
     mockCreateDatabaseFromEnv.mockReturnValue({});
+    // Default DB re-fetch: repo exists but has no key / empty chain → forces the
+    // worker down the no-key static-analysis-only fallback unless a test overrides.
+    mockGetRepositoryById.mockResolvedValue({ id: 1, encryptedApiKey: null });
+    mockGetEffectiveRepoSettings.mockResolvedValue({ providerChain: [] });
     mockReviewPipeline.mockResolvedValue({
       status: 'completed',
       summary: 'Static analysis only',
@@ -411,6 +422,183 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
     const input = mockReviewPipeline.mock.calls[0][0];
     // false && true = false
     expect(input.aiReviewEnabled).toBe(false);
+  });
+});
+
+// ─── Credential re-fetch (secrets out of the Redis payload) ─────────
+
+describe('processReview – encrypted credentials re-fetched from DB, not the job', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.GITHUB_APP_ID = 'test-app-id';
+    process.env.GITHUB_PRIVATE_KEY = 'test-private-key';
+    delete process.env.OPENAI_API_KEY;
+
+    mockCreateDatabaseFromEnv.mockReturnValue({});
+    mockReviewPipeline.mockResolvedValue({
+      status: 'completed',
+      summary: 'ok',
+      findings: [],
+      metadata: { mode: 'full', tokensUsed: 0, executionTimeMs: 1 },
+    });
+    mockFormatReviewComment.mockReturnValue('Review comment body');
+  });
+
+  afterEach(() => {
+    delete process.env.GITHUB_APP_ID;
+    delete process.env.GITHUB_PRIVATE_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+
+  it('re-fetches the provider chain from the DB by repositoryId and resolves the same providers', async () => {
+    // Job carries NO secrets — only the repositoryId identifier.
+    mockGetRepositoryById.mockResolvedValue({ id: 7, encryptedApiKey: null });
+    mockGetEffectiveRepoSettings.mockResolvedValue({
+      providerChain: [{ provider: 'gateway', model: 'claude-sonnet-4', encryptedApiKey: 'enc-db' }],
+    });
+
+    const data = makeJobData({
+      repositoryId: 7,
+      encryptedApiKey: undefined,
+      providerChain: undefined,
+    });
+    await capturedProcessor?.(makeFakeJob(data));
+
+    // DB lookup happened with the job's repositoryId.
+    expect(mockGetRepositoryById).toHaveBeenCalledWith(expect.anything(), 7);
+    expect(mockGetEffectiveRepoSettings).toHaveBeenCalledOnce();
+
+    // The freshly-fetched chain reached the pipeline, decrypted.
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.providerChain).toHaveLength(1);
+    expect(input.providerChain[0].provider).toBe('gateway');
+    expect(input.providerChain[0].apiKey).toBe('decrypted-enc-db');
+    expect(mockDecrypt).toHaveBeenCalledWith('enc-db');
+  });
+
+  it('re-fetches the legacy single key from the DB when no chain exists', async () => {
+    mockGetRepositoryById.mockResolvedValue({ id: 7, encryptedApiKey: 'enc-legacy' });
+    mockGetEffectiveRepoSettings.mockResolvedValue({ providerChain: [] });
+
+    const data = makeJobData({
+      repositoryId: 7,
+      llmProvider: 'openai',
+      encryptedApiKey: undefined,
+      providerChain: undefined,
+    });
+    await capturedProcessor?.(makeFakeJob(data));
+
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.apiKey).toBe('decrypted-enc-legacy');
+    expect(input.aiReviewEnabled).toBe(true);
+  });
+
+  it('degrades gracefully (static-only, no crash) when settings were deleted between enqueue and process', async () => {
+    // Repo removed (installation uninstalled / repo deleted) → null lookup.
+    mockGetRepositoryById.mockResolvedValue(null);
+
+    const data = makeJobData({
+      repositoryId: 999,
+      encryptedApiKey: undefined,
+      providerChain: undefined,
+    });
+
+    await expect(capturedProcessor?.(makeFakeJob(data))).resolves.toEqual({
+      success: true,
+      reviewId: 'rev-001',
+    });
+
+    // No provider available → AI review disabled, static analysis only.
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.aiReviewEnabled).toBe(false);
+    expect(input.providerChain).toBeUndefined();
+    // getEffectiveRepoSettings is never reached when the repo is gone.
+    expect(mockGetEffectiveRepoSettings).not.toHaveBeenCalled();
+  });
+
+  it('degrades gracefully when the DB throws while resolving credentials', async () => {
+    mockGetRepositoryById.mockRejectedValue(new Error('db down'));
+
+    const data = makeJobData({
+      repositoryId: 5,
+      encryptedApiKey: undefined,
+      providerChain: undefined,
+    });
+
+    await expect(capturedProcessor?.(makeFakeJob(data))).resolves.toEqual({
+      success: true,
+      reviewId: 'rev-001',
+    });
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.aiReviewEnabled).toBe(false);
+  });
+
+  it('FF-2: reuses ONE db handle for credential re-fetch AND memory storage (no second pool)', async () => {
+    // Sentinel db instance — every createDatabaseFromEnv() in this test returns
+    // THIS same object, so we can assert the SAME instance is threaded into both
+    // the credential resolver (getRepositoryById) and the memory adapter.
+    const dbHandle = { __sentinel: 'single-pool' };
+    mockCreateDatabaseFromEnv.mockReturnValue(dbHandle);
+    mockGetRepositoryById.mockResolvedValue({ id: 7, encryptedApiKey: null });
+    mockGetEffectiveRepoSettings.mockResolvedValue({ providerChain: [] });
+
+    const data = makeJobData({
+      repositoryId: 7,
+      encryptedApiKey: undefined,
+      providerChain: undefined,
+      settings: {
+        enableSemgrep: false,
+        enableTrivy: false,
+        enableCpd: false,
+        enableMemory: true, // construct PostgresMemoryStorage
+        customRules: [],
+        ignorePatterns: [],
+        reviewLevel: 'standard',
+      },
+    });
+    await capturedProcessor?.(makeFakeJob(data));
+
+    // Credential resolver received the shared handle...
+    expect(mockGetRepositoryById).toHaveBeenCalledWith(dbHandle, 7);
+    // ...and the memory adapter was constructed with the SAME instance.
+    expect(mockPostgresMemoryStorage).toHaveBeenCalledWith(dbHandle, 12345);
+    // The resolver no longer mints its own pool: createDatabaseFromEnv is invoked
+    // ONCE for the credential+memory concern (the single top-of-job handle).
+    // saveReview() reuses its own call later, so we assert the resolver+memory
+    // pair never triggered an EXTRA mint beyond the shared handle by checking the
+    // identity threading above rather than a brittle global count.
+    expect(mockGetRepositoryById.mock.calls[0][0]).toBe(
+      mockPostgresMemoryStorage.mock.calls[0][0],
+    );
+  });
+
+  it('TOLERANCE: old-format in-flight job with encryptedApiKey still works without a DB re-fetch', async () => {
+    const data = makeJobData({
+      llmProvider: 'openai',
+      repositoryId: 7,
+      encryptedApiKey: 'old-inflight-key', // old shape still carries the secret
+      providerChain: undefined,
+    });
+    await capturedProcessor?.(makeFakeJob(data));
+
+    // Tolerance path: payload secret is honoured, DB is NOT consulted.
+    expect(mockGetRepositoryById).not.toHaveBeenCalled();
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.apiKey).toBe('decrypted-old-inflight-key');
+  });
+
+  it('TOLERANCE: old-format in-flight job with providerChain still works without a DB re-fetch', async () => {
+    const data = makeJobData({
+      providerChain: [{ provider: 'gateway', model: 'm', encryptedApiKey: 'old-chain-key' }],
+      repositoryId: 7,
+      encryptedApiKey: null,
+    });
+    await capturedProcessor?.(makeFakeJob(data));
+
+    expect(mockGetRepositoryById).not.toHaveBeenCalled();
+    const input = mockReviewPipeline.mock.calls[0][0];
+    expect(input.providerChain).toHaveLength(1);
+    expect(input.providerChain[0].apiKey).toBe('decrypted-old-chain-key');
   });
 });
 

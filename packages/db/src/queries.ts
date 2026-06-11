@@ -740,9 +740,18 @@ export async function searchObservations(
      * When undefined, falls back to keyword-only tsvector search.
      */
     embedFn?: (text: string) => Promise<number[]>;
+    /**
+     * Number of ranked rows to RETURN (after re-ranking). Defaults to `limit`.
+     * Callers that post-filter rows (e.g. strength decay in the adapter) pass a
+     * larger value so the over-fetched candidates survive ranking and the caller
+     * can drop decayed rows without under-delivering below `limit`.
+     */
+    fetchLimit?: number;
   } = {},
 ) {
   const { limit = 10, type, embedFn } = options;
+  // How many ranked rows the caller wants back (>= limit when post-filtering).
+  const returnLimit = Math.max(options.fetchLimit ?? limit, limit);
 
   const sanitizedQuery = buildTsQuery(query);
 
@@ -757,15 +766,16 @@ export async function searchObservations(
     conditions.push(eq(memoryObservations.type, type));
   }
 
-  // Fetch a larger candidate set when doing hybrid re-ranking
-  const fetchLimit = embedFn ? limit * 5 : limit;
+  // Fetch a larger candidate set when doing hybrid re-ranking, and never fewer
+  // than the caller asked to RETURN (returnLimit) so post-filtering has headroom.
+  const candidateLimit = Math.max(embedFn ? limit * 5 : limit, returnLimit);
 
   const results = await db
     .select()
     .from(memoryObservations)
     .where(and(...conditions))
     .orderBy(sql`ts_rank(search_observations, to_tsquery('english', ${sanitizedQuery})) DESC`)
-    .limit(fetchLimit);
+    .limit(candidateLimit);
 
   if (results.length === 0) return [];
 
@@ -806,13 +816,18 @@ export async function searchObservations(
         return { row: r, finalScore };
       });
 
-      // Sort by final score descending and take top-k
+      // Sort by final score descending and take the top returnLimit candidates.
+      // (returnLimit >= limit; callers post-filter then cap to limit themselves.)
       scored.sort((a, b) => b.finalScore - a.finalScore);
-      finalResults = scored.slice(0, limit).map((s) => s.row);
+      finalResults = scored.slice(0, returnLimit).map((s) => s.row);
     } catch {
       // Embedding failure is non-fatal — fall back to keyword-only ordering
-      finalResults = results.slice(0, limit);
+      finalResults = results.slice(0, returnLimit);
     }
+  } else {
+    // Keyword-only path: the candidate query already capped at candidateLimit
+    // (>= returnLimit). Trim to the requested return count.
+    finalResults = results.slice(0, returnLimit);
   }
 
   // Update last_accessed_at for returned observations (decay tracking)

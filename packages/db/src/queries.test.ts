@@ -1160,6 +1160,30 @@ describe('searchObservations', () => {
     // Verify it reached the DB (didn't short-circuit)
     expect(mockSelect).toHaveBeenCalled();
   });
+
+  it('over-fetches candidates up to fetchLimit and returns up to fetchLimit ranked rows', async () => {
+    // Caller post-filters (decay) → asks for more candidates than `limit`.
+    // 5 rows come back; with limit=2, fetchLimit=6, all 5 (< 6) must survive the
+    // db-layer slice so the caller has headroom to drop decayed rows.
+    const rows = [1, 2, 3, 4, 5].map((id) => ({ id, lastAccessedAt: new Date() }));
+    const mockLimit = vi.fn().mockResolvedValue(rows);
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockUpdateWhere = vi.fn().mockResolvedValue(undefined);
+    const mockSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
+    const mockUpdate = vi.fn().mockReturnValue({ set: mockSet });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect, update: mockUpdate } as unknown as Database;
+
+    const result = await searchObservations(db, 'proj', 'q', { limit: 2, fetchLimit: 6 });
+
+    // Candidate query fetched up to fetchLimit (6), not the smaller `limit` (2).
+    expect(mockLimit).toHaveBeenCalledWith(6);
+    // Non-hybrid path returns all candidates up to fetchLimit (5 < 6) — the
+    // ADAPTER is responsible for the final cap to `limit`.
+    expect(result).toHaveLength(5);
+  });
 });
 
 describe('getObservationsBySession', () => {
