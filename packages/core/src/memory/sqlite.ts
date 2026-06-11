@@ -439,8 +439,9 @@ export class SqliteMemoryStorage implements MemoryStorage {
       const strength = computeStrength(candidate.lastAccessed, now, this.decayConfig);
       if (strength < this.decayConfig.minStrength) continue;
 
-      // Normalize BM25: invert (less negative = better) → [0, 1]
-      const normalizedBm25 = bm25Range === 0 ? 1 : (candidate.bm25Score - minBm25) / bm25Range;
+      // Normalize BM25 to [0, 1]. FTS5 bm25() is MORE NEGATIVE = BETTER match,
+      // so the best candidate (minBm25) must map to 1 and the worst (maxBm25) to 0.
+      const normalizedBm25 = bm25Range === 0 ? 1 : (maxBm25 - candidate.bm25Score) / bm25Range;
 
       // Cosine similarity from stored embedding (0 if not present)
       let cosineSim = 0;

@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { EmbeddingProvider } from '../embed.js';
 import { SqliteMemoryStorage } from './sqlite.js';
 
 // ─── Test Setup ─────────────────────────────────────────────────
@@ -451,6 +452,138 @@ describe('SqliteMemoryStorage', () => {
       });
 
       await storage.close();
+    });
+  });
+
+  // ── Hybrid Search (BM25 + semantic) ──
+  //
+  // Real round-trip tests: no DB mocks. Embeddings are serialized into the
+  // sql.js BLOB column on save and deserialized from Uint8Array on search,
+  // so these tests cover both the deserialization path and the BM25
+  // normalization (FTS5 bm25() is MORE NEGATIVE = BETTER).
+
+  describe('hybrid search (real round-trip)', () => {
+    /** Deterministic embedding provider: vector depends only on the text */
+    function makeEmbeddingProvider(vectorFor: (text: string) => number[]): EmbeddingProvider {
+      const dimension = vectorFor('probe').length;
+      return {
+        dimension,
+        embed: async (text: string) => vectorFor(text),
+        embedBatch: async (texts: string[]) => texts.map(vectorFor),
+      };
+    }
+
+    it('semantic match outranks a stronger keyword match (cosine contributes)', async () => {
+      // Texts containing 'rotate' (and the query itself) share one vector;
+      // everything else is orthogonal — so cosine only rewards the rotate doc.
+      const vectorFor = (text: string) => (text.includes('rotate') ? [1, 0, 0] : [0, 1, 0]);
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(vectorFor),
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Credential rotation policy',
+          content: 'We rotate secrets regularly.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'token validation',
+          content: 'token token token token parsing and token checks.',
+        }),
+      );
+      // Unrelated filler so FTS5 idf is non-degenerate
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Database indexing notes',
+          content: 'Indexes speed up reads.',
+        }),
+      );
+
+      // Query matches 'token' (keyword-best doc) AND embeds to the rotate vector
+      const hybridResults = await storage.searchObservations('owner/repo', 'token rotate');
+
+      expect(hybridResults.length).toBeGreaterThanOrEqual(2);
+      // 0.7 * cosine dominates: the semantic match must rank first even though
+      // the token-spam doc is the far better keyword match
+      expect(hybridResults[0]?.title).toBe('Credential rotation policy');
+
+      await storage.close();
+
+      // Control: keyword-only search over the SAME data ranks the token doc
+      // first — proving cosine (i.e. embedding deserialization) changed the order
+      const keywordStorage = await SqliteMemoryStorage.create(dbPath);
+      const keywordResults = await keywordStorage.searchObservations('owner/repo', 'token rotate');
+      expect(keywordResults[0]?.title).toBe('token validation');
+      await keywordStorage.close();
+    });
+
+    it('best BM25 match ranks first when cosine ties (normalization not inverted)', async () => {
+      // All texts embed to the same vector → cosine is 1 everywhere and
+      // ranking is decided purely by normalized BM25
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0]),
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'token heavy',
+          content: 'token token token token token everywhere.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'token light',
+          content: 'a single token mention.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Unrelated filler',
+          content: 'Nothing relevant here.',
+        }),
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'token');
+
+      expect(results.length).toBe(2);
+      // FTS5 bm25() is MORE NEGATIVE = BETTER: the heavy doc must map to 1,
+      // not 0 (the old formula gave the best match the WORST normalized score)
+      expect(results[0]?.title).toBe('token heavy');
+      expect(results[1]?.title).toBe('token light');
+
+      await storage.close();
+    });
+
+    it('skips cosine on dimension mismatch and falls back to BM25 order', async () => {
+      // Save with a 3-dim provider...
+      const storage3d = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0]),
+      });
+      await storage3d.saveObservation(
+        makeObservationData({
+          title: 'token heavy',
+          content: 'token token token token token everywhere.',
+        }),
+      );
+      await storage3d.saveObservation(
+        makeObservationData({
+          title: 'token light',
+          content: 'a single token mention.',
+        }),
+      );
+      await storage3d.close();
+
+      // ...then search with a 4-dim provider: stored vectors must be skipped
+      const storage4d = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0, 0]),
+      });
+      const results = await storage4d.searchObservations('owner/repo', 'token');
+
+      // No throw, and order falls back to BM25 (cosine contributed 0 for all)
+      expect(results[0]?.title).toBe('token heavy');
+      await storage4d.close();
     });
   });
 
