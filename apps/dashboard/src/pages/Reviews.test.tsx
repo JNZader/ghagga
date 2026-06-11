@@ -476,6 +476,32 @@ describe('Reviews — pagination', () => {
     expect(screen.getByText('Page 1 of 3 (50 total)')).toBeInTheDocument();
   });
 
+  it('renders controls from server total (120/50) and Next advances the page param', () => {
+    mockUseReviews.mockReturnValue({
+      data: {
+        reviews: [makeReview()],
+        total: 120,
+        page: 1,
+        pageSize: 50,
+      },
+      isLoading: false,
+    });
+
+    renderReviews();
+
+    // ceil(120 / 50) = 3 pages — controls must render
+    expect(screen.getByText('Page 1 of 3 (120 total)')).toBeInTheDocument();
+    expect(screen.getByText('Previous')).toBeInTheDocument();
+    expect(screen.getByText('Next')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Next'));
+
+    // The page state drives the page param sent to useReviews → refetch
+    const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
+    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
+    expect(lastCall![1]).toBe(2);
+  });
+
   it('Previous button is disabled on the first page', () => {
     mockUseReviews.mockReturnValue({
       data: {

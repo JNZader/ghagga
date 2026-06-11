@@ -429,7 +429,7 @@ describe('useReviews', () => {
     mockFetch.mockResolvedValueOnce(
       mockJsonResponse({
         data: reviews,
-        pagination: { page: 1, limit: 20, offset: 0 },
+        pagination: { page: 1, limit: 20, offset: 0, total: 1 },
       }),
     );
 
@@ -447,9 +447,39 @@ describe('useReviews', () => {
     });
   });
 
+  it('maps total from the server pagination, not the page row count', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockJsonResponse({
+        data: [
+          {
+            id: 1,
+            repo: 'acme/app',
+            prNumber: 42,
+            status: 'PASSED',
+            mode: 'simple',
+            summary: 'All good',
+            findings: [],
+            createdAt: '2026-01-01',
+          },
+        ],
+        pagination: { page: 1, limit: 50, offset: 0, total: 120 },
+      }),
+    );
+
+    const { result } = renderHook(() => useReviews('acme/app', 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // total must come from pagination.total (120), NOT data.length (1)
+    expect(result.current.data?.total).toBe(120);
+    expect(result.current.data?.pageSize).toBe(50);
+  });
+
   it('passes repo filter param in URL', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockJsonResponse({ data: [], pagination: { page: 1, limit: 20, offset: 0 } }),
+      mockJsonResponse({ data: [], pagination: { page: 1, limit: 20, offset: 0, total: 0 } }),
     );
 
     const { result } = renderHook(() => useReviews('acme/app'), {
@@ -464,7 +494,7 @@ describe('useReviews', () => {
 
   it('passes page param in URL', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockJsonResponse({ data: [], pagination: { page: 3, limit: 20, offset: 40 } }),
+      mockJsonResponse({ data: [], pagination: { page: 3, limit: 20, offset: 40, total: 0 } }),
     );
 
     const { result } = renderHook(() => useReviews(undefined, 3), {

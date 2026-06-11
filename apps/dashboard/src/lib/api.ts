@@ -100,11 +100,11 @@ export function useReviews(repo?: string, page: number = 1) {
     queryFn: async () => {
       const result = await fetchApi<{
         data: Review[];
-        pagination: { page: number; limit: number; offset: number };
+        pagination: { page: number; limit: number; offset: number; total: number };
       }>(`/api/reviews?${params.toString()}`);
       return {
         reviews: result.data,
-        total: result.data.length,
+        total: result.pagination.total,
         page: result.pagination.page,
         pageSize: result.pagination.limit,
       };
