@@ -529,6 +529,12 @@ async function processReview(
           apiKey: entry.encryptedApiKey ? decrypt(entry.encryptedApiKey) : '',
         };
         if (entry.cliModel) mapped.cliModel = entry.cliModel;
+        // SECURITY TODO(sprint-2 merge): this gatewayUrl is re-fetched from the DB
+        // (resolveEncryptedCredentials) and BYPASSES sprint-2's SSRF guard
+        // (revalidateGatewayChain / validateOutboundUrl), which does not exist on
+        // this branch. Once sprint-2 merges, re-validate every entry.gatewayUrl here
+        // (call validateOutboundUrl before assigning) so the worker's DB-rebuilt
+        // provider chain cannot point at an internal/loopback endpoint.
         if (entry.gatewayUrl) mapped.gatewayUrl = entry.gatewayUrl;
         return mapped;
       });

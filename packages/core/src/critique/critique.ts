@@ -239,7 +239,10 @@ export async function runDualCritique(
 
   // ── Step 3: Refined Summary ──────────────────────────────────
   // Ask the LLM to produce a refined summary based on the surviving findings
-  const refinedPrompt = `Here is the code diff:\n\n${wrapUntrustedDiff(input.diff)}\n\nInitial review summary: ${initialReview.summary}\n\nSelf-critique assessment: ${critiqueResult.overallAssessment}\n\nRemaining findings after critique (${refined.length}):\n${wrapUntrusted(SPECIALIST_OUTPUT_UNTRUSTED_LABEL, serializeFindingsForCritique(refined))}\n\nPlease produce the refined review.`;
+  // initialReview.summary and critiqueResult.overallAssessment are model-generated
+  // text derived from the untrusted diff → fence them as untrusted DATA too, so an
+  // injected summary/assessment cannot redirect the refined-review agent.
+  const refinedPrompt = `Here is the code diff:\n\n${wrapUntrustedDiff(input.diff)}\n\nInitial review summary:\n${wrapUntrusted(SPECIALIST_OUTPUT_UNTRUSTED_LABEL, initialReview.summary)}\n\nSelf-critique assessment:\n${wrapUntrusted(SPECIALIST_OUTPUT_UNTRUSTED_LABEL, critiqueResult.overallAssessment)}\n\nRemaining findings after critique (${refined.length}):\n${wrapUntrusted(SPECIALIST_OUTPUT_UNTRUSTED_LABEL, serializeFindingsForCritique(refined))}\n\nPlease produce the refined review.`;
 
   const refinedSystem = `${REFINED_REVIEW_SYSTEM}\n${UNTRUSTED_CONTENT_POLICY}`;
   const refinedResponse = await generateFn(refinedSystem, refinedPrompt);

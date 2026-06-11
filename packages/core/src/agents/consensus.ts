@@ -32,7 +32,9 @@ import {
   CONSENSUS_FOR_SYSTEM,
   CONSENSUS_NEUTRAL_SYSTEM,
   REVIEW_CALIBRATION,
+  STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
+  wrapUntrusted,
   wrapUntrustedDiff,
 } from './prompts.js';
 
@@ -226,6 +228,12 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
   }
   const resolvedGenerateFns: GenerateTextFn[] = input.generateFns;
 
+  // staticContext is attacker-influenceable tool/data output → fence as untrusted
+  // DATA. Only the first vote receives full context (others get compact calibration).
+  const fencedStaticContext = staticContext
+    ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext)
+    : '';
+
   // Auto-calculate scheduling from primary model's TPM.
   // For CLI bridge/gateway (single generateFn), force concurrency=1.
   const primaryModel = models[0]?.model ?? 'gpt-4o-mini';
@@ -259,7 +267,7 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
       const system = [
         STANCE_PROMPTS[config.stance],
         UNTRUSTED_CONTENT_POLICY,
-        isFirst ? staticContext : '',
+        isFirst ? fencedStaticContext : '',
         isFirst ? buildMemoryContext(memoryContext) : '',
         isFirst ? stackHints : '',
         input.checklistContext ?? '',
