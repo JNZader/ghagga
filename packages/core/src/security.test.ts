@@ -269,11 +269,34 @@ describe('Security Audit', () => {
     });
 
     it('should not contain eval() calls in source code', () => {
-      // eval() is a security risk — arbitrary code execution
+      // eval() is a security risk — arbitrary code execution.
+      // We only flag REAL call sites: `eval(` preceded by start-of-expression
+      // context. We must NOT match `eval` when it appears as an alternation
+      // branch inside a RegExp literal (e.g. the AISVS rule catalog in
+      // aisvs.ts uses `/(?:eval|exec|...)\s*\(/` to *detect* this very
+      // pattern). Strip line comments, string literals, and regex literals
+      // before scanning so rule definitions are not counted as call sites.
+      const stripNonCode = (src: string): string =>
+        src
+          // line comments
+          .replace(/\/\/[^\n]*/g, '')
+          // block comments
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          // template/single/double quoted strings
+          .replace(/`(?:\\.|[^`\\])*`/g, '""')
+          .replace(/'(?:\\.|[^'\\])*'/g, '""')
+          .replace(/"(?:\\.|[^"\\])*"/g, '""')
+          // regex literals: a slash not immediately following an identifier,
+          // number, or closing paren/bracket, through the closing slash.
+          .replace(
+            /([=(,:[!&|?{};\n]\s*)\/(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[gimsuy]*/g,
+            '$1//',
+          );
+
       const evalPattern = /\beval\s*\(/;
 
       for (const file of allSourceFiles) {
-        const content = readFileSync(file, 'utf-8');
+        const content = stripNonCode(readFileSync(file, 'utf-8'));
         expect(
           evalPattern.test(content),
           `Found eval() call in ${file} — use safer alternatives`,
