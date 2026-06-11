@@ -6,6 +6,7 @@ import { fetchRemoteFile, searchRemoteCode } from './remote-query.js';
 const mockFetch = vi.fn();
 
 beforeEach(() => {
+  mockFetch.mockClear();
   vi.stubGlobal('fetch', mockFetch);
 });
 
