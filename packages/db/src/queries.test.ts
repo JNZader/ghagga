@@ -50,6 +50,7 @@ import {
   clearAllMemoryObservations,
   clearEmptyMemorySessions,
   clearMemoryObservationsByProject,
+  countReviewsByInstallationIds,
   countReviewsByRepoId,
   createMemorySession,
   deactivateInstallation,
@@ -76,6 +77,7 @@ import {
   getRepoByGithubId,
   getReposByInstallationId,
   getReviewStats,
+  getReviewsByInstallationIds,
   getReviewsByRepoId,
   getSessionsByProject,
   listMemoryObservations,
@@ -713,6 +715,86 @@ describe('countReviewsByRepoId', () => {
     const db = { select: mockSelect } as unknown as Database;
 
     const result = await countReviewsByRepoId(db, 42);
+    expect(result).toBe(0);
+  });
+});
+
+describe('getReviewsByInstallationIds', () => {
+  it('should short-circuit to [] for empty installationIds (no query)', async () => {
+    const mockSelect = vi.fn();
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await getReviewsByInstallationIds(db, []);
+    expect(result).toEqual([]);
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it('should join repositories and apply default limit=50/offset=0', async () => {
+    const rows = [{ id: 1, repositoryId: 42, fullName: 'owner/repo-a' }];
+    const mockOffset = vi.fn().mockResolvedValue(rows);
+    const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await getReviewsByInstallationIds(db, [100, 200]);
+
+    expect(result).toEqual(rows);
+    expect(mockInnerJoin).toHaveBeenCalled();
+    expect(mockLimit).toHaveBeenCalledWith(50);
+    expect(mockOffset).toHaveBeenCalledWith(0);
+  });
+
+  it('should respect custom limit and offset', async () => {
+    const mockOffset = vi.fn().mockResolvedValue([]);
+    const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    await getReviewsByInstallationIds(db, [100], { limit: 25, offset: 50 });
+
+    expect(mockLimit).toHaveBeenCalledWith(25);
+    expect(mockOffset).toHaveBeenCalledWith(50);
+  });
+});
+
+describe('countReviewsByInstallationIds', () => {
+  it('should return 0 for empty installationIds (no query)', async () => {
+    const mockSelect = vi.fn();
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByInstallationIds(db, []);
+    expect(result).toBe(0);
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it('should return the joined aggregate count', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([{ total: 83 }]);
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByInstallationIds(db, [100, 200]);
+    expect(result).toBe(83);
+    expect(mockInnerJoin).toHaveBeenCalled();
+  });
+
+  it('should return 0 when the aggregate row is missing', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([]);
+    const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByInstallationIds(db, [100]);
     expect(result).toBe(0);
   });
 });

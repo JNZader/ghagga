@@ -366,6 +366,70 @@ export async function countReviewsByRepoId(db: Database, repositoryId: number): 
   return row?.total ?? 0;
 }
 
+/**
+ * A review row enriched with its repository's full name, for cross-repository
+ * listings where the caller needs to label which repo each review belongs to.
+ */
+export type ReviewWithRepo = typeof reviews.$inferSelect & { fullName: string };
+
+/**
+ * List reviews across ALL repositories belonging to the given installation IDs,
+ * ordered by createdAt desc, with limit/offset pagination.
+ *
+ * Each row carries the repository `fullName` (via the join) so the caller can
+ * label reviews by repo. Returns an empty array when installationIds is empty
+ * (authz: a caller with no installations sees nothing).
+ */
+export async function getReviewsByInstallationIds(
+  db: Database,
+  installationIds: number[],
+  options: { limit?: number; offset?: number } = {},
+): Promise<ReviewWithRepo[]> {
+  if (installationIds.length === 0) return [];
+
+  const { limit = 50, offset = 0 } = options;
+  return db
+    .select({
+      id: reviews.id,
+      repositoryId: reviews.repositoryId,
+      prNumber: reviews.prNumber,
+      status: reviews.status,
+      mode: reviews.mode,
+      summary: reviews.summary,
+      findings: reviews.findings,
+      tokensUsed: reviews.tokensUsed,
+      executionTimeMs: reviews.executionTimeMs,
+      metadata: reviews.metadata,
+      createdAt: reviews.createdAt,
+      fullName: repositories.fullName,
+    })
+    .from(reviews)
+    .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+    .where(inArray(repositories.installationId, installationIds))
+    .orderBy(desc(reviews.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+/**
+ * Count all reviews across the repositories owned by the given installation IDs.
+ * Used to compute pagination.total for the cross-installation review listing.
+ * Returns 0 when installationIds is empty.
+ */
+export async function countReviewsByInstallationIds(
+  db: Database,
+  installationIds: number[],
+): Promise<number> {
+  if (installationIds.length === 0) return 0;
+
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(reviews)
+    .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+    .where(inArray(repositories.installationId, installationIds));
+  return row?.total ?? 0;
+}
+
 export async function getReviewStats(db: Database, repositoryId: number) {
   const result = await db
     .select({
