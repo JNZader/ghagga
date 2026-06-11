@@ -20,7 +20,7 @@ import {
   toolRegistry,
 } from 'ghagga-core';
 import { getConfigDir, getStoredToken, loadConfig } from '../lib/config.js';
-import { remapLegacyStoredProvider } from '../lib/providers.js';
+import { isLegacyProvider, remapLegacyStoredProvider } from '../lib/providers.js';
 import { resolveProjectId } from '../lib/git.js';
 import { formatSeverityLine } from '../ui/format.js';
 import * as tui from '../ui/tui.js';
@@ -66,6 +66,19 @@ export async function auditCommand(targetPath: string, options: AuditOptions): P
 
     if (!options.quick) {
       const config = loadConfig();
+
+      // Explicit legacy values (--provider flag / env var) are a hard error —
+      // same behavior as "ghagga review". Only STORED CONFIG values are
+      // remapped (read-time migration below).
+      if (isLegacyProvider(provider)) {
+        tui.log.error(
+          `\n❌ Provider '${provider}' is no longer supported directly.\n` +
+            `  → Set --provider gateway and configure credentials in mcp-llm-bridge.\n` +
+            `  → See: https://github.com/JNZader/mcp-llm-bridge\n\n` +
+            `  Or use --provider cli-bridge for local CLI tools (Claude Code, OpenCode, Copilot).\n`,
+        );
+        process.exit(1);
+      }
 
       let providerRemapped = false;
       if (!provider) {
