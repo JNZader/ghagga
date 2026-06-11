@@ -313,10 +313,6 @@ describe('ProviderEntry — credential block re-mount on provider switch', () =>
   // and then changing provider, the saved-key selector is visible again
   // for the new provider (proving the subtree was re-mounted).
   it('re-mounts CredentialBlock and resets keyMode to reuse when provider changes', () => {
-    const availableKeys: AvailableKeysMap = {
-      gateway: { maskedApiKey: 'sk-...wxyz', source: 'global' },
-      ollama: { maskedApiKey: 'unused', source: 'global' }, // ollama hides credential block anyway
-    };
     // Use a non-ollama provider on the other side so the credential block stays visible.
     const otherKeys: AvailableKeysMap = {
       gateway: { maskedApiKey: 'sk-...wxyz', source: 'global' },

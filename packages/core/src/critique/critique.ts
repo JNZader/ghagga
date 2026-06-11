@@ -152,8 +152,7 @@ export function applyCritique(
         }
         break;
 
-      case 'vague':
-      case 'valid':
+      // 'vague' and 'valid' fall through here: the finding is kept as-is.
       default:
         refined.push(finding);
         break;
