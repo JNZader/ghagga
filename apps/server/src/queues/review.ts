@@ -409,22 +409,39 @@ async function processReview(
     let providerChain: ProviderChainEntry[] | undefined;
 
     if (dbChain.length > 0) {
-      providerChain = dbChain.map((entry) => {
+      const mappedChain: ProviderChainEntry[] = [];
+      for (const entry of dbChain) {
         // Normalise any legacy provider value stored in the DB chain.
         const normalizedProvider = normalizeLegacyProvider(entry.provider);
+
+        let apiKey = '';
+        if (entry.encryptedApiKey) {
+          try {
+            apiKey = decrypt(entry.encryptedApiKey);
+          } catch {
+            // Corrupt/tampered stored credentials must not reject the whole
+            // job. Skip this chain entry and continue with the rest; if every
+            // entry fails, the no-key fallback path below degrades gracefully.
+            // SECURITY: never log the encrypted value or error internals.
+            log.warn(
+              { provider: entry.provider },
+              'credential decryption failed — skipping provider chain entry',
+            );
+            continue;
+          }
+        }
+
         const mapped: ProviderChainEntry = {
           provider: normalizedProvider,
           model: entry.model,
-          apiKey: entry.encryptedApiKey ? decrypt(entry.encryptedApiKey) : '',
+          apiKey,
         };
         if (entry.cliModel) mapped.cliModel = entry.cliModel;
         if (entry.gatewayUrl) mapped.gatewayUrl = entry.gatewayUrl;
-        return mapped;
-      });
-
-      if (providerChain.length === 0) {
-        providerChain = undefined;
+        mappedChain.push(mapped);
       }
+
+      providerChain = mappedChain.length > 0 ? mappedChain : undefined;
     }
 
     // Fallback: legacy single provider
@@ -437,8 +454,23 @@ async function processReview(
       legacyProvider = normalizeLegacyProvider(llmProvider);
       legacyModel = llmModel;
 
+      // Guard the legacy decrypt the same way as chain entries: a corrupt
+      // stored value is treated as "no key" so the job degrades instead of
+      // rejecting. SECURITY: never log the encrypted value or error internals.
+      let decryptedLegacyKey: string | undefined;
       if (encryptedApiKey) {
-        legacyApiKey = decrypt(encryptedApiKey);
+        try {
+          decryptedLegacyKey = decrypt(encryptedApiKey);
+        } catch {
+          log.warn(
+            { provider: llmProvider },
+            'credential decryption failed — treating legacy key as absent',
+          );
+        }
+      }
+
+      if (decryptedLegacyKey) {
+        legacyApiKey = decryptedLegacyKey;
       } else {
         const envKey = process.env[`${llmProvider?.toUpperCase()}_API_KEY`];
         if (!envKey) {
