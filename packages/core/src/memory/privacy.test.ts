@@ -133,4 +133,143 @@ describe('stripPrivateData', () => {
     const cleanText = 'function add(a: number, b: number): number {\n  return a + b;\n}';
     expect(stripPrivateData(cleanText)).toBe(cleanText);
   });
+
+  // ─── Sprint 2 gap-closing patterns ────────────────────────────
+
+  it('redacts GitLab personal access tokens (glpat-...)', () => {
+    const text = 'CI_TOKEN=glpat-aBcDeFgHiJkLmNoPqRsT12';
+    const result = stripPrivateData(text);
+    expect(result).toContain('[REDACTED_GITLAB_PAT]');
+    expect(result).not.toContain('glpat-aBcDeFgHiJkLmNoPqRsT12');
+  });
+
+  it('redacts npm tokens (npm_...)', () => {
+    const text = '//registry.npmjs.org/:_authToken=npm_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789';
+    const result = stripPrivateData(text);
+    expect(result).toContain('[REDACTED_NPM_TOKEN]');
+    expect(result).not.toContain('npm_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789');
+  });
+
+  it('redacts Stripe secret and restricted keys (sk_live_, sk_test_, rk_live_, rk_test_)', () => {
+    for (const prefix of ['sk_live_', 'sk_test_', 'rk_live_', 'rk_test_']) {
+      const key = `${prefix}aBcDeFgHiJkLmNoPqRsTuVwX`;
+      const result = stripPrivateData(`stripe key: ${key}`);
+      expect(result, `failed for ${prefix}`).toContain('[REDACTED_STRIPE_KEY]');
+      expect(result, `failed for ${prefix}`).not.toContain(key);
+    }
+  });
+
+  it('redacts Stripe webhook signing secrets (whsec_...)', () => {
+    const text = 'STRIPE_WEBHOOK_SECRET=whsec_aBcDeFgHiJkLmNoPqRsTuVwX';
+    const result = stripPrivateData(text);
+    expect(result).toContain('[REDACTED_STRIPE_WEBHOOK_SECRET]');
+    expect(result).not.toContain('whsec_aBcDeFgHiJkLmNoPqRsTuVwX');
+  });
+
+  it('redacts Slack app-level tokens (xapp-, xoxa-)', () => {
+    const xapp = `token: ${['xapp', '1', 'A012345678', 'fakeAppToken'].join('-')}`;
+    expect(stripPrivateData(xapp)).toContain('[REDACTED_SLACK_TOKEN]');
+
+    const xoxa = `token: ${['xoxa', '2', '9998887776', 'fakeToken'].join('-')}`;
+    expect(stripPrivateData(xoxa)).toContain('[REDACTED_SLACK_TOKEN]');
+  });
+
+  it('redacts Hugging Face tokens (hf_...)', () => {
+    const text = 'HF_TOKEN=hf_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345';
+    const result = stripPrivateData(text);
+    expect(result).toContain('[REDACTED');
+    expect(result).not.toContain('hf_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345');
+  });
+
+  it('redacts SendGrid API keys (SG.<id>.<secret>)', () => {
+    const key = 'SG.aBcDeFgHiJkLmNoPqRsTuV.aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_abcd';
+    const result = stripPrivateData(`sendgrid: ${key}`);
+    expect(result).toContain('[REDACTED_SENDGRID_KEY]');
+    expect(result).not.toContain(key);
+  });
+
+  it('redacts OPENSSH, PKCS8, ENCRYPTED, and PGP PEM private keys', () => {
+    const variants = [
+      ['-----BEGIN OPENSSH PRIVATE KEY-----', '-----END OPENSSH PRIVATE KEY-----'],
+      ['-----BEGIN PRIVATE KEY-----', '-----END PRIVATE KEY-----'], // PKCS8
+      ['-----BEGIN ENCRYPTED PRIVATE KEY-----', '-----END ENCRYPTED PRIVATE KEY-----'],
+      ['-----BEGIN PGP PRIVATE KEY BLOCK-----', '-----END PGP PRIVATE KEY BLOCK-----'],
+    ];
+    for (const [begin, end] of variants) {
+      const pem = [begin, 'b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ==', end].join('\n');
+      const result = stripPrivateData(pem);
+      expect(result, `failed for ${begin}`).toContain('[REDACTED_PRIVATE_KEY]');
+      expect(result, `failed for ${begin}`).not.toContain('b3BlbnNzaC1rZXktdjE');
+    }
+  });
+
+  it('redacts quoted AWS secret keys and YAML-style separators', () => {
+    const secret = 'wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEYaa';
+
+    const quoted = `AWS_SECRET_ACCESS_KEY="${secret}"`;
+    expect(stripPrivateData(quoted)).toContain('[REDACTED_AWS_SECRET]');
+    expect(stripPrivateData(quoted)).not.toContain(secret);
+
+    const yaml = `AWS_SECRET_ACCESS_KEY: ${secret}`;
+    expect(stripPrivateData(yaml)).toContain('[REDACTED_AWS_SECRET]');
+    expect(stripPrivateData(yaml)).not.toContain(secret);
+  });
+
+  it('redacts unquoted .env-style secret assignments', () => {
+    const cases = [
+      'DB_PASSWORD=hunter2hunter2',
+      'MY_API_KEY=abcd1234efgh5678',
+      'SESSION_SECRET: superDuperSecretValue',
+      'AUTH_TOKEN_PROD=tok-9f8e7d6c5b4a',
+    ];
+    for (const text of cases) {
+      const result = stripPrivateData(text);
+      expect(result, `failed for "${text}"`).toContain('[REDACTED]');
+      const value = text.split(/[:=]\s*/)[1]!;
+      expect(result, `failed for "${text}"`).not.toContain(value);
+    }
+  });
+
+  it('redacts passwords in URL userinfo, preserving user and host', () => {
+    const text = 'DATABASE_URL is postgres://admin:s3cretPass@db.internal:5432/app';
+    const result = stripPrivateData(text);
+    expect(result).not.toContain('s3cretPass');
+    expect(result).toContain('[REDACTED_URL_PASSWORD]');
+    expect(result).toContain('postgres://admin:');
+    expect(result).toContain('@db.internal:5432/app');
+  });
+
+  // ─── False-positive guards for the new patterns ───────────────
+
+  it('does NOT redact identifiers that merely resemble Stripe keys', () => {
+    const text = 'const sk_live_docs_url = getDocsUrl();';
+    expect(stripPrivateData(text)).toBe(text);
+  });
+
+  it('does NOT redact process.env.API_KEY references without a value', () => {
+    const text = 'const key = process.env.API_KEY;';
+    expect(stripPrivateData(text)).toBe(text);
+  });
+
+  it('does NOT redact prose mentioning the word password', () => {
+    const text = 'Remember to rotate your password regularly. See the password policy docs.';
+    expect(stripPrivateData(text)).toBe(text);
+  });
+
+  it('does NOT redact URLs without userinfo (port is not a password)', () => {
+    const text = 'Server listening on https://example.com:8080/health';
+    expect(stripPrivateData(text)).toBe(text);
+  });
+
+  it('does NOT double-redact labels inserted by more specific patterns', () => {
+    const text = 'GITHUB_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl';
+    const result = stripPrivateData(text);
+    // The specific GitHub label must survive the generic assignment pass
+    expect(result).toContain('[REDACTED_GITHUB_PAT]');
+  });
+
+  it('does NOT redact short values below the 8-char floor', () => {
+    const text = 'const PASSWORD_MIN_LENGTH = 12;';
+    expect(stripPrivateData(text)).toBe(text);
+  });
 });
