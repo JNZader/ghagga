@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GenerateTextFn } from '../providers/generate-fn.js';
-import { parseFindingsBlock, parseReviewResponse, runSimpleReview } from './simple.js';
 import type { SimpleReviewInput } from './simple.js';
+import { parseFindingsBlock, parseReviewResponse, runSimpleReview } from './simple.js';
 
 // ─── parseReviewResponse ────────────────────────────────────────
 

@@ -410,7 +410,9 @@ export { configureTracer, getTracer, withSpan } from './tracing/index.js';
 export type { CompressionResult, ToolFinding as CompressToolFinding } from './compress/index.js';
 export { compressStaticAnalysisBlock, compressToolFindings } from './compress/index.js';
 
-// ─── Semantic Diff ──────────────────────────────────────────────
+// ─── Semantic Diff (⚠️ EXPERIMENTAL — not wired to the pipeline) ──
+// No production callers as of 2026-06-11; API unstable. See semantic-diff/index.ts
+// header and REFACTOR-NOTES. Re-exported for visibility/tests only.
 
 export type {
   EntityChange as SemanticEntityChange,

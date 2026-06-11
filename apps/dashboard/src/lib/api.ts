@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { notifySessionExpired } from './session-expired';
 import type {
   Installation,
   InstallationSettings,
@@ -14,7 +15,6 @@ import type {
   WorkflowInstallResult,
   WorkflowStatus,
 } from './types';
-import { notifySessionExpired } from './session-expired';
 
 const API_URL =
   import.meta.env.VITE_API_URL ||

@@ -113,6 +113,12 @@ export function ConfirmDialog({
     // It is NOT the dialog itself — the inner div carries role="dialog".
     // `role="presentation"` keeps the wrapper out of the a11y tree so screen
     // readers only announce a single dialog (fixes dual-role ARIA violation).
+    // onKeyDown here catches Escape bubbling from ANY focused child (dialog,
+    // inputs, backdrop) regardless of which element holds focus — moving it to a
+    // single interactive child would miss Escape from siblings. The interactive
+    // affordances (close button, dialog) are real elements with proper roles, so
+    // this presentation wrapper is intentionally non-interactive to the a11y tree.
+    // biome-ignore lint/a11y/noStaticElementInteractions: presentation wrapper does Escape delegation only, see above
     <div
       role="presentation"
       className="fixed inset-0 z-50 flex items-center justify-center"

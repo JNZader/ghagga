@@ -20,8 +20,8 @@ import {
   toolRegistry,
 } from 'ghagga-core';
 import { getConfigDir, getStoredToken, loadConfig } from '../lib/config.js';
-import { isLegacyProvider, remapLegacyStoredProvider } from '../lib/providers.js';
 import { resolveProjectId } from '../lib/git.js';
+import { isLegacyProvider, remapLegacyStoredProvider } from '../lib/providers.js';
 import { formatSeverityLine } from '../ui/format.js';
 import * as tui from '../ui/tui.js';
 

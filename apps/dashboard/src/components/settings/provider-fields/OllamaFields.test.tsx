@@ -28,9 +28,7 @@ describe('OllamaFields', () => {
   it('renders a free-text input with the expected placeholder', () => {
     render(<OllamaFields index={0} entry={createEntry()} onModelChange={vi.fn()} />);
 
-    expect(
-      screen.getByPlaceholderText(/llama3, codellama, qwen2\.5-coder/i),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/llama3, codellama, qwen2\.5-coder/i)).toBeInTheDocument();
   });
 
   it('displays the current model value in the input', () => {

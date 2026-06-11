@@ -1248,7 +1248,11 @@ function resolveGenerateTextFns(
  * (runDiagnosticReview uses createOllamaGenerateFn); CLI bridge and
  * gateway do not, so they fall back to simple mode.
  */
-function resolveEffectiveMode(mode: ReviewMode, isCliBridge: boolean, isGateway: boolean): ReviewMode {
+function resolveEffectiveMode(
+  mode: ReviewMode,
+  isCliBridge: boolean,
+  isGateway: boolean,
+): ReviewMode {
   if (mode === 'diagnostic' && (isCliBridge || isGateway)) {
     return 'simple';
   }

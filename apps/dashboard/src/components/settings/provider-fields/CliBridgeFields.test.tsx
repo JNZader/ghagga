@@ -116,9 +116,7 @@ describe('CliBridgeFields — OpenCode model input', () => {
   });
 
   it('does NOT warn when cliModel matches provider/model format', () => {
-    renderFields(
-      createEntry({ model: 'opencode', cliModel: 'anthropic/claude-sonnet-4-5' }),
-    );
+    renderFields(createEntry({ model: 'opencode', cliModel: 'anthropic/claude-sonnet-4-5' }));
 
     expect(screen.queryByText(/expected format/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/model is required when using opencode/i)).not.toBeInTheDocument();
@@ -126,11 +124,7 @@ describe('CliBridgeFields — OpenCode model input', () => {
 
   it('calls onCliModelChange with the new value when the user types', () => {
     const onCliModelChange = vi.fn();
-    renderFields(
-      createEntry({ model: 'opencode', cliModel: '' }),
-      vi.fn(),
-      onCliModelChange,
-    );
+    renderFields(createEntry({ model: 'opencode', cliModel: '' }), vi.fn(), onCliModelChange);
 
     fireEvent.change(screen.getByLabelText(/opencode model/i), {
       target: { value: 'openai/gpt-5-codex' },
@@ -145,9 +139,7 @@ describe('CliBridgeFields — contextual help', () => {
   it('shows the opencode-specific help when CLI tool is opencode', () => {
     renderFields(createEntry({ model: 'opencode', cliModel: '' }));
 
-    expect(
-      screen.getByText(/models prefixed with opencode\/ are free/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/models prefixed with opencode\/ are free/i)).toBeInTheDocument();
   });
 
   it('shows the gemini-specific help when CLI tool is gemini', () => {

@@ -5,8 +5,8 @@ vi.mock('../providers/ollama.js', () => ({
   createOllamaGenerateFn: vi.fn(),
 }));
 
-import { createOllamaGenerateFn } from '../providers/ollama.js';
 import type { GenerateTextFn } from '../providers/generate-fn.js';
+import { createOllamaGenerateFn } from '../providers/ollama.js';
 import { parseHypotheses, runDiagnosticReview } from './diagnostic.js';
 
 // ─── parseHypotheses ────────────────────────────────────────────

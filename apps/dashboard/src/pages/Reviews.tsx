@@ -154,6 +154,11 @@ export function Reviews() {
   // The repo <select> onChange also calls setPage(1), but selectedRepo can
   // change by other paths (sidebar, deep link). This effect is the source of
   // truth so we never land on a stale page after switching repos.
+  // selectedRepo is an intentional TRIGGER, not read inside the effect
+  // callback: the effect resets pagination *because* the repo changed.
+  // Biome flags it as an "extra" dependency and its unsafe fix would remove
+  // it, making this a mount-only effect and reintroducing the stale-page bug.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger-only dep, see above
   useEffect(() => {
     setPage(1);
   }, [selectedRepo]);

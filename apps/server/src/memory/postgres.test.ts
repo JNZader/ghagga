@@ -5,7 +5,7 @@
  * functions with correct arguments and map results properly.
  */
 
-import { DEFAULT_DECAY_CONFIG, computeStrength } from 'ghagga-core';
+import { computeStrength, DEFAULT_DECAY_CONFIG } from 'ghagga-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostgresMemoryStorage } from './postgres.js';
 
@@ -116,7 +116,14 @@ describe('PostgresMemoryStorage — core methods', () => {
 
     it('handles null filePaths by mapping to null', async () => {
       mockSearchObservations.mockResolvedValueOnce([
-        { id: 3, type: 'preference', title: 'T', content: 'C', filePaths: null, lastAccessedAt: new Date() },
+        {
+          id: 3,
+          type: 'preference',
+          title: 'T',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: new Date(),
+        },
       ]);
 
       const result = await storage.searchObservations('proj', 'q');
@@ -127,7 +134,14 @@ describe('PostgresMemoryStorage — core methods', () => {
 
     it('attaches strength to returned rows (fresh observation → full strength)', async () => {
       mockSearchObservations.mockResolvedValueOnce([
-        { id: 4, type: 'pattern', title: 'T', content: 'C', filePaths: null, lastAccessedAt: new Date() },
+        {
+          id: 4,
+          type: 'pattern',
+          title: 'T',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: new Date(),
+        },
       ]);
 
       const result = await storage.searchObservations('proj', 'q');
@@ -139,7 +153,14 @@ describe('PostgresMemoryStorage — core methods', () => {
       // DEFAULT_DECAY_CONFIG.clearanceDays = 90 → 200 days old is well-cleared.
       const stale = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000);
       mockSearchObservations.mockResolvedValueOnce([
-        { id: 5, type: 'pattern', title: 'old', content: 'C', filePaths: null, lastAccessedAt: stale },
+        {
+          id: 5,
+          type: 'pattern',
+          title: 'old',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: stale,
+        },
       ]);
 
       const result = await storage.searchObservations('proj', 'q');
@@ -198,11 +219,46 @@ describe('PostgresMemoryStorage — core methods', () => {
       const fresh = new Date();
       const stale = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000); // cleared
       mockSearchObservations.mockResolvedValueOnce([
-        { id: 1, type: 'pattern', title: 'decayed-top', content: 'C', filePaths: null, lastAccessedAt: stale },
-        { id: 2, type: 'pattern', title: 'decayed-2', content: 'C', filePaths: null, lastAccessedAt: stale },
-        { id: 3, type: 'pattern', title: 'live-1', content: 'C', filePaths: null, lastAccessedAt: fresh },
-        { id: 4, type: 'pattern', title: 'live-2', content: 'C', filePaths: null, lastAccessedAt: fresh },
-        { id: 5, type: 'pattern', title: 'live-3', content: 'C', filePaths: null, lastAccessedAt: fresh },
+        {
+          id: 1,
+          type: 'pattern',
+          title: 'decayed-top',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: stale,
+        },
+        {
+          id: 2,
+          type: 'pattern',
+          title: 'decayed-2',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: stale,
+        },
+        {
+          id: 3,
+          type: 'pattern',
+          title: 'live-1',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: fresh,
+        },
+        {
+          id: 4,
+          type: 'pattern',
+          title: 'live-2',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: fresh,
+        },
+        {
+          id: 5,
+          type: 'pattern',
+          title: 'live-3',
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: fresh,
+        },
       ]);
 
       const result = await storage.searchObservations('proj', 'q', { limit: 2 });
@@ -242,7 +298,10 @@ describe('PostgresMemoryStorage — core methods', () => {
 
       const result = await storage.saveObservation(input);
 
-      expect(mockSaveObservation).toHaveBeenCalledWith(fakeDb, input);
+      // The storage layer always forwards a computed `embedding` (null when no
+      // embedding provider is configured, as in this test). Assert the real
+      // contract — `{ ...input, embedding: null }` — not the bare input.
+      expect(mockSaveObservation).toHaveBeenCalledWith(fakeDb, { ...input, embedding: null });
       expect(result).toEqual({
         id: 10,
         type: 'pattern',

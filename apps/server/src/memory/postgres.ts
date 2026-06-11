@@ -7,7 +7,7 @@ import type {
   MemoryStats,
   MemoryStorage,
 } from 'ghagga-core';
-import { DEFAULT_DECAY_CONFIG, computeStrength } from 'ghagga-core';
+import { computeStrength, DEFAULT_DECAY_CONFIG } from 'ghagga-core';
 import type { Database, memoryObservations } from 'ghagga-db';
 import {
   clearAllMemoryObservations,

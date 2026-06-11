@@ -17,8 +17,7 @@ vi.mock('./prompts.js', () => ({
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
   buildReviewLevelInstruction: vi.fn((level: string) => `REVIEW_LEVEL:${level}`),
   wrapUntrusted: vi.fn(
-    (label: string, content: string) =>
-      `<UNTRUSTED label="${label}">\n${content}\n</UNTRUSTED>`,
+    (label: string, content: string) => `<UNTRUSTED label="${label}">\n${content}\n</UNTRUSTED>`,
   ),
   wrapUntrustedDiff: vi.fn(
     (diff: string) => `<USER_DIFF>\n\`\`\`diff\n${diff}\n\`\`\`\n</USER_DIFF>`,
@@ -598,9 +597,7 @@ describe('runWorkflowReview', () => {
 
   it('wraps staticContext in an untrusted fence for the security specialist', async () => {
     const { fn, calls } = makeMockGenerateFn();
-    await runWorkflowReview(
-      makeInput({ staticContext: 'STATIC_CONTEXT_DATA', generateFns: [fn] }),
-    );
+    await runWorkflowReview(makeInput({ staticContext: 'STATIC_CONTEXT_DATA', generateFns: [fn] }));
 
     // Security specialist is index 3 and is the only one receiving staticContext.
     expect(calls[3]?.system).toContain('<UNTRUSTED label="STATIC ANALYSIS OUTPUT');
