@@ -49,13 +49,17 @@ export function serializeEmbedding(vec: number[]): Buffer {
 }
 
 /**
- * Deserialize a Buffer from SQLite BLOB back to a float32 embedding vector.
+ * Deserialize a BLOB from SQLite back to a float32 embedding vector.
+ *
+ * Accepts both Buffer and plain Uint8Array: sql.js (fts5-sql-bundle) returns
+ * BLOB columns as Uint8Array, which has no readFloatLE method.
  */
-export function deserializeEmbedding(buf: Buffer): number[] {
-  const len = buf.length / 4;
+export function deserializeEmbedding(buf: Buffer | Uint8Array): number[] {
+  const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+  const len = b.length / 4;
   const vec: number[] = new Array(len);
   for (let i = 0; i < len; i++) {
-    vec[i] = buf.readFloatLE(i * 4);
+    vec[i] = b.readFloatLE(i * 4);
   }
   return vec;
 }

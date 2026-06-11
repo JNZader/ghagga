@@ -9,7 +9,7 @@
  *   ghagga status                  Show current auth and config
  *   ghagga logout                  Clear stored credentials
  *
- * After "ghagga login", reviews use GitHub Models (gpt-4o-mini) for free.
+ * After "ghagga login", reviews use the gateway provider (model: auto).
  * You can override with --provider, --model, --api-key for other providers.
  *
  * Environment variables (override stored config):
@@ -39,6 +39,7 @@ import { memoryCommand } from './commands/memory/index.js';
 import { reviewCommand } from './commands/review.js';
 import { statusCommand } from './commands/status.js';
 import { getStoredToken, loadConfig } from './lib/config.js';
+import { isLegacyProvider } from './lib/providers.js';
 import * as tui from './ui/tui.js';
 
 // Read version from package.json at runtime (no hardcoded strings)
@@ -142,12 +143,32 @@ program
     const storedToken = getStoredToken();
 
     // Priority: CLI flag > env var > stored config
+    let providerFromStoredConfig = false;
     if (!options.provider) {
       options.provider = config.defaultProvider ?? 'gateway';
+      providerFromStoredConfig = true;
     }
 
+    let modelFromStoredConfig = false;
     if (!options.model) {
       options.model = config.defaultModel ?? undefined;
+      modelFromStoredConfig = options.model !== undefined;
+    }
+
+    // ── Read-time migration: legacy provider stored by an old login ──
+    // Only applies to STORED CONFIG values — explicit --provider flags and
+    // env vars still fail loudly below so the user fixes their invocation.
+    if (providerFromStoredConfig && isLegacyProvider(options.provider)) {
+      tui.log.warn(
+        `⚠️  Stored provider '${options.provider}' is no longer supported — using 'gateway' instead.\n` +
+          `   Run "ghagga login" again to refresh your saved config.`,
+      );
+      options.provider = 'gateway';
+      if (modelFromStoredConfig) {
+        // Stored model (e.g. 'gpt-4o-mini') belongs to the legacy provider —
+        // drop it so the gateway default ('auto') applies.
+        options.model = undefined;
+      }
     }
 
     // Auto-resolve API key: CLI flag > env var > stored token (gateway/cli-bridge)
@@ -166,20 +187,10 @@ program
 
     // ── Validate / migrate provider ───────────────────────────
     const currentProviders: LLMProvider[] = ['gateway', 'cli-bridge', 'ollama'];
-    const legacyCLIProviders = new Set([
-      'anthropic',
-      'openai',
-      'google',
-      'github',
-      'groq',
-      'openrouter',
-      'azure',
-      'deepseek',
-      'qwen',
-      'cerebras',
-    ]);
 
-    if (legacyCLIProviders.has(options.provider as string)) {
+    // Explicit legacy values (--provider flag / env var) are a hard error.
+    // Stored-config legacy values were already remapped above.
+    if (isLegacyProvider(options.provider)) {
       tui.log.error(
         `\n❌ Provider '${options.provider}' is no longer supported directly.\n` +
           `  → Set --provider gateway and configure credentials in mcp-llm-bridge.\n` +

@@ -129,11 +129,12 @@ describe('loginCommand', () => {
     expect(mockFetchGitHubUser).toHaveBeenCalledWith('gho_newtoken');
 
     // Verify config was saved with correct data
+    // (gateway/auto — 'github' is a legacy provider the CLI no longer accepts)
     expect(mockSaveConfig).toHaveBeenCalledWith({
       githubToken: 'gho_newtoken',
       githubLogin: 'newuser',
-      defaultProvider: 'github',
-      defaultModel: 'gpt-4o-mini',
+      defaultProvider: 'gateway',
+      defaultModel: 'auto',
     });
 
     // Verify success message
