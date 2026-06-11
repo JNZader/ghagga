@@ -38,9 +38,9 @@ What makes it different:
 
 | | |
 |---|---|
-| **Production code** | ~47,000 lines of strict TypeScript across 7 workspaces |
-| **Test code** | ~64,000 lines — *more test code than production code* |
-| **Test suite** | 4,100+ test cases in 208 test files (Vitest), plus mutation testing with Stryker |
+| **Production code** | ~48,000 lines of strict TypeScript across 7 workspaces |
+| **Test code** | ~67,000 lines — *more test code than production code* |
+| **Test suite** | 4,300+ test cases in 214 test files (Vitest), plus mutation testing with Stryker |
 | **Static analysis** | 17 tools — 7 always-on, 10 auto-detected by stack |
 | **Review modes** | 5 orchestration strategies (single-pass → multi-agent consensus) |
 | **Distribution** | GitHub App (SaaS) · GitHub Action · npm CLI · self-hosted Docker |
@@ -171,7 +171,7 @@ The part that makes reviews compound over time:
 - **Persist after review** — significant findings are stored as typed observations (`decision`, `pattern`, `bugfix`, `architecture`, …) with deduplication.
 - **Strength decay** — stale observations fade out of context instead of polluting it forever.
 - **Versioning** — git-like branch / snapshot / merge / rollback over memory state.
-- **Privacy stripping** — 13 redaction patterns (API keys, JWTs, PEM keys, credential blobs) run before any write.
+- **Privacy stripping** — 16 redaction patterns (API keys, provider tokens, JWTs, PEM/SSH keys, env secrets, URL-embedded credentials) run before any write.
 
 Backends: PostgreSQL (`tsvector` + `ts_rank`) for server mode, SQLite (FTS5 + BM25) for CLI/Action, or Engram over HTTP.
 
@@ -182,7 +182,10 @@ Backends: PostgreSQL (`tsvector` + `ts_rank`) for server mode, SQLite (FTS5 + BM
 | Provider API keys | AES-256-GCM encryption at rest, per-installation keys |
 | GitHub webhooks | HMAC-SHA256 with constant-time comparison |
 | Runner callbacks | Per-dispatch derived HMAC secrets + embedded-timestamp TTL |
-| Memory writes | Privacy stripping (13 redaction patterns) |
+| Memory writes | Privacy stripping (16 redaction patterns) |
+| Outbound gateway URLs | SSRF guard — IP-range + DNS validation at persist time, re-validated at execution time |
+| LLM prompts | Trust boundary — repo content, memory, and prior findings framed and sanitized as untrusted input |
+| Job queue | Credentials never enter Redis payloads — workers re-fetch encrypted keys from PostgreSQL |
 | Injected workflow | `permissions: contents: read`, secret masking, output normalization |
 | Test coverage | Dedicated security suite: encryption tamper detection, HMAC correctness, no-secret-logging, no-eval, prototype-pollution checks |
 
@@ -212,7 +215,7 @@ ghagga/
 A few decisions worth calling out:
 
 - **Core/adapter split.** The review engine is transport-agnostic; server, Action, and CLI are thin IO translators. Adding a delivery mode doesn't touch the pipeline.
-- **Tests outweigh production code** (~64k vs ~47k LOC), with mutation testing (Stryker) guarding the core, server, and Action against assertion-free tests.
+- **Tests outweigh production code** (~67k vs ~48k LOC), with mutation testing (Stryker) guarding the core, server, and Action against assertion-free tests.
 - **v2 was a real rewrite**, not a patch: v1's Deno + Node + Python sprawl collapsed into a single-runtime Node monorepo with async orchestration (BullMQ), a 17-tool registry (up from Semgrep-only), and an actually-used memory system.
 - **Graceful degradation everywhere.** Missing static tools, unreachable memory backends, blocked workflow injection — every layer falls back instead of failing the review.
 
