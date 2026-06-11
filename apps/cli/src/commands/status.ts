@@ -5,8 +5,8 @@
 import type { LLMProvider } from 'ghagga-core';
 import { DEFAULT_MODELS } from 'ghagga-core';
 import { getConfigFilePath, isLoggedIn, loadConfig } from '../lib/config.js';
-import { remapLegacyStoredProvider } from '../lib/providers.js';
 import { fetchGitHubUser } from '../lib/oauth.js';
+import { remapLegacyStoredProvider } from '../lib/providers.js';
 import * as tui from '../ui/tui.js';
 
 export async function statusCommand(): Promise<void> {

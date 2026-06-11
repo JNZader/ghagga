@@ -325,93 +325,94 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
       mockDecrypt.mockImplementation((v: string) => `decrypted-${v}`);
     });
 
-  it('skips a chain entry whose encryptedApiKey fails to decrypt, keeps the rest', async () => {
-    mockDecrypt.mockImplementation((v: string) => {
-      if (v === 'garbage-key') throw new Error('Unsupported state or unable to authenticate data');
-      return `decrypted-${v}`;
+    it('skips a chain entry whose encryptedApiKey fails to decrypt, keeps the rest', async () => {
+      mockDecrypt.mockImplementation((v: string) => {
+        if (v === 'garbage-key')
+          throw new Error('Unsupported state or unable to authenticate data');
+        return `decrypted-${v}`;
+      });
+
+      const data = makeJobData({
+        providerChain: [
+          { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'garbage-key' },
+          { provider: 'gateway', model: 'auto', encryptedApiKey: 'good-key' },
+        ],
+      });
+      const job = makeFakeJob(data);
+
+      await expect(capturedProcessor?.(job)).resolves.toEqual({
+        success: true,
+        reviewId: 'rev-001',
+      });
+
+      const input = mockReviewPipeline.mock.calls[0][0];
+      expect(input.providerChain).toHaveLength(1);
+      expect(input.providerChain[0].provider).toBe('gateway');
+      expect(input.providerChain[0].apiKey).toBe('decrypted-good-key');
+
+      // Warning mentions only the provider name — never the encrypted value
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { provider: 'openai' },
+        expect.stringContaining('credential decryption failed'),
+      );
+      const warnPayloads = mockLogger.warn.mock.calls.map((c) => JSON.stringify(c));
+      for (const payload of warnPayloads) {
+        expect(payload).not.toContain('garbage-key');
+      }
     });
 
-    const data = makeJobData({
-      providerChain: [
-        { provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'garbage-key' },
-        { provider: 'gateway', model: 'auto', encryptedApiKey: 'good-key' },
-      ],
-    });
-    const job = makeFakeJob(data);
+    it('degrades to the no-key fallback when ALL chain entries fail to decrypt', async () => {
+      mockDecrypt.mockImplementation(() => {
+        throw new Error('bad decrypt');
+      });
 
-    await expect(capturedProcessor?.(job)).resolves.toEqual({
-      success: true,
-      reviewId: 'rev-001',
-    });
+      const data = makeJobData({
+        llmProvider: 'openai',
+        encryptedApiKey: null,
+        providerChain: [{ provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'corrupt-1' }],
+      });
+      const job = makeFakeJob(data);
 
-    const input = mockReviewPipeline.mock.calls[0][0];
-    expect(input.providerChain).toHaveLength(1);
-    expect(input.providerChain[0].provider).toBe('gateway');
-    expect(input.providerChain[0].apiKey).toBe('decrypted-good-key');
+      await expect(capturedProcessor?.(job)).resolves.toEqual({
+        success: true,
+        reviewId: 'rev-001',
+      });
 
-    // Warning mentions only the provider name — never the encrypted value
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      { provider: 'openai' },
-      expect.stringContaining('credential decryption failed'),
-    );
-    const warnPayloads = mockLogger.warn.mock.calls.map((c) => JSON.stringify(c));
-    for (const payload of warnPayloads) {
-      expect(payload).not.toContain('garbage-key');
-    }
-  });
-
-  it('degrades to the no-key fallback when ALL chain entries fail to decrypt', async () => {
-    mockDecrypt.mockImplementation(() => {
-      throw new Error('bad decrypt');
+      const input = mockReviewPipeline.mock.calls[0][0];
+      expect(input.providerChain).toBeUndefined();
+      expect(input.aiReviewEnabled).toBe(false);
     });
 
-    const data = makeJobData({
-      llmProvider: 'openai',
-      encryptedApiKey: null,
-      providerChain: [{ provider: 'openai', model: 'gpt-4o', encryptedApiKey: 'corrupt-1' }],
+    it('treats a corrupt legacy encryptedApiKey as absent (static-analysis fallback)', async () => {
+      mockDecrypt.mockImplementation(() => {
+        throw new Error('bad decrypt');
+      });
+
+      const data = makeJobData({
+        llmProvider: 'openai',
+        encryptedApiKey: 'corrupt-legacy-key',
+        providerChain: undefined,
+      });
+      const job = makeFakeJob(data);
+
+      await expect(capturedProcessor?.(job)).resolves.toEqual({
+        success: true,
+        reviewId: 'rev-001',
+      });
+
+      const input = mockReviewPipeline.mock.calls[0][0];
+      expect(input.aiReviewEnabled).toBe(false);
+      expect(input.apiKey).toBeUndefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { provider: 'openai' },
+        expect.stringContaining('credential decryption failed'),
+      );
+      const warnPayloads = mockLogger.warn.mock.calls.map((c) => JSON.stringify(c));
+      for (const payload of warnPayloads) {
+        expect(payload).not.toContain('corrupt-legacy-key');
+      }
     });
-    const job = makeFakeJob(data);
-
-    await expect(capturedProcessor?.(job)).resolves.toEqual({
-      success: true,
-      reviewId: 'rev-001',
-    });
-
-    const input = mockReviewPipeline.mock.calls[0][0];
-    expect(input.providerChain).toBeUndefined();
-    expect(input.aiReviewEnabled).toBe(false);
-  });
-
-  it('treats a corrupt legacy encryptedApiKey as absent (static-analysis fallback)', async () => {
-    mockDecrypt.mockImplementation(() => {
-      throw new Error('bad decrypt');
-    });
-
-    const data = makeJobData({
-      llmProvider: 'openai',
-      encryptedApiKey: 'corrupt-legacy-key',
-      providerChain: undefined,
-    });
-    const job = makeFakeJob(data);
-
-    await expect(capturedProcessor?.(job)).resolves.toEqual({
-      success: true,
-      reviewId: 'rev-001',
-    });
-
-    const input = mockReviewPipeline.mock.calls[0][0];
-    expect(input.aiReviewEnabled).toBe(false);
-    expect(input.apiKey).toBeUndefined();
-
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      { provider: 'openai' },
-      expect.stringContaining('credential decryption failed'),
-    );
-    const warnPayloads = mockLogger.warn.mock.calls.map((c) => JSON.stringify(c));
-    for (const payload of warnPayloads) {
-      expect(payload).not.toContain('corrupt-legacy-key');
-    }
-  });
   });
 
   it('does NOT set aiReviewEnabled when user explicitly disabled it, even with provider', async () => {
@@ -445,8 +446,18 @@ describe('processReview – LLM fallback to static-analysis-only', () => {
       llmProvider: 'openai',
       encryptedApiKey: null,
       providerChain: [
-        { provider: 'gateway', model: 'auto', encryptedApiKey: null, gatewayUrl: 'https://rebind-a.example/' },
-        { provider: 'gateway', model: 'auto', encryptedApiKey: null, gatewayUrl: 'https://rebind-b.example/' },
+        {
+          provider: 'gateway',
+          model: 'auto',
+          encryptedApiKey: null,
+          gatewayUrl: 'https://rebind-a.example/',
+        },
+        {
+          provider: 'gateway',
+          model: 'auto',
+          encryptedApiKey: null,
+          gatewayUrl: 'https://rebind-b.example/',
+        },
       ] as ReviewJobData['providerChain'],
     });
     const job = makeFakeJob(data);
@@ -618,9 +629,7 @@ describe('processReview – encrypted credentials re-fetched from DB, not the jo
     // saveReview() reuses its own call later, so we assert the resolver+memory
     // pair never triggered an EXTRA mint beyond the shared handle by checking the
     // identity threading above rather than a brittle global count.
-    expect(mockGetRepositoryById.mock.calls[0][0]).toBe(
-      mockPostgresMemoryStorage.mock.calls[0][0],
-    );
+    expect(mockGetRepositoryById.mock.calls[0][0]).toBe(mockPostgresMemoryStorage.mock.calls[0][0]);
   });
 
   it('TOLERANCE: old-format in-flight job with encryptedApiKey still works without a DB re-fetch', async () => {
@@ -680,7 +689,10 @@ describe('revalidateGatewayChain', () => {
 
   it('never echoes the rejected URL in the warning payload', async () => {
     const secretUrl = 'http://10.0.0.7:6379/secret-internal-path';
-    await revalidateGatewayChain([{ provider: 'gateway', gatewayUrl: secretUrl, model: 'auto' }], log);
+    await revalidateGatewayChain(
+      [{ provider: 'gateway', gatewayUrl: secretUrl, model: 'auto' }],
+      log,
+    );
 
     const payloads = log.warn.mock.calls.map((c) => JSON.stringify(c));
     for (const p of payloads) {

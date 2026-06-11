@@ -105,12 +105,16 @@ describe('sanitizeTableCell', () => {
 });
 
 describe('isValidGithubLogin', () => {
-  it.each(['octocat', 'a', 'user-name', 'User123', 'a1-b2-c3', 'x'.repeat(39)])(
-    'accepts valid login %s',
-    (login) => {
-      expect(isValidGithubLogin(login)).toBe(true);
-    },
-  );
+  it.each([
+    'octocat',
+    'a',
+    'user-name',
+    'User123',
+    'a1-b2-c3',
+    'x'.repeat(39),
+  ])('accepts valid login %s', (login) => {
+    expect(isValidGithubLogin(login)).toBe(true);
+  });
 
   it.each([
     '',

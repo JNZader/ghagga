@@ -178,9 +178,7 @@ const FAKE_REPO = {
   useGlobalSettings: false,
   aiReviewEnabled: true,
   reviewMode: 'simple',
-  providerChain: [
-    { provider: 'gateway', model: 'auto', encryptedApiKey: 'enc-key-1' },
-  ],
+  providerChain: [{ provider: 'gateway', model: 'auto', encryptedApiKey: 'enc-key-1' }],
   settings: {
     enableSemgrep: true,
     enableTrivy: true,
@@ -387,7 +385,9 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
     expect(mockGetRepoByFullName).not.toHaveBeenCalled();
     expect(mockGetReviewsByRepoId).not.toHaveBeenCalled();
     // No row belongs to a foreign tenant repo.
-    expect(json.data.every((r: { fullName: string }) => r.fullName.startsWith('owner/'))).toBe(true);
+    expect(json.data.every((r: { fullName: string }) => r.fullName.startsWith('owner/'))).toBe(
+      true,
+    );
   });
 
   it('returns pagination.total reflecting the full cross-installation count', async () => {
@@ -996,9 +996,7 @@ describe('PUT /api/installation-settings', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         installationId: 100,
-        providerChain: [
-          { provider: 'gateway', model: 'auto', apiKey: 'sk-gw-new-key' },
-        ],
+        providerChain: [{ provider: 'gateway', model: 'auto', apiKey: 'sk-gw-new-key' }],
         aiReviewEnabled: false,
         reviewMode: 'consensus',
         enableSemgrep: false,
@@ -1145,9 +1143,7 @@ describe('PUT /api/installation-settings', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         installationId: 100,
-        providerChain: [
-          { provider: 'gateway', model: 'auto', apiKey: 'key' },
-        ],
+        providerChain: [{ provider: 'gateway', model: 'auto', apiKey: 'key' }],
       }),
     });
 
@@ -1694,18 +1690,14 @@ describe('PUT /api/settings', () => {
     // Repo with no key for 'cli-bridge' (only has 'gateway')
     const repoWithoutCliBridgeKey = {
       ...FAKE_REPO,
-      providerChain: [
-        { provider: 'gateway', model: 'auto', encryptedApiKey: 'enc-key-1' },
-      ],
+      providerChain: [{ provider: 'gateway', model: 'auto', encryptedApiKey: 'enc-key-1' }],
     };
     mockGetRepoByFullName.mockResolvedValueOnce(repoWithoutCliBridgeKey);
     mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
 
     // Global installation settings DO have a cli-bridge key
     mockGetInstallationSettings.mockResolvedValueOnce({
-      providerChain: [
-        { provider: 'cli-bridge', model: 'auto', encryptedApiKey: 'enc-global-cli' },
-      ],
+      providerChain: [{ provider: 'cli-bridge', model: 'auto', encryptedApiKey: 'enc-global-cli' }],
     });
 
     const app = createApp();

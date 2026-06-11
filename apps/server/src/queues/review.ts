@@ -420,8 +420,11 @@ async function processReview(
   // SECURITY: encrypted credentials are NOT in the job payload — re-fetch them
   // from the DB by identifier (with old-format in-flight tolerance + graceful
   // degradation when settings were deleted). See resolveEncryptedCredentials.
-  const { providerChain: rawProviderChain, encryptedApiKey } =
-    await resolveEncryptedCredentials(data, log, db);
+  const { providerChain: rawProviderChain, encryptedApiKey } = await resolveEncryptedCredentials(
+    data,
+    log,
+    db,
+  );
   const [owner, repo] = repoFullName.split('/') as [string, string];
 
   log.info(`Starting review processing for ${repoFullName}#${prNumber}`);

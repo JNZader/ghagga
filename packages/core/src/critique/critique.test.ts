@@ -442,10 +442,7 @@ CRITIQUES:
   });
 
   it('wraps the diff and findings as untrusted in both critique calls', async () => {
-    const review = makeReviewResult([
-      makeFinding('Real issue'),
-      makeFinding('Another issue'),
-    ]);
+    const review = makeReviewResult([makeFinding('Real issue'), makeFinding('Another issue')]);
 
     const calls: Array<{ system: string; prompt: string }> = [];
     const generateFn = vi.fn(async (system: string, prompt: string) => {

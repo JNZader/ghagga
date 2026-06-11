@@ -388,34 +388,36 @@ export async function getReviewsByInstallationIds(
   if (installationIds.length === 0) return [];
 
   const { limit = 50, offset = 0 } = options;
-  return db
-    .select({
-      id: reviews.id,
-      repositoryId: reviews.repositoryId,
-      prNumber: reviews.prNumber,
-      status: reviews.status,
-      mode: reviews.mode,
-      summary: reviews.summary,
-      findings: reviews.findings,
-      tokensUsed: reviews.tokensUsed,
-      executionTimeMs: reviews.executionTimeMs,
-      metadata: reviews.metadata,
-      createdAt: reviews.createdAt,
-      fullName: repositories.fullName,
-    })
-    .from(reviews)
-    .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
-    // SECURITY (cross-tenant isolation): the early-return above guards the
-    // empty-installationIds path, but `inArray(col, [])` is ALSO safe at the SQL
-    // layer — drizzle renders it as `WHERE false` (zero rows), never an
-    // unconstrained query that would leak every tenant's reviews. Do NOT
-    // "optimize away" the guard above OR assume a future drizzle upgrade keeps
-    // this semantic: queries.test.ts locks the generated SQL via .toSQL() so an
-    // upgrade that drops the WHERE clause fails the suite instead of leaking.
-    .where(inArray(repositories.installationId, installationIds))
-    .orderBy(desc(reviews.createdAt))
-    .limit(limit)
-    .offset(offset);
+  return (
+    db
+      .select({
+        id: reviews.id,
+        repositoryId: reviews.repositoryId,
+        prNumber: reviews.prNumber,
+        status: reviews.status,
+        mode: reviews.mode,
+        summary: reviews.summary,
+        findings: reviews.findings,
+        tokensUsed: reviews.tokensUsed,
+        executionTimeMs: reviews.executionTimeMs,
+        metadata: reviews.metadata,
+        createdAt: reviews.createdAt,
+        fullName: repositories.fullName,
+      })
+      .from(reviews)
+      .innerJoin(repositories, eq(repositories.id, reviews.repositoryId))
+      // SECURITY (cross-tenant isolation): the early-return above guards the
+      // empty-installationIds path, but `inArray(col, [])` is ALSO safe at the SQL
+      // layer — drizzle renders it as `WHERE false` (zero rows), never an
+      // unconstrained query that would leak every tenant's reviews. Do NOT
+      // "optimize away" the guard above OR assume a future drizzle upgrade keeps
+      // this semantic: queries.test.ts locks the generated SQL via .toSQL() so an
+      // upgrade that drops the WHERE clause fails the suite instead of leaking.
+      .where(inArray(repositories.installationId, installationIds))
+      .orderBy(desc(reviews.createdAt))
+      .limit(limit)
+      .offset(offset)
+  );
 }
 
 /**

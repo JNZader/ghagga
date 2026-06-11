@@ -16,12 +16,7 @@ export interface GatewayFieldsProps {
  * Validate button + status messages live in the parent (ProviderEntry)
  * credential block because they are shared with cli-bridge/ollama.
  */
-export function GatewayFields({
-  index,
-  entry,
-  onUrlChange,
-  onModelChange,
-}: GatewayFieldsProps) {
+export function GatewayFields({ index, entry, onUrlChange, onModelChange }: GatewayFieldsProps) {
   return (
     <div className="mb-3 space-y-3">
       <div>
@@ -48,9 +43,7 @@ export function GatewayFields({
           className="mb-1 block text-xs font-medium text-text-secondary"
         >
           Model
-          <span className="ml-2 font-normal text-text-muted">
-            (type or select from gateway)
-          </span>
+          <span className="ml-2 font-normal text-text-muted">(type or select from gateway)</span>
         </label>
         <input
           id={`gateway-model-${index}`}
@@ -69,24 +62,16 @@ export function GatewayFields({
           <option value="github-copilot/gpt-4.1">GPT-4.1 (Copilot FREE)</option>
           <option value="github-copilot/gpt-5-mini">GPT-5 Mini (Copilot FREE)</option>
           {/* ── Copilot CHEAP (0.25-0.33x multiplier) ── */}
-          <option value="github-copilot/claude-haiku-4.5">
-            Claude Haiku 4.5 (Copilot 0.33x)
-          </option>
+          <option value="github-copilot/claude-haiku-4.5">Claude Haiku 4.5 (Copilot 0.33x)</option>
           <option value="github-copilot/gemini-3-flash-preview">
             Gemini 3 Flash (Copilot 0.33x)
           </option>
           <option value="github-copilot/gpt-5.4-mini">GPT-5.4 Mini (Copilot 0.33x)</option>
-          <option value="github-copilot/grok-code-fast-1">
-            Grok Code Fast 1 (Copilot 0.25x)
-          </option>
+          <option value="github-copilot/grok-code-fast-1">Grok Code Fast 1 (Copilot 0.25x)</option>
           {/* ── Copilot STANDARD (1x multiplier) ── */}
           <option value="github-copilot/claude-sonnet-4">Claude Sonnet 4 (Copilot 1x)</option>
-          <option value="github-copilot/claude-sonnet-4.5">
-            Claude Sonnet 4.5 (Copilot 1x)
-          </option>
-          <option value="github-copilot/claude-sonnet-4.6">
-            Claude Sonnet 4.6 (Copilot 1x)
-          </option>
+          <option value="github-copilot/claude-sonnet-4.5">Claude Sonnet 4.5 (Copilot 1x)</option>
+          <option value="github-copilot/claude-sonnet-4.6">Claude Sonnet 4.6 (Copilot 1x)</option>
           <option value="github-copilot/gemini-2.5-pro">Gemini 2.5 Pro (Copilot 1x)</option>
           <option value="github-copilot/gemini-3-pro-preview">Gemini 3 Pro (Copilot 1x)</option>
           <option value="github-copilot/gpt-5">GPT-5 (Copilot 1x)</option>

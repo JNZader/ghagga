@@ -94,9 +94,7 @@ export function sanitizeTableCell(
   input: string,
   maxLength: number = SANITIZE_DEFAULT_CELL_MAX,
 ): string {
-  return sanitizeMarkdownText(input, maxLength)
-    .replace(/\|/g, '\\|')
-    .replace(/\n/g, ' ');
+  return sanitizeMarkdownText(input, maxLength).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
 /**
