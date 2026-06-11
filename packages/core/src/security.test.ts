@@ -79,7 +79,7 @@ const allSourceFiles = [...coreFiles, ...serverFiles, ...cliFiles, ...dbFiles];
  * (with `\\.` escapes and, for templates, basic nesting of `${ ... }`), and
  * regex literals (disambiguated from division by the previous significant char).
  */
-export function stripNonCode(src: string): string {
+function stripNonCode(src: string): string {
   const out: string[] = [];
   const n = src.length;
   let i = 0;
