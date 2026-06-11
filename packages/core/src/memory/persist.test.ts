@@ -89,6 +89,11 @@ function makeResult(
 describe('persistReviewObservations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks resets call history but NOT implementations. Re-assert the
+    // default [STRIPPED] stub so a test that swaps in the real implementation
+    // (see "redacts a secret smuggled into finding.file") cannot leak into the
+    // tests that follow it.
+    mockStripPrivateData.mockImplementation((text: string) => `[STRIPPED]${text}`);
   });
 
   // ── Early return on null/falsy storage ──
@@ -208,6 +213,49 @@ describe('persistReviewObservations', () => {
     // Last call is the summary observation
     const summaryCall = vi.mocked(storage.saveObservation).mock.calls[1]?.[0];
     expect(summaryCall.severity).toBeUndefined();
+  });
+
+  // ── File path is run through stripPrivateData (secret smuggling) ──
+
+  it('runs finding.file through stripPrivateData for both content and filePaths', async () => {
+    const result = makeResult([makeFinding({ severity: 'high', file: 'src/auth.ts', line: 7 })]);
+    const storage = createMockStorage();
+    await persistReviewObservations(storage, 'owner/repo', 1, result);
+
+    // The mocked stripPrivateData prefixes "[STRIPPED]"; the file path must be
+    // among the strings it was asked to sanitize.
+    expect(mockStripPrivateData).toHaveBeenCalledWith('src/auth.ts');
+
+    const findingCall = vi.mocked(storage.saveObservation).mock.calls[0]?.[0];
+    // filePaths reflects the sanitized value, not the raw path.
+    expect(findingCall.filePaths).toEqual(['[STRIPPED]src/auth.ts']);
+    // The "File:" content line also uses the sanitized value.
+    expect(findingCall.content).toContain('File: [STRIPPED]src/auth.ts:7');
+  });
+
+  it('redacts a secret smuggled into finding.file (real stripPrivateData)', async () => {
+    // Use the REAL implementation for this case so we exercise the actual
+    // redaction patterns, not the [STRIPPED] stub.
+    const { stripPrivateData: realStrip } = await vi.importActual<typeof import('./privacy.js')>(
+      './privacy.js',
+    );
+    mockStripPrivateData.mockImplementation(realStrip);
+
+    const secret = 'sk-ant-abcdefghijklmnopqrstuvwxyz0123456789';
+    const result = makeResult([
+      makeFinding({ severity: 'high', file: `src/${secret}/leak.ts`, line: 1 }),
+    ]);
+    const storage = createMockStorage();
+    await persistReviewObservations(storage, 'owner/repo', 1, result);
+
+    const findingCall = vi.mocked(storage.saveObservation).mock.calls[0]?.[0];
+    // The secret must NOT appear anywhere in what we persist.
+    expect(JSON.stringify(findingCall)).not.toContain(secret);
+    expect(findingCall.content).toContain('[REDACTED_ANTHROPIC_KEY]');
+    expect(findingCall.filePaths?.[0]).toContain('[REDACTED_ANTHROPIC_KEY]');
+
+    // Restore the stub for subsequent tests.
+    mockStripPrivateData.mockImplementation((text: string) => `[STRIPPED]${text}`);
   });
 
   // ── Category → ObservationType mapping ──
@@ -342,7 +390,8 @@ describe('persistReviewObservations', () => {
     await persistReviewObservations(storage, 'project', 1, result);
 
     const savedObs = vi.mocked(storage.saveObservation).mock.calls[0]?.[0];
-    expect(savedObs.content).toContain('File: package.json');
+    // File path is now run through stripPrivateData (mock prefixes [STRIPPED]).
+    expect(savedObs.content).toContain('File: [STRIPPED]package.json');
     expect(savedObs.content).not.toContain('package.json:');
   });
 
@@ -356,7 +405,8 @@ describe('persistReviewObservations', () => {
     const savedObs = vi.mocked(storage.saveObservation).mock.calls[0]?.[0];
     expect(savedObs.sessionId).toBe(1);
     expect(savedObs.project).toBe('org/repo');
-    expect(savedObs.filePaths).toEqual(['src/core.ts']);
+    // filePaths is now sanitized via stripPrivateData (mock prefixes [STRIPPED]).
+    expect(savedObs.filePaths).toEqual(['[STRIPPED]src/core.ts']);
   });
 
   it('truncates title to 80 chars of sanitized message', async () => {

@@ -332,9 +332,16 @@ export function formatReviewComment(
     }
   }
 
-  // Static analysis summary
-  const staticTools = result.metadata.toolsRun;
-  const skippedTools = result.metadata.toolsSkipped;
+  // Static analysis summary.
+  // toolsRun / toolsSkipped originate from the runner-callback payload
+  // (apps/server runner-callback.ts \u2192 pipeline.ts \u2192 here), which is
+  // attacker-influenceable. Sanitize every tool name before joining into
+  // Markdown so a crafted name (e.g. "evil<!--x-->", "@org/everyone", or an
+  // HTML/link injection) cannot break out of the comment.
+  const staticTools = result.metadata.toolsRun.map((t) => sanitizeMarkdownText(String(t), 100));
+  const skippedTools = result.metadata.toolsSkipped.map((t) =>
+    sanitizeMarkdownText(String(t), 100),
+  );
   if (staticTools.length > 0 || skippedTools.length > 0) {
     comment += `### Static Analysis\n`;
     if (staticTools.length > 0) {
