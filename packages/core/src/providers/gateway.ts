@@ -72,8 +72,16 @@ export async function generateViaGateway(
       project,
     }),
     signal: AbortSignal.timeout(180_000), // 3 min timeout (matches CLI bridge)
+    // SSRF defense: never follow redirects. The gateway URL was validated by
+    // the server worker (safe-url) against the ORIGINAL host only; a 3xx
+    // Location could redirect this server-side fetch to an unvalidated
+    // private/loopback/metadata address. With redirect:'manual' a 3xx becomes
+    // a non-ok response and is handled below as a failed generation, exactly
+    // like any other gateway error.
+    redirect: 'manual',
   });
 
+  // Non-2xx (including a refused 3xx redirect) is a failed generation.
   if (!response.ok) {
     const error = await response.text().catch(() => 'unknown error');
     throw new Error(`Gateway error (${response.status}): ${error}`);

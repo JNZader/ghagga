@@ -85,7 +85,17 @@ function decryptV1(base64str: string, key: Buffer): string {
   const authTag = combined.subarray(combined.length - AUTH_TAG_LENGTH);
   const ciphertext = combined.subarray(IV_LENGTH, combined.length - AUTH_TAG_LENGTH);
 
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  // Defense in depth: the length check above already guarantees these, but
+  // assert explicitly so a future refactor cannot silently weaken them.
+  if (iv.length !== IV_LENGTH) {
+    throw new Error('Invalid encrypted data: IV must be exactly 12 bytes');
+  }
+  if (authTag.length !== AUTH_TAG_LENGTH) {
+    throw new Error('Invalid encrypted data: auth tag must be exactly 16 bytes');
+  }
+
+  // authTagLength makes Node reject any setAuthTag() of a different length.
+  const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   decipher.setAuthTag(authTag);
 
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
@@ -101,7 +111,21 @@ function decryptV2(payload: string, key: Buffer): string {
   const ciphertext = Buffer.from(parts[1]!, 'base64');
   const authTag = Buffer.from(parts[2]!, 'base64');
 
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  // SECURITY: enforce exact component lengths. Node's GCM implementation
+  // accepts truncated auth tags (e.g. 4 bytes), which would drop forgery
+  // resistance from 2^128 to 2^32 for an attacker with DB write access.
+  // Arbitrary-length IVs are likewise rejected — only the 96-bit IV that
+  // encrypt() produces is valid.
+  if (iv.length !== IV_LENGTH) {
+    throw new Error('Invalid v2 encrypted data: IV must be exactly 12 bytes');
+  }
+  if (authTag.length !== AUTH_TAG_LENGTH) {
+    throw new Error('Invalid v2 encrypted data: auth tag must be exactly 16 bytes');
+  }
+
+  // authTagLength makes Node reject any setAuthTag() of a different length
+  // (defense in depth alongside the explicit check above).
+  const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   decipher.setAuthTag(authTag);
 
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');

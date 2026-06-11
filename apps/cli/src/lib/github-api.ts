@@ -7,6 +7,7 @@
  */
 
 import type { ReviewResult } from 'ghagga-core';
+import { sanitizeMarkdownText, sanitizeTableCell } from 'ghagga-core';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -206,12 +207,14 @@ export function formatIssueBody(result: ReviewResult, version: string): string {
   lines.push('');
   lines.push(`| Field | Value |`);
   lines.push(`|-------|-------|`);
-  lines.push(`| **Status** | ${result.status} |`);
+  // Status/mode/model are LLM/provider-derived — sanitize every cell so a
+  // hostile value cannot break out of the table or smuggle HTML/mentions.
+  lines.push(`| **Status** | ${sanitizeTableCell(String(result.status))} |`);
   lines.push(
     `| **Findings** | ${result.findings.length} total (${countParts.join(', ') || 'none'}) |`,
   );
-  lines.push(`| **Mode** | ${result.metadata.mode} |`);
-  lines.push(`| **Model** | ${result.metadata.model} |`);
+  lines.push(`| **Mode** | ${sanitizeTableCell(String(result.metadata.mode))} |`);
+  lines.push(`| **Model** | ${sanitizeTableCell(String(result.metadata.model))} |`);
   lines.push(`| **Execution time** | ${timeSeconds}s |`);
   lines.push('');
 
@@ -237,7 +240,9 @@ export function formatIssueBody(result: ReviewResult, version: string): string {
 function formatFindingsMarkdown(result: ReviewResult): string {
   const lines: string[] = [];
 
-  lines.push(`**Summary:** ${result.summary}`);
+  // Summary and findings are LLM output derived from the PR diff — sanitize
+  // to block mention spam, hidden HTML comments, and raw HTML injection.
+  lines.push(`**Summary:** ${sanitizeMarkdownText(result.summary, 2000)}`);
   lines.push('');
 
   if (result.findings.length === 0) {
@@ -247,9 +252,13 @@ function formatFindingsMarkdown(result: ReviewResult): string {
 
   for (const finding of result.findings) {
     const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-    lines.push(`- **[${finding.severity.toUpperCase()}]** \`${location}\` — ${finding.message}`);
+    // Backticks would let a hostile file path escape the inline code span.
+    const safeLocation = sanitizeTableCell(location).replace(/`/g, "'");
+    const safeSeverity = sanitizeTableCell(String(finding.severity).toUpperCase());
+    const safeMessage = sanitizeTableCell(finding.message);
+    lines.push(`- **[${safeSeverity}]** \`${safeLocation}\` — ${safeMessage}`);
     if (finding.suggestion) {
-      lines.push(`  - 💡 ${finding.suggestion}`);
+      lines.push(`  - 💡 ${sanitizeTableCell(finding.suggestion)}`);
     }
   }
 

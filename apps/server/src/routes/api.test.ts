@@ -1241,6 +1241,59 @@ describe('PUT /api/settings', () => {
     expect(updates.settings.ignorePatterns).toEqual(['*.md', '*.txt']);
   });
 
+  it('rejects persisting a gateway entry with a private gatewayUrl (SSRF guard)', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [
+          {
+            provider: 'gateway',
+            model: 'auto',
+            apiKey: 'sk-new-gw-key',
+            gatewayUrl: 'http://127.0.0.1:6379',
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('VALIDATION_ERROR');
+    // Generic message only — no IP/range details leaked to the client
+    expect(json.message).toBe('Gateway URL not allowed');
+    expect(mockUpdateRepoSettings).not.toHaveBeenCalled();
+  });
+
+  it('accepts persisting a gateway entry with a public gatewayUrl', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
+
+    const app = createApp();
+    const res = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'owner/repo',
+        providerChain: [
+          {
+            provider: 'gateway',
+            model: 'auto',
+            apiKey: 'sk-new-gw-key',
+            gatewayUrl: 'https://8.8.8.8/v1',
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateRepoSettings).toHaveBeenCalledOnce();
+  });
+
   it('preserves existing encrypted key when no new key provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockUpdateRepoSettings.mockResolvedValueOnce(undefined);
@@ -1733,6 +1786,66 @@ describe('POST /api/providers/validate', () => {
     expect(json.message).toContain('Unknown provider');
   });
 
+  // ── SSRF guard on gateway health check ──
+
+  it('rejects a private gateway URL without fetching it (SSRF guard)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'gateway',
+        gatewayUrl: 'http://169.254.169.254/latest/meta-data',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway URL not allowed');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('returns generic "Gateway unreachable" on fetch failure (no err.message echo)', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new Error('connect ECONNREFUSED 8.8.8.8:443 internal-details'));
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'gateway', gatewayUrl: 'https://8.8.8.8' }),
+    });
+
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway unreachable');
+    expect(JSON.stringify(json)).not.toContain('ECONNREFUSED');
+    fetchSpy.mockRestore();
+  });
+
+  it('returns generic "Gateway unreachable" on non-OK health status (no status echo)', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('forbidden', { status: 403 }));
+
+    const app = createApp();
+    const res = await app.request('/api/providers/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'gateway', gatewayUrl: 'https://8.8.8.8' }),
+    });
+
+    const json = await res.json();
+    expect(json.valid).toBe(false);
+    expect(json.error).toBe('Gateway unreachable');
+    expect(JSON.stringify(json)).not.toContain('403');
+    fetchSpy.mockRestore();
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2003,6 +2116,34 @@ describe('GET /api/runner/install-workflow/status/:owner/:repo', () => {
 
     expect(res.status).toBe(404);
   });
+
+  it('returns 404 (identical to not-tracked) when repo belongs to another installation', async () => {
+    // Anti-enumeration: a foreign repo must be indistinguishable from an
+    // untracked repo, so the guard returns 404 instead of 403.
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'victim/repo',
+      installationId: 999, // NOT in DEFAULT_USER.installationIds ([100])
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/status/victim/repo', {
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(404);
+    const forbiddenBody = await res.json();
+
+    // Body must be byte-identical to the genuine not-found response
+    mockGetRepoByFullName.mockResolvedValueOnce(null);
+    const notFoundRes = await app.request('/api/runner/install-workflow/status/unknown/repo', {
+      headers: { Authorization: 'Bearer test-token' },
+    });
+    expect(notFoundRes.status).toBe(404);
+    expect(forbiddenBody).toEqual(await notFoundRes.json());
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2053,6 +2194,65 @@ describe('POST /api/runner/install-workflow/:owner/:repo', () => {
     });
 
     expect(res.status).toBe(404);
+  });
+
+  it('returns 404 (identical to not-tracked) when repo belongs to another installation', async () => {
+    // Cross-tenant attack: user from installation 100 tries to inject a
+    // workflow into a repo owned by installation 999. The guard must block
+    // BEFORE any token is minted or workflow injected, and the response must
+    // be indistinguishable from "repo not tracked" (anti-enumeration 404).
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'victim/repo',
+      installationId: 999, // NOT in DEFAULT_USER.installationIds ([100])
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/victim/repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(404);
+    const forbiddenBody = await res.json();
+
+    // No installation token minted, no workflow injected, no DB write
+    expect(mockGetInstallationToken).not.toHaveBeenCalled();
+    expect(mockInjectWorkflow).not.toHaveBeenCalled();
+    expect(mockUpdateWorkflowStatus).not.toHaveBeenCalled();
+
+    // Body must be byte-identical to the genuine not-found response
+    mockGetRepoByFullName.mockResolvedValueOnce(null);
+    const notFoundRes = await app.request('/api/runner/install-workflow/unknown/repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+    expect(notFoundRes.status).toBe(404);
+    expect(forbiddenBody).toEqual(await notFoundRes.json());
+  });
+
+  it('allows an authorized user from the repo installation', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({
+      id: 1,
+      fullName: 'testuser/test-repo',
+      installationId: 100, // matches DEFAULT_USER.installationIds
+      workflowInstalledAt: null,
+      workflowSha: null,
+    });
+    mockGetInstallationToken.mockResolvedValueOnce('ghp_installation-token');
+    mockInjectWorkflow.mockResolvedValueOnce({ sha: 'authzsha', created: true });
+    mockUpdateWorkflowStatus.mockResolvedValueOnce(undefined);
+
+    const app = createApp();
+    const res = await app.request('/api/runner/install-workflow/testuser/test-repo', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockInjectWorkflow).toHaveBeenCalled();
   });
 
   it('returns 403 when branch protection blocks injection', async () => {

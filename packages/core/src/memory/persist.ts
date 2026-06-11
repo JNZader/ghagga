@@ -80,12 +80,18 @@ export async function persistReviewObservations(
         ? stripPrivateData(finding.suggestion)
         : undefined;
 
+      // finding.file is attacker-influenceable (it ultimately derives from the
+      // PR diff) and is persisted verbatim. Strip secrets from it the same way
+      // message/suggestion are stripped, so a credential smuggled into a path
+      // (e.g. "src/sk-ant-.../x.ts") is redacted rather than stored.
+      const sanitizedFile = stripPrivateData(finding.file);
+
       const observationTitle = `${finding.category}: ${sanitizedMessage.slice(0, 80)}`;
       const taxonomyTag = classifyObservation(sanitizedMessage, observationTitle);
       const categoryLabel = taxonomyTag.category.toUpperCase().replace('_', ' ');
       const content = [
         `[${categoryLabel}] [${finding.severity.toUpperCase()}] ${finding.category}`,
-        `File: ${finding.file}${finding.line ? `:${finding.line}` : ''}`,
+        `File: ${sanitizedFile}${finding.line ? `:${finding.line}` : ''}`,
         `Issue: ${sanitizedMessage}`,
         sanitizedSuggestion ? `Fix: ${sanitizedSuggestion}` : '',
       ]
@@ -98,7 +104,7 @@ export async function persistReviewObservations(
         type: findingToObservationType(finding),
         title: `[${categoryLabel}] ${observationTitle}`,
         content,
-        filePaths: [finding.file],
+        filePaths: [sanitizedFile],
         severity: finding.severity,
       });
     }
@@ -111,7 +117,9 @@ export async function persistReviewObservations(
       title: `PR #${prNumber} review: ${result.status}`,
       content: stripPrivateData(result.summary),
       topicKey: `pr-${prNumber}-review`,
-      filePaths: significantFindings.map((f) => f.file),
+      // Sanitize file paths here too — a secret smuggled into a path must not
+      // survive in the summary observation's filePaths array.
+      filePaths: significantFindings.map((f) => stripPrivateData(f.file)),
     });
 
     // End the session with a summary

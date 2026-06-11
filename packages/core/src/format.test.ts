@@ -180,6 +180,43 @@ describe('formatReviewComment', () => {
     );
   });
 
+  // ── S1b: Tool names are sanitized (untrusted runner-callback payload) ──
+
+  it('sanitizes malicious tool names before joining into the Static Analysis line', () => {
+    const result = makeResult({
+      status: 'PASSED',
+      findings: [],
+      metadata: {
+        mode: 'simple',
+        provider: 'gateway',
+        model: 'claude-sonnet-4-20250514',
+        tokensUsed: 500,
+        executionTimeMs: 1000,
+        // Attacker-influenceable names: an HTML-comment injection and an
+        // @-mention that would otherwise notify an org/user.
+        toolsRun: ['evil<!--hidden-->', '@org'],
+        toolsSkipped: ['<script>alert(1)</script>'],
+      },
+    });
+
+    const output = formatReviewComment(result);
+
+    // Isolate the Static Analysis section so the idempotent marker comment at
+    // the top of the document doesn't pollute the assertions.
+    const staticSection = output.slice(output.indexOf('### Static Analysis'));
+
+    // The injected HTML comment payload is stripped from the tool name.
+    expect(staticSection).not.toContain('<!--');
+    expect(staticSection).not.toContain('hidden');
+    // '<' is escaped so a <script> tool name cannot open an HTML tag.
+    expect(staticSection).not.toContain('<script>');
+    expect(staticSection).toContain('&lt;script>');
+    // The inert prefix of the comment-injection name survives.
+    expect(staticSection).toContain('evil');
+    // '@org' is neutralized: a literal "@org" (no zero-width char) must NOT appear.
+    expect(staticSection).not.toMatch(/@org\b/);
+  });
+
   // ── S2: Empty findings ──
 
   it('does not render findings table when there are no findings', () => {
@@ -432,6 +469,53 @@ describe('formatReviewComment', () => {
     const result = makeResult();
     const output = formatReviewComment(result);
     expect(output).not.toContain('### Files Changed');
+  });
+
+  // ── Sanitization of LLM-derived content (Sprint 2) ──
+
+  it('mentions the PR author when the login is valid', () => {
+    const output = formatReviewComment(makeResult(), { prAuthor: 'octocat' });
+    expect(output).toContain('— @octocat');
+  });
+
+  it('omits the mention entirely when the login is invalid', () => {
+    const output = formatReviewComment(makeResult(), { prAuthor: 'org/everyone' });
+    expect(output).not.toContain('@org/everyone');
+    expect(output).not.toContain('org/everyone');
+  });
+
+  it('neutralizes @-mentions and HTML in the LLM summary', () => {
+    const output = formatReviewComment(
+      makeResult({
+        summary: 'cc @everyone <script>alert(1)</script><!-- hidden instruction -->',
+      }),
+    );
+    expect(output).not.toContain('@everyone');
+    expect(output).not.toContain('<script>');
+    expect(output).not.toContain('hidden instruction');
+  });
+
+  it('truncates an oversized LLM summary', () => {
+    const output = formatReviewComment(makeResult({ summary: 'z'.repeat(10_000) }));
+    expect(output).not.toContain('z'.repeat(2002));
+  });
+
+  it('sanitizes table-breaking content in finding file/category fields', () => {
+    const output = formatReviewComment(
+      makeResult({
+        status: 'FAILED',
+        findings: [
+          makeFinding({
+            file: 'a|b.ts\n| injected | row |',
+            category: 'bug | <img src=x>',
+            message: 'msg',
+            source: 'ai',
+          }),
+        ],
+      }),
+    );
+    expect(output).not.toContain('| injected | row |');
+    expect(output).not.toContain('<img');
   });
 
   it('shows +N more when category has more than 3 files', () => {

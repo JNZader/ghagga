@@ -81,6 +81,39 @@ describe('generateViaGateway', () => {
     ).rejects.toThrow('Gateway error (401): Unauthorized');
   });
 
+  it('sets redirect:"manual" so server-side fetch never follows a redirect (SSRF)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ text: 'ok', provider: 'gateway', model: 'auto' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await generateViaGateway('prompt', 'system', {
+      gatewayUrl: 'https://example.com',
+      gatewayToken: 'token',
+    });
+
+    const [, options] = fetchSpy.mock.calls[0]!;
+    expect(options?.redirect).toBe('manual');
+  });
+
+  it('treats a 3xx redirect as a failed generation (does not follow it)', async () => {
+    // With redirect:"manual" the runtime surfaces a 3xx as a non-ok response;
+    // generateViaGateway must throw instead of chasing the Location header to a
+    // potentially-private address.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', { status: 302, headers: { Location: 'http://169.254.169.254/' } }),
+    );
+
+    await expect(
+      generateViaGateway('prompt', 'system', {
+        gatewayUrl: 'https://example.com',
+        gatewayToken: 'token',
+      }),
+    ).rejects.toThrow('Gateway error (302)');
+  });
+
   it('handles network errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network failed'));
 

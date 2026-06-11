@@ -6,6 +6,7 @@
  */
 
 import { calculateReviewCost, formatCostFooter } from './cost-footer.js';
+import { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import { isToolRegistryEnabled } from './tools/runner.js';
@@ -186,7 +187,8 @@ export function formatFileCategorySummary(fileList: string[]): string {
   let section = `### Files Changed (${fileList.length})\n`;
 
   for (const cat of categories) {
-    const basenames = cat.files.map((f) => f.split('/').pop() ?? f);
+    // File names come straight from the PR (attacker-controlled) — sanitize.
+    const basenames = cat.files.map((f) => sanitizeMarkdownText(f.split('/').pop() ?? f, 200));
     const MAX_SHOWN = 3;
     const shown = basenames.slice(0, MAX_SHOWN);
     const remaining = basenames.length - MAX_SHOWN;
@@ -227,18 +229,23 @@ export function formatReviewComment(
   let comment = `${REVIEW_COMMENT_MARKER}\n## \ud83e\udd16 GHAGGA Code Review\n\n`;
   comment += `**Status:** ${status}\n`;
   const modelsUsed = result.metadata.modelsUsed;
+  // Mode/model labels are derived from provider responses and settings —
+  // treat as untrusted and sanitize before rendering.
+  const safeMode = sanitizeTableCell(String(result.metadata.mode));
+  const safeModel = sanitizeTableCell(String(result.metadata.model));
   if (modelsUsed && modelsUsed.length > 1) {
     // Multi-model: show primary model + details per specialist/stance
-    comment += `**Mode:** ${result.metadata.mode} | **Model:** ${result.metadata.model} | **Time:** ${timeSeconds}s\n`;
+    comment += `**Mode:** ${safeMode} | **Model:** ${safeModel} | **Time:** ${timeSeconds}s\n`;
     comment += `<details><summary>\ud83e\udde0 Models used (${modelsUsed.length})</summary>\n\n`;
     comment += '| Role | Model |\n|------|-------|\n';
     for (const entry of modelsUsed) {
       const [role, model] = entry.includes(':') ? entry.split(':', 2) : ['—', entry];
-      comment += `| ${role} | \`${model}\` |\n`;
+      // Role/model strings come from provider output — sanitize each cell.
+      comment += `| ${sanitizeTableCell(role ?? '—')} | \`${sanitizeTableCell(model ?? '')}\` |\n`;
     }
     comment += '\n</details>\n';
   } else {
-    comment += `**Mode:** ${result.metadata.mode} | **Model:** ${result.metadata.model} | **Time:** ${timeSeconds}s\n`;
+    comment += `**Mode:** ${safeMode} | **Model:** ${safeModel} | **Time:** ${timeSeconds}s\n`;
   }
 
   // Emoji stats bar (Enhancement 1)
@@ -251,8 +258,9 @@ export function formatReviewComment(
 
   comment += '\n';
 
-  // Summary
-  comment += `### Summary\n${result.summary}\n\n`;
+  // Summary — raw LLM output derived from the (attacker-controlled) PR diff.
+  // Sanitized to block mention spam, hidden HTML comments, and flooding.
+  comment += `### Summary\n${sanitizeMarkdownText(result.summary, 2000)}\n\n`;
 
   // Findings grouped by source
   if (result.findings.length > 0) {
@@ -300,24 +308,40 @@ export function formatReviewComment(
       const findings = grouped.get(src);
       if (!findings || findings.length === 0) continue;
 
-      const label = SOURCE_LABELS[src] ?? src;
+      // Registry labels are trusted literals; unknown sources come from
+      // finding.source (LLM/tool output) and must be sanitized.
+      const label = SOURCE_LABELS[src] ?? sanitizeTableCell(src);
       comment += `**${label} (${findings.length})**\n`;
       comment += `| Severity | Category | File | Message |\n`;
       comment += `|----------|----------|------|----------|\n`;
 
       for (const finding of findings) {
         const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
-        const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-        const message = finding.message.replace(/\|/g, '\\|').replace(/\n/g, ' ');
-        comment += `| ${emoji} ${finding.severity} | ${finding.category} | ${location} | ${message} |\n`;
+        // ALL finding fields are LLM/tool-derived (and ultimately derived
+        // from the attacker-controlled PR diff) — sanitize every cell, not
+        // just the message.
+        const severity = sanitizeTableCell(String(finding.severity));
+        const category = sanitizeTableCell(String(finding.category));
+        const location = sanitizeTableCell(
+          finding.line ? `${finding.file}:${finding.line}` : finding.file,
+        );
+        const message = sanitizeTableCell(finding.message);
+        comment += `| ${emoji} ${severity} | ${category} | ${location} | ${message} |\n`;
       }
       comment += '\n';
     }
   }
 
-  // Static analysis summary
-  const staticTools = result.metadata.toolsRun;
-  const skippedTools = result.metadata.toolsSkipped;
+  // Static analysis summary.
+  // toolsRun / toolsSkipped originate from the runner-callback payload
+  // (apps/server runner-callback.ts \u2192 pipeline.ts \u2192 here), which is
+  // attacker-influenceable. Sanitize every tool name before joining into
+  // Markdown so a crafted name (e.g. "evil<!--x-->", "@org/everyone", or an
+  // HTML/link injection) cannot break out of the comment.
+  const staticTools = result.metadata.toolsRun.map((t) => sanitizeMarkdownText(String(t), 100));
+  const skippedTools = result.metadata.toolsSkipped.map((t) =>
+    sanitizeMarkdownText(String(t), 100),
+  );
   if (staticTools.length > 0 || skippedTools.length > 0) {
     comment += `### Static Analysis\n`;
     if (staticTools.length > 0) {
@@ -341,8 +365,10 @@ export function formatReviewComment(
   comment += `---\n*Powered by [GHAGGA](https://github.com/JNZader/ghagga) \u2014 AI Code Review*`;
 
   // @mention the PR author so GitHub sends them a notification.
-  // Rendered as small text to keep the footer clean.
-  if (options?.prAuthor) {
+  // The author login comes from the webhook payload — only mention it if it
+  // is a syntactically valid GitHub login (blocks "@org/everyone"-style
+  // injection); otherwise omit the mention entirely.
+  if (options?.prAuthor && isValidGithubLogin(options.prAuthor)) {
     comment += ` — @${options.prAuthor}`;
   }
 
