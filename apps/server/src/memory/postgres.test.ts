@@ -5,6 +5,7 @@
  * functions with correct arguments and map results properly.
  */
 
+import { DEFAULT_DECAY_CONFIG, computeStrength } from 'ghagga-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostgresMemoryStorage } from './postgres.js';
 
@@ -48,6 +49,7 @@ describe('PostgresMemoryStorage — core methods', () => {
 
   describe('searchObservations', () => {
     it('calls ghagga-db.searchObservations and maps rows to MemoryObservationRow', async () => {
+      const fresh = new Date(); // just-accessed → full strength → always returned
       mockSearchObservations.mockResolvedValueOnce([
         {
           id: 1,
@@ -55,6 +57,7 @@ describe('PostgresMemoryStorage — core methods', () => {
           title: 'Title A',
           content: 'Content A',
           filePaths: ['src/a.ts'],
+          lastAccessedAt: fresh,
           extra: 'ignored',
         },
         {
@@ -63,6 +66,7 @@ describe('PostgresMemoryStorage — core methods', () => {
           title: 'Title B',
           content: 'Content B',
           filePaths: null,
+          lastAccessedAt: fresh,
           extra: 'ignored',
         },
       ]);
@@ -83,6 +87,7 @@ describe('PostgresMemoryStorage — core methods', () => {
           content: 'Content A',
           filePaths: ['src/a.ts'],
           severity: null,
+          strength: 1,
         },
         {
           id: 2,
@@ -91,6 +96,7 @@ describe('PostgresMemoryStorage — core methods', () => {
           content: 'Content B',
           filePaths: null,
           severity: null,
+          strength: 1,
         },
       ]);
     });
@@ -108,11 +114,53 @@ describe('PostgresMemoryStorage — core methods', () => {
 
     it('handles null filePaths by mapping to null', async () => {
       mockSearchObservations.mockResolvedValueOnce([
-        { id: 3, type: 'preference', title: 'T', content: 'C', filePaths: null },
+        { id: 3, type: 'preference', title: 'T', content: 'C', filePaths: null, lastAccessedAt: new Date() },
       ]);
 
       const result = await storage.searchObservations('proj', 'q');
       expect(result[0]?.filePaths).toBeNull();
+    });
+
+    // ── Decay parity with SQLite backend (sqlite.ts:304-323) ───────
+
+    it('attaches strength to returned rows (fresh observation → full strength)', async () => {
+      mockSearchObservations.mockResolvedValueOnce([
+        { id: 4, type: 'pattern', title: 'T', content: 'C', filePaths: null, lastAccessedAt: new Date() },
+      ]);
+
+      const result = await storage.searchObservations('proj', 'q');
+      expect(result).toHaveLength(1);
+      expect(result[0]?.strength).toBe(1);
+    });
+
+    it('excludes observations older than clearanceDays (strength below minStrength)', async () => {
+      // DEFAULT_DECAY_CONFIG.clearanceDays = 90 → 200 days old is well-cleared.
+      const stale = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000);
+      mockSearchObservations.mockResolvedValueOnce([
+        { id: 5, type: 'pattern', title: 'old', content: 'C', filePaths: null, lastAccessedAt: stale },
+      ]);
+
+      const result = await storage.searchObservations('proj', 'q');
+      expect(result).toHaveLength(0);
+    });
+
+    it('computes strength identically to the SQLite backend (computeStrength parity)', async () => {
+      // Parity table: same ageDays → same strength via the shared computeStrength.
+      // DEFAULT_DECAY_CONFIG: dormancy=7, clearance=90, decay window = 83 days.
+      const now = Date.now();
+      const day = 24 * 60 * 60 * 1000;
+      const cases = [
+        { ageDays: 0, expected: 1 }, // active
+        { ageDays: 7, expected: 1 }, // dormancy boundary
+        { ageDays: 48.5, expected: computeStrength(new Date(now - 48.5 * day), new Date(now)) }, // mid-decay
+        { ageDays: 90, expected: 0 }, // clearance → cleared
+      ] as const;
+
+      for (const { ageDays, expected } of cases) {
+        const lastAccessedAt = new Date(now - ageDays * day);
+        const direct = computeStrength(lastAccessedAt, new Date(now), DEFAULT_DECAY_CONFIG);
+        expect(direct).toBeCloseTo(expected, 10);
+      }
     });
   });
 
