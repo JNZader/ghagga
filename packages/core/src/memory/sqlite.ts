@@ -397,7 +397,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
       filePaths: string[] | null;
       severity: string | null;
       lastAccessed: Date;
-      embedding: Buffer | null;
+      /** sql.js returns BLOB columns as Uint8Array (not Buffer) */
+      embedding: Buffer | Uint8Array | null;
       bm25Score: number;
     }
 
@@ -412,7 +413,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
         filePaths: row.file_paths ? JSON.parse(row.file_paths as string) : null,
         severity: (row.severity as string) ?? null,
         lastAccessed: row.last_accessed_at ? new Date(row.last_accessed_at as string) : new Date(),
-        embedding: row.embedding ? (row.embedding as Buffer) : null,
+        embedding: row.embedding ? (row.embedding as Buffer | Uint8Array) : null,
         bm25Score: row.bm25_score as number,
       });
     }
@@ -446,7 +447,11 @@ export class SqliteMemoryStorage implements MemoryStorage {
       if (candidate.embedding) {
         try {
           const storedVec = deserializeEmbedding(candidate.embedding);
-          cosineSim = cosineSimilarity(queryVec, storedVec);
+          // Dimension guard: a stored vector from a different embedding model
+          // is meaningless against this query — skip cosine (mirror queries.ts)
+          if (storedVec.length === queryVec.length) {
+            cosineSim = cosineSimilarity(queryVec, storedVec);
+          }
         } catch {
           // Malformed embedding — treat as 0
         }
