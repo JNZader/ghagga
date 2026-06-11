@@ -13,6 +13,7 @@ import { createApiRouter } from './api.js';
 
 const mockGetReviewsByDay = vi.fn();
 const mockGetReviewsByRepoId = vi.fn();
+const mockCountReviewsByRepoId = vi.fn();
 const mockGetReviewStats = vi.fn();
 const mockGetRepoByFullName = vi.fn();
 const mockGetReposByInstallationId = vi.fn();
@@ -41,6 +42,7 @@ const mockUpdateWorkflowStatus = vi.fn();
 vi.mock('ghagga-db', () => ({
   getReviewsByDay: (...args: unknown[]) => mockGetReviewsByDay(...args),
   getReviewsByRepoId: (...args: unknown[]) => mockGetReviewsByRepoId(...args),
+  countReviewsByRepoId: (...args: unknown[]) => mockCountReviewsByRepoId(...args),
   getReviewStats: (...args: unknown[]) => mockGetReviewStats(...args),
   getRepoByFullName: (...args: unknown[]) => mockGetRepoByFullName(...args),
   getReposByInstallationId: (...args: unknown[]) => mockGetReposByInstallationId(...args),
@@ -206,6 +208,7 @@ describe('GET /api/reviews', () => {
       { id: 2, prNumber: 11, status: 'FAILED' },
     ];
     mockGetReviewsByRepoId.mockResolvedValueOnce(fakeReviews);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(2);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&page=1&limit=10');
@@ -213,26 +216,50 @@ describe('GET /api/reviews', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data).toEqual(fakeReviews);
-    expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0 });
+    expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0, total: 2 });
 
     expect(mockGetReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42, { limit: 10, offset: 0 });
+    expect(mockCountReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42);
   });
 
   it('uses default pagination when params not provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo');
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0 });
+    expect(json.pagination).toEqual({ page: 1, limit: 50, offset: 0, total: 0 });
+  });
+
+  // FIX A (DSH-A2): pagination.total reflects the FULL count, not the page
+  // length. With more reviews than fit on a page, total must exceed data.length
+  // so the dashboard can compute totalPages and reach pages beyond the first.
+  it('returns pagination.total reflecting full count beyond the current page', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockGetReviewsByRepoId.mockResolvedValueOnce([
+      { id: 1, prNumber: 10, status: 'PASSED' },
+      { id: 2, prNumber: 11, status: 'FAILED' },
+    ]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(137);
+
+    const app = createApp();
+    const res = await app.request('/api/reviews?repo=owner/repo&page=1&limit=50');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveLength(2);
+    expect(json.pagination.total).toBe(137);
+    expect(json.pagination.total).not.toBe(json.data.length);
   });
 
   it('caps limit at 100', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&limit=500');
@@ -245,13 +272,14 @@ describe('GET /api/reviews', () => {
   it('calculates correct offset for page 3', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(0);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo&page=3&limit=20');
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.pagination).toEqual({ page: 3, limit: 20, offset: 40 });
+    expect(json.pagination).toEqual({ page: 3, limit: 20, offset: 40, total: 0 });
   });
 
   it('returns 400 when repo param is missing', async () => {
@@ -319,6 +347,7 @@ describe('GET /api/reviews', () => {
       summary: 'Static analysis ran but the AI agent failed midway.',
     };
     mockGetReviewsByRepoId.mockResolvedValueOnce([partialReview]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(1);
 
     const app = createApp();
     const res = await app.request('/api/reviews?repo=owner/repo');

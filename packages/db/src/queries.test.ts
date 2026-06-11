@@ -50,6 +50,7 @@ import {
   clearAllMemoryObservations,
   clearEmptyMemorySessions,
   clearMemoryObservationsByProject,
+  countReviewsByRepoId,
   createMemorySession,
   deactivateInstallation,
   deleteMappingsByInstallationId,
@@ -691,6 +692,28 @@ describe('getReviewStats', () => {
 
     const result = await getReviewStats(db, 1);
     expect(result).toEqual(stats);
+  });
+});
+
+describe('countReviewsByRepoId', () => {
+  it('should return the count from the aggregate row', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([{ total: 137 }]);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByRepoId(db, 42);
+    expect(result).toBe(137);
+  });
+
+  it('should return 0 when the aggregate row is missing', async () => {
+    const mockWhere = vi.fn().mockResolvedValue([]);
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await countReviewsByRepoId(db, 42);
+    expect(result).toBe(0);
   });
 });
 

@@ -354,6 +354,18 @@ export async function getReviewsByRepoId(
     .offset(offset);
 }
 
+/**
+ * Count all reviews for a specific repository.
+ * Used to compute pagination.total for the per-repo review listing.
+ */
+export async function countReviewsByRepoId(db: Database, repositoryId: number): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(reviews)
+    .where(eq(reviews.repositoryId, repositoryId));
+  return row?.total ?? 0;
+}
+
 export async function getReviewStats(db: Database, repositoryId: number) {
   const result = await db
     .select({

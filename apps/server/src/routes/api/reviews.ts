@@ -9,6 +9,7 @@
 import type { Database } from 'ghagga-db';
 import {
   clearMemoryObservationsByProject,
+  countReviewsByRepoId,
   deleteReviewById,
   deleteReviewsByIds,
   deleteReviewsByRepoId,
@@ -51,11 +52,14 @@ export function createReviewsRouter(db: Database) {
         return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
       }
 
-      const reviews = await getReviewsByRepoId(db, repo.id, { limit, offset });
+      const [reviews, total] = await Promise.all([
+        getReviewsByRepoId(db, repo.id, { limit, offset }),
+        countReviewsByRepoId(db, repo.id),
+      ]);
 
       return c.json({
         data: reviews,
-        pagination: { page, limit, offset },
+        pagination: { page, limit, offset, total },
       });
     } catch (err) {
       const errorId = generateErrorId();
