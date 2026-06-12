@@ -663,11 +663,7 @@ index 0d2d97f..0000000
 exports[`baseline c07 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
 [
   {
-    "lines": [
-      "-new line 1",
-      "-new line 2",
-      "-new line 3",
-    ],
+    "lines": [],
     "symbol": "symEarly",
   },
   {
@@ -1346,7 +1342,6 @@ exports[`baseline c15 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
     "lines": [
       "+inserted A",
       "+inserted B",
-      "-zline 10",
     ],
     "symbol": "symEarly",
   },

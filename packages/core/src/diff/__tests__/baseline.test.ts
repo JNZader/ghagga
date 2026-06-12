@@ -7,8 +7,12 @@
  *     FIXED in Phase 3 (adapter over parseUnifiedDiff) — the c03
  *     parseDiffFiles snapshot reflects the new documented behavior; the
  *     other 4 parsers still freeze the pre-M6 behavior until their phases.
- *   - CORE-M9: extractEntityDiffLines attributes deletions by old-side line
- *     against new-side symbol ranges.
+ *   - CORE-M9: extractEntityDiffLines attributed deletions by old-side line
+ *     against new-side symbol ranges. FIXED in Phase 6 (adapter over
+ *     parseUnifiedDiff) — the c07/c15 extractEntityDiffLines snapshots
+ *     reflect the new documented behavior (deletions attributed by the live
+ *     new-side position); both faces of the delta are gated in
+ *     parity-extract-entity-diff-lines.test.ts.
  *   - recursive off-by-N on iteration 2+ (see recursive-golden.test.ts).
  * Do NOT "fix" a snapshot here — divergence means a parity break in the
  * migration, except where the spec explicitly documents a delta (M6/M9).
