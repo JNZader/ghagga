@@ -70,6 +70,22 @@ export interface ParsedFileDiff {
    */
   path: string;
 
+  /**
+   * The b-side capture of the `diff --git` header itself (unescaped when the
+   * header was quoted). Unlike `path`, this ignores `+++ b/` and `rename to`.
+   * Provenance field for legacy-compat consumers that historically used the
+   * header as the only path authority (recursive/patch-extractor.ts walker).
+   */
+  headerNewPath: string;
+
+  /**
+   * True when the `diff --git` header used git quoting (`core.quotepath`) on
+   * either side. Legacy-compat consumers use this to reproduce historical
+   * "quoted headers are not recognized" behavior (see
+   * recursive/patch-extractor.ts).
+   */
+  headerQuoted: boolean;
+
   /** `new file mode` present. */
   isNew: boolean;
 

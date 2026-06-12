@@ -114,6 +114,7 @@ function unescapeQuotedPath(inner: string): string {
 interface FileState {
   headerOldPath: string | null;
   headerNewPath: string | null;
+  headerQuoted: boolean;
   oldPath: string | null;
   oldPathSeen: boolean;
   newPath: string | null;
@@ -130,17 +131,23 @@ interface FileState {
   rawLines: string[];
 }
 
-/** Try the 4 header forms; returns unescaped a/b paths on match. */
-function matchFileHeader(line: string): { oldPath: string; newPath: string } | null {
+/** Try the 4 header forms; returns unescaped a/b paths (+ quoting) on match. */
+function matchFileHeader(
+  line: string,
+): { oldPath: string; newPath: string; quoted: boolean } | null {
   let m = HEADER_QUOTED_RE.exec(line);
   if (m)
-    return { oldPath: unescapeQuotedPath(m[1] ?? ''), newPath: unescapeQuotedPath(m[2] ?? '') };
+    return {
+      oldPath: unescapeQuotedPath(m[1] ?? ''),
+      newPath: unescapeQuotedPath(m[2] ?? ''),
+      quoted: true,
+    };
   m = HEADER_QUOTED_OLD_RE.exec(line);
-  if (m) return { oldPath: unescapeQuotedPath(m[1] ?? ''), newPath: m[2] ?? '' };
+  if (m) return { oldPath: unescapeQuotedPath(m[1] ?? ''), newPath: m[2] ?? '', quoted: true };
   m = HEADER_QUOTED_NEW_RE.exec(line);
-  if (m) return { oldPath: m[1] ?? '', newPath: unescapeQuotedPath(m[2] ?? '') };
+  if (m) return { oldPath: m[1] ?? '', newPath: unescapeQuotedPath(m[2] ?? ''), quoted: true };
   m = HEADER_PLAIN_RE.exec(line);
-  if (m) return { oldPath: m[1] ?? '', newPath: m[2] ?? '' };
+  if (m) return { oldPath: m[1] ?? '', newPath: m[2] ?? '', quoted: false };
   return null;
 }
 
@@ -171,6 +178,8 @@ function finalizeFile(state: FileState): ParsedFileDiff {
     oldPath,
     newPath,
     path,
+    headerNewPath: state.headerNewPath ?? '',
+    headerQuoted: state.headerQuoted,
     isNew: state.isNew,
     isDeleted: state.isDeleted,
     isRename: state.isRename,
@@ -227,6 +236,7 @@ export function parseUnifiedDiff(raw: string): ParsedDiff {
       state = {
         headerOldPath: header.oldPath,
         headerNewPath: header.newPath,
+        headerQuoted: header.quoted,
         oldPath: null,
         oldPathSeen: false,
         newPath: null,
