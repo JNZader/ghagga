@@ -239,8 +239,7 @@ index abc..def 100644
 
   it('summary counts it under class, never function', () => {
     const result = extractSemanticDiff(DIFF_CLASS_MODIFIED);
-    expect(result.summary).toContain('class modified');
-    expect(result.summary).not.toContain('function modified');
+    expect(result.summary).toBe('1 class modified');
   });
 });
 

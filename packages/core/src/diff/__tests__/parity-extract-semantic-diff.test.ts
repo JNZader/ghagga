@@ -388,6 +388,43 @@ function assertConfinedDivergence(live: SemanticDiff, baseline: SemanticDiff): v
         ),
         `change ${i} (${baselineChange.name}): kind diverged ${baselineChange.kind} → ${liveChange.kind} outside the pinned pairs`,
       ).toBe(true);
+
+      // Structural evidence (3vr cross-engine fix-forward): membership in the
+      // allowlist is not enough — the change must CARRY the evidence that it
+      // is a genuine modification, not a pure removed relabeled by drift.
+      //
+      //  - import/export: the baseline's modified path is the only one that
+      //    sets BOTH signatures (a pure *_removed has oldSignature only), so
+      //    a real *_removed→*_modified rewrite must have both present.
+      //  - class: the `class` decl kind is assigned exclusively by the
+      //    pattern /class\s+(\w+)/, so both signatures of a genuinely
+      //    modified class contain `class <Name>` (fixture evidence:
+      //    'export class Foo {' → 'export class Foo extends Base {').
+      if (
+        (baselineChange.kind === 'import_removed' && liveChange.kind === 'import_modified') ||
+        (baselineChange.kind === 'export_removed' && liveChange.kind === 'export_modified')
+      ) {
+        expect(
+          liveChange.oldSignature,
+          `change ${i} (${baselineChange.name}): ${liveChange.kind} without oldSignature — not a real modification`,
+        ).toBeTruthy();
+        expect(
+          liveChange.newSignature,
+          `change ${i} (${baselineChange.name}): ${liveChange.kind} without newSignature — not a real modification`,
+        ).toBeTruthy();
+      } else if (
+        baselineChange.kind === 'function_modified' &&
+        liveChange.kind === 'class_modified'
+      ) {
+        expect(
+          liveChange.oldSignature,
+          `change ${i} (${baselineChange.name}): class_modified oldSignature lacks a class declaration`,
+        ).toMatch(/\bclass\s+\w+/);
+        expect(
+          liveChange.newSignature,
+          `change ${i} (${baselineChange.name}): class_modified newSignature lacks a class declaration`,
+        ).toMatch(/\bclass\s+\w+/);
+      }
     }
   }
 
@@ -395,6 +432,18 @@ function assertConfinedDivergence(live: SemanticDiff, baseline: SemanticDiff): v
     kindDiverged || live.changes.some((c) => SUMMARY_AFFECTED_KINDS.has(c.kind));
   if (summaryMayDiverge) {
     expect(live.summary).toBe(fixedBuildSummary(live.changes));
+    if (kindDiverged) {
+      // A real kind divergence ALWAYS changes the summary string: a class
+      // rewrite makes the baseline double-count (f+c in both the function
+      // and class groups vs live f / c with c ≥ 1), and an import/export
+      // rewrite moves m ≥ 1 changes from the removed count into the
+      // modified count; group segments are positionally fixed, so the
+      // joined strings cannot coincide. This detects future erosion where
+      // fixedBuildSummary and the baseline silently converge.
+      // (The converse does NOT hold: SUMMARY_AFFECTED_KINDS without
+      // kindDiverged can legitimately yield identical summaries.)
+      expect(live.summary).not.toBe(baseline.summary);
+    }
   } else {
     expect(live.summary).toBe(baseline.summary);
   }
