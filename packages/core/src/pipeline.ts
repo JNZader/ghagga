@@ -41,6 +41,7 @@ import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { SqliteMemoryStorage } from './memory/sqlite.js';
 import { formatNegativeExamplesPrompt } from './negative.js';
+import { runDegradable } from './pipeline/degrade.js';
 import {
   buildConsensusModels,
   resolveAiEnabled,
@@ -302,55 +303,60 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // ── Step 2.6: Call-chain + reverse-deps (optional, runs when blast-radius enabled) ──
   let callChainContext = '';
   if (input.settings.enableBlastRadius) {
-    try {
-      if (input.fileReader) {
-        const fileContentsMap = new Map<string, string>();
-        for (const fp of fileList) {
-          try {
-            const content = await input.fileReader(fp);
-            if (content) fileContentsMap.set(fp, content);
-          } catch {
-            // non-fatal — skip unreadable files
-          }
-        }
-
-        if (fileContentsMap.size > 0) {
-          const callChain = buildCallChainFromDiff(filteredDiff, fileContentsMap);
-          if (callChain.affectedSymbols.length > 0) {
-            const affectedFiles = [...new Set(callChain.affectedSymbols.map((s) => s.filePath))];
-            callChainContext = `\n## Call-Chain Impact\n${callChain.affectedSymbols.length} symbol(s) across ${affectedFiles.length} file(s) may be affected by these changes (depth: ${callChain.depth}).\n`;
-            emit({
-              step: 'call-chain',
-              message: `Call-chain: ${callChain.changedSymbols.length} changed symbol(s), ${callChain.affectedSymbols.length} affected symbol(s)`,
-            });
-          }
-
-          const reverseDepMap = buildReverseDependencyMap(
-            [...fileContentsMap.keys()],
-            fileContentsMap,
-          );
-          const highRiskFiles: string[] = [];
+    // reportFailure: false is DELIBERATE — call-chain degrades with a warn only
+    // and never lands in failedSteps (pinned by the golden degradation suite).
+    await runDegradable(
+      { failedSteps, emit },
+      {
+        step: 'call-chain',
+        warnLabel: '[ghagga] Call-chain/reverse-deps failed (degrading gracefully):',
+        reportFailure: false,
+      },
+      async () => {
+        if (input.fileReader) {
+          const fileContentsMap = new Map<string, string>();
           for (const fp of fileList) {
-            const result = findDependents(fp, reverseDepMap, 2);
-            if (result.transitiveCount >= 3) {
-              highRiskFiles.push(`${fp} (${result.transitiveCount} dependents)`);
+            try {
+              const content = await input.fileReader(fp);
+              if (content) fileContentsMap.set(fp, content);
+            } catch {
+              // non-fatal — skip unreadable files
             }
           }
-          if (highRiskFiles.length > 0) {
-            callChainContext += `\n## High-Risk Files (many dependents)\nThese changed files have many transitive dependents — review carefully:\n${highRiskFiles.map((f) => `- ${f}`).join('\n')}\n`;
-            emit({
-              step: 'reverse-deps',
-              message: `Reverse deps: ${highRiskFiles.length} high-risk file(s) detected`,
-            });
+
+          if (fileContentsMap.size > 0) {
+            const callChain = buildCallChainFromDiff(filteredDiff, fileContentsMap);
+            if (callChain.affectedSymbols.length > 0) {
+              const affectedFiles = [...new Set(callChain.affectedSymbols.map((s) => s.filePath))];
+              callChainContext = `\n## Call-Chain Impact\n${callChain.affectedSymbols.length} symbol(s) across ${affectedFiles.length} file(s) may be affected by these changes (depth: ${callChain.depth}).\n`;
+              emit({
+                step: 'call-chain',
+                message: `Call-chain: ${callChain.changedSymbols.length} changed symbol(s), ${callChain.affectedSymbols.length} affected symbol(s)`,
+              });
+            }
+
+            const reverseDepMap = buildReverseDependencyMap(
+              [...fileContentsMap.keys()],
+              fileContentsMap,
+            );
+            const highRiskFiles: string[] = [];
+            for (const fp of fileList) {
+              const result = findDependents(fp, reverseDepMap, 2);
+              if (result.transitiveCount >= 3) {
+                highRiskFiles.push(`${fp} (${result.transitiveCount} dependents)`);
+              }
+            }
+            if (highRiskFiles.length > 0) {
+              callChainContext += `\n## High-Risk Files (many dependents)\nThese changed files have many transitive dependents — review carefully:\n${highRiskFiles.map((f) => `- ${f}`).join('\n')}\n`;
+              emit({
+                step: 'reverse-deps',
+                message: `Reverse deps: ${highRiskFiles.length} high-risk file(s) detected`,
+              });
+            }
           }
         }
-      }
-    } catch (error) {
-      console.warn(
-        '[ghagga] Call-chain/reverse-deps failed (degrading gracefully):',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+      },
+    );
   }
 
   // ── Step 3: Detect tech stacks ─────────────────────────────
@@ -396,54 +402,64 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     input.features?.negativeExamples !== false &&
     input.memoryStorage instanceof SqliteMemoryStorage
   ) {
-    try {
-      const allNegativeExamples = fileList.flatMap((filePath) =>
-        (input.memoryStorage as SqliteMemoryStorage).getNegativeExamplesForFile(filePath),
-      );
-      // De-duplicate by findingHash
-      const seen = new Set<string>();
-      const uniqueExamples = allNegativeExamples.filter((e) => {
-        if (seen.has(e.findingHash)) return false;
-        seen.add(e.findingHash);
-        return true;
-      });
-      negativeExamplesPrompt = formatNegativeExamplesPrompt(uniqueExamples);
-      if (negativeExamplesPrompt) {
-        emit({
-          step: 'negative-examples',
-          message: `Loaded ${uniqueExamples.length} dismissed finding(s) — injecting suppression context`,
+    // reportFailure: false is DELIBERATE — negative-examples degrades with a warn
+    // only and never lands in failedSteps (pinned by the golden degradation suite).
+    await runDegradable(
+      { failedSteps, emit },
+      {
+        step: 'negative-examples',
+        warnLabel: '[ghagga] Negative examples load failed (degrading gracefully):',
+        reportFailure: false,
+      },
+      () => {
+        const allNegativeExamples = fileList.flatMap((filePath) =>
+          (input.memoryStorage as SqliteMemoryStorage).getNegativeExamplesForFile(filePath),
+        );
+        // De-duplicate by findingHash
+        const seen = new Set<string>();
+        const uniqueExamples = allNegativeExamples.filter((e) => {
+          if (seen.has(e.findingHash)) return false;
+          seen.add(e.findingHash);
+          return true;
         });
-      }
-    } catch (error) {
-      // Non-fatal — degraded gracefully
-      console.warn(
-        '[ghagga] Negative examples load failed (degrading gracefully):',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+        negativeExamplesPrompt = formatNegativeExamplesPrompt(uniqueExamples);
+        if (negativeExamplesPrompt) {
+          emit({
+            step: 'negative-examples',
+            message: `Loaded ${uniqueExamples.length} dismissed finding(s) — injecting suppression context`,
+          });
+        }
+      },
+    );
   }
 
   // ── Step 5.0a: Self-improve rules (optional) ─────────────────
   let selfImproveRulesPrompt = '';
   if (input.settings.selfImprovePath) {
-    try {
-      const feedback = await loadFeedback(input.settings.selfImprovePath);
-      if (feedback.length > 0) {
-        const rules = deriveRules(feedback);
-        selfImproveRulesPrompt = formatRulesForPrompt(rules);
-        if (selfImproveRulesPrompt) {
-          emit({
-            step: 'self-improve',
-            message: `Self-improve: loaded ${feedback.length} feedback record(s), derived ${rules.length} rule(s)`,
-          });
+    const selfImprovePath = input.settings.selfImprovePath;
+    // reportFailure: false is DELIBERATE — self-improve degrades with a warn only
+    // and never lands in failedSteps (pinned by the golden degradation suite).
+    await runDegradable(
+      { failedSteps, emit },
+      {
+        step: 'self-improve',
+        warnLabel: '[ghagga] Self-improve rules load failed (degrading gracefully):',
+        reportFailure: false,
+      },
+      async () => {
+        const feedback = await loadFeedback(selfImprovePath);
+        if (feedback.length > 0) {
+          const rules = deriveRules(feedback);
+          selfImproveRulesPrompt = formatRulesForPrompt(rules);
+          if (selfImproveRulesPrompt) {
+            emit({
+              step: 'self-improve',
+              message: `Self-improve: loaded ${feedback.length} feedback record(s), derived ${rules.length} rule(s)`,
+            });
+          }
         }
-      }
-    } catch (error) {
-      console.warn(
-        '[ghagga] Self-improve rules load failed (degrading gracefully):',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+      },
+    );
   }
 
   // Build full (L2) context first, then choose fidelity level based on budget
@@ -538,34 +554,36 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
 
     if (allStaticFindings.length > 0) {
       emit({ step: 'static-analysis', message: 'Enhancing findings with AI...' });
-      try {
-        const primary = resolvePrimaryProvider(input);
-        const enhanceGenerateFn = resolveGenerateTextFns(
-          input,
-          isCliBridge,
-          isGateway,
-          isOllama,
-        )[0];
-        const serialized = serializeFindings(allStaticFindings);
-        const { result: eResult, metadata: eMeta } = await enhanceFindings({
-          findings: serialized,
-          provider: primary.provider,
-          model: primary.model,
-          apiKey: primary.apiKey,
-          generateFn: enhanceGenerateFn,
-        });
-        enhancedStaticFindings = mergeEnhanceResult(allStaticFindings, eResult);
-        enhanceMetadata = eMeta;
-      } catch (enhanceError) {
-        failedSteps.push({
+      // No warnLabel: ai-enhance is the only push-site that degrades without a console.warn.
+      await runDegradable(
+        { failedSteps, emit },
+        {
           step: 'ai-enhance',
-          error: enhanceError instanceof Error ? enhanceError.message : String(enhanceError),
-        });
-        emit({
-          step: 'static-analysis',
-          message: 'AI enhance failed — continuing without enhancement',
-        });
-      }
+          failEmit: {
+            step: 'static-analysis',
+            message: 'AI enhance failed — continuing without enhancement',
+          },
+        },
+        async () => {
+          const primary = resolvePrimaryProvider(input);
+          const enhanceGenerateFn = resolveGenerateTextFns(
+            input,
+            isCliBridge,
+            isGateway,
+            isOllama,
+          )[0];
+          const serialized = serializeFindings(allStaticFindings);
+          const { result: eResult, metadata: eMeta } = await enhanceFindings({
+            findings: serialized,
+            provider: primary.provider,
+            model: primary.model,
+            apiKey: primary.apiKey,
+            generateFn: enhanceGenerateFn,
+          });
+          enhancedStaticFindings = mergeEnhanceResult(allStaticFindings, eResult);
+          enhanceMetadata = eMeta;
+        },
+      );
     }
   }
 
@@ -575,44 +593,39 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   let trustOverrideMode: ReviewMode | undefined;
 
   if (input.features?.authorTrust && input.author) {
-    try {
-      const author = input.author;
-      const sqliteStorage =
-        input.memoryStorage instanceof SqliteMemoryStorage ? input.memoryStorage : null;
+    const author = input.author;
+    await runDegradable(
+      { failedSteps, emit },
+      { step: 'author-trust', warnLabel: '[ghagga] Author trust scoring failed (non-fatal):' },
+      async () => {
+        const sqliteStorage =
+          input.memoryStorage instanceof SqliteMemoryStorage ? input.memoryStorage : null;
 
-      // Check for a cached (fresh) score — recompute if older than 1 day
-      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-      let trustScore = sqliteStorage?.getTrustScore(author) ?? null;
-      const isStale = !trustScore || Date.now() - trustScore.lastUpdated.getTime() > ONE_DAY_MS;
+        // Check for a cached (fresh) score — recompute if older than 1 day
+        const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+        let trustScore = sqliteStorage?.getTrustScore(author) ?? null;
+        const isStale = !trustScore || Date.now() - trustScore.lastUpdated.getTime() > ONE_DAY_MS;
 
-      if (isStale) {
-        trustScore = await computeAuthorTrustScore(author, { cwd: process.cwd() });
-        sqliteStorage?.upsertTrustScore(trustScore);
-      }
+        if (isStale) {
+          trustScore = await computeAuthorTrustScore(author, { cwd: process.cwd() });
+          sqliteStorage?.upsertTrustScore(trustScore);
+        }
 
-      if (!trustScore) {
-        throw new Error('Trust score unavailable');
-      }
+        if (!trustScore) {
+          throw new Error('Trust score unavailable');
+        }
 
-      const recommendedMode = getReviewModeForTier(trustScore.tier, input.mode);
-      if (recommendedMode !== input.mode) {
-        trustOverrideMode = recommendedMode as ReviewMode;
-      }
+        const recommendedMode = getReviewModeForTier(trustScore.tier, input.mode);
+        if (recommendedMode !== input.mode) {
+          trustOverrideMode = recommendedMode as ReviewMode;
+        }
 
-      emit({
-        step: 'author-trust',
-        message: `[trust] author=${author} score=${trustScore.score} tier=${trustScore.tier} → mode=${recommendedMode}`,
-      });
-    } catch (error) {
-      console.warn(
-        '[ghagga] Author trust scoring failed (non-fatal):',
-        error instanceof Error ? error.message : String(error),
-      );
-      failedSteps.push({
-        step: 'author-trust',
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+        emit({
+          step: 'author-trust',
+          message: `[trust] author=${author} score=${trustScore.score} tier=${trustScore.tier} → mode=${recommendedMode}`,
+        });
+      },
+    );
   }
 
   // Effective input mode — may be overridden by trust scoring
@@ -829,74 +842,72 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
         step: 'exploitability',
         message: `Analyzing exploitability for ${trivyCveCount} CVE(s)...`,
       });
-      try {
-        // Load graph if not already loaded (reuse from blast-radius when available)
-        const exploitGraph = input.graphLoader ? await input.graphLoader.load() : null;
-
-        analyzeExploitability(result.findings, exploitGraph);
-
-        const labels = result.findings
-          .filter((f) => f.exploitability)
-          .reduce(
-            (acc, f) => {
-              const key = f.exploitability ?? 'unknown';
-              acc[key] = (acc[key] ?? 0) + 1;
-              return acc;
-            },
-            {} as Record<string, number>,
-          );
-
-        const exploitable = labels.exploitable ?? 0;
-        const potential = labels['potentially-exploitable'] ?? 0;
-        const notExploitable = labels['not-exploitable'] ?? 0;
-
-        emit({
+      await runDegradable(
+        { failedSteps, emit },
+        {
           step: 'exploitability',
-          message: `Exploitability analysis complete: ${exploitable} exploitable, ${potential} potentially, ${notExploitable} not exploitable`,
-        });
+          warnLabel: '[ghagga] Exploitability analysis failed (non-fatal):',
+          failEmit: {
+            step: 'exploitability',
+            message: 'Exploitability analysis failed — continuing without',
+          },
+        },
+        async () => {
+          // Load graph if not already loaded (reuse from blast-radius when available)
+          const exploitGraph = input.graphLoader ? await input.graphLoader.load() : null;
 
-        // Function-level usage analysis (requires fileReader)
-        if (input.fileReader) {
-          emit({
-            step: 'usage-analysis',
-            message: 'Analyzing function-level usage of vulnerable packages...',
-          });
-          await analyzeUsage(result.findings, exploitGraph, input.fileReader);
+          analyzeExploitability(result.findings, exploitGraph);
 
-          const usageLabels = result.findings
-            .filter((f) => f.usageLabel)
+          const labels = result.findings
+            .filter((f) => f.exploitability)
             .reduce(
               (acc, f) => {
-                const key = f.usageLabel ?? 'unknown';
+                const key = f.exploitability ?? 'unknown';
                 acc[key] = (acc[key] ?? 0) + 1;
                 return acc;
               },
               {} as Record<string, number>,
             );
 
-          const inUse = usageLabels['in-use'] ?? 0;
-          const importedNotCalled = usageLabels['imported-not-called'] ?? 0;
-          const notInUse = usageLabels['not-in-use'] ?? 0;
+          const exploitable = labels.exploitable ?? 0;
+          const potential = labels['potentially-exploitable'] ?? 0;
+          const notExploitable = labels['not-exploitable'] ?? 0;
 
           emit({
-            step: 'usage-analysis',
-            message: `Usage analysis complete: ${inUse} in-use, ${importedNotCalled} imported-not-called, ${notInUse} not-in-use`,
+            step: 'exploitability',
+            message: `Exploitability analysis complete: ${exploitable} exploitable, ${potential} potentially, ${notExploitable} not exploitable`,
           });
-        }
-      } catch (error) {
-        console.warn(
-          '[ghagga] Exploitability analysis failed (non-fatal):',
-          error instanceof Error ? error.message : String(error),
-        );
-        failedSteps.push({
-          step: 'exploitability',
-          error: error instanceof Error ? error.message : String(error),
-        });
-        emit({
-          step: 'exploitability',
-          message: 'Exploitability analysis failed — continuing without',
-        });
-      }
+
+          // Function-level usage analysis (requires fileReader)
+          if (input.fileReader) {
+            emit({
+              step: 'usage-analysis',
+              message: 'Analyzing function-level usage of vulnerable packages...',
+            });
+            await analyzeUsage(result.findings, exploitGraph, input.fileReader);
+
+            const usageLabels = result.findings
+              .filter((f) => f.usageLabel)
+              .reduce(
+                (acc, f) => {
+                  const key = f.usageLabel ?? 'unknown';
+                  acc[key] = (acc[key] ?? 0) + 1;
+                  return acc;
+                },
+                {} as Record<string, number>,
+              );
+
+            const inUse = usageLabels['in-use'] ?? 0;
+            const importedNotCalled = usageLabels['imported-not-called'] ?? 0;
+            const notInUse = usageLabels['not-in-use'] ?? 0;
+
+            emit({
+              step: 'usage-analysis',
+              message: `Usage analysis complete: ${inUse} in-use, ${importedNotCalled} imported-not-called, ${notInUse} not-in-use`,
+            });
+          }
+        },
+      );
     }
   }
 
@@ -912,96 +923,95 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   // ── Step 7.6: Recursive review (optional) ──────────────────────
   if (input.settings.enableRecursiveReview && aiEnabled && result.findings.length > 0) {
     emit({ step: 'recursive-review', message: 'Running recursive review on suggested fixes...' });
-    try {
-      const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway, isOllama);
-      const report = await recursiveReview({
-        originalDiff: truncatedDiff,
-        findings: result.findings,
-        generateFn: generateFns[0],
-        config: {
-          maxIterations: input.settings.maxRecursiveIterations ?? 2,
-        },
-        onProgress: (message) => emit({ step: 'recursive-review', message }),
-      });
-
-      if (report) {
-        result.recursiveReview = report;
-
-        // Add regressions to the findings array
-        if (report.regressions.length > 0) {
-          result.findings = [...result.findings, ...report.regressions];
-          emit({
-            step: 'recursive-review',
-            message: `Recursive review: ${report.regressions.length} regression(s) found in suggested fixes`,
-          });
-        } else {
-          emit({
-            step: 'recursive-review',
-            message: `Recursive review: suggestions validated — ${report.converged ? 'converged' : 'no regressions'} after ${report.iterations} iteration(s)`,
-          });
-        }
-      }
-    } catch (error) {
-      console.warn(
-        '[ghagga] Recursive review failed (non-fatal):',
-        error instanceof Error ? error.message : String(error),
-      );
-      failedSteps.push({
+    await runDegradable(
+      { failedSteps, emit },
+      {
         step: 'recursive-review',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      emit({ step: 'recursive-review', message: 'Recursive review failed — continuing without' });
-    }
+        warnLabel: '[ghagga] Recursive review failed (non-fatal):',
+        failEmit: {
+          step: 'recursive-review',
+          message: 'Recursive review failed — continuing without',
+        },
+      },
+      async () => {
+        const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway, isOllama);
+        const report = await recursiveReview({
+          originalDiff: truncatedDiff,
+          findings: result.findings,
+          generateFn: generateFns[0],
+          config: {
+            maxIterations: input.settings.maxRecursiveIterations ?? 2,
+          },
+          onProgress: (message) => emit({ step: 'recursive-review', message }),
+        });
+
+        if (report) {
+          result.recursiveReview = report;
+
+          // Add regressions to the findings array
+          if (report.regressions.length > 0) {
+            result.findings = [...result.findings, ...report.regressions];
+            emit({
+              step: 'recursive-review',
+              message: `Recursive review: ${report.regressions.length} regression(s) found in suggested fixes`,
+            });
+          } else {
+            emit({
+              step: 'recursive-review',
+              message: `Recursive review: suggestions validated — ${report.converged ? 'converged' : 'no regressions'} after ${report.iterations} iteration(s)`,
+            });
+          }
+        }
+      },
+    );
   }
 
   // ── Step 7.7: Code-doc validation (optional) ───────────────────
   if (input.settings.enableDocValidation && filteredFiles.length > 0) {
-    try {
-      const changedSymbols = extractChangedSymbolsFromDiff(filteredDiff);
-      if (changedSymbols.length > 0) {
-        emit({
-          step: 'doc-validation',
-          message: `Scanning docs for ${changedSymbols.length} changed symbol(s)...`,
-        });
+    await runDegradable(
+      { failedSteps, emit },
+      {
+        step: 'doc-validation',
+        warnLabel: '[ghagga] Doc validation failed (non-fatal):',
+        failEmit: { step: 'doc-validation', message: 'Doc validation failed — continuing without' },
+      },
+      () => {
+        const changedSymbols = extractChangedSymbolsFromDiff(filteredDiff);
+        if (changedSymbols.length > 0) {
+          emit({
+            step: 'doc-validation',
+            message: `Scanning docs for ${changedSymbols.length} changed symbol(s)...`,
+          });
 
-        const docResult = scanDocsForSymbolRefs(changedSymbols, allFiles, fileList);
-        result.docValidation = docResult;
+          const docResult = scanDocsForSymbolRefs(changedSymbols, allFiles, fileList);
+          result.docValidation = docResult;
 
-        if (docResult.staleReferences.length > 0) {
-          // Convert stale references to findings
-          for (const ref of docResult.staleReferences) {
-            result.findings.push({
-              severity: 'low',
-              category: 'documentation',
-              file: ref.file,
-              line: ref.line,
-              message: `Documentation references \`${ref.symbol}\` which was changed in this PR but this doc was not updated.`,
-              suggestion: `Review and update the reference to \`${ref.symbol}\` in this file.`,
-              source: 'doc-validation',
+          if (docResult.staleReferences.length > 0) {
+            // Convert stale references to findings
+            for (const ref of docResult.staleReferences) {
+              result.findings.push({
+                severity: 'low',
+                category: 'documentation',
+                file: ref.file,
+                line: ref.line,
+                message: `Documentation references \`${ref.symbol}\` which was changed in this PR but this doc was not updated.`,
+                suggestion: `Review and update the reference to \`${ref.symbol}\` in this file.`,
+                source: 'doc-validation',
+              });
+            }
+            emit({
+              step: 'doc-validation',
+              message: `Doc validation: ${docResult.staleReferences.length} stale reference(s) found in ${docResult.docsScanned} doc(s)`,
+            });
+          } else {
+            emit({
+              step: 'doc-validation',
+              message: `Doc validation: no stale references (${docResult.docsScanned} docs scanned)`,
             });
           }
-          emit({
-            step: 'doc-validation',
-            message: `Doc validation: ${docResult.staleReferences.length} stale reference(s) found in ${docResult.docsScanned} doc(s)`,
-          });
-        } else {
-          emit({
-            step: 'doc-validation',
-            message: `Doc validation: no stale references (${docResult.docsScanned} docs scanned)`,
-          });
         }
-      }
-    } catch (error) {
-      console.warn(
-        '[ghagga] Doc validation failed (non-fatal):',
-        error instanceof Error ? error.message : String(error),
-      );
-      failedSteps.push({
-        step: 'doc-validation',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      emit({ step: 'doc-validation', message: 'Doc validation failed — continuing without' });
-    }
+      },
+    );
   }
 
   // ── Step 7.8: Semantic ranking of findings (optional) ─────────
@@ -1009,42 +1019,42 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     input.features?.semanticRanking !== false && !!input.embeddingProvider;
   if (semanticRankingEnabled && result.findings.length > 1) {
     emit({ step: 'semantic-ranking', message: 'Reranking findings by semantic relevance...' });
-    try {
-      result.findings = await rankFindings(result.findings, input.embeddingProvider);
-      emit({
+    await runDegradable(
+      { failedSteps, emit },
+      {
         step: 'semantic-ranking',
-        message: `Semantic ranking complete (${result.findings.length} findings reranked)`,
-      });
-    } catch (error) {
-      console.warn(
-        '[ghagga] Semantic ranking failed (non-fatal):',
-        error instanceof Error ? error.message : String(error),
-      );
-      failedSteps.push({
-        step: 'semantic-ranking',
-        error: error instanceof Error ? error.message : String(error),
-      });
-      emit({ step: 'semantic-ranking', message: 'Semantic ranking failed — continuing without' });
-    }
+        warnLabel: '[ghagga] Semantic ranking failed (non-fatal):',
+        failEmit: {
+          step: 'semantic-ranking',
+          message: 'Semantic ranking failed — continuing without',
+        },
+      },
+      async () => {
+        result.findings = await rankFindings(result.findings, input.embeddingProvider);
+        emit({
+          step: 'semantic-ranking',
+          message: `Semantic ranking complete (${result.findings.length} findings reranked)`,
+        });
+      },
+    );
   }
 
   // ── Step 8: Persist to memory (awaited for SQLite correctness) ──
   if (input.settings.enableMemory && input.memoryStorage && input.context) {
-    await persistReviewObservations(
-      input.memoryStorage,
-      input.context.repoFullName,
-      input.context.prNumber,
-      result,
-    ).catch((error: unknown) => {
-      console.warn(
-        '[ghagga] Memory persist failed (non-fatal):',
-        error instanceof Error ? error.message : String(error),
-      );
-      failedSteps.push({
-        step: 'memory-persist',
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    const memoryStorage = input.memoryStorage;
+    const reviewContext = input.context;
+    await runDegradable(
+      { failedSteps, emit },
+      { step: 'memory-persist', warnLabel: '[ghagga] Memory persist failed (non-fatal):' },
+      async () => {
+        await persistReviewObservations(
+          memoryStorage,
+          reviewContext.repoFullName,
+          reviewContext.prNumber,
+          result,
+        );
+      },
+    );
   }
 
   // ── Step 9: Attach failed steps and mark as PARTIAL ─────────
