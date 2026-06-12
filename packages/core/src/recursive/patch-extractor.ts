@@ -46,6 +46,51 @@ export function extractPatches(findings: ReviewFinding[]): SuggestionPatch[] {
 // ─── Virtual Patch Application ─────────────────────────────────
 
 /**
+ * Result of applying virtual patches: the synthetic diff plus the OUT-OF-BAND
+ * record of which output lines are injected `[SUGGESTED FIX]` markers.
+ *
+ * `injectedLineIndices` holds 0-based indices into `diff.split('\n')`. Identity
+ * comes from "the walker put it there" — recorded at the injection site — NOT
+ * from scanning the `[SUGGESTED FIX]` text prefix, which would collide with any
+ * genuine source line beginning `[SUGGESTED FIX]`. Collision-immune by
+ * construction.
+ */
+export interface VirtualPatchResult {
+  /** The synthetic diff string (the historical return value). */
+  diff: string;
+  /** 0-based indices into `diff.split('\n')` that are injected markers. */
+  injectedLineIndices: number[];
+}
+
+/** Hunk-header grammar: `@@ -oldStart,oldCount +newStart,newCount @@ <suffix>`. */
+const HUNK_HEADER_RE =
+  /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/;
+
+/**
+ * Rebuild a hunk header from the old-side captures (verbatim), the corrected
+ * new-side start/count, and the verbatim section-heading suffix preserved from
+ * the original header. `oldStart`/`oldCount` are NEVER touched — a marker is a
+ * pure NEW-SIDE addition, so the old (pre-image) accounting is unchanged.
+ *
+ * Mirrors git's unified-diff convention: a count of 1 MAY be omitted, but to
+ * stay byte-stable we re-emit exactly the shape the original used (we only
+ * rewrite the numbers that changed). When the original omitted a count, we keep
+ * it omitted unless the corrected count is no longer 1.
+ */
+function rebuildHunkHeader(
+  oldStart: string,
+  oldCount: string | undefined,
+  newStart: number,
+  newCount: number,
+  newCountOmitted: boolean,
+  suffix: string,
+): string {
+  const oldPart = oldCount === undefined ? `-${oldStart}` : `-${oldStart},${oldCount}`;
+  const newPart = newCountOmitted && newCount === 1 ? `+${newStart}` : `+${newStart},${newCount}`;
+  return `@@ ${oldPart} ${newPart} @@${suffix}`;
+}
+
+/**
  * Apply suggestion patches to an original diff, producing a synthetic
  * patched diff for re-review.
  *
@@ -61,53 +106,48 @@ export function extractPatches(findings: ReviewFinding[]): SuggestionPatch[] {
  * would look like if the suggestions were applied. This is NOT a real
  * git diff; it's a review-friendly format for the LLM to analyze.
  *
- * ⚠️ FROZEN LEGACY BEHAVIOR (spec R7 — golden recursive-golden.test.ts):
- * this walker intentionally reproduces the historical line accounting,
- * bugs included. Do NOT "fix" any of these here (separate ticket):
+ * COORDINATE CONTRACT (Design B — recursive-coordinate-contract):
+ * the synthetic diff is a VALID unified diff. When a marker is injected, the
+ * hunk's `newCount` is incremented and every LATER hunk in the SAME file gets
+ * its `newStart` shifted by the markers injected above it, so the declared
+ * `@@ +N` tells the truth: physical position == declared `@@ +N` == real
+ * new-file line == whatever any sane LLM reports. On iteration 2+ the marker is
+ * therefore a REAL counted `+` line (its position is already reflected in later
+ * headers), which is why later patches no longer drift (the off-by-N is closed).
+ *
+ * Marker IDENTITY is tracked OUT-OF-BAND: the output index of each injected
+ * marker is recorded at the injection site (`injectedLineIndices`), never by
+ * scanning the `[SUGGESTED FIX]` text — collision-immune by construction.
+ *
+ * ⚠️ STILL-FROZEN LEGACY BEHAVIOR (spec R7) — the renumber ONLY touches the
+ * marker path; everything else reproduces the historical accounting, bugs
+ * included. Do NOT "fix" any of these here (separate tickets):
  * - Quoted headers (`diff --git "a/x" "b/y"`, core.quotepath) are NOT
- *   recognized as file boundaries, even though the unified parser handles
- *   them: patches against such files never apply, and the previous file's
- *   patch scope + line counter keep running through the quoted section
- *   (`headerQuoted` gate below). The historical regex only matched the
- *   unquoted form.
+ *   recognized as file boundaries: patches against such files never apply, and
+ *   the previous file's patch scope + line counter keep running through the
+ *   quoted section (`headerQuoted` gate below). No markers there → no renumber.
  * - The counter counts metadata lines its exclusion list never covered
  *   (`similarity index`, `rename from/to`, `Binary files`, `new file mode`,
- *   mode lines) and genuine empty lines — including lines a strict parser
- *   would consider orphaned after an empty line cut a hunk short. That is
- *   why counting walks `rawLines` (every input line), NOT `hunks`.
- * - On iteration 2+ of the recursive loop, previously injected
- *   `+[SUGGESTED FIX]` lines are counted like any other `+` line, shifting
- *   later patches (the frozen off-by-N).
+ *   mode lines) and genuine empty lines. That is why counting walks `rawLines`
+ *   (every input line), NOT `hunks`.
  * - The file-boundary path authority is the `diff --git` header b-side
- *   capture (`headerNewPath`), NOT the `+++ b/` / `rename to` resolved
- *   `path` — they only diverge on malformed input, where the header must
- *   keep winning for parity.
- * - Patches without a `line` never match the counter and are silently
- *   dropped (golden pins this).
- * Behavior-parity scope (the precise claim — NOT an unqualified "zero
- * behavior change"): output is identical to the legacy walker for every
- * REACHABLE input — real `git diff` output, GitHub API
- * (`application/vnd.github.v3.diff`) responses, and `truncateDiff` output
- * (its dominant branch discards the partial line and appends the
- * truncation marker, so it cannot emit a cut-mid-line header — verified).
- * Known divergences are SYNTHETIC-ONLY (malformed, hand-crafted input),
- * documented per design and pinned old-vs-new in
- * diff/__tests__/parity-apply-virtual-patches.test.ts:
- * - loose-hunk-header: `@@ -1,2 +100` without the trailing ` @@` — the
- *   historical loose regex reset the counter (to 99, so a patch at line
- *   100 applied); the strict parser ignores the line (patch never applies).
- * - mixed-quoted-malformed: `diff --git a/old-with b/inside "b/x"` — the
- *   historical greedy capture made `inside "b/x"` a file boundary; the new
- *   parser treats the header as quoted (no boundary, patch never applies).
- * - partial-@@-mid-line: `@@ -1,2 +3` cut mid-line — same loose-regex
- *   counter reset as loose-hunk-header, only producible by a mid-line cut.
+ *   capture (`headerNewPath`), NOT the `+++ b/` / `rename to` resolved `path`.
+ * - Patches without a `line` never match the counter and are silently dropped.
+ * The only INTENTIONAL behavior change vs the pre-Design-B walker is the
+ * marker path: hunk headers are now renumbered and markers count on iteration
+ * 2+. The non-recursive divergences (loose-hunk-header, mixed-quoted-malformed,
+ * partial-@@) are unaffected and stay pinned in
+ * diff/__tests__/parity-apply-virtual-patches.test.ts.
  *
  * @param originalDiff - The original unified diff string
  * @param patches - Suggestion patches to apply
- * @returns Synthetic diff with suggestions applied
+ * @returns `VirtualPatchResult` — the synthetic diff plus injected marker indices
  */
-export function applyVirtualPatches(originalDiff: string, patches: SuggestionPatch[]): string {
-  if (patches.length === 0) return originalDiff;
+export function applyVirtualPatches(
+  originalDiff: string,
+  patches: SuggestionPatch[],
+): VirtualPatchResult {
+  if (patches.length === 0) return { diff: originalDiff, injectedLineIndices: [] };
 
   // Group patches by file
   const patchesByFile = new Map<string, SuggestionPatch[]>();
@@ -120,14 +160,17 @@ export function applyVirtualPatches(originalDiff: string, patches: SuggestionPat
   // Build the synthetic diff
   const parsed = parseUnifiedDiff(originalDiff);
   const result: string[] = [];
+  const injectedLineIndices: number[] = [];
 
   let currentFile: string | null = null;
   let currentFilePatches: SuggestionPatch[] = [];
   let lineCounter = 0; // Tracks the target-side line number in current hunk
 
-  // Emit one input line, advancing the legacy counter and injecting any
-  // matching `+[SUGGESTED FIX]` markers after it.
-  const visit = (line: string): void => {
+  // Emit one input line, advancing the counter and injecting any matching
+  // `+[SUGGESTED FIX]` markers after it. Returns the number of markers injected
+  // (so the per-hunk renumber pass can tally `markersInThisHunk`). The injected
+  // marker's output index is recorded out-of-band in `injectedLineIndices`.
+  const visit = (line: string): number => {
     // Count lines for position tracking (added or context lines increment target counter)
     if (line.startsWith('+') && !line.startsWith('+++')) {
       lineCounter++;
@@ -147,13 +190,17 @@ export function applyVirtualPatches(originalDiff: string, patches: SuggestionPat
     result.push(line);
 
     // Check if any patch targets this line
+    let injected = 0;
     if (currentFile && currentFilePatches.length > 0) {
       const matchingPatches = currentFilePatches.filter((p) => p.line === lineCounter);
       for (const patch of matchingPatches) {
-        // Insert the suggestion as a synthetic replacement block
+        // Record the index BEFORE pushing — identity is positional, not textual.
+        injectedLineIndices.push(result.length);
         result.push(`+[SUGGESTED FIX] ${patch.suggestion}`);
+        injected++;
       }
     }
+    return injected;
   };
 
   for (const line of parsed.preamble) visit(line);
@@ -161,27 +208,61 @@ export function applyVirtualPatches(originalDiff: string, patches: SuggestionPat
   for (const file of parsed.files) {
     // File boundary — legacy gate: quoted headers were never recognized, so
     // the previous file's patch scope and counter deliberately leak into
-    // this section (see FROZEN LEGACY BEHAVIOR above).
+    // this section (see STILL-FROZEN LEGACY BEHAVIOR above). `injectedBefore`
+    // resets to 0 at each recognized file boundary — no cross-file header math.
     if (!file.headerQuoted) {
       currentFile = file.headerNewPath;
       currentFilePatches = patchesByFile.get(currentFile) ?? [];
       lineCounter = 0;
     }
+    let injectedBefore = 0; // markers injected in EARLIER hunks of THIS file
 
-    // Hunk headers reset the counter to the new-side start.
+    // Hunk headers reset the counter to the new-side start AND are rewritten so
+    // the declared `@@ +N` accounts for markers injected above (Design B).
     //
-    // Invariant behind the index-pointer + string-equality scan: each
-    // hunk.header appears exactly once in rawLines, in hunks[] order — the
-    // parser pushes the header line into BOTH arrays in the same pass, and
-    // any rawLine matching the hunk-header grammar is registered as a hunk.
-    // Hunk body lines always carry a `+`/`-`/space/`\` prefix, so they are
-    // never string-equal to a header (which starts with `@`). Even duplicate
-    // IDENTICAL headers stay correct: the pointer pairs the i-th rawLines
-    // occurrence with hunks[i].
+    // The reset scan keys on STRING-EQUALITY `line === hunk.header`. We rewrite
+    // both the emitted string AND `hunk.header` (in lockstep) so the scan keeps
+    // pairing the i-th rawLines occurrence with hunks[i]. The new-side start is
+    // shifted by `injectedBefore`; the counter then resets to the shifted start
+    // minus 1 — still correct because the markers sit INSIDE already-counted
+    // earlier hunks, never double-counted across the boundary.
     let nextHunk = 0;
-    for (const line of file.rawLines) {
+    for (let rawIdx = 0; rawIdx < file.rawLines.length; rawIdx++) {
+      const line = file.rawLines[rawIdx] ?? '';
       const hunk = file.hunks[nextHunk];
       if (hunk && line === hunk.header) {
+        const m = HUNK_HEADER_RE.exec(hunk.header);
+        if (m?.[1] && m?.[3]) {
+          const oldStart = m[1];
+          const oldCount = m[2]; // may be undefined (omitted → 1)
+          const newCountOmitted = m[4] === undefined;
+          const suffix = m[5] ?? '';
+          const markersInThisHunk = countMarkersInHunk(
+            file.rawLines,
+            rawIdx,
+            file.hunks[nextHunk + 1]?.header,
+            currentFilePatches,
+            hunk.newStart,
+          );
+          const newStartShifted = hunk.newStart + injectedBefore;
+          const newCountShifted = hunk.newCount + markersInThisHunk;
+          const rewritten = rebuildHunkHeader(
+            oldStart,
+            oldCount,
+            newStartShifted,
+            newCountShifted,
+            newCountOmitted,
+            suffix,
+          );
+          // Keep model and emitted string in sync for the string-eq scan.
+          hunk.header = rewritten;
+          lineCounter = newStartShifted - 1;
+          result.push(rewritten);
+          nextHunk++;
+          injectedBefore += markersInThisHunk;
+          continue;
+        }
+        // Header didn't match the strict grammar — fall back to legacy reset.
         lineCounter = hunk.newStart - 1;
         nextHunk++;
       }
@@ -189,7 +270,50 @@ export function applyVirtualPatches(originalDiff: string, patches: SuggestionPat
     }
   }
 
-  return result.join('\n');
+  return { diff: result.join('\n'), injectedLineIndices };
+}
+
+/**
+ * Count how many markers a hunk will receive, WITHOUT mutating output. Replays
+ * the same counter logic `visit` uses over just this hunk's body lines (from
+ * `headerPos + 1` up to the next header / file end), so the per-hunk `newCount`
+ * bump is known BEFORE the header is emitted. `headerPos` is the EXACT rawLines
+ * index of this hunk's header (handed in by the main loop), so duplicate
+ * identical headers are paired correctly — no `indexOf` re-scan.
+ */
+function countMarkersInHunk(
+  rawLines: string[],
+  headerPos: number,
+  nextHeader: string | undefined,
+  filePatches: SuggestionPatch[],
+  newStart: number,
+): number {
+  if (filePatches.length === 0) return 0;
+
+  let counter = newStart - 1;
+  let markers = 0;
+  for (let i = headerPos + 1; i < rawLines.length; i++) {
+    const line = rawLines[i] ?? '';
+    if (nextHeader !== undefined && line === nextHeader) break;
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      counter++;
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      // removal — no advance
+    } else if (
+      !line.startsWith('\\') &&
+      !line.startsWith('diff ') &&
+      !line.startsWith('index ') &&
+      !line.startsWith('---') &&
+      !line.startsWith('+++') &&
+      !line.startsWith('@@')
+    ) {
+      counter++;
+    } else {
+      continue;
+    }
+    markers += filePatches.filter((p) => p.line === counter).length;
+  }
+  return markers;
 }
 
 /**
