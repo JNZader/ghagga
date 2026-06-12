@@ -352,6 +352,65 @@ describe('CORE-M6 umbrella — quoted headers now resolve a real filePath', () =
   });
 });
 
+describe('CORE-M6 umbrella — quoted sections WITH declarations, full old-vs-new (3vr fix-forward)', () => {
+  // Codex 3vr finding: the corpus quoted fixtures carry no declaration
+  // lines, so the blanket parity never exercised declaration EXTRACTION
+  // inside quoted sections. This composite pins the complete surface:
+  // everything except the quoted filePaths must be identical (names, kinds,
+  // signatures, order, summary).
+  const COMPOSITE = [
+    'diff --git a/src/normal.ts b/src/normal.ts',
+    'index 1111111..2222222 100644',
+    '--- a/src/normal.ts',
+    '+++ b/src/normal.ts',
+    '@@ -1,3 +1,3 @@',
+    ' uno',
+    '-export function enNormal(a: string) {',
+    '+export function enNormal(a: string, b: number) {',
+    ' tres',
+    'diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"',
+    'index 49de013..11c4483 100644',
+    '--- "a/caf\\303\\251.ts"',
+    '+++ "b/caf\\303\\251.ts"',
+    '@@ -1,2 +1,3 @@',
+    ' contexto',
+    '+export function enCafe() {',
+    'diff --git "a/ni\\303\\261o.ts" "b/ni\\303\\261o.ts"',
+    'index 3333333..4444444 100644',
+    '--- "a/ni\\303\\261o.ts"',
+    '+++ "b/ni\\303\\261o.ts"',
+    '@@ -1,2 +1,1 @@',
+    ' linea',
+    "-import { gone } from './gone'",
+  ].join('\n');
+
+  it('declaration extraction inside quoted sections matches the baseline except filePath', () => {
+    const baseline = baselineExtractSemanticDiff(COMPOSITE);
+    const live = extractSemanticDiff(COMPOSITE);
+
+    // Same changes, same order, same kinds/names/signatures — masking the
+    // filePath, both outputs must be deeply identical.
+    const mask = (c: EntityChange) => ({ ...c, filePath: 'MASKED' });
+    expect(live.changes.map(mask)).toEqual(baseline.changes.map(mask));
+    expect(live.summary).toBe(baseline.summary);
+
+    // The ONLY delta: quoted sections historically resolved 'unknown'.
+    expect(baseline.changes.map((c) => c.filePath)).toEqual([
+      'src/normal.ts',
+      'unknown',
+      'unknown',
+    ]);
+    expect(live.changes.map((c) => c.filePath)).toEqual(['src/normal.ts', 'café.ts', 'niño.ts']);
+
+    // And the extraction itself is non-trivial (kinds actually exercised).
+    expect(live.changes.map((c) => c.kind)).toEqual([
+      'function_modified',
+      'function_added',
+      'import_removed',
+    ]);
+  });
+});
+
 describe('KNOWN synthetic-only divergences: malformed header boundaries (pinned)', () => {
   it('mixed-quoted malformed header: legacy greedy capture vs model b-side', () => {
     // Same header shape as adv-mixed-quoted-malformed.diff, plus a

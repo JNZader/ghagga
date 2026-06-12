@@ -168,8 +168,26 @@ const WINDOW_SIZES = [0, 3, 10] as const;
 
 function probeWindows(raw: string): SymbolInfo[] {
   const lineCount = raw.split('\n').length;
+  const anchors = new Set<number>();
+  for (let s = 0; s <= lineCount + 5; s++) anchors.add(s);
+
+  // 3vr fix-forward (Codex, Phase 5-7 review): hunk headers can reference
+  // new-side positions FAR beyond the textual length of the diff (a short
+  // diff touching deep lines of a large file is perfectly reachable git
+  // output). Anchor extra windows at every old/new start captured by the
+  // LEGACY loose regex over the raw lines — impl-independent key space, so
+  // the probe grid cannot inherit a blind spot from either implementation.
+  for (const line of raw.split('\n')) {
+    const m = BASELINE_HUNK_RE.exec(line);
+    if (m) {
+      for (const v of [Number.parseInt(m[1] ?? '0', 10), Number.parseInt(m[2] ?? '0', 10)]) {
+        for (const off of [-3, -1, 0, 1, 3, 11]) anchors.add(Math.max(0, v + off));
+      }
+    }
+  }
+
   const windows: SymbolInfo[] = [];
-  for (let s = 0; s <= lineCount + 5; s++) {
+  for (const s of anchors) {
     for (const k of WINDOW_SIZES) windows.push(makeSymbol(s, s + k));
   }
   return windows;
@@ -220,6 +238,10 @@ describe('parity on bare hunk fragments (kept in the model preamble)', () => {
       '@@ -1,2 +1,7 @@\n a\n+i1\n+i2\n+i3\n+i4\n+i5\n b\n@@ -10,3 +15,2 @@\n c\n-gone\n d',
     ],
     ['prose then hunk', 'not a diff\n@@ -3,2 +3,2 @@\n-x\n+y\n z'],
+    [
+      'deep positions: short diff touching far lines of a large file (3vr fix-forward)',
+      'diff --git a/big.ts b/big.ts\n--- a/big.ts\n+++ b/big.ts\n@@ -99998,3 +199998,3 @@ deep\n ctx\n-deep gone\n+deep new\n@@ -100010,2 +200010,3 @@ deeper\n ctx\n+deep added',
+    ],
   ];
 
   it.each(FRAGMENTS)('%s', (_label, raw) => {
