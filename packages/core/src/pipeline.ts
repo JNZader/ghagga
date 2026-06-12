@@ -21,27 +21,23 @@ import { loadLensesFromDir, runFanOutReview } from './agents/fan-out-lenses.js';
 import { buildCodeIntelSection, buildStackHints } from './agents/prompts.js';
 import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
-import { buildChecklistContext, resolveChecklistConfig, scoreFindings } from './checklist/index.js';
+import { buildChecklistContext, resolveChecklistConfig } from './checklist/index.js';
 import { buildCodeIntelContext } from './code-intel/context.js';
 import type { CodeIntelMetadata, CodeIntelResult } from './code-intel/types.js';
-import {
-  extractChangedSymbols as extractChangedSymbolsFromDiff,
-  scanDocsForSymbols as scanDocsForSymbolRefs,
-} from './doc-validation/index.js';
 import { enhanceFindings, mergeEnhanceResult } from './enhance/index.js';
 import { serializeFindings } from './enhance/prompt.js';
-import { analyzeExploitability, analyzeUsage } from './exploitability/index.js';
 import { detectFlood } from './flood/index.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
 import { buildCallChainFromDiff } from './graph/call-chain.js';
 import { buildReverseDependencyMap, findDependents } from './graph/reverse-deps.js';
 import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
-import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { SqliteMemoryStorage } from './memory/sqlite.js';
 import { formatNegativeExamplesPrompt } from './negative.js';
 import { runDegradable } from './pipeline/degrade.js';
+import { enrich } from './pipeline/enrich.js';
+import { finalize } from './pipeline/finalize.js';
 import {
   buildConsensusModels,
   resolveAiEnabled,
@@ -51,9 +47,7 @@ import {
   resolvePrimaryProvider,
 } from './pipeline/providers.js';
 import { createSkippedResult, createStaticOnlyResult } from './pipeline/results.js';
-import type { FailedStep } from './pipeline/state.js';
-import { rankFindings } from './ranking/index.js';
-import { recursiveReview } from './recursive/index.js';
+import type { FailedStep, PipelineState } from './pipeline/state.js';
 import { deriveRules, formatRulesForPrompt, loadFeedback } from './self-improve/index.js';
 import { formatStaticAnalysisContext, runStaticAnalysis } from './tools/runner.js';
 import { computeAuthorTrustScore, getReviewModeForTier } from './trust/index.js';
@@ -781,292 +775,55 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     }
   }
 
-  // ── Step 7: Merge static analysis into result ──────────────
-  result.staticAnalysis = staticResult;
-  result.memoryContext = memoryContext;
+  // ── Phase boundary: populate shared PipelineState ───────────
+  // Locals settled by the steps above migrate into state here; the
+  // enrich and finalize phases mutate `state.result` in-place.
+  const state: PipelineState = {
+    input,
+    startTime,
+    emit,
+    aiEnabled,
+    allFiles,
+    fileList,
+    filteredFiles,
+    filteredDiff,
+    blastRadiusMetadata,
+    callChainContext,
+    stacks,
+    stackHints,
+    truncatedDiff,
+    diffBudget,
+    contextBudget,
+    staticResult,
+    rawMemoryContext,
+    codeIntelResults,
+    codeIntelMetadata,
+    staticContext,
+    memoryContext,
+    codeIntelContext,
+    checklistContext,
+    resolvedChecklist,
+    negativeExamplesPrompt,
+    selfImproveRulesPrompt,
+    activeProvider,
+    isCliBridge,
+    isGateway,
+    isOllama,
+    enhancedStaticFindings,
+    enhanceMetadata,
+    trustOverrideMode,
+    resolvedInputMode,
+    result,
+    failedSteps,
+  };
 
-  // Add static analysis findings to the result's findings array (dynamic — all tools)
-  const staticFindings = Object.values(staticResult).flatMap((toolResult) =>
-    toolResult && typeof toolResult === 'object' && 'findings' in toolResult
-      ? toolResult.findings
-      : [],
-  );
-  result.findings = [...result.findings, ...staticFindings];
+  // ── Steps 7 → 7.8: enrich (merge + post-processing) ─────────
+  await enrich(state);
 
-  // ── Merge enhanced static findings into result ──────────────
-  if (enhancedStaticFindings && enhanceMetadata) {
-    result.enhanced = true;
-    result.enhanceMetadata = enhanceMetadata;
-    // Replace static-sourced findings with enhanced versions
-    const nonStaticFindings = result.findings.filter((f) => f.source === 'ai');
-    result.findings = [...enhancedStaticFindings, ...nonStaticFindings];
-  }
+  // ── Steps 8 → 9: finalize (persist + status downgrade) ──────
+  await finalize(state);
 
-  // Track which tools ran successfully
-  result.metadata.toolsRun = [];
-  result.metadata.toolsSkipped = [];
-  for (const [name, tool] of Object.entries(staticResult)) {
-    if (tool.status === 'success') {
-      result.metadata.toolsRun.push(name);
-    } else {
-      result.metadata.toolsSkipped.push(name);
-    }
-  }
-
-  // Update execution time to cover the full pipeline
-  result.metadata.executionTimeMs = Date.now() - startTime;
-
-  // Add file stats metadata (for emoji stats bar in comment)
-  result.metadata.totalAdditions = allFiles.reduce((sum, f) => sum + f.additions, 0);
-  result.metadata.totalDeletions = allFiles.reduce((sum, f) => sum + f.deletions, 0);
-  result.metadata.fileList = allFiles.map((f) => f.path);
-
-  // Add blast-radius metadata (if applicable)
-  if (blastRadiusMetadata) {
-    result.metadata.blastRadius = blastRadiusMetadata;
-  }
-
-  // Add code intelligence metadata (if applicable)
-  if (codeIntelMetadata) {
-    result.codeIntelMetadata = codeIntelMetadata;
-  }
-
-  // ── Step 7.4: Exploitability analysis (optional) ────────────
-  if (input.settings.enableBlastRadius && result.findings.length > 0) {
-    const trivyCveCount = result.findings.filter(
-      (f) => f.source === 'trivy' && f.category === 'dependency-vulnerability',
-    ).length;
-
-    if (trivyCveCount > 0) {
-      emit({
-        step: 'exploitability',
-        message: `Analyzing exploitability for ${trivyCveCount} CVE(s)...`,
-      });
-      await runDegradable(
-        { failedSteps, emit },
-        {
-          step: 'exploitability',
-          warnLabel: '[ghagga] Exploitability analysis failed (non-fatal):',
-          failEmit: {
-            step: 'exploitability',
-            message: 'Exploitability analysis failed — continuing without',
-          },
-        },
-        async () => {
-          // Load graph if not already loaded (reuse from blast-radius when available)
-          const exploitGraph = input.graphLoader ? await input.graphLoader.load() : null;
-
-          analyzeExploitability(result.findings, exploitGraph);
-
-          const labels = result.findings
-            .filter((f) => f.exploitability)
-            .reduce(
-              (acc, f) => {
-                const key = f.exploitability ?? 'unknown';
-                acc[key] = (acc[key] ?? 0) + 1;
-                return acc;
-              },
-              {} as Record<string, number>,
-            );
-
-          const exploitable = labels.exploitable ?? 0;
-          const potential = labels['potentially-exploitable'] ?? 0;
-          const notExploitable = labels['not-exploitable'] ?? 0;
-
-          emit({
-            step: 'exploitability',
-            message: `Exploitability analysis complete: ${exploitable} exploitable, ${potential} potentially, ${notExploitable} not exploitable`,
-          });
-
-          // Function-level usage analysis (requires fileReader)
-          if (input.fileReader) {
-            emit({
-              step: 'usage-analysis',
-              message: 'Analyzing function-level usage of vulnerable packages...',
-            });
-            await analyzeUsage(result.findings, exploitGraph, input.fileReader);
-
-            const usageLabels = result.findings
-              .filter((f) => f.usageLabel)
-              .reduce(
-                (acc, f) => {
-                  const key = f.usageLabel ?? 'unknown';
-                  acc[key] = (acc[key] ?? 0) + 1;
-                  return acc;
-                },
-                {} as Record<string, number>,
-              );
-
-            const inUse = usageLabels['in-use'] ?? 0;
-            const importedNotCalled = usageLabels['imported-not-called'] ?? 0;
-            const notInUse = usageLabels['not-in-use'] ?? 0;
-
-            emit({
-              step: 'usage-analysis',
-              message: `Usage analysis complete: ${inUse} in-use, ${importedNotCalled} imported-not-called, ${notInUse} not-in-use`,
-            });
-          }
-        },
-      );
-    }
-  }
-
-  // ── Step 7.5: Score findings against checklist (optional) ───
-  if (resolvedChecklist && result.findings.length > 0) {
-    result.checklistScore = scoreFindings(result.findings, resolvedChecklist);
-    emit({
-      step: 'checklist-score',
-      message: `Checklist score: ${result.checklistScore.totalScore} (${result.checklistScore.findings.length} matched findings)`,
-    });
-  }
-
-  // ── Step 7.6: Recursive review (optional) ──────────────────────
-  if (input.settings.enableRecursiveReview && aiEnabled && result.findings.length > 0) {
-    emit({ step: 'recursive-review', message: 'Running recursive review on suggested fixes...' });
-    await runDegradable(
-      { failedSteps, emit },
-      {
-        step: 'recursive-review',
-        warnLabel: '[ghagga] Recursive review failed (non-fatal):',
-        failEmit: {
-          step: 'recursive-review',
-          message: 'Recursive review failed — continuing without',
-        },
-      },
-      async () => {
-        const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway, isOllama);
-        const report = await recursiveReview({
-          originalDiff: truncatedDiff,
-          findings: result.findings,
-          generateFn: generateFns[0],
-          config: {
-            maxIterations: input.settings.maxRecursiveIterations ?? 2,
-          },
-          onProgress: (message) => emit({ step: 'recursive-review', message }),
-        });
-
-        if (report) {
-          result.recursiveReview = report;
-
-          // Add regressions to the findings array
-          if (report.regressions.length > 0) {
-            result.findings = [...result.findings, ...report.regressions];
-            emit({
-              step: 'recursive-review',
-              message: `Recursive review: ${report.regressions.length} regression(s) found in suggested fixes`,
-            });
-          } else {
-            emit({
-              step: 'recursive-review',
-              message: `Recursive review: suggestions validated — ${report.converged ? 'converged' : 'no regressions'} after ${report.iterations} iteration(s)`,
-            });
-          }
-        }
-      },
-    );
-  }
-
-  // ── Step 7.7: Code-doc validation (optional) ───────────────────
-  if (input.settings.enableDocValidation && filteredFiles.length > 0) {
-    await runDegradable(
-      { failedSteps, emit },
-      {
-        step: 'doc-validation',
-        warnLabel: '[ghagga] Doc validation failed (non-fatal):',
-        failEmit: { step: 'doc-validation', message: 'Doc validation failed — continuing without' },
-      },
-      () => {
-        const changedSymbols = extractChangedSymbolsFromDiff(filteredDiff);
-        if (changedSymbols.length > 0) {
-          emit({
-            step: 'doc-validation',
-            message: `Scanning docs for ${changedSymbols.length} changed symbol(s)...`,
-          });
-
-          const docResult = scanDocsForSymbolRefs(changedSymbols, allFiles, fileList);
-          result.docValidation = docResult;
-
-          if (docResult.staleReferences.length > 0) {
-            // Convert stale references to findings
-            for (const ref of docResult.staleReferences) {
-              result.findings.push({
-                severity: 'low',
-                category: 'documentation',
-                file: ref.file,
-                line: ref.line,
-                message: `Documentation references \`${ref.symbol}\` which was changed in this PR but this doc was not updated.`,
-                suggestion: `Review and update the reference to \`${ref.symbol}\` in this file.`,
-                source: 'doc-validation',
-              });
-            }
-            emit({
-              step: 'doc-validation',
-              message: `Doc validation: ${docResult.staleReferences.length} stale reference(s) found in ${docResult.docsScanned} doc(s)`,
-            });
-          } else {
-            emit({
-              step: 'doc-validation',
-              message: `Doc validation: no stale references (${docResult.docsScanned} docs scanned)`,
-            });
-          }
-        }
-      },
-    );
-  }
-
-  // ── Step 7.8: Semantic ranking of findings (optional) ─────────
-  const semanticRankingEnabled =
-    input.features?.semanticRanking !== false && !!input.embeddingProvider;
-  if (semanticRankingEnabled && result.findings.length > 1) {
-    emit({ step: 'semantic-ranking', message: 'Reranking findings by semantic relevance...' });
-    await runDegradable(
-      { failedSteps, emit },
-      {
-        step: 'semantic-ranking',
-        warnLabel: '[ghagga] Semantic ranking failed (non-fatal):',
-        failEmit: {
-          step: 'semantic-ranking',
-          message: 'Semantic ranking failed — continuing without',
-        },
-      },
-      async () => {
-        result.findings = await rankFindings(result.findings, input.embeddingProvider);
-        emit({
-          step: 'semantic-ranking',
-          message: `Semantic ranking complete (${result.findings.length} findings reranked)`,
-        });
-      },
-    );
-  }
-
-  // ── Step 8: Persist to memory (awaited for SQLite correctness) ──
-  if (input.settings.enableMemory && input.memoryStorage && input.context) {
-    const memoryStorage = input.memoryStorage;
-    const reviewContext = input.context;
-    await runDegradable(
-      { failedSteps, emit },
-      { step: 'memory-persist', warnLabel: '[ghagga] Memory persist failed (non-fatal):' },
-      async () => {
-        await persistReviewObservations(
-          memoryStorage,
-          reviewContext.repoFullName,
-          reviewContext.prNumber,
-          result,
-        );
-      },
-    );
-  }
-
-  // ── Step 9: Attach failed steps and mark as PARTIAL ─────────
-  if (failedSteps.length > 0) {
-    result.failedSteps = failedSteps;
-    // Only downgrade to PARTIAL if the review otherwise appeared successful
-    if (result.status === 'PASSED') {
-      result.status = 'PARTIAL';
-    }
-  }
-
-  return result;
+  return state.result;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────

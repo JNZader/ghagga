@@ -14,6 +14,14 @@
  * blocks carry their own logic (blast-radius fallback metadata,
  * ai-review static-only fallback, the three `*Safe` helpers) stay
  * bespoke by design.
+ *
+ * ⚠️ INVARIANT: this helper assumes SEQUENTIAL execution. Wrapping a
+ * synchronous `fn` in `await fn()` adds one microtask tick compared to
+ * the original inline try/catch. That tick is invisible TODAY because
+ * no adopted call site runs inside a `Promise.all` — every adoption is
+ * awaited in pipeline order. If a future change runs `runDegradable`
+ * sites concurrently, revisit this assumption (relative interleaving
+ * of warns/pushes/emits would no longer be pinned by sequence).
  */
 
 import type { ProgressEvent } from '../types.js';
