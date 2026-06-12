@@ -5,12 +5,17 @@
  * iterations of the recursive review loop (recursive/index.ts:91-156), where
  * iteration 2 re-parses the synthetic diff produced by iteration 1.
  *
- * ⚠️ The off-by-N in iteration 2 is INTENTIONALLY FROZEN AS-IS: the injected
- * `+[SUGGESTED FIX]` lines from iteration 1 shift the lineCounter, so round-2
- * patches land one line late per preceding injection in the same hunk. This is
- * the documented pre-existing behavior (separate ticket — do NOT fix here).
- * If a migration "improves" these coordinates, that is a FORBIDDEN behavior
- * change: revert the migration, not this golden.
+ * ✅ RE-BLESSED under Design B (sdd/recursive-coordinate-contract): the iteration-2
+ * off-by-N is now CLOSED. `applyVirtualPatches` renumbers hunk headers when it
+ * injects a `+[SUGGESTED FIX]` marker (newCount += markers-in-hunk; later hunks'
+ * newStart += markers-injected-above), so the declared `@@ +N` tells the truth
+ * about physical line position. On iteration 2 the round-1 markers are therefore
+ * ordinary counted `+` lines, and round-2 patches land adjacent to the SAME real
+ * line the LLM numbered against — no drift. Every snapshot delta below is JUSTIFIED
+ * by the both-interpretation contract test (recursive/coordinate-contract.test.ts):
+ * the marker that previously landed one line late (e.g. round-2 alpha7 after alpha6)
+ * now lands after the intended line (alpha7). If a future change re-introduces the
+ * off-by-N, that is a FORBIDDEN regression: revert it, not this golden.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -42,8 +47,8 @@ function markerCoordinates(diff: string): Array<{ index: number; marker: string;
 }
 
 describe('recursive golden freeze — 2 iterations over C16', () => {
-  const iter1 = applyVirtualPatches(c01, round1);
-  const iter2 = applyVirtualPatches(c16, round2);
+  const iter1 = applyVirtualPatches(c01, round1).diff;
+  const iter2 = applyVirtualPatches(c16, round2).diff;
 
   it('iteration 1 output equals the committed c16 fixture', () => {
     expect(iter1).toBe(c16);
@@ -68,7 +73,7 @@ describe('recursive golden freeze — 2 iterations over C16', () => {
   });
 
   it('2-iteration run is deterministic', () => {
-    const again = applyVirtualPatches(applyVirtualPatches(c01, round1), round2);
+    const again = applyVirtualPatches(applyVirtualPatches(c01, round1).diff, round2).diff;
     expect(again).toBe(iter2);
   });
 });

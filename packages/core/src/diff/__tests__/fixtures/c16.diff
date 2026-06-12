@@ -2,7 +2,7 @@ diff --git a/src/alpha.ts b/src/alpha.ts
 index 657651a..bf211dc 100644
 --- a/src/alpha.ts
 +++ b/src/alpha.ts
-@@ -2,7 +2,7 @@ export const alpha1 = 1;
+@@ -2,7 +2,8 @@ export const alpha1 = 1;
  export const alpha2 = 2;
  export const alpha3 = 3;
  export const alpha4 = 4;
@@ -12,7 +12,7 @@ index 657651a..bf211dc 100644
  export const alpha6 = 6;
  export const alpha7 = 7;
  export const alpha8 = 8;
-@@ -27,7 +27,7 @@ export const alpha26 = 26;
+@@ -27,7 +28,7 @@ export const alpha26 = 26;
  export const alpha27 = 27;
  export const alpha28 = 28;
  export const alpha29 = 29;
@@ -34,7 +34,7 @@ index 6ac9ab0..bfd79c7 100644
  export const beta6 = 6;
  export const beta7 = 7;
  export const beta8 = 8;
-@@ -27,7 +27,7 @@ export const beta26 = 26;
+@@ -27,7 +27,8 @@ export const beta26 = 26;
  export const beta27 = 27;
  export const beta28 = 28;
  export const beta29 = 29;
@@ -48,7 +48,7 @@ diff --git a/src/gamma.ts b/src/gamma.ts
 index b2320f6..2513611 100644
 --- a/src/gamma.ts
 +++ b/src/gamma.ts
-@@ -2,7 +2,7 @@ export const gamma1 = 1;
+@@ -2,7 +2,8 @@ export const gamma1 = 1;
  export const gamma2 = 2;
  export const gamma3 = 3;
  export const gamma4 = 4;
@@ -58,7 +58,7 @@ index b2320f6..2513611 100644
 +[SUGGESTED FIX] const gamma6 = 6;
  export const gamma7 = 7;
  export const gamma8 = 8;
-@@ -27,7 +27,7 @@ export const gamma26 = 26;
+@@ -27,7 +28,7 @@ export const gamma26 = 26;
  export const gamma27 = 27;
  export const gamma28 = 28;
  export const gamma29 = 29;

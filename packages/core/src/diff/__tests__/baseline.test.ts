@@ -102,12 +102,12 @@ describe('derived fixture provenance', () => {
   });
 
   it('c16 is exactly applyVirtualPatches(c01, round1)', () => {
-    expect(applyVirtualPatches(fixture('c01'), patchRounds.round1)).toBe(fixture('c16'));
+    expect(applyVirtualPatches(fixture('c01'), patchRounds.round1).diff).toBe(fixture('c16'));
   });
 
   it('c16 patch fixture is deterministic (two runs, identical output)', () => {
-    const a = applyVirtualPatches(fixture('c01'), patchRounds.round1);
-    const b = applyVirtualPatches(fixture('c01'), patchRounds.round1);
+    const a = applyVirtualPatches(fixture('c01'), patchRounds.round1).diff;
+    const b = applyVirtualPatches(fixture('c01'), patchRounds.round1).diff;
     expect(a).toBe(b);
   });
 });
@@ -153,7 +153,7 @@ describe.each(CASES)('baseline %s', (name) => {
         findingIndex: 1,
       },
     ];
-    expect(applyVirtualPatches(raw, generic)).toMatchSnapshot();
+    expect(applyVirtualPatches(raw, generic).diff).toMatchSnapshot();
   });
 
   it('extractSemanticDiff (semantic-diff/index.ts)', () => {

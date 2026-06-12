@@ -166,6 +166,22 @@ export function applyVirtualPatches(
   let currentFilePatches: SuggestionPatch[] = [];
   let lineCounter = 0; // Tracks the target-side line number in current hunk
 
+  // Inject every `+[SUGGESTED FIX]` marker whose patch `line` matches the given
+  // counter value, recording each marker's output index out-of-band. Mirrors the
+  // legacy walker's post-line patch-match (which ran after EVERY emitted line,
+  // header included). Returns the number of markers injected.
+  const injectAfter = (counter: number): number => {
+    if (!currentFile || currentFilePatches.length === 0) return 0;
+    let injected = 0;
+    for (const patch of currentFilePatches.filter((p) => p.line === counter)) {
+      // Record the index BEFORE pushing — identity is positional, not textual.
+      injectedLineIndices.push(result.length);
+      result.push(`+[SUGGESTED FIX] ${patch.suggestion}`);
+      injected++;
+    }
+    return injected;
+  };
+
   // Emit one input line, advancing the counter and injecting any matching
   // `+[SUGGESTED FIX]` markers after it. Returns the number of markers injected
   // (so the per-hunk renumber pass can tally `markersInThisHunk`). The injected
@@ -190,17 +206,7 @@ export function applyVirtualPatches(
     result.push(line);
 
     // Check if any patch targets this line
-    let injected = 0;
-    if (currentFile && currentFilePatches.length > 0) {
-      const matchingPatches = currentFilePatches.filter((p) => p.line === lineCounter);
-      for (const patch of matchingPatches) {
-        // Record the index BEFORE pushing — identity is positional, not textual.
-        injectedLineIndices.push(result.length);
-        result.push(`+[SUGGESTED FIX] ${patch.suggestion}`);
-        injected++;
-      }
-    }
-    return injected;
+    return injectAfter(lineCounter);
   };
 
   for (const line of parsed.preamble) visit(line);
@@ -273,11 +279,22 @@ export function applyVirtualPatches(
           // what `visit` actually injects.
           lineCounter = hunk.newStart - 1;
           result.push(rewritten);
+          // LEGACY-FAITHFUL header-position injection: the old walker ran its
+          // patch-match check after EVERY line, the `@@` header included, with
+          // the counter already reset to `newStart - 1`. So a patch whose `line`
+          // equals `newStart - 1` injects a marker IMMEDIATELY after the header.
+          // We must reproduce that (it is frozen R7 behavior, NOT the renumber
+          // change) — `countMarkersInHunk` likewise counts this header-position
+          // match, so it is already budgeted into `markersInThisHunk` above.
+          injectAfter(lineCounter);
           nextHunk++;
           injectedBefore += markersInThisHunk;
           continue;
         }
         // Header didn't match the strict grammar — fall back to legacy reset.
+        // The `visit(line)` below then pushes the header (no counter increment —
+        // it starts with `@@`) and runs the header-position patch-match at the
+        // reset counter, exactly as the legacy flat loop did.
         lineCounter = hunk.newStart - 1;
         nextHunk++;
       }
@@ -306,7 +323,11 @@ function countMarkersInHunk(
   if (filePatches.length === 0) return 0;
 
   let counter = newStart - 1;
-  let markers = 0;
+  // Header-position match: the legacy walker ran its patch-match after the `@@`
+  // header line with the counter already at `newStart - 1`, so a patch at that
+  // line injects a marker INSIDE this hunk. `injectAfter(newStart - 1)` in the
+  // main loop reproduces it; budget it here so `newCount` accounts for it.
+  let markers = filePatches.filter((p) => p.line === counter).length;
   for (let i = headerPos + 1; i < rawLines.length; i++) {
     const line = rawLines[i] ?? '';
     if (nextHeader !== undefined && line === nextHeader) break;

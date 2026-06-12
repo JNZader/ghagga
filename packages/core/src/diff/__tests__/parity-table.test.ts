@@ -157,6 +157,19 @@ const DOCUMENTED_DELTAS: readonly DocumentedDelta[] = [
     note: 'malformed-only: a loose `@@ -1,2 +100` no longer resets the counter; a malformed mixed-quoted header is no longer a file boundary (headerQuoted gate)',
   },
   {
+    id: 'R7-marker-renumber',
+    consumers: ['applyVirtualPatches'],
+    // Every corpus fixture where a c16 round-1 patch lands a marker: the hunk
+    // header is renumbered (newCount += markers-in-hunk; later newStart += markers
+    // above). On a MISS the renumber is a strict no-op, so only marker-bearing
+    // fixtures appear. c11/c12 are truncated derivatives of c01 (still carry the
+    // alpha:5 target before the cut).
+    corpusFixtures: ['c01', 'c11', 'c12', 'c16'],
+    pinnedBy:
+      'parity-apply-virtual-patches.test.ts (assertMarkerPathDivergence) + recursive-golden.test.ts + recursive/coordinate-contract.test.ts',
+    note: 'Design B (sdd/recursive-coordinate-contract): injecting a `+[SUGGESTED FIX]` marker now RENUMBERS the synthetic diff so `@@ +N` tells the truth — closing the iteration-2+ off-by-N. Divergence vs the legacy walker is confined to `@@` header lines (markers land identically on iter 1; the off-by-N only manifested across iterations). This is the INTENTIONAL fix, not a parity break.',
+  },
+  {
     id: 'M6-semantic',
     consumers: ['extractSemanticDiff'],
     corpusFixtures: [],
@@ -269,7 +282,7 @@ describe.each(ALL_FIXTURES)('cross-consumer consistency — %s', (name) => {
   });
 
   it('applyVirtualPatches reconstructs the input byte-exactly on a guaranteed miss', () => {
-    expect(applyVirtualPatches(raw, [])).toBe(raw);
+    expect(applyVirtualPatches(raw, []).diff).toBe(raw);
     const miss: SuggestionPatch[] = [
       {
         file: 'no-such-file-anywhere.ts',
@@ -279,7 +292,9 @@ describe.each(ALL_FIXTURES)('cross-consumer consistency — %s', (name) => {
         findingIndex: 0,
       },
     ];
-    expect(applyVirtualPatches(raw, miss)).toBe(raw);
+    // Guaranteed miss ⇒ zero markers ⇒ the renumber pass is a strict no-op,
+    // so the synthetic diff is byte-identical to the input (Design B invariant).
+    expect(applyVirtualPatches(raw, miss).diff).toBe(raw);
   });
 
   it('extractSemanticDiff resolves every filePath from the same model headers (or the legacy pseudo-section)', () => {
@@ -369,7 +384,7 @@ describe('delta R7-walker — malformed boundaries (applyVirtualPatches)', () =>
     const probe: SuggestionPatch[] = [
       { file: 'loose.ts', line: 100, originalMessage: 'p', suggestion: 'LOOSE', findingIndex: 0 },
     ];
-    expect(applyVirtualPatches(raw, probe)).toBe(raw);
+    expect(applyVirtualPatches(raw, probe).diff).toBe(raw);
   });
 
   it('adv-mixed-quoted-malformed: the legacy greedy key `inside "b/x"` is no longer a boundary', () => {
@@ -377,7 +392,7 @@ describe('delta R7-walker — malformed boundaries (applyVirtualPatches)', () =>
     const probe: SuggestionPatch[] = [
       { file: 'inside "b/x"', line: 1, originalMessage: 'p', suggestion: 'MIX', findingIndex: 0 },
     ];
-    expect(applyVirtualPatches(raw, probe)).toBe(raw);
+    expect(applyVirtualPatches(raw, probe).diff).toBe(raw);
   });
 });
 
@@ -423,7 +438,7 @@ describe('cross-consumer parity table (generated report)', () => {
       const deletions = files.reduce((n, f) => n + f.deletions, 0);
       const hunks = parseHunks(raw).length;
       const entityLines = extractEntityDiffLines(raw, FULL_WINDOW).length;
-      const patched = applyVirtualPatches(raw, patchRounds.round1);
+      const patched = applyVirtualPatches(raw, patchRounds.round1).diff;
       const markers = patched.split('\n').length - raw.split('\n').length;
       const changes = extractSemanticDiff(raw).changes.length;
       return [
