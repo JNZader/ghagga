@@ -174,29 +174,69 @@ function normalizeBody(body: string): string {
 }
 
 /**
- * Compute similarity ratio between two strings (0.0–1.0).
- * Uses a simple longest-common-subsequence ratio approach.
+ * Defensive cap on LCS input size (CORE-M8). Inputs are normalized entity
+ * bodies from a diff, typically well under this. The DP below is O(n*m)
+ * time, so two pathological ~100 KB bodies (e.g. a class spanning a whole
+ * generated file) would cost ~10^10 cell updates. Beyond the cap we compare
+ * the first MAX chars of each body only — for the near-identical bodies
+ * rename detection cares about, prefixes of this size are representative;
+ * the trade-off is that two giant bodies differing only past the cap would
+ * score 1.0 (acceptable: same first 10k chars of normalized code is an
+ * extremely strong rename signal anyway).
+ */
+const MAX_SIMILARITY_INPUT_LENGTH = 10_000;
+
+/**
+ * Compute similarity ratio between two strings (0.0–1.0) as
+ * `LCS(a, b) / max(len(a), len(b))` — a real longest-common-subsequence
+ * ratio (CORE-M8; the previous implementation claimed LCS but compared
+ * characters at the same positions, so a one-char shift like "Xabcde" vs
+ * "abcde" scored near 0 instead of high).
+ *
+ * Classic two-row dynamic programming: O(n*m) time, O(min(n, m)) memory.
  * Returns 1.0 for identical strings, 0.0 for completely different.
  */
 function computeSimilarity(a: string, b: string): number {
   if (a === b) return 1.0;
   if (a.length === 0 || b.length === 0) return 0.0;
 
-  const maxLen = Math.max(a.length, b.length);
+  const s = a.length > MAX_SIMILARITY_INPUT_LENGTH ? a.slice(0, MAX_SIMILARITY_INPUT_LENGTH) : a;
+  const t = b.length > MAX_SIMILARITY_INPUT_LENGTH ? b.slice(0, MAX_SIMILARITY_INPUT_LENGTH) : b;
+  if (s === t) return 1.0;
 
-  // For performance, use character-level comparison for short strings
-  // and a simplified ratio for longer ones
-  let matches = 0;
-  const shorter = a.length <= b.length ? a : b;
-  const longer = a.length > b.length ? a : b;
+  const maxLen = Math.max(s.length, t.length);
+  return lcsLength(s, t) / maxLen;
+}
 
-  // Count matching characters at same positions
-  const minLen = shorter.length;
-  for (let i = 0; i < minLen; i++) {
-    if (shorter[i] === longer[i]) matches++;
+/**
+ * Length of the longest common subsequence of two strings.
+ * Two-row DP over the shorter string to keep memory at O(min(n, m)).
+ */
+function lcsLength(a: string, b: string): number {
+  const longer = a.length >= b.length ? a : b;
+  const shorter = a.length >= b.length ? b : a;
+  const cols = shorter.length;
+
+  let prev = new Uint32Array(cols + 1);
+  let curr = new Uint32Array(cols + 1);
+
+  for (let i = 1; i <= longer.length; i++) {
+    const charCode = longer.charCodeAt(i - 1);
+    for (let j = 1; j <= cols; j++) {
+      if (charCode === shorter.charCodeAt(j - 1)) {
+        curr[j] = prev[j - 1] + 1;
+      } else {
+        const fromTop = prev[j];
+        const fromLeft = curr[j - 1];
+        curr[j] = fromTop >= fromLeft ? fromTop : fromLeft;
+      }
+    }
+    const swap = prev;
+    prev = curr;
+    curr = swap;
   }
 
-  return matches / maxLen;
+  return prev[cols];
 }
 
 /**

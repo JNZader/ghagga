@@ -382,6 +382,73 @@ describe('detectRenames', () => {
     expect(renames).toEqual([]);
   });
 
+  // ── CORE-M8: computeSimilarity is now a real LCS ratio ──────
+  // The pre-M8 implementation compared characters at the SAME positions,
+  // so any shift ("Xabcde" vs "abcde") scored near 0. These tests pin the
+  // LCS behavior through detectRenames (computeSimilarity is private).
+
+  it('detects a rename when the body is shifted by a prefix (CORE-M8 LCS)', () => {
+    // Normalized bodies: "return someLongValue; }" vs "Xreturn someLongValue; }".
+    // Positional matching scored ~0 here (every char shifted by one, no
+    // repeated chars to match accidentally) → no rename pre-M8.
+    // Real LCS: 23/24 ≈ 0.958 ≥ 0.9 → rename detected.
+    const oldSource = ['function foo() {', '  return someLongValue;', '}'].join('\n');
+    const newSource = ['function bar() {', '  Xreturn someLongValue;', '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 3)];
+    const added = [makeSymbol('bar', 1, 3)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(1);
+    expect(renames[0]?.oldName).toBe('foo');
+    expect(renames[0]?.newName).toBe('bar');
+    expect(renames[0]?.similarity).toBeGreaterThanOrEqual(0.9);
+    expect(renames[0]?.similarity).toBeLessThan(1);
+  });
+
+  it('reports similarity exactly 1.0 for identical bodies (CORE-M8)', () => {
+    const body = '  const x = compute();\n  return x * 2;';
+    const oldSource = `function foo() {\n${body}\n}`;
+    const newSource = `function bar() {\n${body}\n}`;
+
+    const removed = [makeSymbol('foo', 1, 4)];
+    const added = [makeSymbol('bar', 1, 4)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(1);
+    expect(renames[0]?.similarity).toBe(1);
+  });
+
+  it('does not match bodies with no characters in common (CORE-M8)', () => {
+    // endLine excludes the closing brace so the normalized bodies are
+    // fully disjoint character sets → LCS 0 → similarity 0.
+    const oldSource = ['function foo() {', '  aaaa', '}'].join('\n');
+    const newSource = ['function bar() {', '  zzzz', '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 2)];
+    const added = [makeSymbol('bar', 1, 2)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(0);
+  });
+
+  it('skips symbols whose normalized body is empty (CORE-M8)', () => {
+    // Bodies are comment-only → normalizeBody returns '' → symbol skipped
+    // before similarity is ever computed.
+    const oldSource = ['function foo() {', '  // only a comment', '}'].join('\n');
+    const newSource = ['function bar() {', '  // only a comment', '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 2)];
+    const added = [makeSymbol('bar', 1, 2)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(0);
+  });
+
   it('matches at most one added symbol per removed symbol', () => {
     const body = '  const x = 1;\n  return x + 2;';
     const oldSource = `function foo() {\n${body}\n}`;
