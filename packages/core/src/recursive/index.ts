@@ -93,13 +93,11 @@ export async function recursiveReview(
 
     // Step 2: Apply patches virtually.
     // `applyVirtualPatches` returns a `VirtualPatchResult` ({ diff, injectedLineIndices }).
-    // The injected-marker indices are out-of-band metadata for the marker path; they
-    // are kept as a LOOP-LOCAL value and NEVER surface in `RecursiveReviewReport`.
-    const { diff: patchedDiff, injectedLineIndices } = applyVirtualPatches(
-      currentDiff,
-      currentPatches,
-    );
-    void injectedLineIndices; // reserved for future marker-aware classification
+    // Only `diff` is consumed by the recursive loop today. The out-of-band
+    // `injectedLineIndices` (marker positions) are collision-immune metadata that a
+    // future marker-aware classifier could read; if/when that lands, destructure it
+    // here and thread it LOOP-LOCAL — it must NEVER enter `RecursiveReviewReport`.
+    const { diff: patchedDiff } = applyVirtualPatches(currentDiff, currentPatches);
     const patchContext = buildPatchContext(currentPatches);
 
     // Step 3: Re-review

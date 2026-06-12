@@ -172,3 +172,81 @@ index 1111111..2222222 100644
     expect(injectedLineIndices).not.toContain(sourceLineIdx);
   });
 });
+
+describe('header-position injection (legacy R7 fidelity) + count↔inject invariant', () => {
+  // A patch whose `line` equals `newStart - 1` injects a marker RIGHT AFTER the
+  // `@@` header — the legacy walker ran its post-line patch-match after the
+  // header line too (counter already reset to newStart-1). The renumber must
+  // budget this header-position marker, and `countMarkersInHunk`'s precomputed
+  // tally must EXACTLY equal what is actually injected (so newCount is valid).
+  //
+  // The adversarial shape the 4vr reviewers flagged: the FIRST body line after
+  // the header is NON-advancing (a removal). The counter stays at newStart-1
+  // across both the header and the removal, so `injectAfter(newStart-1)` fires
+  // on BOTH — and `countMarkersInHunk` must mirror that one-for-one. This is the
+  // frozen R7 "marker after every emitted line incl. non-advancing" behavior;
+  // the test pins the INTERNAL CONSISTENCY (count == injected), not git-validity.
+  const headerPosDiff = `diff --git a/src/h.ts b/src/h.ts
+index 1111111..2222222 100644
+--- a/src/h.ts
++++ b/src/h.ts
+@@ -5,3 +5,3 @@ section
+-removed at new-side 4
+ ctx at new-side 5
++added at new-side 6`;
+
+  it('injects after the header for a patch at newStart-1, and again after the non-advancing removal', () => {
+    // newStart = 5 → newStart-1 = 4. Header reset puts the counter at 4; the
+    // first body line is a removal (no advance) so the counter is STILL 4 after
+    // it. A patch at line 4 therefore injects twice (after header, after removal).
+    const patches: SuggestionPatch[] = [
+      {
+        file: 'src/h.ts',
+        line: 4,
+        originalMessage: 'header-position + non-advancing',
+        suggestion: 'HEADER POS',
+        findingIndex: 0,
+      },
+    ];
+    const { diff, injectedLineIndices } = applyVirtualPatches(headerPosDiff, patches);
+    const lines = diff.split('\n');
+
+    // Two markers injected (header-position + post-removal), both tracked.
+    const markerLines = lines
+      .map((l, i) => (l.startsWith('+[SUGGESTED FIX] HEADER POS') ? i : -1))
+      .filter((i) => i >= 0);
+    expect(markerLines).toHaveLength(2);
+    // injectedLineIndices === the actual marker positions (count↔inject invariant).
+    expect([...injectedLineIndices].sort((a, b) => a - b)).toEqual(markerLines);
+
+    // The renumbered header's newCount budgets BOTH markers: original newCount 3
+    // + 2 markers = 5. Old side untouched (-5,3). Suffix preserved.
+    const header = lines.find((l) => l.startsWith('@@'));
+    expect(header).toBe('@@ -5,3 +5,5 @@ section');
+
+    // First marker lands immediately after the header (before the removal line).
+    const headerIdx = lines.findIndex((l) => l.startsWith('@@'));
+    expect(lines[headerIdx + 1]).toBe('+[SUGGESTED FIX] HEADER POS');
+  });
+
+  it('a patch at newStart-1 with an ADVANCING first body line injects exactly once', () => {
+    // Control: when the first body line is a `+`/context line (advances the
+    // counter to newStart), the header-position match fires only after the
+    // header. newCount = 3 + 1 = 4.
+    const advDiff = `diff --git a/src/h.ts b/src/h.ts
+index 1111111..2222222 100644
+--- a/src/h.ts
++++ b/src/h.ts
+@@ -5,3 +5,3 @@ section
+ ctx at new-side 5
+ ctx at new-side 6
++added at new-side 7`;
+    const patches: SuggestionPatch[] = [
+      { file: 'src/h.ts', line: 4, originalMessage: 'p', suggestion: 'ONCE', findingIndex: 0 },
+    ];
+    const { diff, injectedLineIndices } = applyVirtualPatches(advDiff, patches);
+    const lines = diff.split('\n');
+    expect(injectedLineIndices).toHaveLength(1);
+    expect(lines.find((l) => l.startsWith('@@'))).toBe('@@ -5,3 +5,4 @@ section');
+  });
+});

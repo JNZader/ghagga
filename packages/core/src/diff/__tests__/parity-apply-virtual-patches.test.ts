@@ -23,15 +23,21 @@
  * tells the truth about physical line position. The legacy walker leaves headers
  * untouched, so its declared coordinates lie — that lie is the off-by-N.
  *
- * Therefore byte-equality with the legacy walker can ONLY be asserted on fixtures
+ * Therefore strict byte-equality with the legacy walker is asserted on fixtures
  * where ZERO markers land (the renumber pass is then a strict no-op). On a fixture
- * where ≥1 marker lands, new and legacy diverge BY CONSTRUCTION, and the divergence
- * is EXACTLY the rewritten `@@` header lines — every NON-header line (context,
- * additions, removals, AND the injected markers themselves) is byte-identical
- * between the two. `assertMarkerPathDivergence` pins BOTH faces: it asserts the
- * outputs differ (so the renumber can never silently vanish) AND that the diff is
- * confined to `@@` lines (so no NON-header behavior can drift in under cover of
- * the documented divergence). This is the documented "MARKER_DIVERGENT" set.
+ * where ≥1 marker lands, new and legacy may diverge, and the divergence is confined
+ * to hunk headers: `assertMarkerPathDivergence` pins that (a) line counts are equal
+ * (no line added/dropped/reordered off the header path), (b) every NON-header line
+ * (context, additions, removals, AND the injected markers themselves) is byte-
+ * identical, and (c) on the `@@` headers that DO differ, only the new-side
+ * `+newStart,newCount` segment may change — the old-side `@@ -oldStart,oldCount`
+ * and the trailing section heading stay byte-identical. (A marker landing in a
+ * HEADERLESS region — binary/mode-only diff — produces no header to renumber, so
+ * the outputs are byte-identical to legacy; that equality is allowed.) No NON-header
+ * behavior can drift in under cover of the documented divergence. This is the
+ * documented "MARKER_DIVERGENT" set. The off-by-N closure itself (renumber actually
+ * firing) is positively pinned by the renumber unit tests, the c16 byte-eq, and the
+ * recursive golden — not by this harness.
  *
  * The probe grid targets, per fixture, the UNION of both implementations'
  * key spaces: every resolved `path` and raw `headerNewPath` from the unified
@@ -207,6 +213,22 @@ function probesFor(raw: string): SuggestionPatch[] {
 /** Is a line a unified-diff hunk header (`@@ ... @@ ...`)? */
 const isHunkHeader = (line: string): boolean => line.startsWith('@@');
 
+/** `@@ -oldStart,oldCount +newStart,newCount @@ <suffix>` capture (mirror of the walker's). */
+const HEADER_PARTS_RE = /^(@@ -\d+(?:,\d+)?) (\+\d+(?:,\d+)?) (@@.*)$/;
+
+/**
+ * The OLD-side segment (`@@ -oldStart,oldCount`) plus the trailing `@@ <suffix>`
+ * of a hunk header — i.e. EVERYTHING the renumber must leave untouched. The
+ * Design-B renumber may only rewrite the `+newStart,newCount` segment; the
+ * old (pre-image) accounting and the section heading are invariant. Returns the
+ * raw line for headers that don't match the strict grammar (so the equality
+ * check below still pins them byte-for-byte).
+ */
+function headerInvariantSegment(line: string): string {
+  const m = HEADER_PARTS_RE.exec(line);
+  return m ? `${m[1]} ${m[3]}` : line;
+}
+
 /**
  * Marker-path divergence pin (Design B). When markers land, the new walker may
  * differ from the legacy walker ONLY on renumbered `@@` hunk headers — every
@@ -230,12 +252,21 @@ function assertMarkerPathDivergence(newOut: string, legacyOut: string): void {
   // adds/drops a line relative to the legacy output (markers land identically).
   expect(newLines.length).toBe(legacyLines.length);
   for (let i = 0; i < newLines.length; i++) {
-    if (isHunkHeader(newLines[i] ?? '') && isHunkHeader(legacyLines[i] ?? '')) {
-      // Header line — allowed to differ (renumbered). Old-side accounting must
-      // still be untouched: only the `+N[,M]` segment may change.
+    const newLine = newLines[i] ?? '';
+    const legacyLine = legacyLines[i] ?? '';
+    if (isHunkHeader(newLine) && isHunkHeader(legacyLine)) {
+      // Header line — the new-side `+newStart,newCount` segment is allowed to
+      // differ (renumbered). But the OLD-side accounting (`@@ -oldStart,oldCount`)
+      // and the trailing `@@ <section heading>` MUST be byte-identical: the
+      // renumber is a pure new-side operation. Pinning the invariant segment
+      // closes the blind spot where old-side drift (or a malformed header) could
+      // slip through under cover of the documented divergence.
+      expect(headerInvariantSegment(newLine), `header old-side/suffix drifted at line ${i}`).toBe(
+        headerInvariantSegment(legacyLine),
+      );
       continue;
     }
-    expect(newLines[i], `non-header line ${i} drifted`).toBe(legacyLines[i]);
+    expect(newLine, `non-header line ${i} drifted`).toBe(legacyLine);
   }
 }
 
