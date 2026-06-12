@@ -1401,6 +1401,43 @@ describe('golden: blast-radius edges (B0.5)', () => {
   });
 });
 
+// ─── Identity asserts (B4) ──────────────────────────────────────
+// The phase split threads ONE mutable `state.result` object end-to-end
+// (D1: no Partial-merge, no clones). These asserts pin that identity
+// through OBSERVABLE references only — objects returned by the mocks —
+// without exposing any production internals.
+// NOT pinnable non-invasively: `result.failedSteps === <internal
+// accumulator>` — the accumulator is function-local to reviewPipeline
+// and has no external handle; covered indirectly by the first assert
+// (finalize attaches it onto the very object the caller receives).
+
+describe('identity: result object is threaded, never cloned (B4)', () => {
+  it('returns the very ReviewResult object the agent produced (mutated in-place)', async () => {
+    const agentResult = makeAgentResult('simple');
+    (runSimpleReview as M<typeof runSimpleReview>).mockResolvedValueOnce(agentResult);
+    const { result } = await runGolden(makeInput());
+    expect(result).toBe(agentResult);
+    // ...and enrich really mutated THIS object in-place (step-7 merge ran on it)
+    expect(result.metadata.fileList).toEqual(['src/index.ts']);
+  });
+
+  it('result.staticAnalysis is the same object the static runner produced', async () => {
+    const staticResult = staticWithSemgrep();
+    (runStaticAnalysis as M<typeof runStaticAnalysis>).mockResolvedValueOnce(staticResult);
+    const { result } = await runGolden(makeInput());
+    expect(result.staticAnalysis).toBe(staticResult);
+  });
+
+  it('result.recursiveReview is the same report object recursiveReview returned', async () => {
+    (runStaticAnalysis as M<typeof runStaticAnalysis>).mockResolvedValueOnce(staticWithSemgrep());
+    (recursiveReview as M<typeof recursiveReview>).mockResolvedValueOnce(RECURSIVE_REPORT);
+    const { result } = await runGolden(
+      makeInput({ settings: makeSettings({ enableRecursiveReview: true }) }),
+    );
+    expect(result.recursiveReview).toBe(RECURSIVE_REPORT);
+  });
+});
+
 // Deferred coverage (explicitly out of B0.5 scope, per review reconciliation):
 //   - #8 registry-enabled skipped result (isToolRegistryEnabled=true path /
 //     dynamic skipped-result keys from toolRegistry.getAll).

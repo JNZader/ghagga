@@ -30,7 +30,15 @@ export interface FailedStep {
   error: string;
 }
 
-export interface PipelineState {
+/**
+ * Pipeline state WITHOUT `result` — the shape available to phases that
+ * run BEFORE the dispatch creates the `ReviewResult` (prepare,
+ * gather-context, execute). `execute` RETURNS the result; the
+ * orchestrator attaches it via `Object.assign(base, { result })` —
+ * same object, no copy — upgrading the base to a full `PipelineState`
+ * for enrich/finalize. This keeps `result` non-optional downstream.
+ */
+export interface PipelineStateBase {
   // ── Immutable config (set once at construction) ──────────────
   readonly input: ReviewInput;
   readonly startTime: number;
@@ -76,7 +84,8 @@ export interface PipelineState {
   negativeExamplesPrompt: string;
   selfImproveRulesPrompt: string;
 
-  // execute (provider flags also consumed by enrich step 7.6)
+  // execute (provider flags also consumed by enrich step 7.6).
+  // Placeholder-initialized at construction; execute resolves the real values.
   activeProvider: string;
   isCliBridge: boolean;
   isGateway: boolean;
@@ -86,12 +95,17 @@ export interface PipelineState {
   enhancedStaticFindings?: ReviewFinding[];
   enhanceMetadata?: EnhanceMetadata;
 
-  // trust override (execute step 5.6) → effective input mode
+  // trust override (execute step 5.6) → effective input mode.
+  // resolvedInputMode is initialized to `input.mode` (the pre-trust value)
+  // and overwritten by execute once trust scoring resolves.
   trustOverrideMode?: ReviewMode;
   resolvedInputMode: ReviewMode;
 
-  // execute creates it; enrich/finalize mutate it
-  result: ReviewResult;
-
   failedSteps: FailedStep[];
+}
+
+export interface PipelineState extends PipelineStateBase {
+  // execute creates it (returned, then attached by the orchestrator);
+  // enrich/finalize mutate it in-place.
+  result: ReviewResult;
 }
