@@ -109,6 +109,17 @@ export interface RenameMatch {
 export interface EntityDiffOptions {
   /** Minimum body similarity to consider a rename (0.0–1.0). Default: 0.9 */
   similarityThreshold?: number;
+
+  /**
+   * Total LCS dynamic-programming cell budget (n*m per compared pair of
+   * normalized bodies) for one `detectRenames` call. Once exhausted,
+   * remaining pairs are treated as not similar (no rename) instead of
+   * running the O(n*m) DP — bounds CPU on pathological diffs with many
+   * large removed/added bodies. Identity matches and pairs resolved by
+   * the cheap prefilter consume no budget. Default: 200_000_000
+   * (~low single-digit seconds worst case).
+   */
+  lcsDpCellBudget?: number;
 }
 
 // ─── Scoped Context Types ─────────────────────────────────────

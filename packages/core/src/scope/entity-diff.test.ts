@@ -382,6 +382,268 @@ describe('detectRenames', () => {
     expect(renames).toEqual([]);
   });
 
+  // ── CORE-M8: computeSimilarity is now a real LCS ratio ──────
+  // The pre-M8 implementation compared characters at the SAME positions,
+  // so any shift ("Xabcde" vs "abcde") scored near 0. These tests pin the
+  // LCS behavior through detectRenames (computeSimilarity is private).
+
+  it('detects a rename when the body is shifted by a prefix (CORE-M8 LCS)', () => {
+    // Normalized bodies: "return someLongValue; }" vs "Xreturn someLongValue; }".
+    // Positional matching scored ~0 here (every char shifted by one, no
+    // repeated chars to match accidentally) → no rename pre-M8.
+    // Real LCS: 23/24 ≈ 0.958 ≥ 0.9 → rename detected.
+    const oldSource = ['function foo() {', '  return someLongValue;', '}'].join('\n');
+    const newSource = ['function bar() {', '  Xreturn someLongValue;', '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 3)];
+    const added = [makeSymbol('bar', 1, 3)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(1);
+    expect(renames[0]?.oldName).toBe('foo');
+    expect(renames[0]?.newName).toBe('bar');
+    expect(renames[0]?.similarity).toBeGreaterThanOrEqual(0.9);
+    expect(renames[0]?.similarity).toBeLessThan(1);
+  });
+
+  it('reports similarity exactly 1.0 for identical bodies (CORE-M8)', () => {
+    const body = '  const x = compute();\n  return x * 2;';
+    const oldSource = `function foo() {\n${body}\n}`;
+    const newSource = `function bar() {\n${body}\n}`;
+
+    const removed = [makeSymbol('foo', 1, 4)];
+    const added = [makeSymbol('bar', 1, 4)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(1);
+    expect(renames[0]?.similarity).toBe(1);
+  });
+
+  it('does not match bodies with no characters in common (CORE-M8)', () => {
+    // endLine excludes the closing brace so the normalized bodies are
+    // fully disjoint character sets → LCS 0 → similarity 0.
+    const oldSource = ['function foo() {', '  aaaa', '}'].join('\n');
+    const newSource = ['function bar() {', '  zzzz', '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 2)];
+    const added = [makeSymbol('bar', 1, 2)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(0);
+  });
+
+  it('skips symbols whose normalized body is empty (CORE-M8)', () => {
+    // Bodies are comment-only → normalizeBody returns '' → symbol skipped
+    // before similarity is ever computed.
+    const oldSource = ['function foo() {', '  // only a comment', '}'].join('\n');
+    const newSource = ['function bar() {', '  // only a comment', '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 2)];
+    const added = [makeSymbol('bar', 1, 2)];
+
+    const renames = detectRenames(removed, added, oldSource, newSource);
+
+    expect(renames).toHaveLength(0);
+  });
+
+  // ── CORE-M8 fix-forward: cap denominator, prefilter, DP budget ──
+  // The first LCS implementation (1) compared the CAPPED slices for the
+  // identity fast-path and used the CAPPED lengths as denominator, so two
+  // >10k bodies identical only in their first 10k chars scored a false
+  // 1.0; and (2) ran the O(n*m) DP for every removed×added pair with no
+  // bailout (unbounded CPU on pathological diffs). These tests pin the
+  // guards through detectRenames (computeSimilarity stays private).
+
+  describe('capped giant bodies (CORE-M8 fix-forward)', () => {
+    // Normalized body: `return "<11000 a's><2000-char tail>"; }` = 13012
+    // chars. The first 10 000 chars fall inside the shared filler, so the
+    // capped prefixes are identical while the bodies differ past the cap.
+    const filler = 'a'.repeat(11_000);
+    const giantSource = (name: string, tail: string): string =>
+      [`function ${name}() {`, `  return "${filler}${tail}";`, '}'].join('\n');
+    const removed = [makeSymbol('foo', 1, 3)];
+    const added = [makeSymbol('bar', 1, 3)];
+
+    it('does not report a rename for bodies identical only within the capped prefix', () => {
+      const oldSource = giantSource('foo', 'X'.repeat(2000));
+      const newSource = giantSource('bar', 'Y'.repeat(2000));
+
+      // Pre-fix: capped slices compared equal → false similarity 1.0 →
+      // false rename. Now the denominator keeps the ORIGINAL lengths:
+      // similarity ≤ 10000/13012 ≈ 0.769 < 0.9 → no rename.
+      expect(detectRenames(removed, added, oldSource, newSource)).toHaveLength(0);
+    });
+
+    it('caps the similarity of equal capped prefixes at cap/max(original lens), not 1.0', () => {
+      const oldSource = giantSource('foo', 'X'.repeat(2000));
+      const newSource = giantSource('bar', 'Y'.repeat(2000));
+
+      // At a threshold below the capped ratio the pair IS reported — with
+      // the exact capped-identity score LCS(s, t)/max(len(a), len(b)) =
+      // 10000/13012, never 1.0.
+      const renames = detectRenames(removed, added, oldSource, newSource, {
+        similarityThreshold: 0.7,
+      });
+
+      expect(renames).toHaveLength(1);
+      expect(renames[0]?.similarity).toBeCloseTo(10_000 / 13_012, 5);
+      expect(renames[0]?.similarity).toBeLessThan(1);
+    });
+
+    it('still reports exact 1.0 for FULLY identical giant bodies (identity on originals)', () => {
+      // Identity fast-path compares the ORIGINAL strings, before both the
+      // prefilter and the cap — truly identical >10k bodies stay a perfect
+      // rename signal.
+      const oldSource = giantSource('foo', 'Z'.repeat(2000));
+      const newSource = giantSource('bar', 'Z'.repeat(2000));
+
+      const renames = detectRenames(removed, added, oldSource, newSource);
+
+      expect(renames).toHaveLength(1);
+      expect(renames[0]?.similarity).toBe(1);
+    });
+  });
+
+  it('does not cross the threshold for realistic different bodies of similar length', () => {
+    // Normalized lengths 80 vs 77 → length-ratio prefilter bound 0.9625
+    // ≥ 0.9, so the DP itself must reject the pair: LCS = 30 → 30/80 =
+    // 0.375 < 0.9. Guards that LCS permissiveness (shared spaces, parens,
+    // keywords) does not turn unrelated same-size bodies into renames.
+    const oldSource = [
+      'function foo() {',
+      '  const sum = values.reduce((acc, v) => acc + v, 0);',
+      '  return sum / values.length;',
+      '}',
+    ].join('\n');
+    const newSource = [
+      'function bar() {',
+      '  if (!cache.has(key)) { cache.set(key, build(key)); }',
+      '  return cache.get(key);',
+      '}',
+    ].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 4)];
+    const added = [makeSymbol('bar', 1, 4)];
+
+    expect(detectRenames(removed, added, oldSource, newSource)).toHaveLength(0);
+  });
+
+  it('computes the exact LCS ratio for repeated-char reordered bodies (CORE-M8 DP)', () => {
+    // Normalized bodies "aaabbb" vs "bbbaaa": equal lengths, so the
+    // prefilter bound is 1.0 and the real DP runs. LCS by hand: "aaa" or
+    // "bbb" (length 3; no length-4 common subsequence exists since no 'a'
+    // follows a 'b' in the old body and vice versa) → 3/6 = 0.5 exactly.
+    const oldSource = ['function foo() {', '  aaabbb', '}'].join('\n');
+    const newSource = ['function bar() {', '  bbbaaa', '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 2)];
+    const added = [makeSymbol('bar', 1, 2)];
+
+    const atLcs = detectRenames(removed, added, oldSource, newSource, {
+      similarityThreshold: 0.5,
+    });
+    expect(atLcs).toHaveLength(1);
+    expect(atLcs[0]?.similarity).toBe(0.5);
+
+    // Just above the exact LCS ratio → no rename.
+    const aboveLcs = detectRenames(removed, added, oldSource, newSource, {
+      similarityThreshold: 0.51,
+    });
+    expect(aboveLcs).toHaveLength(0);
+  });
+
+  it('rejects strongly asymmetric pairs (prefilter: min/max length below threshold)', () => {
+    // Old body "return x; }" (11 chars) is a PERFECT subsequence of the
+    // new body (212 chars), but LCS ≤ min(len) caps similarity at
+    // 11/212 ≈ 0.05 < 0.9 — the prefilter skips the DP and the verdict is
+    // identical to what the full DP would return: no rename.
+    const oldSource = ['function foo() {', '  return x;', '}'].join('\n');
+    const newSource = ['function bar() {', `  return x; ${'z'.repeat(200)}`, '}'].join('\n');
+
+    const removed = [makeSymbol('foo', 1, 3)];
+    const added = [makeSymbol('bar', 1, 3)];
+
+    expect(detectRenames(removed, added, oldSource, newSource)).toHaveLength(0);
+  });
+
+  describe('DP cell budget (CORE-M8 fix-forward)', () => {
+    it('skips DP pairs once the budget is exhausted (no rename, never unbounded CPU)', () => {
+      // The shifted-prefix pair scores 0.958 via the DP (pinned above) —
+      // but with a zero budget the DP never runs and the pair is treated
+      // as not similar.
+      const oldSource = ['function foo() {', '  return someLongValue;', '}'].join('\n');
+      const newSource = ['function bar() {', '  Xreturn someLongValue;', '}'].join('\n');
+
+      const removed = [makeSymbol('foo', 1, 3)];
+      const added = [makeSymbol('bar', 1, 3)];
+
+      const renames = detectRenames(removed, added, oldSource, newSource, {
+        lcsDpCellBudget: 0,
+      });
+
+      expect(renames).toHaveLength(0);
+    });
+
+    it('still detects identical-body renames with a zero budget (identity costs nothing)', () => {
+      const body = '  const x = compute();\n  return x * 2;';
+      const oldSource = `function foo() {\n${body}\n}`;
+      const newSource = `function bar() {\n${body}\n}`;
+
+      const removed = [makeSymbol('foo', 1, 4)];
+      const added = [makeSymbol('bar', 1, 4)];
+
+      const renames = detectRenames(removed, added, oldSource, newSource, {
+        lcsDpCellBudget: 0,
+      });
+
+      expect(renames).toHaveLength(1);
+      expect(renames[0]?.similarity).toBe(1);
+    });
+
+    it('accumulates DP cells across pairs within one detectRenames call', () => {
+      // Pair 1 (short): 21×21 = 441 cells, similarity 19/21 ≈ 0.905 → match.
+      // Pair 2 (long): 82×82 = 6724 cells, similarity ≈ 0.988 → would match.
+      // Cross pairs are prefiltered for free (21/82 ≈ 0.256 < 0.9).
+      // Budget 1000: pair 1 runs (441 consumed), pair 2 needs 6724 > 559
+      // remaining → skipped.
+      const longLine =
+        '  const value = computeSomething(parameterOne, parameterTwo); return value + offset;';
+      const oldSource = [
+        'function shortOld() {',
+        '  alpha beta gamma one;',
+        '}',
+        'function longOld() {',
+        longLine,
+        '}',
+      ].join('\n');
+      const newSource = [
+        'function shortNew() {',
+        '  alpha beta gamma two;',
+        '}',
+        'function longNew() {',
+        longLine.replace('+ offset', '- offset'),
+        '}',
+      ].join('\n');
+
+      const removed = [makeSymbol('shortOld', 1, 2), makeSymbol('longOld', 4, 5)];
+      const added = [makeSymbol('shortNew', 1, 2), makeSymbol('longNew', 4, 5)];
+
+      // Sanity: with the default budget BOTH pairs are genuine renames.
+      expect(detectRenames(removed, added, oldSource, newSource)).toHaveLength(2);
+
+      const renames = detectRenames(removed, added, oldSource, newSource, {
+        lcsDpCellBudget: 1000,
+      });
+
+      expect(renames).toHaveLength(1);
+      expect(renames[0]?.oldName).toBe('shortOld');
+      expect(renames[0]?.newName).toBe('shortNew');
+    });
+  });
+
   it('matches at most one added symbol per removed symbol', () => {
     const body = '  const x = 1;\n  return x + 2;';
     const oldSource = `function foo() {\n${body}\n}`;

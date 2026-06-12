@@ -174,29 +174,116 @@ function normalizeBody(body: string): string {
 }
 
 /**
- * Compute similarity ratio between two strings (0.0–1.0).
- * Uses a simple longest-common-subsequence ratio approach.
- * Returns 1.0 for identical strings, 0.0 for completely different.
+ * Defensive cap on LCS input size (CORE-M8). Inputs are normalized entity
+ * bodies from a diff, typically well under this. The DP below is O(n*m)
+ * time, so two pathological ~100 KB bodies (e.g. a class spanning a whole
+ * generated file) would cost ~10^10 cell updates. Beyond the cap the DP
+ * compares the first MAX chars of each body only, but the similarity
+ * denominator keeps the ORIGINAL lengths — so two giant bodies identical
+ * only within the capped prefix score at most `cap / max(original lens)`
+ * (e.g. two 15k bodies sharing only their first 10k score ≤ 0.67), never a
+ * false 1.0. Trade-off: similarity living past the cap is invisible to the
+ * DP, so genuinely-similar giant pairs may be under-scored and missed —
+ * degraded detection on pathological inputs, never unbounded CPU.
  */
-function computeSimilarity(a: string, b: string): number {
+const MAX_SIMILARITY_INPUT_LENGTH = 10_000;
+
+/**
+ * Default total LCS DP work budget for one detectRenames call (CORE-M8
+ * fix-forward). detectRenames compares every removed×added pair and each
+ * pair that reaches the DP costs n*m cell updates (n, m ≤ the 10k input
+ * cap, so a single worst-case pair is 10^8 cells ≈ a few hundred ms).
+ * 200M cells keeps the absolute worst case at low single-digit seconds on
+ * commodity hardware while covering thousands of realistic pairs (~2000
+ * pairs of 300×300-char bodies). Trade-off (same spirit as the input cap):
+ * once the budget is exhausted, remaining pairs are reported as
+ * not-similar (no rename) — renames can go undetected on pathological
+ * diffs, CPU is never unbounded. Overridable per call via
+ * `EntityDiffOptions.lcsDpCellBudget`.
+ */
+const DEFAULT_LCS_DP_CELL_BUDGET = 200_000_000;
+
+/** Mutable per-detectRenames-call accumulator of remaining LCS DP work. */
+interface LcsDpBudget {
+  cellsRemaining: number;
+}
+
+/**
+ * Compute similarity ratio between two strings (0.0–1.0) as
+ * `LCS(a, b) / max(len(a), len(b))` — a real longest-common-subsequence
+ * ratio (CORE-M8; the previous implementation claimed LCS but compared
+ * characters at the same positions, so a one-char shift like "Xabcde" vs
+ * "abcde" scored near 0 instead of high).
+ *
+ * Classic two-row dynamic programming: O(n*m) time, O(min(n, m)) memory.
+ * Returns 1.0 for identical strings, 0.0 for completely different.
+ *
+ * Guards, in evaluation order (CORE-M8 fix-forward):
+ * 1. Identity fast-path on the ORIGINAL strings → exact 1.0 (never on the
+ *    capped slices — equal capped prefixes of differing bodies are NOT 1.0).
+ * 2. Free prefilter: LCS(a, b) ≤ min(len(a), len(b), cap), so when that
+ *    bound over `max(len)` is already below `threshold` the pair cannot
+ *    match — skip the O(n*m) DP entirely. Returns 0.0; the caller only
+ *    compares the result against `threshold`, so any sub-threshold value
+ *    is equivalent (reported similarities of accepted matches are exact).
+ * 3. Capped-identity shortcut: equal capped prefixes have LCS exactly
+ *    equal to the capped length — score `cap / max(original lens)` with
+ *    no DP.
+ * 4. DP cell budget: each DP run consumes n*m cells from `budget`; a pair
+ *    that would exceed what remains returns 0.0 (treated as not similar)
+ *    instead of running.
+ */
+function computeSimilarity(a: string, b: string, threshold: number, budget: LcsDpBudget): number {
   if (a === b) return 1.0;
   if (a.length === 0 || b.length === 0) return 0.0;
 
+  // Denominator over ORIGINAL lengths: a post-cap denominator let two >10k
+  // bodies with identical capped prefixes score a false 1.0.
   const maxLen = Math.max(a.length, b.length);
 
-  // For performance, use character-level comparison for short strings
-  // and a simplified ratio for longer ones
-  let matches = 0;
-  const shorter = a.length <= b.length ? a : b;
-  const longer = a.length > b.length ? a : b;
+  const lcsUpperBound = Math.min(a.length, b.length, MAX_SIMILARITY_INPUT_LENGTH);
+  if (lcsUpperBound / maxLen < threshold) return 0.0;
 
-  // Count matching characters at same positions
-  const minLen = shorter.length;
-  for (let i = 0; i < minLen; i++) {
-    if (shorter[i] === longer[i]) matches++;
+  const s = a.length > MAX_SIMILARITY_INPUT_LENGTH ? a.slice(0, MAX_SIMILARITY_INPUT_LENGTH) : a;
+  const t = b.length > MAX_SIMILARITY_INPUT_LENGTH ? b.slice(0, MAX_SIMILARITY_INPUT_LENGTH) : b;
+  if (s === t) return s.length / maxLen;
+
+  const cells = s.length * t.length;
+  if (cells > budget.cellsRemaining) return 0.0;
+  budget.cellsRemaining -= cells;
+
+  return lcsLength(s, t) / maxLen;
+}
+
+/**
+ * Length of the longest common subsequence of two strings.
+ * Two-row DP over the shorter string to keep memory at O(min(n, m)).
+ */
+function lcsLength(a: string, b: string): number {
+  const longer = a.length >= b.length ? a : b;
+  const shorter = a.length >= b.length ? b : a;
+  const cols = shorter.length;
+
+  let prev = new Uint32Array(cols + 1);
+  let curr = new Uint32Array(cols + 1);
+
+  for (let i = 1; i <= longer.length; i++) {
+    const charCode = longer.charCodeAt(i - 1);
+    for (let j = 1; j <= cols; j++) {
+      if (charCode === shorter.charCodeAt(j - 1)) {
+        curr[j] = prev[j - 1] + 1;
+      } else {
+        const fromTop = prev[j];
+        const fromLeft = curr[j - 1];
+        curr[j] = fromTop >= fromLeft ? fromTop : fromLeft;
+      }
+    }
+    const swap = prev;
+    prev = curr;
+    curr = swap;
   }
 
-  return matches / maxLen;
+  return prev[cols];
 }
 
 /**
@@ -218,6 +305,12 @@ export function detectRenames(
   options?: EntityDiffOptions,
 ): RenameMatch[] {
   const threshold = options?.similarityThreshold ?? DEFAULT_SIMILARITY_THRESHOLD;
+  // Shared across ALL removed×added pairs of this call (CORE-M8 fix-forward):
+  // bounds total DP work so a pathological diff (many large bodies) degrades
+  // to missed renames instead of unbounded CPU.
+  const budget: LcsDpBudget = {
+    cellsRemaining: options?.lcsDpCellBudget ?? DEFAULT_LCS_DP_CELL_BUDGET,
+  };
   const renames: RenameMatch[] = [];
   const matchedAdded = new Set<number>();
 
@@ -246,7 +339,7 @@ export function detectRenames(
 
       if (newBody.length === 0) continue;
 
-      const similarity = computeSimilarity(oldBody, newBody);
+      const similarity = computeSimilarity(oldBody, newBody, threshold, budget);
 
       if (similarity >= threshold && (!bestMatch || similarity > bestMatch.similarity)) {
         bestMatch = { index: i, similarity, symbol: added };
