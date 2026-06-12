@@ -15,30 +15,22 @@
  * memory is unavailable, the pipeline continues with what it has.
  */
 
-import { buildCodeIntelSection, buildStackHints } from './agents/prompts.js';
-import { buildChecklistContext, resolveChecklistConfig } from './checklist/index.js';
-import { buildCodeIntelContext } from './code-intel/context.js';
-import type { CodeIntelMetadata, CodeIntelResult } from './code-intel/types.js';
+import { buildStackHints } from './agents/prompts.js';
 import { detectFlood } from './flood/index.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
 import { buildCallChainFromDiff } from './graph/call-chain.js';
 import { buildReverseDependencyMap, findDependents } from './graph/reverse-deps.js';
 import type { BlastRadiusMetadata } from './graph/schema.js';
 import { isGraphStale } from './graph/schema.js';
-import { searchMemoryForContext } from './memory/search.js';
-import { SqliteMemoryStorage } from './memory/sqlite.js';
-import { formatNegativeExamplesPrompt } from './negative.js';
 import { runDegradable } from './pipeline/degrade.js';
 import { enrich } from './pipeline/enrich.js';
 import { execute } from './pipeline/execute.js';
 import { finalize } from './pipeline/finalize.js';
+import { gatherContext } from './pipeline/gather-context.js';
 import { resolveAiEnabled, resolvePrimaryModel } from './pipeline/providers.js';
 import { createSkippedResult } from './pipeline/results.js';
 import type { FailedStep, PipelineState, PipelineStateBase } from './pipeline/state.js';
-import { deriveRules, formatRulesForPrompt, loadFeedback } from './self-improve/index.js';
-import { formatStaticAnalysisContext, runStaticAnalysis } from './tools/runner.js';
-import type { LLMProvider, ReviewInput, ReviewResult } from './types.js';
-import { buildProgressiveContext } from './utils/context-levels.js';
+import type { LLMProvider, ReviewInput, ReviewResult, ToolResult } from './types.js';
 import { filterDiffFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
 import { detectStacks } from './utils/stack-detect.js';
 import { calculateTokenBudget } from './utils/token-budget.js';
@@ -357,169 +349,14 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     message: `Token budget: ${diffBudget.toLocaleString()} tokens for diff, ${contextBudget.toLocaleString()} tokens for context`,
   });
 
-  // ── Step 5: Run static analysis (in parallel with memory) ──
-  // If precomputed results are available (from GitHub Actions runner), use those directly.
-  // Otherwise, run tools locally (CLI/Action modes).
-  emit({
-    step: 'static-analysis',
-    message: input.precomputedStaticAnalysis
-      ? 'Using precomputed static analysis from runner...'
-      : 'Running static analysis & memory search...',
-  });
-  const [staticResult, rawMemoryContext, codeIntelResults] = await Promise.all([
-    input.precomputedStaticAnalysis
-      ? Promise.resolve(input.precomputedStaticAnalysis)
-      : runStaticAnalysisSafe(fileList, input, failedSteps),
-    aiEnabled ? searchMemorySafe(input, fileList, failedSteps) : Promise.resolve(null),
-    queryCodeIntelSafe(input, fileList, emit, failedSteps),
-  ]);
-
-  // ── Step 5.0: Negative examples (optional) ────────────────────
-  // Load dismissed findings for the files in this diff and prepend them
-  // to the memory context so agents suppress known false positives.
-  let negativeExamplesPrompt = '';
-  if (
-    input.features?.negativeExamples !== false &&
-    input.memoryStorage instanceof SqliteMemoryStorage
-  ) {
-    // reportFailure: false is DELIBERATE — negative-examples degrades with a warn
-    // only and never lands in failedSteps (pinned by the golden degradation suite).
-    await runDegradable(
-      { failedSteps, emit },
-      {
-        step: 'negative-examples',
-        warnLabel: '[ghagga] Negative examples load failed (degrading gracefully):',
-        reportFailure: false,
-      },
-      () => {
-        const allNegativeExamples = fileList.flatMap((filePath) =>
-          (input.memoryStorage as SqliteMemoryStorage).getNegativeExamplesForFile(filePath),
-        );
-        // De-duplicate by findingHash
-        const seen = new Set<string>();
-        const uniqueExamples = allNegativeExamples.filter((e) => {
-          if (seen.has(e.findingHash)) return false;
-          seen.add(e.findingHash);
-          return true;
-        });
-        negativeExamplesPrompt = formatNegativeExamplesPrompt(uniqueExamples);
-        if (negativeExamplesPrompt) {
-          emit({
-            step: 'negative-examples',
-            message: `Loaded ${uniqueExamples.length} dismissed finding(s) — injecting suppression context`,
-          });
-        }
-      },
-    );
-  }
-
-  // ── Step 5.0a: Self-improve rules (optional) ─────────────────
-  let selfImproveRulesPrompt = '';
-  if (input.settings.selfImprovePath) {
-    const selfImprovePath = input.settings.selfImprovePath;
-    // reportFailure: false is DELIBERATE — self-improve degrades with a warn only
-    // and never lands in failedSteps (pinned by the golden degradation suite).
-    await runDegradable(
-      { failedSteps, emit },
-      {
-        step: 'self-improve',
-        warnLabel: '[ghagga] Self-improve rules load failed (degrading gracefully):',
-        reportFailure: false,
-      },
-      async () => {
-        const feedback = await loadFeedback(selfImprovePath);
-        if (feedback.length > 0) {
-          const rules = deriveRules(feedback);
-          selfImproveRulesPrompt = formatRulesForPrompt(rules);
-          if (selfImproveRulesPrompt) {
-            emit({
-              step: 'self-improve',
-              message: `Self-improve: loaded ${feedback.length} feedback record(s), derived ${rules.length} rule(s)`,
-            });
-          }
-        }
-      },
-    );
-  }
-
-  // Build full (L2) context first, then choose fidelity level based on budget
-  const fullStaticContext = formatStaticAnalysisContext(staticResult);
-
-  // Prepend self-improve rules + negative examples to memory context
-  const rawMemoryContextWithNegatives =
-    [selfImproveRulesPrompt, negativeExamplesPrompt, rawMemoryContext].filter(Boolean).join('\n') ||
-    null;
-
-  const progressiveContext = buildProgressiveContext({
-    staticResult,
-    memoryContext: rawMemoryContextWithNegatives,
-    stackHints,
-    contextBudget,
-    fullStaticContext,
-  });
-
-  const staticContext = progressiveContext.staticContext;
-  const memoryContext = progressiveContext.memoryContext;
-
-  // ── Step 5.1b: Build code intelligence context (optional) ───
-  const codeIntelContext =
-    codeIntelResults.length > 0
-      ? buildCodeIntelSection(
-          buildCodeIntelContext(codeIntelResults, input.settings.codeIntelMaxTokens),
-        )
-      : '';
-
-  let codeIntelMetadata: CodeIntelMetadata | undefined;
-  if (input.settings.enableCodeIntel) {
-    codeIntelMetadata = {
-      enabled: true,
-      providerAvailable: !!input.codeIntelProvider,
-      filesQueried: fileList.length,
-      filesWithData: codeIntelResults.filter(
-        (r) => r.callers.length > 0 || r.callees.length > 0 || r.imports.length > 0,
-      ).length,
-      queryDurationMs: 0, // Timing captured in queryCodeIntelSafe
-    };
-  }
-
-  {
-    const toolsSummary = Object.entries(staticResult)
-      .map(([name, result]) => `  ${name}: ${result.status} (${result.findings.length} findings)`)
-      .join('\n');
-    const levelDetail = `  context levels: static=${progressiveContext.staticLevel}, memory=${progressiveContext.memoryLevel}`;
-    const codeIntelDetail = codeIntelContext
-      ? `\n  code-intel: ${codeIntelResults.length} file(s) with structural data`
-      : '\n  code-intel: disabled or unavailable';
-    emit({
-      step: 'static-results',
-      message: `Static analysis complete (context: static=${progressiveContext.staticLevel}, memory=${progressiveContext.memoryLevel})`,
-      detail:
-        toolsSummary +
-        (rawMemoryContext ? '\n  memory: loaded' : '\n  memory: disabled') +
-        codeIntelDetail +
-        '\n' +
-        levelDetail,
-    });
-  }
-
-  // ── Step 5.4: Build checklist context (optional) ────────────
-  let checklistContext = '';
-  const resolvedChecklist = resolveChecklistConfig(input.settings.checklist);
-  if (resolvedChecklist) {
-    checklistContext = buildChecklistContext(resolvedChecklist);
-    if (checklistContext) {
-      emit({
-        step: 'checklist',
-        message: `Checklist active: ${resolvedChecklist.dimensions.filter((d) => d.enabled).length} dimensions`,
-      });
-    }
-  }
-
   // ── Phase boundary: populate shared PipelineState (sans result) ──
-  // Locals settled by the steps above migrate into state here. The
-  // execute phase resolves provider flags / enhance / trust onto this
-  // state and RETURNS the ReviewResult it creates; enrich and finalize
-  // then mutate `state.result` in-place.
+  // Locals settled by steps 1–4 migrate into state here. The
+  // gather-context phase overwrites the gather-owned placeholders below
+  // UNCONDITIONALLY before any consumer reads them; the execute phase
+  // resolves provider flags / enhance / trust onto this state and
+  // RETURNS the ReviewResult it creates; enrich and finalize then
+  // mutate `state.result` in-place.
+  const pendingTool = (): ToolResult => ({ status: 'skipped', findings: [], executionTimeMs: 0 });
   const base: PipelineStateBase = {
     input,
     startTime,
@@ -536,17 +373,18 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     truncatedDiff,
     diffBudget,
     contextBudget,
-    staticResult,
-    rawMemoryContext,
-    codeIntelResults,
-    codeIntelMetadata,
-    staticContext,
-    memoryContext,
-    codeIntelContext,
-    checklistContext,
-    resolvedChecklist,
-    negativeExamplesPrompt,
-    selfImproveRulesPrompt,
+    // Gathered by the gather-context phase (placeholders until then —
+    // never read pre-gather):
+    staticResult: { semgrep: pendingTool(), trivy: pendingTool(), cpd: pendingTool() },
+    rawMemoryContext: null,
+    codeIntelResults: [],
+    staticContext: '',
+    memoryContext: null,
+    codeIntelContext: '',
+    checklistContext: '',
+    resolvedChecklist: null,
+    negativeExamplesPrompt: '',
+    selfImproveRulesPrompt: '',
     // Resolved by the execute phase (placeholders until then):
     activeProvider: '',
     isCliBridge: false,
@@ -555,6 +393,9 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
     resolvedInputMode: input.mode, // pre-trust value; execute overwrites
     failedSteps,
   };
+
+  // ── Steps 5 → 5.4: gather context (trio ∥ + prompts + checklist) ──
+  await gatherContext(base);
 
   // ── Steps 5.5 → 6: execute (enhance compute + trust + dispatch) ──
   const result = await execute(base);
@@ -571,160 +412,4 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   await finalize(state);
 
   return state.result;
-}
-
-// ─── Helpers ────────────────────────────────────────────────────
-
-/**
- * Run static analysis with graceful degradation.
- * Returns a result with all tools skipped if anything goes wrong.
- */
-async function runStaticAnalysisSafe(
-  fileList: string[],
-  input: ReviewInput,
-  failedSteps: { step: string; error: string }[],
-) {
-  try {
-    // Build a file map for static analysis (paths only, content from diff)
-    const files = new Map<string, string>();
-    for (const path of fileList) {
-      files.set(path, ''); // Content is extracted from diff by the tool runner
-    }
-
-    return await runStaticAnalysis(files, '.', {
-      enableSemgrep: input.settings.enableSemgrep,
-      enableTrivy: input.settings.enableTrivy,
-      enableCpd: input.settings.enableCpd,
-      customRules: input.settings.customRules,
-      enabledTools: input.settings.enabledTools,
-      disabledTools: input.settings.disabledTools,
-    });
-  } catch (error) {
-    console.warn(
-      '[ghagga] Static analysis failed (degrading gracefully):',
-      error instanceof Error ? error.message : String(error),
-    );
-    failedSteps.push({
-      step: 'static-analysis',
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    const errorResult = {
-      status: 'error' as const,
-      findings: [],
-      error: error instanceof Error ? error.message : String(error),
-      executionTimeMs: 0,
-    };
-
-    return {
-      semgrep: errorResult,
-      trivy: errorResult,
-      cpd: errorResult,
-    };
-  }
-}
-
-/**
- * Search memory with graceful degradation.
- * Returns null if memory is disabled or unavailable.
- */
-async function searchMemorySafe(
-  input: ReviewInput,
-  fileList: string[],
-  failedSteps: { step: string; error: string }[],
-): Promise<string | null> {
-  if (!input.settings.enableMemory || !input.memoryStorage || !input.context) {
-    return null;
-  }
-
-  try {
-    return await searchMemoryForContext(input.memoryStorage, input.context.repoFullName, fileList);
-  } catch (error) {
-    console.warn(
-      '[ghagga] Memory search failed (degrading gracefully):',
-      error instanceof Error ? error.message : String(error),
-    );
-    failedSteps.push({
-      step: 'memory-search',
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
-}
-
-/**
- * Query the code intelligence provider for structural context.
- * Returns an empty array when disabled, unavailable, or on error.
- */
-async function queryCodeIntelSafe(
-  input: ReviewInput,
-  fileList: string[],
-  emit: (event: import('./types.js').ProgressEvent) => void,
-  failedSteps: { step: string; error: string }[],
-): Promise<CodeIntelResult[]> {
-  if (!input.settings.enableCodeIntel || !input.codeIntelProvider) {
-    return [];
-  }
-
-  const startTime = Date.now();
-  emit({
-    step: 'code-intel',
-    message: `Querying code intelligence for ${fileList.length} file(s)...`,
-  });
-
-  try {
-    const results: CodeIntelResult[] = [];
-    const provider = input.codeIntelProvider;
-
-    // Query each changed file for structural data (parallel)
-    const queries = fileList.map(async (file) => {
-      const [imports, exports] = await Promise.all([
-        provider.getFileImports(file),
-        provider.getFileExports(file),
-      ]);
-
-      // Query callers/callees for each exported symbol
-      const callerResults = await Promise.all(
-        exports.slice(0, 10).map((sym) => provider.getCallers(sym, file)),
-      );
-      const calleeResults = await Promise.all(
-        exports.slice(0, 10).map((sym) => provider.getCallees(sym, file)),
-      );
-
-      const callers = callerResults.flat();
-      const callees = calleeResults.flat();
-
-      return { file, callers, callees, imports, exports };
-    });
-
-    const settled = await Promise.allSettled(queries);
-    for (const outcome of settled) {
-      if (outcome.status === 'fulfilled') {
-        results.push(outcome.value);
-      }
-    }
-
-    const durationMs = Date.now() - startTime;
-    const withData = results.filter(
-      (r) => r.callers.length > 0 || r.callees.length > 0 || r.imports.length > 0,
-    ).length;
-
-    emit({
-      step: 'code-intel',
-      message: `Code intelligence: ${withData}/${results.length} files with structural data (${durationMs}ms)`,
-    });
-
-    return results;
-  } catch (error) {
-    console.warn(
-      '[ghagga] Code intelligence query failed (degrading gracefully):',
-      error instanceof Error ? error.message : String(error),
-    );
-    failedSteps.push({
-      step: 'code-intel',
-      error: error instanceof Error ? error.message : String(error),
-    });
-    emit({ step: 'code-intel', message: 'Code intelligence: failed — continuing without' });
-    return [];
-  }
 }

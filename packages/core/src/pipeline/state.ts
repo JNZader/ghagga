@@ -71,7 +71,10 @@ export interface PipelineStateBase {
   diffBudget: number;
   contextBudget: number;
 
-  // gather-context
+  // gather-context (steps 5 → 5.4).
+  // Placeholder-initialized at construction; gatherContext overwrites them
+  // UNCONDITIONALLY (the trio always resolves all three) before any
+  // downstream consumer runs. Never read these pre-gather.
   staticResult: StaticAnalysisResult;
   rawMemoryContext: string | null;
   codeIntelResults: CodeIntelResult[];

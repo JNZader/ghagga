@@ -1438,6 +1438,61 @@ describe('identity: result object is threaded, never cloned (B4)', () => {
   });
 });
 
+// ─── Trio parallelism (B5) ──────────────────────────────────────
+// R-orden: the step-5 trio (static analysis ∥ memory search ∥ code-intel)
+// MUST stay a single Promise.all — all three start before any resolves.
+// Each leg records its start and then awaits a shared gate that only opens
+// after the assertion; if the trio were sequentialized, the first leg
+// would block the others from starting and vi.waitFor would time out.
+
+describe('ordering: step-5 trio runs in one Promise.all (B5)', () => {
+  it('static-analysis, memory-search and code-intel all start before any resolves', async () => {
+    const started: string[] = [];
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    (runStaticAnalysis as M<typeof runStaticAnalysis>).mockImplementationOnce(async () => {
+      started.push('static-analysis');
+      await gate;
+      return SKIPPED_STATIC();
+    });
+    (searchMemoryForContext as M<typeof searchMemoryForContext>).mockImplementationOnce(
+      async () => {
+        started.push('memory-search');
+        await gate;
+        return 'Past review: watch the parser.';
+      },
+    );
+    const gatedProvider: CodeIntelProvider = {
+      ...makeCodeIntelProvider(),
+      getFileImports: async () => {
+        started.push('code-intel');
+        await gate;
+        return ['./utils.js'];
+      },
+    };
+
+    const resultPromise = reviewPipeline(
+      makeInput({
+        memoryStorage: {} as unknown as NonNullable<ReviewInput['memoryStorage']>,
+        settings: makeSettings({ enableMemory: true, enableCodeIntel: true }),
+        codeIntelProvider: gatedProvider,
+      }),
+    );
+
+    try {
+      await vi.waitFor(() => expect(started).toHaveLength(3));
+      // All three in-flight simultaneously — none has resolved (gate closed).
+      expect(new Set(started)).toEqual(new Set(['static-analysis', 'memory-search', 'code-intel']));
+    } finally {
+      release();
+    }
+    await resultPromise;
+  });
+});
+
 // Deferred coverage (explicitly out of B0.5 scope, per review reconciliation):
 //   - #8 registry-enabled skipped result (isToolRegistryEnabled=true path /
 //     dynamic skipped-result keys from toolRegistry.getAll).
