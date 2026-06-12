@@ -84,12 +84,23 @@ export function extractPatches(findings: ReviewFinding[]): SuggestionPatch[] {
  *   keep winning for parity.
  * - Patches without a `line` never match the counter and are silently
  *   dropped (golden pins this).
- * Known narrowing vs the historical loose regexes, documented per design:
- * a partial hunk header (e.g. `@@ -1,2 +3` cut mid-line) no longer resets
- * the counter, and a hand-crafted `diff --git a/old-with b/inside "b/x"`
- * mixed-quoted header is treated as quoted (no boundary) instead of
- * matching the historical greedy capture. Neither form occurs in git or
- * `truncateDiff` output (it cuts at line boundaries).
+ * Behavior-parity scope (the precise claim — NOT an unqualified "zero
+ * behavior change"): output is identical to the legacy walker for every
+ * REACHABLE input — real `git diff` output, GitHub API
+ * (`application/vnd.github.v3.diff`) responses, and `truncateDiff` output
+ * (its dominant branch discards the partial line and appends the
+ * truncation marker, so it cannot emit a cut-mid-line header — verified).
+ * Known divergences are SYNTHETIC-ONLY (malformed, hand-crafted input),
+ * documented per design and pinned old-vs-new in
+ * diff/__tests__/parity-apply-virtual-patches.test.ts:
+ * - loose-hunk-header: `@@ -1,2 +100` without the trailing ` @@` — the
+ *   historical loose regex reset the counter (to 99, so a patch at line
+ *   100 applied); the strict parser ignores the line (patch never applies).
+ * - mixed-quoted-malformed: `diff --git a/old-with b/inside "b/x"` — the
+ *   historical greedy capture made `inside "b/x"` a file boundary; the new
+ *   parser treats the header as quoted (no boundary, patch never applies).
+ * - partial-@@-mid-line: `@@ -1,2 +3` cut mid-line — same loose-regex
+ *   counter reset as loose-hunk-header, only producible by a mid-line cut.
  *
  * @param originalDiff - The original unified diff string
  * @param patches - Suggestion patches to apply
@@ -157,9 +168,16 @@ export function applyVirtualPatches(originalDiff: string, patches: SuggestionPat
       lineCounter = 0;
     }
 
-    // Hunk headers reset the counter to the new-side start. Every line that
-    // parses as a hunk header appears in rawLines verbatim and in order, so
-    // an index pointer + string equality identifies them without re-parsing.
+    // Hunk headers reset the counter to the new-side start.
+    //
+    // Invariant behind the index-pointer + string-equality scan: each
+    // hunk.header appears exactly once in rawLines, in hunks[] order — the
+    // parser pushes the header line into BOTH arrays in the same pass, and
+    // any rawLine matching the hunk-header grammar is registered as a hunk.
+    // Hunk body lines always carry a `+`/`-`/space/`\` prefix, so they are
+    // never string-equal to a header (which starts with `@`). Even duplicate
+    // IDENTICAL headers stay correct: the pointer pairs the i-th rawLines
+    // occurrence with hunks[i].
     let nextHunk = 0;
     for (const line of file.rawLines) {
       const hunk = file.hunks[nextHunk];
