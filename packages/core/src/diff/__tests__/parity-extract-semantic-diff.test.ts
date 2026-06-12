@@ -312,6 +312,97 @@ describe('parity on inputs without any diff --git header (legacy pseudo-section)
   });
 });
 
+// ─── Documented deltas vs the historical splitter (pinned old-vs-new) ──
+
+describe('CORE-M6 umbrella — quoted headers now resolve a real filePath', () => {
+  // Historically the quoted section EXISTED (the splitter fires on any line
+  // starting with `diff --git `) but its path never matched the legacy tail
+  // regex → declarations were attributed to 'unknown'. The unified model
+  // parses and unescapes the quoted header (CORE-M6, changelog: minor).
+  const QUOTED_WITH_DECL = [
+    'diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"',
+    'index 49de013..11c4483 100644',
+    '--- "a/caf\\303\\251.ts"',
+    '+++ "b/caf\\303\\251.ts"',
+    '@@ -1,2 +1,2 @@',
+    ' contexto',
+    '+export function dentroDeQuoted() {',
+  ].join('\n');
+
+  it('baseline attributed the declaration to unknown; live resolves café.ts', () => {
+    const baseline = baselineExtractSemanticDiff(QUOTED_WITH_DECL);
+    const live = extractSemanticDiff(QUOTED_WITH_DECL);
+
+    expect(baseline.changes).toEqual([
+      expect.objectContaining({
+        kind: 'function_added',
+        name: 'dentroDeQuoted',
+        filePath: 'unknown',
+      }),
+    ]);
+    expect(live.changes).toEqual([
+      expect.objectContaining({
+        kind: 'function_added',
+        name: 'dentroDeQuoted',
+        filePath: 'café.ts',
+      }),
+    ]);
+    // Everything except the filePath is identical.
+    expect(live.summary).toBe(baseline.summary);
+  });
+});
+
+describe('KNOWN synthetic-only divergences: malformed header boundaries (pinned)', () => {
+  it('mixed-quoted malformed header: legacy greedy capture vs model b-side', () => {
+    // Same header shape as adv-mixed-quoted-malformed.diff, plus a
+    // declaration so the filePath delta becomes observable. The legacy tail
+    // regex greedily captured `inside "b/x"`; the model parses the
+    // quoted-new form and resolves `x`. Hand-crafted only — git never emits
+    // a path containing an unquoted ` b/` alongside a quoted b-side.
+    const raw = [
+      'diff --git a/old-with b/inside "b/x"',
+      'index 3333333..4444444 100644',
+      '--- a/old-with',
+      '+++ "b/x"',
+      '@@ -1,2 +1,2 @@',
+      ' uno',
+      '+export function enMalformado() {',
+    ].join('\n');
+
+    expect(baselineExtractSemanticDiff(raw).changes).toEqual([
+      expect.objectContaining({ name: 'enMalformado', filePath: 'inside "b/x"' }),
+    ]);
+    expect(extractSemanticDiff(raw).changes).toEqual([
+      expect.objectContaining({ name: 'enMalformado', filePath: 'x' }),
+    ]);
+  });
+
+  it('garbage `diff --git` line mid-diff: legacy opened a new section, model keeps the previous file', () => {
+    // The legacy splitter fired on ANY line starting with `diff --git `;
+    // the unified model only opens a file for parseable headers, so the
+    // declaration after the garbage line stays attributed to real.ts.
+    // Unreachable in git/GitHub/truncateDiff output (truncateDiff cuts on
+    // whole lines and appends its marker; only the FINAL header can be cut,
+    // which produces no following declarations — see c12).
+    const raw = [
+      'diff --git a/real.ts b/real.ts',
+      '--- a/real.ts',
+      '+++ b/real.ts',
+      '@@ -1,1 +1,2 @@',
+      ' ctx',
+      'diff --git esto-no-es-un-header',
+      '+export function huerfana() {',
+    ].join('\n');
+
+    expect(baselineExtractSemanticDiff(raw).changes).toEqual([
+      expect.objectContaining({ name: 'huerfana', filePath: 'unknown' }),
+    ]);
+    expect(extractSemanticDiff(raw).changes).toEqual([
+      expect.objectContaining({ name: 'huerfana', filePath: 'real.ts' }),
+    ]);
+  });
+});
+
 describe('gate 7.1 aggregate (non-vacuous)', () => {
   it('the corpus produces a meaningful number of entity changes', () => {
     let total = 0;
