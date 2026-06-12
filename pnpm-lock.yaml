@@ -179,6 +179,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@ghagga/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@hono/node-server':
         specifier: ^2.0.3
         version: 2.0.4(hono@4.12.21)

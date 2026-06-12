@@ -99,7 +99,7 @@ function ReviewDetail({ review, onClose }: { review: Review; onClose: () => void
                 <tbody>
                   {review.findings.map((finding: Finding) => (
                     <tr
-                      key={`${finding.file}-${finding.line}-${finding.category}`}
+                      key={`${finding.file}-${finding.line ?? 'file'}-${finding.category}`}
                       className="border-b border-surface-border/50"
                     >
                       <td className="py-2.5 pr-4">
@@ -107,7 +107,7 @@ function ReviewDetail({ review, onClose }: { review: Review; onClose: () => void
                       </td>
                       <td className="py-2.5 pr-4 text-text-secondary">{finding.category}</td>
                       <td className="py-2.5 pr-4 font-mono text-xs text-primary-400">
-                        {finding.file}:{finding.line}
+                        {finding.line != null ? `${finding.file}:${finding.line}` : finding.file}
                       </td>
                       <td className="py-2.5 pr-4 text-text-primary">{finding.message}</td>
                       <td className="py-2.5 text-text-secondary">{finding.suggestion || '—'}</td>
