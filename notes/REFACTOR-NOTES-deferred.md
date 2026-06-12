@@ -55,7 +55,9 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 > - **CORE-M6 CERRADO**: paths quoted parsean + unescape octal/C-style (changelog, semver minor).
 > - **CORE-M9 CERRADO**: deletions atribuidas por posición new-side viva (changelog; flippeó
 >   exactamente 2 snapshots del corpus: c07 y c15, gateado dual-baseline).
-> - **Off-by-N del recursive CONGELADO AS-IS** (spec R7, golden 2-iteraciones) — ticket abajo.
+> - **Off-by-N del recursive RESUELTO** (SDD recursive-coordinate-contract, 2026-06-12 — reemplaza
+>   el "congelado AS-IS" del Refactor 1): Design B (renumber de headers) + tracking out-of-band.
+>   Ver ticket abajo.
 > - Paridad byte-exacta de `DiffFile.content` verificada (Buffer.equals) → cero cambio en
 >   prompts LLM.
 >
@@ -190,14 +192,30 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   `core/src/index.ts`, ningún caller real. El bug de precedencia vivió meses sin detectarse por eso.
   Decidir: wirearlo al pipeline o marcarlo experimental. *(Update 2026-06-12: ya está anotado
   `@experimental` en el código desde el SDD unify-diff-parsers; la decisión de wirearlo sigue abierta.)*
-- **Off-by-N del recursive en iteración 2+** (del SDD unify-diff-parsers, spec R7 — congelado, NO
-  arreglado): las líneas `+[SUGGESTED FIX]` inyectadas en la iteración 1 corren el counter target-side
-  cuando `recursive/index.ts:155` re-parsea el diff sintético, así que los patches de la iteración 2
-  aterrizan N líneas más abajo (N = patches previos aplicados arriba). Evidencia ejecutable: el golden
-  `src/diff/__tests__/recursive-golden.test.ts` pinnea las coordenadas corridas (alpha7 cae tras
-  alpha6; beta31 cae tras el marker de round 1) y `parity-apply-virtual-patches.test.ts` congela el
-  walker completo. Arreglarlo = cambio de comportamiento del re-review recursivo → SDD/ticket propio,
-  actualizando ambos harnesses A CONCIENCIA (hoy fallan ante cualquier "mejora" accidental).
+- **Off-by-N del recursive en iteración 2+ — RESUELTO 2026-06-12** (SDD recursive-coordinate-contract;
+  reemplaza la nota "congelado AS-IS" del Refactor 1/spec R7). El problema: las líneas `+[SUGGESTED FIX]`
+  inyectadas en iter1 corrían el counter target-side cuando `recursive/index.ts` re-parsea el diff
+  sintético, así que los patches de iter2 aterrizaban N líneas abajo (N = markers inyectados arriba en
+  el mismo hunk) — y peor, el N dependía de si el LLM numeraba por headers `@@` (interp A) o por líneas
+  físicas (interp B), o sea NO determinista.
+  **Approach (Design B — robusto-a-ambas)**: `applyVirtualPatches` ahora emite un unified diff VÁLIDO —
+  al inyectar un marker renumera el header del hunk afectado (`newCount += markers-in-hunk`) y corre el
+  `newStart` de cada hunk posterior del mismo archivo por los markers inyectados arriba. Así el `@@ +N`
+  declarado dice la verdad: posición física == `@@ +N` == línea real == lo que reporta cualquier LLM
+  sano. Interp A y B convergen en la MISMA línea (gateado por el contract test
+  `recursive/coordinate-contract.test.ts`, que corre el loop completo iter1→iter2 con un mock que
+  parsea el `patchedDiff` real). Identidad del marker trackeada OUT-OF-BAND vía
+  `VirtualPatchResult.injectedLineIndices` (índices grabados en el sitio de inyección), nunca por
+  scan del prefijo `[SUGGESTED FIX]` → inmune a colisión con líneas de código que empiecen así.
+  **Re-bless a conciencia**: `c16.diff` regenerado como output Design-B (6 headers renumerados);
+  `recursive-golden.test.ts.snap` re-blessado (iter2 alpha7 ahora cae TRAS alpha7, no tras alpha6);
+  `parity-apply-virtual-patches.test.ts` levanta la igualdad legacy SOLO en el path de markers
+  (`assertMarkerPathDivergence`: divergencia confinada a headers `@@`; no-op/miss/malformed siguen
+  pinneados byte-exactos). `RecursiveReviewReport` público SIN cambios.
+  Bug de paridad cazado durante el reconcile: el branch de header de la Fase 2-4 hacía `continue`
+  saltándose el patch-match post-header → perdía la inyección legacy en `line === newStart-1`.
+  Restaurado con helper `injectAfter()` + `countMarkersInHunk` ahora presupuesta el match en posición
+  de header. Verificado: markers aterrizan idénticos al legacy en TODAS las fixtures.
 - **CORE-M8 `computeSimilarity`** (`scope/entity-diff.ts:168-187` pre-refactor; hoy en el mismo
   archivo): dice LCS pero compara char por posición. Quedó EXPLÍCITAMENTE fuera de scope del SDD
   unify-diff-parsers (es lógica de similarity, no de parsing). Sigue pendiente.

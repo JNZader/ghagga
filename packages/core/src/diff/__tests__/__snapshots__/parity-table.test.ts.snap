@@ -4,7 +4,7 @@ exports[`cross-consumer parity table (generated report) > matches the pinned tab
 "
 | fixture                    | parseDiffFiles | hunks | entity | patches | semantic | Δ                                                           |
 | -------------------------- | -------------- | ----- | ------ | ------- | -------- | ----------------------------------------------------------- |
-| c01                        | 3f +6/-6       | 6h    | 12L    | 3p      | 6c       | —                                                           |
+| c01                        | 3f +6/-6       | 6h    | 12L    | 3p      | 6c       | R7-marker-renumber(applyVirtualPatches)                     |
 | c02                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
 | c03                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | M6(parseDiffFiles)                                          |
 | c04                        | 2f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
@@ -14,12 +14,12 @@ exports[`cross-consumer parity table (generated report) > matches the pinned tab
 | c08                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
 | c09                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
 | c10                        | 1f +0/-0       | 0h    | 0L     | 0p      | 0c       | —                                                           |
-| c11                        | 2f +3/-3       | 3h    | 6L     | 1p      | 3c       | —                                                           |
-| c12                        | 2f +4/-4       | 4h    | 8L     | 2p      | 4c       | —                                                           |
+| c11                        | 2f +3/-3       | 3h    | 6L     | 1p      | 3c       | R7-marker-renumber(applyVirtualPatches)                     |
+| c12                        | 2f +4/-4       | 4h    | 8L     | 2p      | 4c       | R7-marker-renumber(applyVirtualPatches)                     |
 | c13                        | 0f +0/-0       | 0h    | 0L     | 0p      | 0c       | —                                                           |
 | c14                        | 0f +0/-0       | 0h    | 0L     | 0p      | 0c       | —                                                           |
 | c15                        | 1f +3/-1       | 2h    | 4L     | 0p      | 0c       | M9(extractEntityDiffLines)                                  |
-| c16                        | 3f +9/-6       | 6h    | 15L    | 3p      | 6c       | —                                                           |
+| c16                        | 3f +9/-6       | 6h    | 15L    | 3p      | 6c       | R7-marker-renumber(applyVirtualPatches)                     |
 | adv-empty-line-mid-hunk    | 1f +3/-3       | 2h    | 6L     | 0p      | 0c       | —                                                           |
 | adv-header-b-mismatch      | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | M6-path-auth(parseDiffFiles)                                |
 | adv-loose-hunk-header      | 1f +1/-0       | 0h    | 0L     | 0p      | 0c       | R7-walker(applyVirtualPatches)                              |

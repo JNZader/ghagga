@@ -287,6 +287,7 @@ export type {
   ReReviewInput,
   ReReviewResult,
   SuggestionPatch,
+  VirtualPatchResult,
 } from './recursive/index.js';
 export {
   applyVirtualPatches,
