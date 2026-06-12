@@ -11,11 +11,29 @@
  * inputs without any `diff --git` header (the historical splitter kept
  * pre-header content as a pseudo-section and scanned its +/- lines).
  *
- * Expected divergences vs the baseline: NONE on any fixture (no fixture
- * carries declaration lines inside quoted/malformed sections). The
- * documented delta classes (quoted headers resolving to a real path under
- * the CORE-M6 umbrella, and synthetic-only malformed-header boundaries)
- * are pinned explicitly when the adapter lands (Phase 7 task 7.2).
+ * Expected divergences vs the baseline:
+ *   - filePath deltas: quoted headers resolving to a real path under the
+ *     CORE-M6 umbrella, and synthetic-only malformed-header boundaries —
+ *     pinned explicitly below (Phase 7 task 7.2).
+ *   - summary-kinds fix (deliberate, post-freeze): the baseline reproduces
+ *     two historical bugs that the live implementation has since fixed:
+ *       (A) buildSummary passed `import_added`/`export_added` as the
+ *           group's modifiedKind (the `*_modified` members did not exist),
+ *           so every added import/export was ALSO counted as modified; and
+ *           modified imports/exports (name on both +/- sides) fell into the
+ *           false branch of a two-way ternary → `import_removed`/
+ *           `export_removed`.
+ *       (B) mapToChangeKind returned `function_modified` for modified
+ *           classes (no `class_modified` member), and buildSummary used
+ *           `function_modified` as the class group's modifiedKind, so every
+ *           modified FUNCTION was also counted as "N class modified".
+ *     The divergence is CONFINED by `assertConfinedDivergence`: change sets
+ *     are identical except for the three pinned kind rewrites
+ *     (function_modified→class_modified for classes, import_removed→
+ *     import_modified, export_removed→export_modified), and the summary may
+ *     differ from the baseline only when one of the affected kinds is
+ *     present — in which case it must equal the frozen FIXED summary
+ *     expectation (`fixedBuildSummary`). Everything else stays byte-equal.
  */
 
 import { readFileSync } from 'node:fs';
@@ -268,12 +286,175 @@ function baselineExtractSemanticDiff(unifiedDiff: string): SemanticDiff {
   return { changes, summary: baselineBuildSummary(changes) };
 }
 
+// ─── Confined-divergence harness (summary-kinds fix) ────────────
+//
+// Precedent: `assertMarkerPathDivergence` in parity-apply-virtual-patches
+// — scope the legacy equality to what did NOT change and pin the expected
+// divergence explicitly, instead of deleting the harness.
+
+/**
+ * The ONLY kind rewrites the live implementation may produce relative to
+ * the frozen baseline (baselineKind → liveKind):
+ *  - modified class:  baseline collapsed to function_modified (no
+ *    class_modified member existed) → live class_modified;
+ *  - modified import: baseline fell into the false ternary branch →
+ *    import_removed → live import_modified;
+ *  - modified export: same shape → export_removed → live export_modified.
+ */
+const ALLOWED_KIND_DIVERGENCE: ReadonlyArray<readonly [EntityChangeKind, EntityChangeKind]> = [
+  ['function_modified', 'class_modified'],
+  ['import_removed', 'import_modified'],
+  ['export_removed', 'export_modified'],
+];
+
+/**
+ * Kinds whose presence changed the SUMMARY under the historical bugs even
+ * when every per-change kind is identical: the baseline double-counted
+ * added imports/exports as "modified" (modifiedKind = addedKind) and
+ * cross-counted every function_modified as "N class modified".
+ */
+const SUMMARY_AFFECTED_KINDS: ReadonlySet<EntityChangeKind> = new Set([
+  'function_modified',
+  'class_modified',
+  'import_added',
+  'import_modified',
+  'export_added',
+  'export_modified',
+]);
+
+/**
+ * FROZEN EXPECTED summary for the live implementation — a verbatim copy of
+ * the FIXED buildSummary (semantic-diff/index.ts post summary-kinds fix),
+ * mirroring how `baselineBuildSummary` freezes the historical one. DO NOT
+ * sync with future impl changes without re-pinning.
+ */
+function fixedBuildSummary(changes: EntityChange[]): string {
+  const counts: Partial<Record<EntityChangeKind, number>> = {};
+  for (const c of changes) {
+    counts[c.kind] = (counts[c.kind] ?? 0) + 1;
+  }
+
+  const parts: string[] = [];
+
+  const groupSummary = (
+    addedKind: EntityChangeKind,
+    removedKind: EntityChangeKind,
+    modifiedKind: EntityChangeKind,
+    label: string,
+  ) => {
+    const added = counts[addedKind] ?? 0;
+    const removed = counts[removedKind] ?? 0;
+    const modified = counts[modifiedKind] ?? 0;
+    if (added) parts.push(`${added} ${label} added`);
+    if (removed) parts.push(`${removed} ${label} removed`);
+    if (modified) parts.push(`${modified} ${label} modified`);
+  };
+
+  groupSummary('function_added', 'function_removed', 'function_modified', 'function');
+  groupSummary('class_added', 'class_removed', 'class_modified', 'class');
+  groupSummary('method_added', 'method_removed', 'method_modified', 'method');
+  groupSummary('import_added', 'import_removed', 'import_modified', 'import');
+  groupSummary('export_added', 'export_removed', 'export_modified', 'export');
+  groupSummary('type_added', 'type_removed', 'type_modified', 'type');
+
+  if (parts.length === 0) return 'no entity-level changes detected';
+  return parts.join(', ');
+}
+
+/**
+ * Live output may diverge from the frozen baseline ONLY on the
+ * summary-kinds surface:
+ *  1. change sets are identical (names, filePaths, signatures, ORDER,
+ *     length) once `kind` is masked;
+ *  2. every kind mismatch is one of the three pinned rewrites;
+ *  3. the summary is byte-equal to the baseline's unless an affected kind
+ *     is present — then it must equal the frozen FIXED expectation.
+ * No other behavior can drift under cover of the documented divergence.
+ */
+function assertConfinedDivergence(live: SemanticDiff, baseline: SemanticDiff): void {
+  const maskKind = (c: EntityChange) => ({ ...c, kind: 'MASKED' as const });
+  expect(live.changes.map(maskKind)).toEqual(baseline.changes.map(maskKind));
+
+  let kindDiverged = false;
+  for (let i = 0; i < baseline.changes.length; i++) {
+    const baselineChange = baseline.changes[i];
+    const liveChange = live.changes[i];
+    if (!baselineChange || !liveChange) continue; // lengths pinned equal above
+    if (liveChange.kind !== baselineChange.kind) {
+      kindDiverged = true;
+      expect(
+        ALLOWED_KIND_DIVERGENCE.some(
+          ([from, to]) => from === baselineChange.kind && to === liveChange.kind,
+        ),
+        `change ${i} (${baselineChange.name}): kind diverged ${baselineChange.kind} → ${liveChange.kind} outside the pinned pairs`,
+      ).toBe(true);
+
+      // Structural evidence (3vr cross-engine fix-forward): membership in the
+      // allowlist is not enough — the change must CARRY the evidence that it
+      // is a genuine modification, not a pure removed relabeled by drift.
+      //
+      //  - import/export: the baseline's modified path is the only one that
+      //    sets BOTH signatures (a pure *_removed has oldSignature only), so
+      //    a real *_removed→*_modified rewrite must have both present.
+      //  - class: the `class` decl kind is assigned exclusively by the
+      //    pattern /class\s+(\w+)/, so both signatures of a genuinely
+      //    modified class contain `class <Name>` (fixture evidence:
+      //    'export class Foo {' → 'export class Foo extends Base {').
+      if (
+        (baselineChange.kind === 'import_removed' && liveChange.kind === 'import_modified') ||
+        (baselineChange.kind === 'export_removed' && liveChange.kind === 'export_modified')
+      ) {
+        expect(
+          liveChange.oldSignature,
+          `change ${i} (${baselineChange.name}): ${liveChange.kind} without oldSignature — not a real modification`,
+        ).toBeTruthy();
+        expect(
+          liveChange.newSignature,
+          `change ${i} (${baselineChange.name}): ${liveChange.kind} without newSignature — not a real modification`,
+        ).toBeTruthy();
+      } else if (
+        baselineChange.kind === 'function_modified' &&
+        liveChange.kind === 'class_modified'
+      ) {
+        expect(
+          liveChange.oldSignature,
+          `change ${i} (${baselineChange.name}): class_modified oldSignature lacks a class declaration`,
+        ).toMatch(/\bclass\s+\w+/);
+        expect(
+          liveChange.newSignature,
+          `change ${i} (${baselineChange.name}): class_modified newSignature lacks a class declaration`,
+        ).toMatch(/\bclass\s+\w+/);
+      }
+    }
+  }
+
+  const summaryMayDiverge =
+    kindDiverged || live.changes.some((c) => SUMMARY_AFFECTED_KINDS.has(c.kind));
+  if (summaryMayDiverge) {
+    expect(live.summary).toBe(fixedBuildSummary(live.changes));
+    if (kindDiverged) {
+      // A real kind divergence ALWAYS changes the summary string: a class
+      // rewrite makes the baseline double-count (f+c in both the function
+      // and class groups vs live f / c with c ≥ 1), and an import/export
+      // rewrite moves m ≥ 1 changes from the removed count into the
+      // modified count; group segments are positionally fixed, so the
+      // joined strings cannot coincide. This detects future erosion where
+      // fixedBuildSummary and the baseline silently converge.
+      // (The converse does NOT hold: SUMMARY_AFFECTED_KINDS without
+      // kindDiverged can legitimately yield identical summaries.)
+      expect(live.summary).not.toBe(baseline.summary);
+    }
+  } else {
+    expect(live.summary).toBe(baseline.summary);
+  }
+}
+
 // ─── Parity gate ────────────────────────────────────────────────
 
 describe.each(ALL_FIXTURES)('extractSemanticDiff parity %s', (name) => {
-  it('is deeply equal to the frozen baseline (changes order included)', () => {
+  it('matches the frozen baseline up to the pinned summary-kinds divergence', () => {
     const raw = fixture(name);
-    expect(extractSemanticDiff(raw)).toEqual(baselineExtractSemanticDiff(raw));
+    assertConfinedDivergence(extractSemanticDiff(raw), baselineExtractSemanticDiff(raw));
   });
 });
 
@@ -301,7 +482,7 @@ describe('parity on inputs without any diff --git header (legacy pseudo-section)
   ];
 
   it.each(BARE_INPUTS)('%s', (_label, raw) => {
-    expect(extractSemanticDiff(raw)).toEqual(baselineExtractSemanticDiff(raw));
+    assertConfinedDivergence(extractSemanticDiff(raw), baselineExtractSemanticDiff(raw));
   });
 
   it('empty and newline-only inputs stay empty', () => {
@@ -392,7 +573,14 @@ describe('CORE-M6 umbrella — quoted sections WITH declarations, full old-vs-ne
     // filePath, both outputs must be deeply identical.
     const mask = (c: EntityChange) => ({ ...c, filePath: 'MASKED' });
     expect(live.changes.map(mask)).toEqual(baseline.changes.map(mask));
-    expect(live.summary).toBe(baseline.summary);
+
+    // Summary-kinds divergence (pinned): the function_modified change made
+    // the BASELINE also count "1 class modified" (class group keyed its
+    // modifiedKind off function_modified); the live summary no longer does.
+    expect(baseline.summary).toBe(
+      '1 function added, 1 function modified, 1 class modified, 1 import removed',
+    );
+    expect(live.summary).toBe('1 function added, 1 function modified, 1 import removed');
 
     // The ONLY delta: quoted sections historically resolved 'unknown'.
     expect(baseline.changes.map((c) => c.filePath)).toEqual([
@@ -459,6 +647,100 @@ describe('KNOWN synthetic-only divergences: malformed header boundaries (pinned)
     expect(extractSemanticDiff(raw).changes).toEqual([
       expect.objectContaining({ name: 'huerfana', filePath: 'real.ts' }),
     ]);
+  });
+});
+
+describe('DELIBERATE divergence — summary-kinds fix (pinned old-vs-new)', () => {
+  const wrap = (bodyLines: string[]): string =>
+    [
+      'diff --git a/src/x.ts b/src/x.ts',
+      'index 1111111..2222222 100644',
+      '--- a/src/x.ts',
+      '+++ b/src/x.ts',
+      '@@ -1,2 +1,2 @@',
+      ' ctx',
+      ...bodyLines,
+    ].join('\n');
+
+  it('added import: identical change set, baseline double-counted it as modified', () => {
+    const raw = wrap(["+import { bar } from './bar'"]);
+    const baseline = baselineExtractSemanticDiff(raw);
+    const live = extractSemanticDiff(raw);
+
+    expect(live.changes).toEqual(baseline.changes); // kinds identical (import_added)
+    expect(baseline.summary).toBe('1 import added, 1 import modified'); // Bug A
+    expect(live.summary).toBe('1 import added');
+  });
+
+  it('added export: identical change set, baseline double-counted it as modified', () => {
+    const raw = wrap(['+export const VERSION = "2.0"']);
+    const baseline = baselineExtractSemanticDiff(raw);
+    const live = extractSemanticDiff(raw);
+
+    expect(live.changes).toEqual(baseline.changes); // kinds identical (export_added)
+    expect(baseline.summary).toBe('1 export added, 1 export modified'); // Bug A
+    expect(live.summary).toBe('1 export added');
+  });
+
+  it('modified import (same module, changed specifiers): baseline misreported import_removed', () => {
+    const raw = wrap(["-import { a } from './m'", "+import { a, b } from './m'"]);
+    const baseline = baselineExtractSemanticDiff(raw);
+    const live = extractSemanticDiff(raw);
+
+    expect(baseline.changes).toEqual([
+      expect.objectContaining({
+        kind: 'import_removed', // false ternary branch — signatures betray the lie
+        name: './m',
+        oldSignature: "import { a } from './m'",
+        newSignature: "import { a, b } from './m'",
+      }),
+    ]);
+    expect(live.changes).toEqual([
+      expect.objectContaining({
+        kind: 'import_modified',
+        name: './m',
+        oldSignature: "import { a } from './m'",
+        newSignature: "import { a, b } from './m'",
+      }),
+    ]);
+    expect(baseline.summary).toBe('1 import removed');
+    expect(live.summary).toBe('1 import modified');
+  });
+
+  it('modified export (same name, changed value): baseline misreported export_removed', () => {
+    const raw = wrap(["-export const VERSION = '1.0'", "+export const VERSION = '2.0'"]);
+    const baseline = baselineExtractSemanticDiff(raw);
+    const live = extractSemanticDiff(raw);
+
+    expect(baseline.changes.map((c) => c.kind)).toEqual(['export_removed']);
+    expect(live.changes.map((c) => c.kind)).toEqual(['export_modified']);
+    expect(baseline.summary).toBe('1 export removed');
+    expect(live.summary).toBe('1 export modified');
+  });
+
+  it('modified class: baseline collapsed to function_modified and double-counted in summary', () => {
+    const raw = wrap(['-export class Foo {', '+export class Foo extends Base {']);
+    const baseline = baselineExtractSemanticDiff(raw);
+    const live = extractSemanticDiff(raw);
+
+    expect(baseline.changes.map((c) => c.kind)).toEqual(['function_modified']); // Bug B
+    expect(live.changes.map((c) => c.kind)).toEqual(['class_modified']);
+    // Baseline counted the SAME change in both the function and class groups.
+    expect(baseline.summary).toBe('1 function modified, 1 class modified');
+    expect(live.summary).toBe('1 class modified');
+  });
+
+  it("modified function: identical change set, baseline leaked it into the class group's summary", () => {
+    const raw = wrap([
+      '-export function f(a: string) {',
+      '+export function f(a: string, b: number) {',
+    ]);
+    const baseline = baselineExtractSemanticDiff(raw);
+    const live = extractSemanticDiff(raw);
+
+    expect(live.changes).toEqual(baseline.changes); // kinds identical (function_modified)
+    expect(baseline.summary).toBe('1 function modified, 1 class modified'); // Bug B leak
+    expect(live.summary).toBe('1 function modified');
   });
 });
 

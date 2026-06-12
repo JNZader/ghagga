@@ -14,8 +14,16 @@
  *     new-side position); both faces of the delta are gated in
  *     parity-extract-entity-diff-lines.test.ts.
  *   - recursive off-by-N on iteration 2+ (see recursive-golden.test.ts).
+ *   - semantic-diff summary kinds: extractSemanticDiff double-counted added
+ *     imports/exports in the summary and misreported modified imports/
+ *     exports/classes (no `*_modified` members existed for them). FIXED
+ *     post-migration (summary-kinds fix) — the c01/c11/c12/c16
+ *     extractSemanticDiff snapshots reflect the new documented behavior;
+ *     both faces of the delta are gated in
+ *     parity-extract-semantic-diff.test.ts (confined-divergence harness).
  * Do NOT "fix" a snapshot here — divergence means a parity break in the
- * migration, except where the spec explicitly documents a delta (M6/M9).
+ * migration, except where the spec explicitly documents a delta (M6/M9,
+ * semantic-diff summary kinds).
  *
  * Corpus provenance (spec sdd/unify-diff-parsers, C1–C16):
  *   c01–c10, c15  generated from a real local git repo (renames with -M,

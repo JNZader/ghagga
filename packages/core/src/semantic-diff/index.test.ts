@@ -158,6 +158,89 @@ describe('extractSemanticDiff — import_added', () => {
     const kinds = result.changes.map((c) => c.kind);
     expect(kinds).toContain('import_added' as EntityChangeKind);
   });
+
+  it('summary reports ONLY "1 import added" — no phantom "1 import modified" (double-count bug)', () => {
+    const result = extractSemanticDiff(DIFF_IMPORT_ADDED);
+    expect(result.summary).toBe('1 import added');
+  });
+});
+
+describe('extractSemanticDiff — import_modified', () => {
+  const DIFF_IMPORT_MODIFIED = `diff --git a/src/index.ts b/src/index.ts
+index abc..def 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,2 +1,2 @@
+-import { foo } from './foo';
++import { foo, baz } from './foo';
+ export { foo };
+`;
+
+  it('reports a changed import line (same module) as import_modified, not import_removed', () => {
+    const result = extractSemanticDiff(DIFF_IMPORT_MODIFIED);
+    expect(result.changes.map((c) => c.kind)).toEqual(['import_modified' as EntityChangeKind]);
+    expect(result.changes[0]?.oldSignature).toBe("import { foo } from './foo';");
+    expect(result.changes[0]?.newSignature).toBe("import { foo, baz } from './foo';");
+    expect(result.summary).toBe('1 import modified');
+  });
+});
+
+describe('extractSemanticDiff — export_added / export_modified', () => {
+  const DIFF_EXPORT_ADDED = `diff --git a/src/index.ts b/src/index.ts
+index abc..def 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,1 +1,2 @@
+ const x = 1;
++export const VERSION = '1.0';
+`;
+
+  const DIFF_EXPORT_MODIFIED = `diff --git a/src/index.ts b/src/index.ts
+index abc..def 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,1 +1,1 @@
+-export const VERSION = '1.0';
++export const VERSION = '2.0';
+`;
+
+  it('summary reports ONLY "1 export added" — no phantom "1 export modified" (double-count bug)', () => {
+    const result = extractSemanticDiff(DIFF_EXPORT_ADDED);
+    expect(result.changes.map((c) => c.kind)).toEqual(['export_added' as EntityChangeKind]);
+    expect(result.summary).toBe('1 export added');
+  });
+
+  it('reports a changed plain export (same name) as export_modified, not export_removed', () => {
+    const result = extractSemanticDiff(DIFF_EXPORT_MODIFIED);
+    expect(result.changes.map((c) => c.kind)).toEqual(['export_modified' as EntityChangeKind]);
+    expect(result.summary).toBe('1 export modified');
+  });
+});
+
+describe('extractSemanticDiff — class_modified', () => {
+  const DIFF_CLASS_MODIFIED = `diff --git a/src/services/auth.ts b/src/services/auth.ts
+index abc..def 100644
+--- a/src/services/auth.ts
++++ b/src/services/auth.ts
+@@ -1,3 +1,3 @@
+-export class AuthService {
++export class AuthService extends BaseService {
+   private token: string = '';
+ }
+`;
+
+  it('reports a modified class as class_modified, not function_modified', () => {
+    const result = extractSemanticDiff(DIFF_CLASS_MODIFIED);
+    const cls = result.changes.find((c) => c.name === 'AuthService');
+    expect(cls?.kind).toBe('class_modified' as EntityChangeKind);
+    expect(cls?.oldSignature).toBe('export class AuthService {');
+    expect(cls?.newSignature).toBe('export class AuthService extends BaseService {');
+  });
+
+  it('summary counts it under class, never function', () => {
+    const result = extractSemanticDiff(DIFF_CLASS_MODIFIED);
+    expect(result.summary).toBe('1 class modified');
+  });
 });
 
 describe('extractSemanticDiff — type_added', () => {

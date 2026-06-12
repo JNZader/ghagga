@@ -104,48 +104,48 @@ exports[`baseline c01 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
   "changes": [
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha5",
       "newSignature": "export const alpha5 = 500; // changed",
       "oldSignature": "export const alpha5 = 5;",
     },
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha30",
       "newSignature": "export const alpha30 = 3000; // changed",
       "oldSignature": "export const alpha30 = 30;",
     },
     {
       "filePath": "src/beta.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "beta5",
       "newSignature": "export const beta5 = 500; // changed",
       "oldSignature": "export const beta5 = 5;",
     },
     {
       "filePath": "src/beta.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "beta30",
       "newSignature": "export const beta30 = 3000; // changed",
       "oldSignature": "export const beta30 = 30;",
     },
     {
       "filePath": "src/gamma.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "gamma5",
       "newSignature": "export const gamma5 = 500; // changed",
       "oldSignature": "export const gamma5 = 5;",
     },
     {
       "filePath": "src/gamma.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "gamma30",
       "newSignature": "export const gamma30 = 3000; // changed",
       "oldSignature": "export const gamma30 = 30;",
     },
   ],
-  "summary": "6 export removed",
+  "summary": "6 export modified",
 }
 `;
 
@@ -967,27 +967,27 @@ exports[`baseline c11 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
   "changes": [
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha5",
       "newSignature": "export const alpha5 = 500; // changed",
       "oldSignature": "export const alpha5 = 5;",
     },
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha30",
       "newSignature": "export const alpha30 = 3000; // changed",
       "oldSignature": "export const alpha30 = 30;",
     },
     {
       "filePath": "src/beta.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "beta5",
       "newSignature": "export const beta5 = 500; // changed",
       "oldSignature": "export const beta5 = 5;",
     },
   ],
-  "summary": "3 export removed",
+  "summary": "3 export modified",
 }
 `;
 
@@ -1143,34 +1143,34 @@ exports[`baseline c12 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
   "changes": [
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha5",
       "newSignature": "export const alpha5 = 500; // changed",
       "oldSignature": "export const alpha5 = 5;",
     },
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha30",
       "newSignature": "export const alpha30 = 3000; // changed",
       "oldSignature": "export const alpha30 = 30;",
     },
     {
       "filePath": "src/beta.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "beta5",
       "newSignature": "export const beta5 = 500; // changed",
       "oldSignature": "export const beta5 = 5;",
     },
     {
       "filePath": "src/beta.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "beta30",
       "newSignature": "export const beta30 = 3000; // changed",
       "oldSignature": "export const beta30 = 30;",
     },
   ],
-  "summary": "4 export removed",
+  "summary": "4 export modified",
 }
 `;
 
@@ -1507,48 +1507,48 @@ exports[`baseline c16 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
   "changes": [
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha5",
       "newSignature": "export const alpha5 = 500; // changed",
       "oldSignature": "export const alpha5 = 5;",
     },
     {
       "filePath": "src/alpha.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "alpha30",
       "newSignature": "export const alpha30 = 3000; // changed",
       "oldSignature": "export const alpha30 = 30;",
     },
     {
       "filePath": "src/beta.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "beta5",
       "newSignature": "export const beta5 = 500; // changed",
       "oldSignature": "export const beta5 = 5;",
     },
     {
       "filePath": "src/beta.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "beta30",
       "newSignature": "export const beta30 = 3000; // changed",
       "oldSignature": "export const beta30 = 30;",
     },
     {
       "filePath": "src/gamma.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "gamma5",
       "newSignature": "export const gamma5 = 500; // changed",
       "oldSignature": "export const gamma5 = 5;",
     },
     {
       "filePath": "src/gamma.ts",
-      "kind": "export_removed",
+      "kind": "export_modified",
       "name": "gamma30",
       "newSignature": "export const gamma30 = 3000; // changed",
       "oldSignature": "export const gamma30 = 30;",
     },
   ],
-  "summary": "6 export removed",
+  "summary": "6 export modified",
 }
 `;
 

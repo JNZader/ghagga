@@ -29,13 +29,16 @@ export type EntityChangeKind =
   | 'function_modified'
   | 'class_added'
   | 'class_removed'
+  | 'class_modified'
   | 'method_added'
   | 'method_removed'
   | 'method_modified'
   | 'import_added'
   | 'import_removed'
+  | 'import_modified'
   | 'export_added'
   | 'export_removed'
+  | 'export_modified'
   | 'type_added'
   | 'type_removed'
   | 'type_modified';
@@ -309,17 +312,30 @@ function mapToChangeKind(
         ? 'class_added'
         : direction === 'removed'
           ? 'class_removed'
-          : 'function_modified'; // classes cannot be "modified" at entity level, treat as function_modified
+          : 'class_modified';
     case 'method':
       return direction === 'added'
         ? 'method_added'
         : direction === 'removed'
           ? 'method_removed'
           : 'method_modified';
+    // Modified imports/exports ARE reachable: a declaration whose name (for
+    // imports, the from-module) appears on both the +/- sides of a section is
+    // derived with direction 'modified'. Historically these fell into the
+    // false branch of a two-way ternary and were misreported as
+    // import_removed/export_removed (with both signatures set).
     case 'import':
-      return direction === 'added' ? 'import_added' : 'import_removed';
+      return direction === 'added'
+        ? 'import_added'
+        : direction === 'removed'
+          ? 'import_removed'
+          : 'import_modified';
     case 'export':
-      return direction === 'added' ? 'export_added' : 'export_removed';
+      return direction === 'added'
+        ? 'export_added'
+        : direction === 'removed'
+          ? 'export_removed'
+          : 'export_modified';
     case 'type':
       return direction === 'added'
         ? 'type_added'
@@ -352,10 +368,10 @@ function buildSummary(changes: EntityChange[]): string {
   };
 
   groupSummary('function_added', 'function_removed', 'function_modified', 'function');
-  groupSummary('class_added', 'class_removed', 'function_modified', 'class');
+  groupSummary('class_added', 'class_removed', 'class_modified', 'class');
   groupSummary('method_added', 'method_removed', 'method_modified', 'method');
-  groupSummary('import_added', 'import_removed', 'import_added', 'import');
-  groupSummary('export_added', 'export_removed', 'export_added', 'export');
+  groupSummary('import_added', 'import_removed', 'import_modified', 'import');
+  groupSummary('export_added', 'export_removed', 'export_modified', 'export');
   groupSummary('type_added', 'type_removed', 'type_modified', 'type');
 
   if (parts.length === 0) return 'no entity-level changes detected';
