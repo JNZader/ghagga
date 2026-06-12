@@ -202,14 +202,35 @@ beforeEach(() => {
 // GET /api/reviews
 // ═══════════════════════════════════════════════════════════════════
 
+/**
+ * Builds a full `reviews` DB row as the query layer returns it (storage shape:
+ * repositoryId instead of repo, nullable summary/findings, Date createdAt,
+ * internal columns like tokensUsed). The route maps this to the wire Review.
+ */
+function fakeDbReviewRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    repositoryId: 42,
+    prNumber: 10,
+    status: 'PASSED',
+    mode: 'simple',
+    summary: 'All good',
+    findings: [],
+    tokensUsed: 100,
+    executionTimeMs: 1200,
+    metadata: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...overrides,
+  };
+}
+
 describe('GET /api/reviews', () => {
-  it('returns paginated reviews for an accessible repo', async () => {
+  it('returns paginated reviews mapped to the wire Review contract (repo populated)', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
-    const fakeReviews = [
-      { id: 1, prNumber: 10, status: 'PASSED' },
-      { id: 2, prNumber: 11, status: 'FAILED' },
-    ];
-    mockGetReviewsByRepoId.mockResolvedValueOnce(fakeReviews);
+    mockGetReviewsByRepoId.mockResolvedValueOnce([
+      fakeDbReviewRow({ id: 1, prNumber: 10, status: 'PASSED' }),
+      fakeDbReviewRow({ id: 2, prNumber: 11, status: 'FAILED', summary: null, findings: null }),
+    ]);
     mockCountReviewsByRepoId.mockResolvedValueOnce(2);
 
     const app = createApp();
@@ -217,7 +238,41 @@ describe('GET /api/reviews', () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data).toEqual(fakeReviews);
+    expect(json.data).toEqual([
+      {
+        id: 1,
+        repo: 'owner/repo',
+        prNumber: 10,
+        status: 'PASSED',
+        mode: 'simple',
+        summary: 'All good',
+        findings: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 2,
+        repo: 'owner/repo',
+        prNumber: 11,
+        status: 'FAILED',
+        mode: 'simple',
+        // DB nullables are normalized so the contract's non-null fields hold.
+        summary: '',
+        findings: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    // Contract pin: EXACTLY the Review keys — no storage columns leak
+    // (repositoryId, tokensUsed, executionTimeMs, metadata) and no fullName.
+    expect(Object.keys(json.data[0]).sort()).toEqual([
+      'createdAt',
+      'findings',
+      'id',
+      'mode',
+      'prNumber',
+      'repo',
+      'status',
+      'summary',
+    ]);
     expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0, total: 2 });
 
     expect(mockGetReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42, { limit: 10, offset: 0 });
@@ -243,8 +298,8 @@ describe('GET /api/reviews', () => {
   it('returns pagination.total reflecting full count beyond the current page', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([
-      { id: 1, prNumber: 10, status: 'PASSED' },
-      { id: 2, prNumber: 11, status: 'FAILED' },
+      fakeDbReviewRow({ id: 1, prNumber: 10, status: 'PASSED' }),
+      fakeDbReviewRow({ id: 2, prNumber: 11, status: 'FAILED' }),
     ]);
     mockCountReviewsByRepoId.mockResolvedValueOnce(137);
 
@@ -332,13 +387,13 @@ describe('GET /api/reviews', () => {
   // broader e2e harness exists.
   it('passes PARTIAL status through verbatim in the API response', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
-    const partialReview = {
+    const partialRow = fakeDbReviewRow({
       id: 99,
       prNumber: 42,
       status: 'PARTIAL' as const,
       summary: 'Static analysis ran but the AI agent failed midway.',
-    };
-    mockGetReviewsByRepoId.mockResolvedValueOnce([partialReview]);
+    });
+    mockGetReviewsByRepoId.mockResolvedValueOnce([partialRow]);
     mockCountReviewsByRepoId.mockResolvedValueOnce(1);
 
     const app = createApp();
@@ -348,7 +403,16 @@ describe('GET /api/reviews', () => {
     const json = await res.json();
     expect(json.data).toHaveLength(1);
     expect(json.data[0].status).toBe('PARTIAL');
-    expect(json.data[0]).toEqual(partialReview);
+    expect(json.data[0]).toEqual({
+      id: 99,
+      repo: 'owner/repo',
+      prNumber: 42,
+      status: 'PARTIAL',
+      mode: 'simple',
+      summary: 'Static analysis ran but the AI agent failed midway.',
+      findings: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
   });
 });
 
@@ -362,11 +426,17 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
     // for excluding foreign tenants; we assert the route passes EXACTLY the
     // caller's installationIds down and returns the scoped rows unchanged.
     const user = { ...DEFAULT_USER, installationIds: [100, 200] };
-    const ownReviews = [
-      { id: 1, repositoryId: 42, prNumber: 10, status: 'PASSED', fullName: 'owner/repo-a' },
-      { id: 2, repositoryId: 77, prNumber: 11, status: 'FAILED', fullName: 'owner/repo-b' },
-    ];
-    mockGetReviewsByInstallationIds.mockResolvedValueOnce(ownReviews);
+    // Joined rows: each carries its repository fullName (storage shape).
+    mockGetReviewsByInstallationIds.mockResolvedValueOnce([
+      fakeDbReviewRow({ id: 1, repositoryId: 42, prNumber: 10, fullName: 'owner/repo-a' }),
+      fakeDbReviewRow({
+        id: 2,
+        repositoryId: 77,
+        prNumber: 11,
+        status: 'FAILED',
+        fullName: 'owner/repo-b',
+      }),
+    ]);
     mockCountReviewsByInstallationIds.mockResolvedValueOnce(2);
 
     const app = createApp(user);
@@ -374,7 +444,13 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data).toEqual(ownReviews);
+    // The join's fullName is mapped into the wire `repo` field per row.
+    expect(json.data.map((r: { id: number; repo: string }) => [r.id, r.repo])).toEqual([
+      [1, 'owner/repo-a'],
+      [2, 'owner/repo-b'],
+    ]);
+    // Contract pin: `fullName` is a storage detail — it must NOT leak.
+    expect(json.data[0]).not.toHaveProperty('fullName');
     // Authz: the query layer is invoked with the caller's installations ONLY.
     expect(mockGetReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100, 200], {
       limit: 50,
@@ -385,15 +461,13 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
     expect(mockGetRepoByFullName).not.toHaveBeenCalled();
     expect(mockGetReviewsByRepoId).not.toHaveBeenCalled();
     // No row belongs to a foreign tenant repo.
-    expect(json.data.every((r: { fullName: string }) => r.fullName.startsWith('owner/'))).toBe(
-      true,
-    );
+    expect(json.data.every((r: { repo: string }) => r.repo.startsWith('owner/'))).toBe(true);
   });
 
   it('returns pagination.total reflecting the full cross-installation count', async () => {
     const user = { ...DEFAULT_USER, installationIds: [100] };
     mockGetReviewsByInstallationIds.mockResolvedValueOnce([
-      { id: 1, repositoryId: 42, prNumber: 10, status: 'PASSED', fullName: 'owner/repo-a' },
+      fakeDbReviewRow({ id: 1, repositoryId: 42, prNumber: 10, fullName: 'owner/repo-a' }),
     ]);
     mockCountReviewsByInstallationIds.mockResolvedValueOnce(83);
 

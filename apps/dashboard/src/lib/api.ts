@@ -90,12 +90,6 @@ async function fetchData<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ─── Reviews ──────────────────────────────────────────────
 
-/**
- * Server review row. Cross-installation listings (no `repo` param) also carry
- * the repository `fullName` per row so the caller can label each review.
- */
-type ReviewListRow = Review & { fullName?: string };
-
 export function useReviews(repo?: string, page: number = 1) {
   const params = new URLSearchParams();
   if (repo) params.set('repo', repo);
@@ -104,17 +98,15 @@ export function useReviews(repo?: string, page: number = 1) {
   return useQuery<ReviewsResponse>({
     queryKey: ['reviews', repo, page],
     queryFn: async () => {
+      // The server populates `repo` (repository fullName) on EVERY review row,
+      // for both the per-repo and the "All repositories" listings — no
+      // client-side labeling or fallbacks needed.
       const result = await fetchApi<{
-        data: ReviewListRow[];
+        data: Review[];
         pagination: { page: number; limit: number; offset: number; total: number };
       }>(`/api/reviews?${params.toString()}`);
       return {
-        reviews: result.data.map(({ fullName, ...review }) => ({
-          ...review,
-          // "All repositories" rows are labeled with their repo fullName;
-          // per-repo rows fall back to the requested repo.
-          repo: fullName ?? review.repo ?? repo ?? '',
-        })),
+        reviews: result.data,
         total: result.pagination.total,
         page: result.pagination.page,
         pageSize: result.pagination.limit,

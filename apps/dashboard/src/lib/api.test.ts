@@ -447,29 +447,29 @@ describe('useReviews', () => {
     });
   });
 
-  it('omits the repo param and maps fullName into repo for "All repositories"', async () => {
+  it('omits the repo param and uses the server-populated repo for "All repositories"', async () => {
     mockFetch.mockResolvedValueOnce(
       mockJsonResponse({
         data: [
           {
             id: 1,
+            repo: 'acme/app',
             prNumber: 10,
             status: 'PASSED',
             mode: 'simple',
             summary: 'ok',
             findings: [],
             createdAt: '2026-01-01',
-            fullName: 'acme/app',
           },
           {
             id: 2,
+            repo: 'acme/api',
             prNumber: 20,
             status: 'FAILED',
             mode: 'workflow',
             summary: 'issues',
             findings: [],
             createdAt: '2026-01-02',
-            fullName: 'acme/api',
           },
         ],
         pagination: { page: 1, limit: 50, offset: 0, total: 2 },
@@ -486,16 +486,20 @@ describe('useReviews', () => {
     const [url] = mockFetch.mock.calls[0];
     expect(url).not.toContain('repo=');
 
-    // Each row is labeled with its repository fullName
+    // Each row carries its repo fullName, populated by the server
     expect(result.current.data?.reviews.map((r) => r.repo)).toEqual(['acme/app', 'acme/api']);
   });
 
-  it('falls back to the requested repo when rows carry no fullName', async () => {
+  it('uses the server-provided repo verbatim — no client-side fallback or relabeling', async () => {
+    // The row's repo intentionally differs from the requested filter: the
+    // contract says the SERVER populates repo, so the client must never
+    // overwrite or fall back to the query param.
     mockFetch.mockResolvedValueOnce(
       mockJsonResponse({
         data: [
           {
             id: 1,
+            repo: 'acme/api',
             prNumber: 10,
             status: 'PASSED',
             mode: 'simple',
@@ -514,7 +518,7 @@ describe('useReviews', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data?.reviews[0]?.repo).toBe('acme/app');
+    expect(result.current.data?.reviews[0]?.repo).toBe('acme/api');
   });
 
   it('maps total from the server pagination, not the page row count', async () => {

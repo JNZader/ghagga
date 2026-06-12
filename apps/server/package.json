@@ -15,6 +15,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@ghagga/types": "workspace:*",
     "@hono/node-server": "^2.0.3",
     "@octokit/rest": "^22.0.1",
     "bullmq": "^5.76.10",

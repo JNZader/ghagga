@@ -41,6 +41,12 @@ export interface User {
 
 export interface Review {
   id: number;
+  /**
+   * Repository full name ("owner/name"). Populated SERVER-SIDE on every
+   * review listing: the per-repo path composes it from the repo row the
+   * route already validated, and the cross-installation path carries it
+   * via the repositories join. Clients must NOT need fallbacks for this.
+   */
   repo: string;
   prNumber: number;
   status: ReviewStatus;

@@ -6,6 +6,7 @@
  *   DELETE /api/reviews/:param  (numeric → single review by ID, non-numeric → by repo full name)
  */
 
+import type { Finding, Review, ReviewMode, ReviewStatus } from '@ghagga/types';
 import type { Database } from 'ghagga-db';
 import {
   clearMemoryObservationsByProject,
@@ -24,6 +25,44 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthUser } from '../../middleware/auth.js';
 import { generateErrorId, logger } from './utils.js';
+
+/**
+ * Structural view of a `reviews` DB row — the subset the wire contract needs.
+ * Both `getReviewsByRepoId` rows and `ReviewWithRepo` rows satisfy it.
+ */
+interface ReviewRow {
+  id: number;
+  prNumber: number;
+  status: string;
+  mode: string;
+  summary: string | null;
+  findings: unknown[] | null;
+  createdAt: Date;
+}
+
+/**
+ * Map a DB review row to the wire `Review` contract (@ghagga/types).
+ *
+ * This is where `repo` becomes REAL: reviews rows only store `repositoryId`,
+ * so the repository full name ("owner/name") is composed here —
+ *   - per-repo path: from the repo row the route already validated (no extra join)
+ *   - cross-installation path: from the `fullName` the query's join provides
+ *
+ * Also normalizes DB nullables (`summary`, `findings`) so the contract's
+ * non-nullable fields tell the truth, and serializes `createdAt` to ISO.
+ */
+function toReviewDto(row: ReviewRow, repoFullName: string): Review {
+  return {
+    id: row.id,
+    repo: repoFullName,
+    prNumber: row.prNumber,
+    status: row.status as ReviewStatus,
+    mode: row.mode as ReviewMode,
+    summary: row.summary ?? '',
+    findings: (row.findings ?? []) as Finding[],
+    createdAt: row.createdAt.toISOString(),
+  };
+}
 
 export function createReviewsRouter(db: Database) {
   const router = new Hono();
@@ -51,7 +90,8 @@ export function createReviewsRouter(db: Database) {
         ]);
 
         return c.json({
-          data: reviews,
+          // Each joined row carries its repository fullName → wire `repo`.
+          data: reviews.map((row) => toReviewDto(row, row.fullName)),
           pagination: { page, limit, offset, total },
         });
       }
@@ -72,7 +112,9 @@ export function createReviewsRouter(db: Database) {
       ]);
 
       return c.json({
-        data: reviews,
+        // All rows belong to `repo` (validated above) — compose its canonical
+        // fullName instead of re-joining repositories per row in the query.
+        data: reviews.map((row) => toReviewDto(row, repo.fullName)),
         pagination: { page, limit, offset, total },
       });
     } catch (err) {
