@@ -148,14 +148,14 @@ index 1234567..abcdefg 100644
       },
     ];
 
-    const result = applyVirtualPatches(sampleDiff, patches);
-    expect(result).toContain('[SUGGESTED FIX]');
-    expect(result).toContain('Use parameterized queries');
+    const { diff } = applyVirtualPatches(sampleDiff, patches);
+    expect(diff).toContain('[SUGGESTED FIX]');
+    expect(diff).toContain('Use parameterized queries');
   });
 
   it('returns original diff when no patches', () => {
-    const result = applyVirtualPatches(sampleDiff, []);
-    expect(result).toBe(sampleDiff);
+    const { diff } = applyVirtualPatches(sampleDiff, []);
+    expect(diff).toBe(sampleDiff);
   });
 
   it('handles multiple patches for different files', () => {
@@ -193,9 +193,9 @@ index 1234567..abcdefg 100644
       },
     ];
 
-    const result = applyVirtualPatches(multiFileDiff, patches);
-    expect(result).toContain('+[SUGGESTED FIX] fix a');
-    expect(result).toContain('+[SUGGESTED FIX] fix b');
+    const { diff } = applyVirtualPatches(multiFileDiff, patches);
+    expect(diff).toContain('+[SUGGESTED FIX] fix a');
+    expect(diff).toContain('+[SUGGESTED FIX] fix b');
   });
 });
 

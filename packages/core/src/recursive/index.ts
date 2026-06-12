@@ -91,8 +91,15 @@ export async function recursiveReview(
   for (let iteration = 1; iteration <= config.maxIterations; iteration++) {
     emit(`Recursive review: iteration ${iteration}/${config.maxIterations}`);
 
-    // Step 2: Apply patches virtually
-    const patchedDiff = applyVirtualPatches(currentDiff, currentPatches);
+    // Step 2: Apply patches virtually.
+    // `applyVirtualPatches` returns a `VirtualPatchResult` ({ diff, injectedLineIndices }).
+    // The injected-marker indices are out-of-band metadata for the marker path; they
+    // are kept as a LOOP-LOCAL value and NEVER surface in `RecursiveReviewReport`.
+    const { diff: patchedDiff, injectedLineIndices } = applyVirtualPatches(
+      currentDiff,
+      currentPatches,
+    );
+    void injectedLineIndices; // reserved for future marker-aware classification
     const patchContext = buildPatchContext(currentPatches);
 
     // Step 3: Re-review
@@ -240,6 +247,7 @@ function findClosestPatch(
 
 // ─── Re-exports ────────────────────────────────────────────────
 
+export type { VirtualPatchResult } from './patch-extractor.js';
 export { applyVirtualPatches, buildPatchContext, extractPatches } from './patch-extractor.js';
 export type { ReReviewInput, ReReviewResult } from './re-reviewer.js';
 export { runReReview } from './re-reviewer.js';
