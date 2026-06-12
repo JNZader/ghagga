@@ -128,7 +128,40 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 
 ---
 
-## REFACTOR 2 — Partir el god-function `reviewPipeline` 🔧
+## ✅ REFACTOR 2 — Partir el god-function `reviewPipeline` — COMPLETADO 2026-06-12 (pendiente PR)
+
+> **Resolución (SDD `split-review-pipeline`, branch `refactor/split-review-pipeline`, base
+> `992c69f`):** implementación completa en la rama, batches B0–B6, 4vr por batch; falta el PR a
+> main + canary (B7). `reviewPipeline` quedó como orquestador fino (~30 líneas de función) que
+> encadena 5 fases sobre un `PipelineState` mutable compartido:
+> `pipeline/prepare.ts` (+ sibling `prepare-graph.ts`) → `gather-context.ts` (+ sibling
+> `gather-safe.ts`) → `execute.ts` → `enrich.ts` → `finalize.ts`, con `state.ts`, `degrade.ts`
+> (`runDegradable`), `providers.ts` y `results.ts` como soporte. Red golden de 53 casos
+> (`pipeline-golden.test.ts`, activo permanente) pinnea ReviewResult + stream de emits byte-igual.
+>
+> **Deltas verificados durante el SDD vs lo escrito abajo (el explore midió contra código real):**
+> 1. **Límites reales de la función**: `reviewPipeline` iba de `pipeline.ts:150` a `:1071`
+>    (~921 líneas, no ~928 — entre `:1071` y `resolveAiEnabled :1079` hay doc comment).
+> 2. **3 steps degradan SIN push** a `failedSteps` (solo `console.warn`): call-chain,
+>    negative-examples y self-improve. La lista de 12 push-sites de abajo era correcta pero
+>    incompleta como inventario de degradación — los 3 warn-only quedaron preservados explícitos
+>    (`runDegradable` con `reportFailure: false` + comentario DELIBERATE) y pinneados por golden.
+> 3. **Contradicción del approach original**: el punto 3 de abajo proponía "de paso arregla la
+>    inconsistencia PASSED-only" — eso contradice el listón "cero cambio de comportamiento" que la
+>    sección Riesgo declara absoluto. **Decisión**: el refactor preservó el downgrade PASSED→PARTIAL
+>    LITERAL (pinneado por `pipeline.test.ts` "preserves FAILED status"); el fix de aplicar el
+>    downgrade de cobertura a todos los status va como **PR aparte post-SDD** (cambio de
+>    comportamiento observable, changelog propio).
+> 4. **Approach distinto al propuesto**: el contrato `PipelineStep` + runner con `Partial<Result>`
+>    fue RECHAZADO con evidencia (design D1 del SDD): los steps mutan findings in-place, leen
+>    read-your-writes sobre `result`, y el trío static∥memory∥code-intel escribe concurrente — un
+>    runner-merge cambiaba semántica. En su lugar: fases que mutan un `PipelineState` explícito;
+>    `runDegradable` centraliza el patrón try/warn/push/emit solo en los sitios genuinamente
+>    uniformes (blast-radius y el dispatch conservan sus catch bespoke).
+> 5. Bonus: dedupe del shape `FailedStep` — `pipeline/state.ts` ahora lo deriva de
+>    `ReviewResult['failedSteps']` (no puede divergir del tipo público).
+>
+> Lo que sigue queda como histórico (el estado que describía ya no existe).
 
 **Tipo:** behavior-preserving puro (cosmético estructural). **Riesgo:** alto (es EL motor).
 **Tamaño:** 1 SDD mediano. **Modelo:** Fable (no es seguridad, pero el 4vr sí por ser core crítico).
@@ -309,8 +342,9 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 4. ~~**Refactor 1** (diff parsers) — SDD con golden tests, 4vr. El corpus de golden tests es un
    activo permanente.~~ ✅ 2026-06-12, SDD `unify-diff-parsers` (ver sección arriba). El corpus
    (23 fixtures) + los 6 harnesses de paridad quedaron como activo permanente.
-5. **Refactor 2** (pipeline god-function) — SDD, rama dedicada, 4vr, canary obligatorio.
-   Desbloqueado (la suite de core está verde). **ES EL PRÓXIMO PASO** (sesión propia).
+5. ~~**Refactor 2** (pipeline god-function) — SDD, rama dedicada, 4vr, canary obligatorio.~~
+   ✅ 2026-06-12, SDD `split-review-pipeline` (ver sección arriba) — implementado en la rama,
+   pendiente PR a main + canary. Follow-up post-merge: fix del downgrade PASSED-only (PR aparte).
 6. ~~**Contratos**: `Review.repo` en `@ghagga/types`~~ ✅ 2026-06-12, PR #217 (ver sección
    Correctness). El barrido fix-between-SDDs del 2026-06-12 cerró además CORE-M8 (#218),
    los 2 bugs de semantic-diff (#219) y el ticket stale de lint (#216).

@@ -1,0 +1,5174 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden: baseline & modes > baseline: simple mode, all optional steps off 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: baseline & modes > mode: consensus 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running consensus agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "consensus",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "consensus review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: baseline & modes > mode: diagnostic falls back to simple on gateway 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Diagnostic mode not supported with gateway — falling back to simple mode",
+      "step": "mode-fallback",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: baseline & modes > mode: diagnostic stays diagnostic on ollama 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running diagnostic agent with ollama/llama3...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "diagnostic",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "diagnostic review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: baseline & modes > mode: fan-out (no lensDir → loadLensesFromDir not called) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running fan-out agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "fan-out",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "fan-out review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: baseline & modes > mode: workflow 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running workflow agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "workflow",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "workflow review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: baseline & modes > static-only: aiReviewEnabled=false skips the agent entirely 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "AI review disabled — returning static analysis only",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "static-only",
+      "provider": "none",
+      "tokensUsed": 0,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "FAILED",
+    "summary": "Static analysis found 1 finding(s). AI review was not performed.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: blast-radius edges (B0.5) > enableBlastRadius without graphLoader: block 2.5 skipped entirely, call-chain 2.6 still runs 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Call-chain: 1 changed symbol(s), 1 affected symbol(s)",
+      "step": "call-chain",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warning + metadata.blastRadius.graphStale=true 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Dependency graph is stale (last indexed: 2020-01-01T00:00:00Z)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  changed: 1
+  dependents: 0
+  tests: 0",
+      "message": "Blast radius: 1 files (from 2 in diff)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 1,
+        "enabled": true,
+        "graphAvailable": true,
+        "graphStale": true,
+        "totalFiles": 2,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: chained multi-degradation (B0.5) > blast-radius + memory-search + semantic-ranking fail together: failedSteps ORDER pinned 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Blast radius: skipped (error loading graph)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (2 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Reranking findings by semantic relevance...",
+      "step": "semantic-ranking",
+    },
+    {
+      "message": "Semantic ranking failed — continuing without",
+      "step": "semantic-ranking",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "graph file not found",
+        "step": "blast-radius",
+      },
+      {
+        "error": "database connection failed",
+        "step": "memory-search",
+      },
+      {
+        "error": "embedding provider down",
+        "step": "semantic-ranking",
+      },
+    ],
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+      {
+        "category": "style",
+        "file": "src/index.ts",
+        "line": 9,
+        "message": "Prefer const over let",
+        "severity": "low",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 1,
+        "enabled": true,
+        "fallbackReason": "error: graph file not found",
+        "graphAvailable": false,
+        "totalFiles": 1,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+          {
+            "category": "style",
+            "file": "src/index.ts",
+            "line": 9,
+            "message": "Prefer const over let",
+            "severity": "low",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Blast-radius failed (degrading gracefully):",
+      "[Error] graph file not found",
+    ],
+    [
+      "[ghagga] Memory search failed (degrading gracefully):",
+      "database connection failed",
+    ],
+    [
+      "[ghagga] Semantic ranking failed (non-fatal):",
+      "embedding provider down",
+    ],
+  ],
+}
+`;
+
+exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > call-chain fails (:360): warn only, NO failedSteps entry, status PASSED 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Call-chain/reverse-deps failed (degrading gracefully):",
+      "call-chain parser exploded",
+    ],
+  ],
+}
+`;
+
+exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > negative-examples fails (:430): warn only, NO failedSteps entry, status PASSED 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Negative examples load failed (degrading gracefully):",
+      "negative table missing",
+    ],
+  ],
+}
+`;
+
+exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > self-improve fails (:453): warn only, NO failedSteps entry, status PASSED 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Self-improve rules load failed (degrading gracefully):",
+      "feedback file unreadable",
+    ],
+  ],
+}
+`;
+
+exports[`golden: early returns > all files filtered out: returns SKIPPED before any expensive step 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "",
+      "message": "Parsed 1 files from diff, 0 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "mode": "simple",
+      "model": "claude-sonnet-4-20250514",
+      "provider": "gateway",
+      "tokensUsed": 0,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "SKIPPED",
+    "summary": "All files in the diff matched ignore patterns. No review was performed.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: early returns > flood-skip: recommendation=skip aborts before any expensive step 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  [bot] Author "dep-bot" matches bot pattern",
+      "message": "Flood detected: skip",
+      "step": "flood-detection",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "mode": "simple",
+      "model": "claude-sonnet-4-20250514",
+      "provider": "gateway",
+      "tokensUsed": 0,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "SKIPPED",
+    "summary": "Flood detection: PR skipped (bot author or spam signal).",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > ai-enhance fails (:571): no console.warn, push + emit only 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Enhancing findings with AI...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "AI enhance failed — continuing without enhancement",
+      "step": "static-analysis",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "enhance model unavailable",
+        "step": "ai-enhance",
+      },
+    ],
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > ai-review fails (:771): static-only result + NEEDS_HUMAN_REVIEW (no PARTIAL downgrade) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "AI review failed — returning static analysis only",
+      "step": "agent-failed",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "LLM exploded",
+        "step": "ai-review",
+      },
+    ],
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "static-only",
+      "provider": "none",
+      "tokensUsed": 0,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "NEEDS_HUMAN_REVIEW",
+    "summary": "AI review failed (LLM exploded). Static analysis results are shown below.",
+  },
+  "warns": [
+    [
+      "[ghagga] AI review failed, returning static analysis only:",
+      "LLM exploded",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > author-trust fails (:622): warn + push, mode not overridden 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "git unavailable",
+        "step": "author-trust",
+      },
+    ],
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Author trust scoring failed (non-fatal):",
+      "git unavailable",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > blast-radius fails (:298): degraded metadata + PARTIAL 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Blast radius: skipped (error loading graph)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "graph file not found",
+        "step": "blast-radius",
+      },
+    ],
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 1,
+        "enabled": true,
+        "fallbackReason": "error: graph file not found",
+        "graphAvailable": false,
+        "totalFiles": 1,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Blast-radius failed (degrading gracefully):",
+      "[Error] graph file not found",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > code-intel fails (:1410): only reachable via emit throwing on the success message 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "Querying code intelligence for 1 file(s)...",
+      "step": "code-intel",
+    },
+    {
+      "message": "Code intelligence: 1/1 files with structural data (Nms)",
+      "step": "code-intel",
+    },
+    {
+      "message": "Code intelligence: failed — continuing without",
+      "step": "code-intel",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "codeIntelMetadata": {
+      "enabled": true,
+      "filesQueried": 1,
+      "filesWithData": 0,
+      "providerAvailable": true,
+      "queryDurationMs": 0,
+    },
+    "failedSteps": [
+      {
+        "error": "forced code-intel emit failure",
+        "step": "code-intel",
+      },
+    ],
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Code intelligence query failed (degrading gracefully):",
+      "forced code-intel emit failure",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > doc-validation fails (:1010): warn + push + emit 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Doc validation failed — continuing without",
+      "step": "doc-validation",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "symbol extraction blew up",
+        "step": "doc-validation",
+      },
+    ],
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Doc validation failed (non-fatal):",
+      "symbol extraction blew up",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > exploitability fails (:902): warn + push + emit 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: success (1 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Analyzing exploitability for 1 CVE(s)...",
+      "step": "exploitability",
+    },
+    {
+      "message": "Exploitability analysis failed — continuing without",
+      "step": "exploitability",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "exploit graph corrupt",
+        "step": "exploitability",
+      },
+    ],
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+      {
+        "category": "dependency-vulnerability",
+        "file": "package.json",
+        "line": 1,
+        "message": "CVE-2024-0001 in lodash",
+        "severity": "critical",
+        "source": "trivy",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+        "trivy",
+      ],
+      "toolsSkipped": [
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "dependency-vulnerability",
+            "file": "package.json",
+            "line": 1,
+            "message": "CVE-2024-0001 in lodash",
+            "severity": "critical",
+            "source": "trivy",
+          },
+        ],
+        "status": "success",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Exploitability analysis failed (non-fatal):",
+      "exploit graph corrupt",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > memory-persist fails (:1054): warn + push, no emit 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: loaded
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "sqlite is locked",
+        "step": "memory-persist",
+      },
+    ],
+    "findings": [],
+    "memoryContext": "Past review: watch the parser.",
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Memory persist failed (non-fatal):",
+      "sqlite is locked",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > memory-search fails (:1334): warn + push, context null 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "database connection failed",
+        "step": "memory-search",
+      },
+    ],
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Memory search failed (degrading gracefully):",
+      "database connection failed",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > recursive-review fails (:960): warn + push + emit 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Running recursive review on suggested fixes...",
+      "step": "recursive-review",
+    },
+    {
+      "message": "Recursive review failed — continuing without",
+      "step": "recursive-review",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "re-review loop crashed",
+        "step": "recursive-review",
+      },
+    ],
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Recursive review failed (non-fatal):",
+      "re-review loop crashed",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > semantic-ranking fails (:1034): warn + push + emit, order untouched 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (2 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Reranking findings by semantic relevance...",
+      "step": "semantic-ranking",
+    },
+    {
+      "message": "Semantic ranking failed — continuing without",
+      "step": "semantic-ranking",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "embedding provider down",
+        "step": "semantic-ranking",
+      },
+    ],
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+      {
+        "category": "style",
+        "file": "src/index.ts",
+        "line": 9,
+        "message": "Prefer const over let",
+        "severity": "low",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+          {
+            "category": "style",
+            "file": "src/index.ts",
+            "line": 9,
+            "message": "Prefer const over let",
+            "severity": "low",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Semantic ranking failed (non-fatal):",
+      "embedding provider down",
+    ],
+  ],
+}
+`;
+
+exports[`golden: forced degradation — 12 failedSteps.push sites > static-analysis fails (:1294): error result for all tools + PARTIAL 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: error (0 findings)
+  trivy: error (0 findings)
+  cpd: error (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "semgrep crashed",
+        "step": "static-analysis",
+      },
+    ],
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "semgrep crashed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "error",
+      },
+      "semgrep": {
+        "error": "semgrep crashed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "error",
+      },
+      "trivy": {
+        "error": "semgrep crashed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "error",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Static analysis failed (degrading gracefully):",
+      "semgrep crashed",
+    ],
+  ],
+}
+`;
+
+exports[`golden: kitchen-sink > everything ON: pins the final findings order (enhance→exploit→recursive→doc→rank) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  changed: 2
+  dependents: 0
+  tests: 0",
+      "message": "Blast radius: 2 files (from 2 in diff)",
+      "step": "blast-radius",
+    },
+    {
+      "message": "Call-chain: 1 changed symbol(s), 1 affected symbol(s)",
+      "step": "call-chain",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "Querying code intelligence for 2 file(s)...",
+      "step": "code-intel",
+    },
+    {
+      "message": "Code intelligence: 2/2 files with structural data (Nms)",
+      "step": "code-intel",
+    },
+    {
+      "message": "Loaded 1 dismissed finding(s) — injecting suppression context",
+      "step": "negative-examples",
+    },
+    {
+      "message": "Self-improve: loaded 1 feedback record(s), derived 1 rule(s)",
+      "step": "self-improve",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: success (1 findings)
+  cpd: skipped (0 findings)
+  memory: loaded
+  code-intel: 2 file(s) with structural data
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Checklist active: 4 dimensions",
+      "step": "checklist",
+    },
+    {
+      "message": "Enhancing findings with AI...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "[trust] author=alice score=0.85 tier=trusted → mode=simple",
+      "step": "author-trust",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Analyzing exploitability for 1 CVE(s)...",
+      "step": "exploitability",
+    },
+    {
+      "message": "Exploitability analysis complete: 0 exploitable, 0 potentially, 1 not exploitable",
+      "step": "exploitability",
+    },
+    {
+      "message": "Analyzing function-level usage of vulnerable packages...",
+      "step": "usage-analysis",
+    },
+    {
+      "message": "Usage analysis complete: 1 in-use, 0 imported-not-called, 0 not-in-use",
+      "step": "usage-analysis",
+    },
+    {
+      "message": "Checklist score: 74 (3 matched findings)",
+      "step": "checklist-score",
+    },
+    {
+      "message": "Running recursive review on suggested fixes...",
+      "step": "recursive-review",
+    },
+    {
+      "message": "Recursive review: 1 regression(s) found in suggested fixes",
+      "step": "recursive-review",
+    },
+    {
+      "message": "Scanning docs for 1 changed symbol(s)...",
+      "step": "doc-validation",
+    },
+    {
+      "message": "Doc validation: 1 stale reference(s) found in 2 doc(s)",
+      "step": "doc-validation",
+    },
+    {
+      "message": "Reranking findings by semantic relevance...",
+      "step": "semantic-ranking",
+    },
+    {
+      "message": "Semantic ranking complete (5 findings reranked)",
+      "step": "semantic-ranking",
+    },
+  ],
+  "result": {
+    "checklistScore": {
+      "dimensionScores": [
+        {
+          "dimensionId": "security",
+          "dimensionName": "Security",
+          "findingCount": 2,
+          "totalScore": 60,
+        },
+        {
+          "dimensionId": "boundary-conditions",
+          "dimensionName": "Boundary Conditions",
+          "findingCount": 1,
+          "totalScore": 14,
+        },
+      ],
+      "findings": [
+        {
+          "checkId": "injection-prevention",
+          "checkWeight": 10,
+          "dimensionId": "security",
+          "findingIndex": 0,
+          "score": 30,
+          "severityMultiplier": 3,
+        },
+        {
+          "checkId": "dependency-safety",
+          "checkWeight": 6,
+          "dimensionId": "security",
+          "findingIndex": 1,
+          "score": 30,
+          "severityMultiplier": 5,
+        },
+        {
+          "checkId": null,
+          "checkWeight": 7,
+          "dimensionId": "boundary-conditions",
+          "findingIndex": 2,
+          "score": 14,
+          "severityMultiplier": 2,
+        },
+      ],
+      "totalScore": 74,
+    },
+    "codeIntelMetadata": {
+      "enabled": true,
+      "filesQueried": 2,
+      "filesWithData": 2,
+      "providerAvailable": true,
+      "queryDurationMs": 0,
+    },
+    "docValidation": {
+      "changedSymbols": [
+        "indexFn",
+      ],
+      "docsScanned": 2,
+      "staleReferences": [
+        {
+          "context": "see indexFn()",
+          "file": "docs/api.md",
+          "line": 10,
+          "symbol": "indexFn",
+        },
+      ],
+    },
+    "enhanceMetadata": {
+      "filteredCount": 0,
+      "groupCount": 0,
+      "model": "test-enhance-model",
+      "tokenUsage": {
+        "input": 10,
+        "output": 5,
+      },
+    },
+    "enhanced": true,
+    "findings": [
+      {
+        "category": "documentation",
+        "file": "docs/api.md",
+        "line": 10,
+        "message": "Documentation references \`indexFn\` which was changed in this PR but this doc was not updated.",
+        "severity": "low",
+        "source": "doc-validation",
+        "suggestion": "Review and update the reference to \`indexFn\` in this file.",
+      },
+      {
+        "category": "bug",
+        "file": "src/index.ts",
+        "isRegression": true,
+        "line": 2,
+        "message": "Regression: suggested fix breaks null handling",
+        "originatingSuggestion": {
+          "file": "src/index.ts",
+          "line": 2,
+          "suggestion": "use ?. operator",
+        },
+        "severity": "high",
+        "source": "ai",
+      },
+      {
+        "category": "bug",
+        "file": "src/index.ts",
+        "line": 2,
+        "message": "AI: possible off-by-one in loop bound",
+        "severity": "medium",
+        "source": "ai",
+      },
+      {
+        "category": "dependency-vulnerability",
+        "exploitability": "not-exploitable",
+        "file": "package.json",
+        "line": 1,
+        "message": "CVE-2024-0001 in lodash",
+        "severity": "critical",
+        "source": "trivy",
+        "usageLabel": "in-use",
+      },
+      {
+        "aiPriority": 9,
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+        "suggestion": "Use parameterized queries.",
+      },
+    ],
+    "memoryContext": "## Self-Improve Rules
+- Avoid flagging test fixtures.
+PREVIOUSLY DISMISSED FINDINGS — do NOT suggest these again:
+- security (false positive on test fixture)
+
+Past review: watch the parser.",
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 2,
+        "enabled": true,
+        "graphAvailable": true,
+        "graphStale": false,
+        "totalFiles": 2,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+        "trivy",
+      ],
+      "toolsSkipped": [
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "recursiveReview": {
+      "converged": false,
+      "iterations": 1,
+      "regressions": [
+        {
+          "category": "bug",
+          "file": "src/index.ts",
+          "isRegression": true,
+          "line": 2,
+          "message": "Regression: suggested fix breaks null handling",
+          "originatingSuggestion": {
+            "file": "src/index.ts",
+            "line": 2,
+            "suggestion": "use ?. operator",
+          },
+          "severity": "high",
+          "source": "ai",
+        },
+      ],
+      "totalNewIssues": 1,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "dependency-vulnerability",
+            "file": "package.json",
+            "line": 1,
+            "message": "CVE-2024-0001 in lodash",
+            "severity": "critical",
+            "source": "trivy",
+          },
+        ],
+        "status": "success",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > author-trust ON: trusted author overrides workflow → simple 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "[trust] author=alice score=0.85 tier=trusted → mode=simple",
+      "step": "author-trust",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > blast-radius ON: exceeded cap falls back to full diff 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Blast radius exceeds 50 files — using full diff",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 2,
+        "enabled": true,
+        "fallbackReason": "blast radius exceeds 50 files",
+        "graphAvailable": true,
+        "graphStale": false,
+        "totalFiles": 2,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available filters files 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  changed: 1
+  dependents: 0
+  tests: 0",
+      "message": "Blast radius: 1 files (from 2 in diff)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 1,
+        "enabled": true,
+        "graphAvailable": true,
+        "graphStale": false,
+        "totalFiles": 2,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: consumes PRE-blast-radius fileList (load-bearing) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  changed: 1
+  dependents: 0
+  tests: 0",
+      "message": "Blast radius: 1 files (from 2 in diff)",
+      "step": "blast-radius",
+    },
+    {
+      "message": "Call-chain: 1 changed symbol(s), 2 affected symbol(s)",
+      "step": "call-chain",
+    },
+    {
+      "message": "Reverse deps: 1 high-risk file(s) detected",
+      "step": "reverse-deps",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 1,
+        "enabled": true,
+        "graphAvailable": true,
+        "graphStale": false,
+        "totalFiles": 2,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > checklist ON: context emitted and findings scored 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Checklist active: 4 dimensions",
+      "step": "checklist",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Checklist score: 30 (1 matched findings)",
+      "step": "checklist-score",
+    },
+  ],
+  "result": {
+    "checklistScore": {
+      "dimensionScores": [
+        {
+          "dimensionId": "security",
+          "dimensionName": "Security",
+          "findingCount": 1,
+          "totalScore": 30,
+        },
+      ],
+      "findings": [
+        {
+          "checkId": "injection-prevention",
+          "checkWeight": 10,
+          "dimensionId": "security",
+          "findingIndex": 0,
+          "score": 30,
+          "severityMultiplier": 3,
+        },
+      ],
+      "totalScore": 30,
+    },
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > code-intel ON: provider data flows into metadata and emits 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "Querying code intelligence for 1 file(s)...",
+      "step": "code-intel",
+    },
+    {
+      "message": "Code intelligence: 1/1 files with structural data (Nms)",
+      "step": "code-intel",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: 1 file(s) with structural data
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "codeIntelMetadata": {
+      "enabled": true,
+      "filesQueried": 1,
+      "filesWithData": 1,
+      "providerAvailable": true,
+      "queryDurationMs": 0,
+    },
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > doc-validation ON: stale references pushed as low/documentation findings 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Scanning docs for 1 changed symbol(s)...",
+      "step": "doc-validation",
+    },
+    {
+      "message": "Doc validation: 1 stale reference(s) found in 2 doc(s)",
+      "step": "doc-validation",
+    },
+  ],
+  "result": {
+    "docValidation": {
+      "changedSymbols": [
+        "indexFn",
+      ],
+      "docsScanned": 2,
+      "staleReferences": [
+        {
+          "context": "see indexFn()",
+          "file": "docs/api.md",
+          "line": 10,
+          "symbol": "indexFn",
+        },
+      ],
+    },
+    "findings": [
+      {
+        "category": "documentation",
+        "file": "docs/api.md",
+        "line": 10,
+        "message": "Documentation references \`indexFn\` which was changed in this PR but this doc was not updated.",
+        "severity": "low",
+        "source": "doc-validation",
+        "suggestion": "Review and update the reference to \`indexFn\` in this file.",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > enhance ON: compute in 5.5, apply in merge — ai findings preserved 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Enhancing findings with AI...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "enhanceMetadata": {
+      "filteredCount": 0,
+      "groupCount": 0,
+      "model": "test-enhance-model",
+      "tokenUsage": {
+        "input": 10,
+        "output": 5,
+      },
+    },
+    "enhanced": true,
+    "findings": [
+      {
+        "aiPriority": 9,
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+        "suggestion": "Use parameterized queries.",
+      },
+      {
+        "category": "bug",
+        "file": "src/index.ts",
+        "line": 2,
+        "message": "AI: possible off-by-one in loop bound",
+        "severity": "medium",
+        "source": "ai",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > exploitability + usage ON: trivy CVEs labeled in-place 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: success (1 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Analyzing exploitability for 1 CVE(s)...",
+      "step": "exploitability",
+    },
+    {
+      "message": "Exploitability analysis complete: 0 exploitable, 0 potentially, 1 not exploitable",
+      "step": "exploitability",
+    },
+    {
+      "message": "Analyzing function-level usage of vulnerable packages...",
+      "step": "usage-analysis",
+    },
+    {
+      "message": "Usage analysis complete: 1 in-use, 0 imported-not-called, 0 not-in-use",
+      "step": "usage-analysis",
+    },
+  ],
+  "result": {
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+      {
+        "category": "dependency-vulnerability",
+        "exploitability": "not-exploitable",
+        "file": "package.json",
+        "line": 1,
+        "message": "CVE-2024-0001 in lodash",
+        "severity": "critical",
+        "source": "trivy",
+        "usageLabel": "in-use",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+        "trivy",
+      ],
+      "toolsSkipped": [
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "dependency-vulnerability",
+            "exploitability": "not-exploitable",
+            "file": "package.json",
+            "line": 1,
+            "message": "CVE-2024-0001 in lodash",
+            "severity": "critical",
+            "source": "trivy",
+            "usageLabel": "in-use",
+          },
+        ],
+        "status": "success",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > memory ON: search feeds context and persist receives the final result 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: loaded
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": "Past review: watch the parser.",
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > negative-examples ON: SqliteMemoryStorage instanceof gate satisfied 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "Loaded 1 dismissed finding(s) — injecting suppression context",
+      "step": "negative-examples",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": "PREVIOUSLY DISMISSED FINDINGS — do NOT suggest these again:
+- security (false positive on test fixture)
+",
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > recursive-review ON: regressions are appended to findings 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (1 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Running recursive review on suggested fixes...",
+      "step": "recursive-review",
+    },
+    {
+      "message": "Recursive review: 1 regression(s) found in suggested fixes",
+      "step": "recursive-review",
+    },
+  ],
+  "result": {
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+      {
+        "category": "bug",
+        "file": "src/index.ts",
+        "isRegression": true,
+        "line": 2,
+        "message": "Regression: suggested fix breaks null handling",
+        "originatingSuggestion": {
+          "file": "src/index.ts",
+          "line": 2,
+          "suggestion": "use ?. operator",
+        },
+        "severity": "high",
+        "source": "ai",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "recursiveReview": {
+      "converged": false,
+      "iterations": 1,
+      "regressions": [
+        {
+          "category": "bug",
+          "file": "src/index.ts",
+          "isRegression": true,
+          "line": 2,
+          "message": "Regression: suggested fix breaks null handling",
+          "originatingSuggestion": {
+            "file": "src/index.ts",
+            "line": 2,
+            "suggestion": "use ?. operator",
+          },
+          "severity": "high",
+          "source": "ai",
+        },
+      ],
+      "totalNewIssues": 1,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > self-improve ON: rules prepended to memory context 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "message": "Self-improve: loaded 2 feedback record(s), derived 1 rule(s)",
+      "step": "self-improve",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": "## Self-Improve Rules
+- Avoid flagging test fixtures.",
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: optional steps ON (isolated) > semantic-ranking ON: findings reordered (reverse mock pins reorder) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (2 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Reranking findings by semantic relevance...",
+      "step": "semantic-ranking",
+    },
+    {
+      "message": "Semantic ranking complete (2 findings reranked)",
+      "step": "semantic-ranking",
+    },
+  ],
+  "result": {
+    "findings": [
+      {
+        "category": "style",
+        "file": "src/index.ts",
+        "line": 9,
+        "message": "Prefer const over let",
+        "severity": "low",
+        "source": "semgrep",
+      },
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+          {
+            "category": "style",
+            "file": "src/index.ts",
+            "line": 9,
+            "message": "Prefer const over let",
+            "severity": "low",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: path-protection tiers (B0.5) > blocked (.env) + redacted (.env.example): emits + parse-diff counts pinned 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  [BLOCKED] .env",
+      "message": "Blocked 1 sensitive file(s) from review",
+      "step": "path-protection",
+    },
+    {
+      "detail": "  [REDACTED] .env.example",
+      "message": "Redacted 1 file(s) — paths visible, content hidden",
+      "step": "path-protection",
+    },
+    {
+      "detail": "  src/index.ts
+  .env.example",
+      "message": "Parsed 3 files from diff, 2 after filtering (1 blocked, 1 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        ".env",
+        ".env.example",
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 3,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge diagnostic (flat fields): mode-fallback pins the "CLI bridge" message 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Diagnostic mode not supported with CLI bridge — falling back to simple mode",
+      "step": "mode-fallback",
+    },
+    {
+      "message": "Running simple agent with cli-bridge/gemini...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge simple via providerChain: opencode + cliModel resolve credentials 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with cli-bridge/opencode...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus with 2-entry gateway chain: neutral wraps around to chain[0] (i % N) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running consensus agent with gateway/model-a...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "consensus",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "consensus review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus with 3-entry gateway chain: stance distribution + one generateFn per entry 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running consensus agent with gateway/model-a...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "consensus",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "consensus review OK.",
+  },
+  "warns": [],
+}
+`;
