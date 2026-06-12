@@ -70,6 +70,53 @@ describe('renumber arithmetic — c01 (2 files x 2 hunks)', () => {
   });
 });
 
+describe('coordinate frame — markers in TWO consecutive hunks of one file', () => {
+  // Regression guard (3vr CRITICAL, 2026-06-12): the matching counter must stay
+  // in the UNSHIFTED (patch) coordinate frame even after an earlier hunk shifted
+  // the EMITTED header. Resetting the counter to the shifted start would move
+  // every later-hunk match by `injectedBefore` lines → wrong landing +
+  // duplicate/missed injections. c01 never triggers this (no file has markers in
+  // two consecutive hunks), so it needs its own fixture.
+  const twoHunk = `diff --git a/x.ts b/x.ts
+index 1..2 100644
+--- a/x.ts
++++ b/x.ts
+@@ -1,3 +1,3 @@ h1
+ a1
+-a2
++a2new
+ a3
+@@ -10,3 +10,3 @@ h2
+ b10
+-b11
++b11new
+ b12`;
+  // new-side coords: a2new = 2 (hunk1), b11new = 11 (hunk2).
+  const patches: SuggestionPatch[] = [
+    { file: 'x.ts', line: 2, originalMessage: 'h1', suggestion: 'FIX-h1', findingIndex: 0 },
+    { file: 'x.ts', line: 11, originalMessage: 'h2', suggestion: 'FIX-h2', findingIndex: 1 },
+  ];
+  const { diff, injectedLineIndices } = applyVirtualPatches(twoHunk, patches);
+  const lines = diff.split('\n');
+
+  it('exactly 2 markers injected (no duplicate from a mis-anchored counter)', () => {
+    expect(injectedLineIndices).toHaveLength(2);
+    expect(lines.filter((l) => l.startsWith('+[SUGGESTED FIX]'))).toHaveLength(2);
+  });
+
+  it('hunk1 marker lands after +a2new; hunk2 marker lands after +b11new', () => {
+    const h1 = lines.findIndex((l) => l === '+[SUGGESTED FIX] FIX-h1');
+    const h2 = lines.findIndex((l) => l === '+[SUGGESTED FIX] FIX-h2');
+    expect(lines[h1 - 1]).toBe('+a2new');
+    expect(lines[h2 - 1]).toBe('+b11new');
+  });
+
+  it('headers: hunk1 newCount+1; hunk2 newStart+1 AND newCount+1', () => {
+    expect(diff).toContain('@@ -1,3 +1,4 @@ h1');
+    expect(diff).toContain('@@ -10,3 +11,4 @@ h2');
+  });
+});
+
 describe('out-of-band injected-line tracking', () => {
   it('injectedLineIndices match the actual marker positions, hand-counted', () => {
     const { diff, injectedLineIndices } = applyVirtualPatches(c01, round1);

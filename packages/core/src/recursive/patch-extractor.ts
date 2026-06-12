@@ -63,8 +63,7 @@ export interface VirtualPatchResult {
 }
 
 /** Hunk-header grammar: `@@ -oldStart,oldCount +newStart,newCount @@ <suffix>`. */
-const HUNK_HEADER_RE =
-  /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/;
+const HUNK_HEADER_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/;
 
 /**
  * Rebuild a hunk header from the old-side captures (verbatim), the corrected
@@ -123,9 +122,10 @@ function rebuildHunkHeader(
  * marker path; everything else reproduces the historical accounting, bugs
  * included. Do NOT "fix" any of these here (separate tickets):
  * - Quoted headers (`diff --git "a/x" "b/y"`, core.quotepath) are NOT
- *   recognized as file boundaries: patches against such files never apply, and
- *   the previous file's patch scope + line counter keep running through the
- *   quoted section (`headerQuoted` gate below). No markers there → no renumber.
+ *   recognized as file boundaries: the previous file's patch scope + line
+ *   counter keep running through the quoted section (`headerQuoted` gate
+ *   below). A marker can still land there if a leaked counter coincides with a
+ *   leaked patch line — frozen legacy behavior, pinned by the parity suite.
  * - The counter counts metadata lines its exclusion list never covered
  *   (`similarity index`, `rename from/to`, `Binary files`, `new file mode`,
  *   mode lines) and genuine empty lines. That is why counting walks `rawLines`
@@ -209,7 +209,13 @@ export function applyVirtualPatches(
     // File boundary — legacy gate: quoted headers were never recognized, so
     // the previous file's patch scope and counter deliberately leak into
     // this section (see STILL-FROZEN LEGACY BEHAVIOR above). `injectedBefore`
-    // resets to 0 at each recognized file boundary — no cross-file header math.
+    // is declared per parsed file section (below), so the header-shift math
+    // never crosses a file boundary. NOTE: for a quoted-header section the
+    // leaked `currentFilePatches` CAN still cause a marker to be injected if a
+    // leaked counter value coincides with a leaked patch line — the renumber
+    // then runs on that section's hunks like any other. That coincidence is
+    // frozen legacy behavior (spec R7), not a guarantee that quoted sections
+    // never get markers; the parity/golden suites pin whatever it produces.
     if (!file.headerQuoted) {
       currentFile = file.headerNewPath;
       currentFilePatches = patchesByFile.get(currentFile) ?? [];
@@ -256,7 +262,16 @@ export function applyVirtualPatches(
           );
           // Keep model and emitted string in sync for the string-eq scan.
           hunk.header = rewritten;
-          lineCounter = newStartShifted - 1;
+          // CRITICAL coordinate frame: `lineCounter` is matched against patch
+          // `line` values, which reference the CURRENT diff's new-side line
+          // numbers — i.e. the UNSHIFTED coordinates the LLM numbered against.
+          // The `injectedBefore` shift belongs ONLY to the emitted header, not
+          // to the matching counter. Resetting to the shifted start would move
+          // every patch match in this hunk by `injectedBefore` lines (wrong
+          // landing + duplicate/missed injections). `countMarkersInHunk` uses
+          // the same unshifted anchor, so the precomputed tally agrees with
+          // what `visit` actually injects.
+          lineCounter = hunk.newStart - 1;
           result.push(rewritten);
           nextHunk++;
           injectedBefore += markersInThisHunk;
@@ -295,6 +310,8 @@ function countMarkersInHunk(
   for (let i = headerPos + 1; i < rawLines.length; i++) {
     const line = rawLines[i] ?? '';
     if (nextHeader !== undefined && line === nextHeader) break;
+    // Counter advance: MUST mirror `visit` exactly (additions + context lines
+    // increment; removals and meta lines do not).
     if (line.startsWith('+') && !line.startsWith('+++')) {
       counter++;
     } else if (line.startsWith('-') && !line.startsWith('---')) {
@@ -308,9 +325,12 @@ function countMarkersInHunk(
       !line.startsWith('@@')
     ) {
       counter++;
-    } else {
-      continue;
     }
+    // Patch-match check: ALSO mirror `visit` — it runs after EVERY emitted line
+    // (outside the counter branch), including removals and meta lines, with the
+    // unchanged counter. Do NOT skip meta lines here, or the tally would
+    // under-count vs what `visit` injects (e.g. a patch landing where a
+    // `\ No newline at end of file` line sits).
     markers += filePatches.filter((p) => p.line === counter).length;
   }
   return markers;
