@@ -33,7 +33,7 @@ export interface DiffFile {
  * Parse a unified diff string into structured file objects.
  *
  * Thin adapter over the unified parser (`src/diff/parse.ts`). The contract
- * is byte-parity with the historical line-splitting implementation (gated by
+ * is parity with the historical line-splitting implementation (gated by
  * `diff/__tests__/parity-parse-diff-files.test.ts`):
  *
  *  - `content` is rebuilt from the file's `rawLines` — the EXACT slice of the
@@ -43,10 +43,17 @@ export interface DiffFile {
  *  - `additions`/`deletions` use the exact historical predicate over
  *    rawLines (`startsWith('+') && !startsWith('+++')`), NOT the structured
  *    hunks — parity on malformed input where hunks never form (C11/C12).
- *  - Sole documented delta (CORE-M6, changelog): quoted paths
- *    (`diff --git "a/caf\303\251.ts" ...`, core.quotepath escapes) are now
- *    parsed and unescaped. Previously the file was silently dropped and its
- *    diff lines were absorbed by the preceding file's `content`.
+ *  - `path` parity holds for WELL-FORMED diffs (git/GitHub output, where the
+ *    `diff --git ... b/X` capture always equals the `+++ b/X` line). On
+ *    MALFORMED sections where they disagree, path authority is the new
+ *    parser's: `+++ b/` → `rename to` → header b-side (the baseline trusted
+ *    the header regex). Documented divergence, asserted both-sides in the
+ *    parity harness (`adv-header-b-mismatch`).
+ *  - Documented delta (CORE-M6, changelog): quoted paths
+ *    (`diff --git "a/caf\303\251.ts" ...`, core.quotepath escapes, including
+ *    consecutive quoted sections and mixed-quoted headers) are now parsed
+ *    and unescaped. Previously the file was silently dropped and its diff
+ *    lines were absorbed by the preceding file's `content`.
  *
  * @param diff - Full unified diff string
  * @returns Array of DiffFile objects
