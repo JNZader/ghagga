@@ -125,7 +125,7 @@ import { detectFlood } from './flood/index.js';
 import { type BlastRadiusResult, computeBlastRadius } from './graph/blast-radius.js';
 import { buildCallChainFromDiff } from './graph/call-chain.js';
 import { findDependents } from './graph/reverse-deps.js';
-import type { DependencyGraph, GraphLoader } from './graph/schema.js';
+import type { DependencyGraph, GraphLoader, GraphMetadata } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { SqliteMemoryStorage } from './memory/sqlite.js';
@@ -143,8 +143,10 @@ import { runStaticAnalysis } from './tools/runner.js';
 import { computeAuthorTrustScore } from './trust/index.js';
 import type {
   AuthorTrustScore,
+  LLMProvider,
   NegativeExample,
   ProgressEvent,
+  ProviderChainEntry,
   ReviewFinding,
   ReviewInput,
   ReviewResult,
@@ -1153,3 +1155,254 @@ describe('golden: kitchen-sink', () => {
     expect(run.golden).toMatchSnapshot();
   });
 });
+
+// ─── B0.5 fixtures (review fix-forward) ─────────────────────────
+
+/**
+ * ⚠️ Load-bearing nuance (B0.5): [BLOCKED]/[REDACTED] are NOT driven by
+ * settings.ignorePatterns. They come from the HARDCODED security tiers in
+ * utils/path-protection.ts (ZERO_ACCESS_PATTERNS / REDACT_PATTERNS), applied
+ * BEFORE user ignorePatterns (filterDiffFiles, utils/diff.ts:130-145).
+ * `.env` → ZERO_ACCESS (blocked); `.env.example` → REDACT (checked FIRST,
+ * path-protection.ts:139 — otherwise `.env.*` would block it). Redacted files
+ * stay in `filtered` with content replaced by REDACTED_CONTENT.
+ */
+const PATH_PROTECTION_DIFF = `diff --git a/.env b/.env
+--- a/.env
++++ b/.env
+@@ -1 +1,2 @@
+ SECRET=old
++SECRET=new
+diff --git a/.env.example b/.env.example
+--- a/.env.example
++++ b/.env.example
+@@ -1 +1,2 @@
+ SECRET=
++OTHER=
+diff --git a/src/index.ts b/src/index.ts
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,2 +1,3 @@
+ const x = 1;
++const y = 2;
+ export default x;
+`;
+
+const GATEWAY_CHAIN_3: ProviderChainEntry[] = [
+  { provider: 'gateway', model: 'model-a', apiKey: 'key-a', gatewayUrl: 'https://gw.test' },
+  { provider: 'gateway', model: 'model-b', apiKey: 'key-b' },
+  { provider: 'gateway', model: 'model-c', apiKey: 'key-c' },
+];
+
+const STALE_METADATA: GraphMetadata = {
+  lastIndexedCommit: 'deadbeef',
+  // NOTE: no milliseconds — '00:00:00.000Z' would trip GROUPED_NUMBER_RE
+  // ('00.000' parses as a locale-grouped number) and mangle the emit string.
+  lastIndexedAt: '2020-01-01T00:00:00Z',
+  schemaVersion: 1,
+  fileCount: 2,
+  languages: ['typescript'],
+  indexDurationMs: 5,
+};
+
+// ─── B0.5 tests — coverage holes from the 2vr review ────────────
+
+describe('golden: providers — cli-bridge & providerChain (B0.5)', () => {
+  it('cli-bridge simple via providerChain: opencode + cliModel resolve credentials', async () => {
+    // Exercises resolveGenerateTextFns cli-bridge branch (pipeline.ts:1170-1195):
+    // preferredCLI='opencode' (entry.model !== 'auto'), cliModel='openai/gpt-4o'
+    // → resolveCredentialEnvVar → OPENAI_API_KEY ← decrypted entry apiKey.
+    const run = await runGolden(
+      makeInput({
+        provider: 'cli-bridge',
+        model: 'auto',
+        apiKey: undefined,
+        providerChain: [
+          {
+            provider: 'cli-bridge',
+            model: 'opencode',
+            cliModel: 'openai/gpt-4o',
+            apiKey: 'cli-key',
+          },
+        ],
+      }),
+    );
+    expect(runSimpleReview).toHaveBeenCalledOnce();
+    expect(run.result.status).toBe('PASSED');
+    expect(run.golden).toMatchSnapshot();
+  });
+
+  it('cli-bridge diagnostic (flat fields): mode-fallback pins the "CLI bridge" message', async () => {
+    // Flat-field branch of the cli-bridge resolution (cliBridgeEntry undefined,
+    // preferredCLI = input.model 'gemini' → GEMINI_API_KEY) + resolveEffectiveMode
+    // diagnostic→simple (pipeline.ts:1256).
+    const run = await runGolden(
+      makeInput({ mode: 'diagnostic', provider: 'cli-bridge', model: 'gemini' }),
+    );
+    expect(runDiagnosticReview).not.toHaveBeenCalled();
+    expect(runSimpleReview).toHaveBeenCalledOnce();
+    expect(run.golden.events).toContainEqual({
+      step: 'mode-fallback',
+      message: 'Diagnostic mode not supported with CLI bridge — falling back to simple mode',
+    });
+    expect(run.golden).toMatchSnapshot();
+  });
+
+  it('consensus with 3-entry gateway chain: stance distribution + one generateFn per entry', async () => {
+    // resolvePrimaryProvider takes chain[0]; buildConsensusModels N>=3 →
+    // chain[0]→for, chain[1]→against, chain[2]→neutral (pipeline.ts:1116);
+    // gateway branch maps ALL chain entries → 3 generateFns (pipeline.ts:1207).
+    const run = await runGolden(makeInput({ mode: 'consensus', providerChain: GATEWAY_CHAIN_3 }));
+    expect(runConsensusReview).toHaveBeenCalledOnce();
+    const consensusArgs = (runConsensusReview as M<typeof runConsensusReview>).mock.calls[0]?.[0];
+    expect(consensusArgs?.models).toEqual([
+      { provider: 'gateway', model: 'model-a', apiKey: 'key-a', stance: 'for' },
+      { provider: 'gateway', model: 'model-b', apiKey: 'key-b', stance: 'against' },
+      { provider: 'gateway', model: 'model-c', apiKey: 'key-c', stance: 'neutral' },
+    ]);
+    expect(consensusArgs?.generateFns).toHaveLength(3);
+    expect(run.golden).toMatchSnapshot();
+  });
+
+  it('consensus with 2-entry gateway chain: neutral wraps around to chain[0] (i % N)', async () => {
+    const run = await runGolden(
+      makeInput({ mode: 'consensus', providerChain: GATEWAY_CHAIN_3.slice(0, 2) }),
+    );
+    expect(runConsensusReview).toHaveBeenCalledOnce();
+    const consensusArgs = (runConsensusReview as M<typeof runConsensusReview>).mock.calls[0]?.[0];
+    expect(consensusArgs?.models).toEqual([
+      { provider: 'gateway', model: 'model-a', apiKey: 'key-a', stance: 'for' },
+      { provider: 'gateway', model: 'model-b', apiKey: 'key-b', stance: 'against' },
+      { provider: 'gateway', model: 'model-a', apiKey: 'key-a', stance: 'neutral' },
+    ]);
+    expect(consensusArgs?.generateFns).toHaveLength(2);
+    expect(run.golden).toMatchSnapshot();
+  });
+});
+
+describe('golden: validateInput throws (B0.5)', () => {
+  it('empty diff: rejects with the exact message', async () => {
+    await expect(reviewPipeline(makeInput({ diff: '' }))).rejects.toThrow(
+      'Review input must include a non-empty diff',
+    );
+  });
+
+  it('legacy provider (openai): rejects with the migration error', async () => {
+    await expect(
+      reviewPipeline(makeInput({ provider: 'openai' as unknown as LLMProvider })),
+    ).rejects.toThrow(
+      "Provider 'openai' is no longer supported directly. " +
+        "Set provider: 'gateway' and configure credentials in mcp-llm-bridge. " +
+        'See docs/configuration.md#gateway-mode-mcp-llm-bridge',
+    );
+  });
+});
+
+describe('golden: path-protection tiers (B0.5)', () => {
+  it('blocked (.env) + redacted (.env.example): emits + parse-diff counts pinned', async () => {
+    // NOTE: review assumed ignorePatterns of type block/redact — WRONG. These
+    // tiers are hardcoded in path-protection.ts and non-overridable. No
+    // ignorePatterns needed to trigger them (see PATH_PROTECTION_DIFF docblock).
+    const run = await runGolden(makeInput({ diff: PATH_PROTECTION_DIFF }));
+    expect(run.golden.events).toContainEqual({
+      step: 'path-protection',
+      message: 'Blocked 1 sensitive file(s) from review',
+      detail: '  [BLOCKED] .env',
+    });
+    expect(run.golden.events).toContainEqual({
+      step: 'path-protection',
+      message: 'Redacted 1 file(s) — paths visible, content hidden',
+      detail: '  [REDACTED] .env.example',
+    });
+    expect(run.golden.events).toContainEqual(
+      expect.objectContaining({
+        step: 'parse-diff',
+        message: 'Parsed 3 files from diff, 2 after filtering (1 blocked, 1 redacted)',
+      }),
+    );
+    expect(run.golden).toMatchSnapshot();
+  });
+});
+
+describe('golden: chained multi-degradation (B0.5)', () => {
+  it('blast-radius + memory-search + semantic-ranking fail together: failedSteps ORDER pinned', async () => {
+    (runStaticAnalysis as M<typeof runStaticAnalysis>).mockResolvedValueOnce(
+      staticWithTwoFindings(),
+    );
+    (searchMemoryForContext as M<typeof searchMemoryForContext>).mockRejectedValueOnce(
+      new Error('database connection failed'),
+    );
+    (rankFindings as M<typeof rankFindings>).mockRejectedValueOnce(
+      new Error('embedding provider down'),
+    );
+    const run = await runGolden(
+      makeInput({
+        graphLoader: makeGraphLoader({
+          load: vi.fn().mockRejectedValue(new Error('graph file not found')),
+        }),
+        memoryStorage: {} as unknown as NonNullable<ReviewInput['memoryStorage']>,
+        embeddingProvider: FAKE_EMBED,
+        settings: makeSettings({ enableBlastRadius: true, enableMemory: true }),
+      }),
+    );
+    // Order is load-bearing: blast-radius pushes at Step 2.5 (sequential),
+    // memory-search inside the Step 5 Promise.all, semantic-ranking at Step 7.8.
+    expect(run.result.failedSteps).toEqual([
+      { step: 'blast-radius', error: 'graph file not found' },
+      { step: 'memory-search', error: 'database connection failed' },
+      { step: 'semantic-ranking', error: 'embedding provider down' },
+    ]);
+    expect(run.result.status).toBe('PARTIAL');
+    expect(run.golden).toMatchSnapshot();
+  });
+});
+
+describe('golden: blast-radius edges (B0.5)', () => {
+  it('stale graph: emits staleness warning + metadata.blastRadius.graphStale=true', async () => {
+    (computeBlastRadius as M<typeof computeBlastRadius>).mockReturnValueOnce(BLAST_KEEP_INDEX_ONLY);
+    const run = await runGolden(
+      makeInput({
+        diff: TWO_FILE_DIFF,
+        graphLoader: makeGraphLoader({
+          loadMetadata: vi.fn().mockResolvedValue(STALE_METADATA),
+        }),
+        settings: makeSettings({ enableBlastRadius: true }),
+      }),
+    );
+    expect(run.golden.events).toContainEqual({
+      step: 'blast-radius',
+      message: 'Dependency graph is stale (last indexed: 2020-01-01T00:00:00Z)',
+    });
+    expect(run.result.metadata.blastRadius?.graphStale).toBe(true);
+    expect(run.golden).toMatchSnapshot();
+  });
+
+  it('enableBlastRadius without graphLoader: block 2.5 skipped entirely, call-chain 2.6 still runs', async () => {
+    // Gating verified in pipeline.ts: Step 2.5 requires enableBlastRadius AND
+    // input.graphLoader (:233); Step 2.6 only requires enableBlastRadius (:315)
+    // plus a fileReader inside. No blast-radius events, no metadata.blastRadius.
+    (buildCallChainFromDiff as M<typeof buildCallChainFromDiff>).mockReturnValueOnce({
+      changedSymbols: [{ filePath: 'src/index.ts', symbolName: 'indexFn', kind: 'function' }],
+      affectedSymbols: [{ filePath: 'src/index.ts', symbolName: 'indexFn', kind: 'function' }],
+      callChainGraph: { nodes: [], edges: [] },
+      depth: 1,
+    });
+    const run = await runGolden(
+      makeInput({
+        diff: TWO_FILE_DIFF,
+        fileReader: async () => 'export function indexFn() {}\n',
+        settings: makeSettings({ enableBlastRadius: true }),
+      }),
+    );
+    expect(run.golden.events.filter((e) => e.step === 'blast-radius')).toEqual([]);
+    expect(run.golden.events.some((e) => e.step === 'call-chain')).toBe(true);
+    expect(run.result.metadata.blastRadius).toBeUndefined();
+    expect(run.golden).toMatchSnapshot();
+  });
+});
+
+// Deferred coverage (explicitly out of B0.5 scope, per review reconciliation):
+//   - #8 registry-enabled skipped result (isToolRegistryEnabled=true path /
+//     dynamic skipped-result keys from toolRegistry.getAll).
+//   - #9 truncateDiff actually truncating (diff > token budget → wasTruncated
+//     branch + '[... diff truncated ...]' marker in the agent input).

@@ -638,6 +638,376 @@ exports[`golden: baseline & modes > static-only: aiReviewEnabled=false skips the
 }
 `;
 
+exports[`golden: blast-radius edges (B0.5) > enableBlastRadius without graphLoader: block 2.5 skipped entirely, call-chain 2.6 still runs 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Call-chain: 1 changed symbol(s), 1 affected symbol(s)",
+      "step": "call-chain",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warning + metadata.blastRadius.graphStale=true 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts
+  src/utils.ts",
+      "message": "Parsed 2 files from diff, 2 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Dependency graph is stale (last indexed: 2020-01-01T00:00:00Z)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  changed: 1
+  dependents: 0
+  tests: 0",
+      "message": "Blast radius: 1 files (from 2 in diff)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 1,
+        "enabled": true,
+        "graphAvailable": true,
+        "graphStale": true,
+        "totalFiles": 2,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+        "src/utils.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 2,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: chained multi-degradation (B0.5) > blast-radius + memory-search + semantic-ranking fail together: failedSteps ORDER pinned 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "message": "Blast radius: skipped (error loading graph)",
+      "step": "blast-radius",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: success (2 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+    {
+      "message": "Reranking findings by semantic relevance...",
+      "step": "semantic-ranking",
+    },
+    {
+      "message": "Semantic ranking failed — continuing without",
+      "step": "semantic-ranking",
+    },
+  ],
+  "result": {
+    "failedSteps": [
+      {
+        "error": "graph file not found",
+        "step": "blast-radius",
+      },
+      {
+        "error": "database connection failed",
+        "step": "memory-search",
+      },
+      {
+        "error": "embedding provider down",
+        "step": "semantic-ranking",
+      },
+    ],
+    "findings": [
+      {
+        "category": "security",
+        "file": "src/index.ts",
+        "line": 5,
+        "message": "SQL injection via string concatenation",
+        "severity": "high",
+        "source": "semgrep",
+      },
+      {
+        "category": "style",
+        "file": "src/index.ts",
+        "line": 9,
+        "message": "Prefer const over let",
+        "severity": "low",
+        "source": "semgrep",
+      },
+    ],
+    "memoryContext": null,
+    "metadata": {
+      "blastRadius": {
+        "blastRadiusFiles": 1,
+        "enabled": true,
+        "fallbackReason": "error: graph file not found",
+        "graphAvailable": false,
+        "totalFiles": 1,
+      },
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [
+        "semgrep",
+      ],
+      "toolsSkipped": [
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "executionTimeMs": 0,
+        "findings": [
+          {
+            "category": "security",
+            "file": "src/index.ts",
+            "line": 5,
+            "message": "SQL injection via string concatenation",
+            "severity": "high",
+            "source": "semgrep",
+          },
+          {
+            "category": "style",
+            "file": "src/index.ts",
+            "line": 9,
+            "message": "Prefer const over let",
+            "severity": "low",
+            "source": "semgrep",
+          },
+        ],
+        "status": "success",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PARTIAL",
+    "summary": "simple review OK.",
+  },
+  "warns": [
+    [
+      "[ghagga] Blast-radius failed (degrading gracefully):",
+      "[Error] graph file not found",
+    ],
+    [
+      "[ghagga] Memory search failed (degrading gracefully):",
+      "database connection failed",
+    ],
+    [
+      "[ghagga] Semantic ranking failed (non-fatal):",
+      "embedding provider down",
+    ],
+  ],
+}
+`;
+
 exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > call-chain fails (:360): warn only, NO failedSteps entry, status PASSED 1`] = `
 {
   "events": [
@@ -4341,6 +4711,463 @@ exports[`golden: optional steps ON (isolated) > semantic-ranking ON: findings re
     },
     "status": "PASSED",
     "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: path-protection tiers (B0.5) > blocked (.env) + redacted (.env.example): emits + parse-diff counts pinned 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  [BLOCKED] .env",
+      "message": "Blocked 1 sensitive file(s) from review",
+      "step": "path-protection",
+    },
+    {
+      "detail": "  [REDACTED] .env.example",
+      "message": "Redacted 1 file(s) — paths visible, content hidden",
+      "step": "path-protection",
+    },
+    {
+      "detail": "  src/index.ts
+  .env.example",
+      "message": "Parsed 3 files from diff, 2 after filtering (1 blocked, 1 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        ".env",
+        ".env.example",
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 3,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge diagnostic (flat fields): mode-fallback pins the "CLI bridge" message 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Diagnostic mode not supported with CLI bridge — falling back to simple mode",
+      "step": "mode-fallback",
+    },
+    {
+      "message": "Running simple agent with cli-bridge/gemini...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge simple via providerChain: opencode + cliModel resolve credentials 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with cli-bridge/opencode...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus with 2-entry gateway chain: neutral wraps around to chain[0] (i % N) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running consensus agent with gateway/model-a...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "consensus",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "consensus review OK.",
+  },
+  "warns": [],
+}
+`;
+
+exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus with 3-entry gateway chain: stance distribution + one generateFn per entry 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 89600 tokens for diff, 38400 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running consensus agent with gateway/model-a...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "consensus",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "consensus review OK.",
   },
   "warns": [],
 }
