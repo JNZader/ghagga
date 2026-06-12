@@ -5,15 +5,15 @@
 // in ghagga-core and re-exported from here. This prevents drift like the
 // ReviewStatus PARTIAL issue (resolved in PR #186).
 //
-// Single source of truth: ReviewStatus is defined in `ghagga-core` (the review
-// engine runtime). We re-export it here so the dashboard / server / shared
-// wire contract cannot drift from the runtime enum. Adding a new status to
-// core is automatically reflected in @ghagga/types — no manual sync needed.
-import type { ReviewStatus } from 'ghagga-core';
+// Single source of truth: ReviewStatus and ReviewMode are defined in
+// `ghagga-core` (the review engine runtime). We re-export them here so the
+// dashboard / server / shared wire contract cannot drift from the runtime
+// enums. Adding a new status/mode to core is automatically reflected in
+// @ghagga/types — no manual sync needed. (ReviewMode previously drifted:
+// core persisted 'diagnostic' reviews while this union lacked it.)
+import type { ReviewMode, ReviewStatus } from 'ghagga-core';
 
-export type { ReviewStatus };
-
-export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'fan-out';
+export type { ReviewMode, ReviewStatus };
 
 /**
  * Supported LLM provider modes.
@@ -60,7 +60,12 @@ export interface Finding {
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
   category: string;
   file: string;
-  line: number;
+  /**
+   * Line number, when applicable. Optional because core's `ReviewFinding`
+   * declares `line?: number` and the server persists findings verbatim —
+   * file-level findings (no specific line) DO reach the wire without it.
+   */
+  line?: number;
   message: string;
   suggestion?: string;
 }

@@ -91,7 +91,9 @@ export function createReviewsRouter(db: Database) {
 
         return c.json({
           // Each joined row carries its repository fullName → wire `repo`.
-          data: reviews.map((row) => toReviewDto(row, row.fullName)),
+          // Destructured so the compiler resolves `fullName` from the real
+          // query row type (ReviewWithRepo), not the structural ReviewRow.
+          data: reviews.map(({ fullName, ...row }) => toReviewDto(row, fullName)),
           pagination: { page, limit, offset, total },
         });
       }

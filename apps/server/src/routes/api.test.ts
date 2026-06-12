@@ -214,8 +214,11 @@ function fakeDbReviewRow(overrides: Record<string, unknown> = {}) {
     prNumber: 10,
     status: 'PASSED',
     mode: 'simple',
-    summary: 'All good',
-    findings: [],
+    // Defaults mirror the REAL storage state: both columns are nullable and
+    // rows commonly carry NULL — tests asserting non-null values opt in
+    // explicitly via overrides.
+    summary: null,
+    findings: null,
     tokensUsed: 100,
     executionTimeMs: 1200,
     metadata: null,
@@ -228,7 +231,7 @@ describe('GET /api/reviews', () => {
   it('returns paginated reviews mapped to the wire Review contract (repo populated)', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([
-      fakeDbReviewRow({ id: 1, prNumber: 10, status: 'PASSED' }),
+      fakeDbReviewRow({ id: 1, prNumber: 10, status: 'PASSED', summary: 'All good', findings: [] }),
       fakeDbReviewRow({ id: 2, prNumber: 11, status: 'FAILED', summary: null, findings: null }),
     ]);
     mockCountReviewsByRepoId.mockResolvedValueOnce(2);
@@ -449,8 +452,18 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
       [1, 'owner/repo-a'],
       [2, 'owner/repo-b'],
     ]);
-    // Contract pin: `fullName` is a storage detail — it must NOT leak.
-    expect(json.data[0]).not.toHaveProperty('fullName');
+    // Contract pin: EXACTLY the Review keys — no storage columns leak
+    // (repositoryId, tokensUsed, executionTimeMs, metadata) and no fullName.
+    expect(Object.keys(json.data[0]).sort()).toEqual([
+      'createdAt',
+      'findings',
+      'id',
+      'mode',
+      'prNumber',
+      'repo',
+      'status',
+      'summary',
+    ]);
     // Authz: the query layer is invoked with the caller's installations ONLY.
     expect(mockGetReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100, 200], {
       limit: 50,

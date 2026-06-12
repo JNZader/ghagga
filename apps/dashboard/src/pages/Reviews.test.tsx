@@ -789,6 +789,29 @@ describe('Reviews — detail modal', () => {
     expect(screen.getByText('src/utils.ts:10')).toBeInTheDocument();
   });
 
+  it('renders only the file (no ":undefined") when a finding has no line', () => {
+    const reviewNoLine = makeReview({
+      id: 11,
+      findings: [
+        {
+          severity: 'low',
+          category: 'docs',
+          file: 'README.md',
+          message: 'Missing setup section',
+        },
+      ],
+    });
+    mockReviewsData([reviewNoLine]);
+
+    renderReviews();
+
+    fireEvent.click(screen.getByText('acme/app'));
+
+    // Location cell shows just the file — never "README.md:undefined".
+    expect(screen.getByText('README.md')).toBeInTheDocument();
+    expect(screen.queryByText('README.md:undefined')).not.toBeInTheDocument();
+  });
+
   it('displays "—" when a finding has no suggestion', () => {
     mockReviewsData([REVIEW_WITH_FINDINGS]);
 
