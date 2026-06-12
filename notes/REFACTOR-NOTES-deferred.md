@@ -216,9 +216,13 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   saltándose el patch-match post-header → perdía la inyección legacy en `line === newStart-1`.
   Restaurado con helper `injectAfter()` + `countMarkersInHunk` ahora presupuesta el match en posición
   de header. Verificado: markers aterrizan idénticos al legacy en TODAS las fixtures.
-- **CORE-M8 `computeSimilarity`** (`scope/entity-diff.ts:168-187` pre-refactor; hoy en el mismo
-  archivo): dice LCS pero compara char por posición. Quedó EXPLÍCITAMENTE fuera de scope del SDD
-  unify-diff-parsers (es lógica de similarity, no de parsing). Sigue pendiente.
+- ~~**CORE-M8 `computeSimilarity`**~~ ✅ **RESUELTO 2026-06-12, PR #218** (`dac8808`, 3vr con
+  fix-forward). LCS real (DP dos filas, Uint32Array) en vez de char-por-posición; threshold 0.9
+  intacto (LCS ≥ posicional para todo par ⇒ cero falsos negativos nuevos). El 3vr agregó guards:
+  denominador con longitudes ORIGINALES (mata el falso rename 1.0 de bodies >10k idénticos solo en
+  el prefijo capeado), prefilter O(1) (`min/max < threshold` ⇒ skip DP) y budget de celdas DP
+  (200M default, inyectable vía `EntityDiffOptions.lcsDpCellBudget`) porque el costo por par subió
+  ~10.000× — sin budget era bomba de CPU latente en `detectRenames` (API pública sin callers hoy).
 - **2 bugs pre-existentes de `semantic-diff` congelados por los harnesses de paridad** (hallados por
   el 3vr de Phase 5-7 del SDD, AMBOS anteriores al refactor y preservados a propósito —
   `@experimental`, sin callers prod):
@@ -229,6 +233,13 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
      union `EntityChangeKind` no tiene `class_modified`).
   Arreglarlos = delta de comportamiento observable → actualizar `parity-extract-semantic-diff.test.ts`
   (la copia frozen los reproduce) y el changelog al hacerlo.
+  ✅ **RESUELTO 2026-06-12, PR #219** (`f78f835`, 3vr): union ampliado con
+  `class_modified`/`import_modified`/`export_modified`, ternarios de 3 ramas, buildSummary con
+  modifiedKinds correctos. Bonus descubierto en el fix: (cara B) toda function modificada también
+  contaba en "N class modified", y los imports/exports MODIFICADOS eran alcanzables y se reportaban
+  `*_removed`. Harness convertido a divergencia confinada con evidencia estructural por par
+  (precedente `assertMarkerPathDivergence`); 4 snapshots re-blessed auditados (solo
+  `export_removed→export_modified` + recuentos). Semver minor, changelog incluido.
 - **Limitación documentada de autoridad de path en headers malformados** (SDD unify-diff-parsers,
   `src/diff/parse.ts:17-19`): en el header unquoted `diff --git a/x b/y`, un path con ` b/` literal
   es ambiguo — gana la ÚLTIMA ocurrencia (mismo boundary que la regex histórica). Y cuando el header
@@ -245,9 +256,20 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   pasa verde completo — `--no-verify` ya NO es necesario por lint. Gotcha vigente: el paso Compile
   del hook regenera `apps/action/dist` (churn de bundle; si no se quiere commitear, restaurar con
   `git checkout -- apps/action/dist` y borrar los artefactos nuevos no trackeados).
-- **`Review.repo` es ficción** (descubierto sprint 3): las review rows del server nunca llevan campo
-  `repo`. El dashboard lo papelea con fallback a `fullName`. Fix real: corregir el contrato en
-  `@ghagga/types` y mapear server-side.
+- ~~**`Review.repo` es ficción**~~ ✅ **RESUELTO 2026-06-12, PR #217** (`4212a0e`, 3vr con
+  fix-forward). `GET /api/reviews` ahora mapea ambos paths por `toReviewDto` (per-repo compone del
+  repo ya validado, cross-installation del innerJoin); el dashboard perdió el fallback en cadena.
+  Bonus de seguridad: en main el endpoint emitía filas DB CRUDAS — `metadata` (provider, modelo,
+  tokens, costos, fileList), `tokensUsed`, `executionTimeMs` salían al wire; el mapper allowlistea.
+  El 3vr (Codex) cazó además: `ReviewMode` ahora se re-exporta de core (faltaba `diagnostic`, que
+  el runtime persiste desde `c35b011`) y `Finding.line` pasó a opcional (core dice `line?`, se
+  persiste verbatim; el dashboard ya no renderiza `file:undefined`). Deploy note: server-first.
+- **Follow-ups del 3vr de #217** (anotados, no bloqueantes):
+  1. El `Finding` del wire es subset del `ReviewFinding` de core (`source` requerido + opcionales
+     como `aiPriority` se persisten verbatim → presentes en el wire pero NO declarados en el tipo).
+     Candidato: re-exportar `ReviewFinding` desde core como se hizo con `ReviewMode`/`ReviewStatus`.
+  2. No hay integration test de auth para `GET /api/reviews` — la suite integrada cubre
+     `/api/repositories` y `/api/stats` pero no reviews (señalado por Codex).
 - **Test live-PG para tsquery** (sprint 1): el escaping de `buildTsQuery` está string-tested; falta
   un test de integración con PG real que pruebe que `to_tsquery` acepta el output.
 - **Matrix jobs comparten cache key** (sprint 1): aún con runAttempt, dos jobs en el mismo run-attempt
@@ -288,8 +310,10 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
    activo permanente.~~ ✅ 2026-06-12, SDD `unify-diff-parsers` (ver sección arriba). El corpus
    (23 fixtures) + los 6 harnesses de paridad quedaron como activo permanente.
 5. **Refactor 2** (pipeline god-function) — SDD, rama dedicada, 4vr, canary obligatorio.
-   Desbloqueado (la suite de core está verde).
-6. **Contratos**: `Review.repo` en `@ghagga/types` (los tipos que mienten son veneno de DX).
+   Desbloqueado (la suite de core está verde). **ES EL PRÓXIMO PASO** (sesión propia).
+6. ~~**Contratos**: `Review.repo` en `@ghagga/types`~~ ✅ 2026-06-12, PR #217 (ver sección
+   Correctness). El barrido fix-between-SDDs del 2026-06-12 cerró además CORE-M8 (#218),
+   los 2 bugs de semantic-diff (#219) y el ticket stale de lint (#216).
 
 > Regla de stamina: no encadenar los dos refactors en la misma sesión. Cada uno es un esfuerzo
 > aislado con su propia red de tests. La deuda estructural se cierra con foco, no con prisa.
