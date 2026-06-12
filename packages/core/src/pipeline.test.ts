@@ -803,6 +803,9 @@ diff --git a/README.md b/README.md
 
       // Status should be PARTIAL since the review would otherwise PASS
       expect(result.status).toBe('PARTIAL');
+
+      // Coverage signal: a degraded step means incomplete coverage
+      expect(result.coverageComplete).toBe(false);
     });
 
     it('does not set failedSteps when all steps succeed', async () => {
@@ -810,6 +813,9 @@ diff --git a/README.md b/README.md
 
       expect(result.failedSteps).toBeUndefined();
       expect(result.status).toBe('PASSED');
+
+      // Coverage signal: every pipeline step ran
+      expect(result.coverageComplete).toBe(true);
     });
 
     it('preserves FAILED status even when steps fail (does not downgrade to PARTIAL)', async () => {
@@ -830,6 +836,10 @@ diff --git a/README.md b/README.md
 
       // Status should remain FAILED, not downgraded to PARTIAL
       expect(result.status).toBe('FAILED');
+
+      // Coverage signal is ORTHOGONAL to the verdict: FAILED stands, but the
+      // incomplete coverage is surfaced first-class instead of via downgrade.
+      expect(result.coverageComplete).toBe(false);
     });
   });
 

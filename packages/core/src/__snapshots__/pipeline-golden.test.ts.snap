@@ -41,6 +41,7 @@ exports[`golden: baseline & modes > baseline: simple mode, all optional steps of
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -129,6 +130,7 @@ exports[`golden: baseline & modes > mode: consensus 1`] = `
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -221,6 +223,7 @@ exports[`golden: baseline & modes > mode: diagnostic falls back to simple on gat
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -309,6 +312,7 @@ exports[`golden: baseline & modes > mode: diagnostic stays diagnostic on ollama 
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -397,6 +401,7 @@ exports[`golden: baseline & modes > mode: fan-out (no lensDir → loadLensesFrom
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -485,6 +490,7 @@ exports[`golden: baseline & modes > mode: workflow 1`] = `
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -573,6 +579,7 @@ exports[`golden: baseline & modes > static-only: aiReviewEnabled=false skips the
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [
       {
         "category": "security",
@@ -684,6 +691,7 @@ exports[`golden: blast-radius edges (B0.5) > enableBlastRadius without graphLoad
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -785,6 +793,7 @@ exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warnin
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -893,6 +902,7 @@ exports[`golden: chained multi-degradation (B0.5) > blast-radius + memory-search
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "graph file not found",
@@ -1049,6 +1059,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -1142,6 +1153,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -1235,6 +1247,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -1447,6 +1460,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > ai-enhance f
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "enhance model unavailable",
@@ -1563,6 +1577,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > ai-review fa
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "LLM exploded",
@@ -1680,6 +1695,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > author-trust
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "git unavailable",
@@ -1783,6 +1799,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > blast-radius
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "graph file not found",
@@ -1908,6 +1925,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > code-intel f
       "providerAvailable": true,
       "queryDurationMs": 0,
     },
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "forced code-intel emit failure",
@@ -2011,6 +2029,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > doc-validati
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "symbol extraction blew up",
@@ -2118,6 +2137,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > exploitabili
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "exploit graph corrupt",
@@ -2251,6 +2271,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > memory-persi
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "sqlite is locked",
@@ -2350,6 +2371,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > memory-searc
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "database connection failed",
@@ -2457,6 +2479,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > recursive-re
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "re-review loop crashed",
@@ -2582,6 +2605,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > semantic-ran
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "embedding provider down",
@@ -2715,6 +2739,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > static-analy
     },
   ],
   "result": {
+    "coverageComplete": false,
     "failedSteps": [
       {
         "error": "semgrep crashed",
@@ -2948,6 +2973,7 @@ exports[`golden: kitchen-sink > everything ON: pins the final findings order (en
       "providerAvailable": true,
       "queryDurationMs": 0,
     },
+    "coverageComplete": true,
     "docValidation": {
       "changedSymbols": [
         "indexFn",
@@ -3167,6 +3193,7 @@ exports[`golden: optional steps ON (isolated) > author-trust ON: trusted author 
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -3260,6 +3287,7 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: exceeded cap fa
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -3365,6 +3393,7 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -3477,6 +3506,7 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -3602,6 +3632,7 @@ exports[`golden: optional steps ON (isolated) > checklist ON: context emitted an
       ],
       "totalScore": 30,
     },
+    "coverageComplete": true,
     "findings": [
       {
         "category": "security",
@@ -3723,6 +3754,7 @@ exports[`golden: optional steps ON (isolated) > code-intel ON: provider data flo
       "providerAvailable": true,
       "queryDurationMs": 0,
     },
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -3819,6 +3851,7 @@ exports[`golden: optional steps ON (isolated) > doc-validation ON: stale referen
     },
   ],
   "result": {
+    "coverageComplete": true,
     "docValidation": {
       "changedSymbols": [
         "indexFn",
@@ -3935,6 +3968,7 @@ exports[`golden: optional steps ON (isolated) > enhance ON: compute in 5.5, appl
     },
   ],
   "result": {
+    "coverageComplete": true,
     "enhanceMetadata": {
       "filteredCount": 0,
       "groupCount": 0,
@@ -4077,6 +4111,7 @@ exports[`golden: optional steps ON (isolated) > exploitability + usage ON: trivy
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [
       {
         "category": "security",
@@ -4203,6 +4238,7 @@ exports[`golden: optional steps ON (isolated) > memory ON: search feeds context 
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": "Past review: watch the parser.",
     "metadata": {
@@ -4295,6 +4331,7 @@ exports[`golden: optional steps ON (isolated) > negative-examples ON: SqliteMemo
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": "PREVIOUSLY DISMISSED FINDINGS — do NOT suggest these again:
 - security (false positive on test fixture)
@@ -4393,6 +4430,7 @@ exports[`golden: optional steps ON (isolated) > recursive-review ON: regressions
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [
       {
         "category": "security",
@@ -4538,6 +4576,7 @@ exports[`golden: optional steps ON (isolated) > self-improve ON: rules prepended
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": "## Self-Improve Rules
 - Avoid flagging test fixtures.",
@@ -4635,6 +4674,7 @@ exports[`golden: optional steps ON (isolated) > semantic-ranking ON: findings re
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [
       {
         "category": "style",
@@ -4768,6 +4808,7 @@ exports[`golden: path-protection tiers (B0.5) > blocked (.env) + redacted (.env.
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -4862,6 +4903,7 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge di
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -4950,6 +4992,7 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge si
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -5038,6 +5081,7 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus wit
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -5126,6 +5170,7 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus wit
     },
   ],
   "result": {
+    "coverageComplete": true,
     "findings": [],
     "memoryContext": null,
     "metadata": {

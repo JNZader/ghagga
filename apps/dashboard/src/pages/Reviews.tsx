@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { CoverageIndicator } from '@/components/CoverageIndicator';
 import { SeverityBadge } from '@/components/SeverityBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -44,6 +45,7 @@ function ReviewDetail({ review, onClose }: { review: Review; onClose: () => void
           <div>
             <div className="flex items-center gap-3">
               <StatusBadge status={review.status} />
+              <CoverageIndicator coverageComplete={review.coverageComplete} />
               <span className="text-sm text-text-secondary">
                 {review.repo} #{review.prNumber}
               </span>
@@ -381,7 +383,10 @@ export function Reviews() {
                       />
                     </td>
                     <td className="px-6 py-3">
-                      <StatusBadge status={review.status} />
+                      <span className="inline-flex items-center gap-2">
+                        <StatusBadge status={review.status} />
+                        <CoverageIndicator coverageComplete={review.coverageComplete} />
+                      </span>
                     </td>
                     <td className="px-6 py-3 font-medium text-text-primary">{review.repo}</td>
                     <td className="px-6 py-3 text-primary-400">#{review.prNumber}</td>

@@ -331,8 +331,27 @@ export interface ReviewResult {
   /** Code intelligence metadata (present when enableCodeIntel is true). */
   codeIntelMetadata?: import('./code-intel/types.js').CodeIntelMetadata;
 
-  /** Pipeline steps that failed but were gracefully degraded. Present when status is 'PARTIAL'. */
+  /**
+   * Pipeline steps that failed but were gracefully degraded. Present whenever
+   * at least one step degraded, REGARDLESS of status — a FAILED or
+   * NEEDS_HUMAN_REVIEW review with degraded steps carries it too (only a
+   * PASSED review is downgraded to PARTIAL; see pipeline/finalize.ts).
+   */
   failedSteps?: { step: string; error: string }[];
+
+  /**
+   * First-class coverage signal, ORTHOGONAL to the review verdict (`status`):
+   * the verdict says what the review concluded; coverage says how much of the
+   * pipeline actually ran to reach it.
+   *
+   *   - `true`      — every pipeline step ran (full coverage)
+   *   - `false`     — at least one step degraded (see `failedSteps`); the
+   *                   verdict stands but was produced with incomplete coverage
+   *   - `undefined` — not applicable: the pipeline never ran (e.g. SKIPPED
+   *                   early-returns like flood-skip / all-files-filtered,
+   *                   which short-circuit before the finalize phase)
+   */
+  coverageComplete?: boolean;
 }
 
 export interface ReviewFinding {

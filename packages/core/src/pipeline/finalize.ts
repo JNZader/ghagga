@@ -2,11 +2,16 @@
  * Finalize phase: steps 8 → 9 of the review pipeline.
  *
  *   8  persist review observations to memory (awaited for SQLite correctness)
- *   9  attach failed steps and downgrade PASSED → PARTIAL
+ *   9  attach failed steps, set coverageComplete, downgrade PASSED → PARTIAL
  *
  * ⚠️ The downgrade is PASSED-only ON PURPOSE: a FAILED review stays
  * FAILED even when steps degraded (pinned by pipeline.test.ts —
  * "preserves FAILED status even when steps fail"). Do NOT "fix" this.
+ * The first-class coverage signal for non-PASSED statuses is
+ * `coverageComplete` (orthogonal to the verdict), set below for EVERY
+ * result that reaches finalize. SKIPPED early-returns (flood-skip /
+ * all-files-filtered) short-circuit in prepare and never reach this
+ * phase — they stay `coverageComplete: undefined` (not applicable).
  */
 
 import { persistReviewObservations } from '../memory/persist.js';
@@ -39,6 +44,9 @@ export async function finalize(state: PipelineState): Promise<void> {
   }
 
   // ── Step 9: Attach failed steps and mark as PARTIAL ─────────
+  // Coverage is orthogonal to the verdict: every result that reaches
+  // finalize gets the signal, including FAILED / NEEDS_HUMAN_REVIEW.
+  result.coverageComplete = state.failedSteps.length === 0;
   if (state.failedSteps.length > 0) {
     result.failedSteps = state.failedSteps;
     // Only downgrade to PARTIAL if the review otherwise appeared successful

@@ -37,6 +37,8 @@ interface ReviewRow {
   mode: string;
   summary: string | null;
   findings: unknown[] | null;
+  /** jsonb blob persisted by the review queue (ReviewMetadata + coverageComplete). */
+  metadata: unknown;
   createdAt: Date;
 }
 
@@ -50,8 +52,15 @@ interface ReviewRow {
  *
  * Also normalizes DB nullables (`summary`, `findings`) so the contract's
  * non-nullable fields tell the truth, and serializes `createdAt` to ISO.
+ *
+ * `coverageComplete` lives inside the `metadata` jsonb blob (the queue folds
+ * it in at saveReview time — queues/review.ts). It is emitted ONLY when the
+ * blob carries a real boolean: rows persisted before the field existed, and
+ * SKIPPED reviews (pipeline never ran), simply lack the key on the wire.
  */
 function toReviewDto(row: ReviewRow, repoFullName: string): Review {
+  const coverageComplete = (row.metadata as { coverageComplete?: unknown } | null)
+    ?.coverageComplete;
   return {
     id: row.id,
     repo: repoFullName,
@@ -61,6 +70,7 @@ function toReviewDto(row: ReviewRow, repoFullName: string): Review {
     summary: row.summary ?? '',
     findings: (row.findings ?? []) as Finding[],
     createdAt: row.createdAt.toISOString(),
+    ...(typeof coverageComplete === 'boolean' ? { coverageComplete } : {}),
   };
 }
 
