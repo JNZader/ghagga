@@ -24,11 +24,12 @@ import type {
 } from '../types.js';
 import type { DiffFile } from '../utils/diff.js';
 
-/** A pipeline step that failed but was gracefully degraded. */
-export interface FailedStep {
-  step: string;
-  error: string;
-}
+/**
+ * A pipeline step that failed but was gracefully degraded.
+ * Derived from `ReviewResult['failedSteps']` so the internal accumulator
+ * and the public result shape can never drift apart.
+ */
+export type FailedStep = NonNullable<ReviewResult['failedSteps']>[number];
 
 /**
  * Pipeline state WITHOUT `result` — the shape available to phases that
