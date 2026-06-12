@@ -41,33 +41,22 @@ import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { SqliteMemoryStorage } from './memory/sqlite.js';
 import { formatNegativeExamplesPrompt } from './negative.js';
-import { resolveCredentialEnvVar } from './providers/cli-bridge.js';
 import {
-  createCLIBridgeGenerateFn,
-  createGatewayGenerateFn,
-  createOllamaGenerateFn,
-  type GenerateTextFn,
-} from './providers/generate-fn.js';
+  buildConsensusModels,
+  resolveAiEnabled,
+  resolveEffectiveMode,
+  resolveGenerateTextFns,
+  resolvePrimaryModel,
+  resolvePrimaryProvider,
+} from './pipeline/providers.js';
+import { createSkippedResult, createStaticOnlyResult } from './pipeline/results.js';
+import type { FailedStep } from './pipeline/state.js';
 import { rankFindings } from './ranking/index.js';
 import { recursiveReview } from './recursive/index.js';
 import { deriveRules, formatRulesForPrompt, loadFeedback } from './self-improve/index.js';
-import { initializeDefaultTools } from './tools/plugins/index.js';
-import { toolRegistry } from './tools/registry.js';
-import {
-  formatStaticAnalysisContext,
-  isToolRegistryEnabled,
-  runStaticAnalysis,
-} from './tools/runner.js';
+import { formatStaticAnalysisContext, runStaticAnalysis } from './tools/runner.js';
 import { computeAuthorTrustScore, getReviewModeForTier } from './trust/index.js';
-import type {
-  LLMProvider,
-  ProviderChainEntry,
-  ReviewFinding,
-  ReviewInput,
-  ReviewMode,
-  ReviewResult,
-  ReviewStatus,
-} from './types.js';
+import type { LLMProvider, ReviewFinding, ReviewInput, ReviewMode, ReviewResult } from './types.js';
 import { buildProgressiveContext } from './utils/context-levels.js';
 import { filterDiffFiles, parseDiffFiles, truncateDiff } from './utils/diff.js';
 import { detectStacks } from './utils/stack-detect.js';
@@ -153,7 +142,7 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   const emit = input.onProgress ?? (() => {});
 
   // Track steps that failed but were gracefully degraded
-  const failedSteps: { step: string; error: string }[] = [];
+  const failedSteps: FailedStep[] = [];
 
   // Resolve whether AI review is enabled
   const aiEnabled = resolveAiEnabled(input);
@@ -1070,196 +1059,6 @@ export async function reviewPipeline(input: ReviewInput): Promise<ReviewResult> 
   return result;
 }
 
-// ─── Provider Resolution ────────────────────────────────────────
-
-/**
- * Determine if AI review is enabled.
- * Defaults to true for backward compatibility (CLI/Action don't set this).
- */
-function resolveAiEnabled(input: ReviewInput): boolean {
-  if (input.aiReviewEnabled === false) return false;
-  // If chain is explicitly empty and no single provider, treat as disabled
-  if (input.providerChain && input.providerChain.length === 0 && !input.provider) {
-    console.warn(
-      '[ghagga] AI review enabled but provider chain is empty and no single provider — treating as disabled',
-    );
-    return false;
-  }
-  return true;
-}
-
-/**
- * Resolve the primary provider from chain or flat fields.
- * Returns the first entry in the chain, or builds one from flat fields.
- */
-function resolvePrimaryProvider(input: ReviewInput): ProviderChainEntry {
-  if (input.providerChain && input.providerChain.length > 0) {
-    const first = input.providerChain[0];
-    if (first) return first;
-  }
-
-  // Backward compat: single provider from flat fields
-  if (!input.provider || !input.model || !input.apiKey) {
-    throw new Error('No provider chain and no single provider configured');
-  }
-  return {
-    provider: input.provider as ProviderChainEntry['provider'],
-    model: input.model,
-    apiKey: input.apiKey,
-  };
-}
-
-/**
- * Build the 3-entry ConsensusModelConfig array for the for/against/neutral votes.
- *
- * Distribution rules (given a chain of length N):
- *   N >= 3 : chain[0]→for, chain[1]→against, chain[2]→neutral
- *   N == 2 : chain[0]→for, chain[1]→against, chain[0]→neutral
- *   N == 1 : all 3 votes use chain[0]  (same as primary-only)
- *   N == 0 : all 3 votes use `primary` (backward compat)
- *
- * This spreads consensus votes across providers so each vote hits a
- * different TPM budget instead of all three hammering the same limit.
- */
-function buildConsensusModels(
-  chain: ProviderChainEntry[] | undefined,
-  primary: ProviderChainEntry,
-): import('./agents/consensus.js').ConsensusModelConfig[] {
-  const stances = ['for', 'against', 'neutral'] as const;
-
-  return stances.map((stance, i) => {
-    const entry =
-      chain && chain.length > 0 ? (chain[i % chain.length] as ProviderChainEntry) : primary;
-    return {
-      provider: entry.provider as import('./types.js').LLMProvider,
-      model: entry.model,
-      apiKey: entry.apiKey,
-      stance,
-    };
-  });
-}
-
-/**
- * Resolve the model name for token budget calculation.
- */
-function resolvePrimaryModel(input: ReviewInput): string {
-  if (input.providerChain && input.providerChain.length > 0) {
-    return input.providerChain[0]?.model ?? 'gpt-4o-mini';
-  }
-  return input.model ?? 'gpt-4o-mini';
-}
-
-// ─── GenerateTextFn Resolution ──────────────────────────────────
-
-/**
- * Create the appropriate GenerateTextFn(s) based on the provider type.
- *
- * - cli-bridge: single fn wrapping generateViaCLI
- * - gateway: one fn per gateway chain entry (for round-robin distribution)
- * - ollama: single fn wrapping local Ollama OpenAI-compatible API
- *
- * Providers that are no longer supported directly (anthropic, openai, etc.)
- * throw a migration error pointing users to gateway mode.
- */
-function resolveGenerateTextFns(
-  input: ReviewInput,
-  isCliBridge: boolean,
-  isGateway: boolean,
-  isOllama: boolean,
-): GenerateTextFn[] {
-  if (isCliBridge) {
-    // Resolve CLI bridge options from provider chain or flat input fields
-    const cliBridgeEntry = input.providerChain?.[0];
-    const preferredCLI =
-      (cliBridgeEntry?.model ?? input.model) !== 'auto'
-        ? (cliBridgeEntry?.model ?? input.model)
-        : undefined;
-
-    const cliModel = cliBridgeEntry?.cliModel;
-
-    // Build credentials from the decrypted API key
-    const decryptedKey = cliBridgeEntry?.apiKey || input.apiKey;
-    const credentialEnvName = resolveCredentialEnvVar(preferredCLI, cliModel);
-    const credentials: Record<string, string> = {};
-    if (preferredCLI && credentialEnvName && decryptedKey) {
-      credentials[credentialEnvName] = decryptedKey;
-    }
-
-    return [
-      createCLIBridgeGenerateFn({
-        preferredCLI,
-        cliModel,
-        credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
-      }),
-    ];
-  }
-
-  if (isGateway) {
-    // Map ALL gateway entries in the chain — one GenerateTextFn per model
-    // for round-robin distribution in workflow/consensus modes
-    const chain = input.providerChain?.filter((e) => e.provider === 'gateway') ?? [];
-
-    if (chain.length > 0) {
-      // Use gatewayUrl and token from the first entry (shared across all)
-      const gatewayUrl = chain[0]?.gatewayUrl ?? '';
-      const gatewayToken = chain[0]?.apiKey || input.apiKey || '';
-
-      return chain.map((entry) => {
-        const model = entry.model !== 'auto' ? entry.model : undefined;
-        return createGatewayGenerateFn({
-          gatewayUrl,
-          gatewayToken,
-          model,
-          project: 'ghagga',
-        });
-      });
-    }
-
-    // Fallback: single entry from flat input fields
-    return [
-      createGatewayGenerateFn({
-        gatewayUrl: '',
-        gatewayToken: input.apiKey || '',
-        model: input.model !== 'auto' ? input.model : undefined,
-        project: 'ghagga',
-      }),
-    ];
-  }
-
-  if (isOllama) {
-    const model = input.model && input.model !== 'auto' ? input.model : 'llama3';
-    return [createOllamaGenerateFn(model, input.ollamaBaseURL)];
-  }
-
-  // Legacy provider migration guard — should never reach here with the narrowed type,
-  // but protects against runtime strings from older configs.
-  const legacyProvider = input.providerChain?.[0]?.provider ?? input.provider ?? 'unknown';
-  throw new Error(
-    `Provider '${legacyProvider}' is no longer supported directly. ` +
-      `Set provider: 'gateway' and configure credentials in mcp-llm-bridge. ` +
-      `See docs/configuration.md#gateway-mode-mcp-llm-bridge`,
-  );
-}
-
-/**
- * Resolve the effective review mode.
- *
- * Diagnostic mode requires direct model access. Ollama provides it
- * (runDiagnosticReview uses createOllamaGenerateFn); CLI bridge and
- * gateway do not, so they fall back to simple mode.
- */
-function resolveEffectiveMode(
-  mode: ReviewMode,
-  isCliBridge: boolean,
-  isGateway: boolean,
-): ReviewMode {
-  if (mode === 'diagnostic' && (isCliBridge || isGateway)) {
-    return 'simple';
-  }
-  // Fan-out works with all backends (uses generateFns like workflow/consensus)
-  return mode;
-}
-
 // ─── Helpers ────────────────────────────────────────────────────
 
 /**
@@ -1414,92 +1213,4 @@ async function queryCodeIntelSafe(
     emit({ step: 'code-intel', message: 'Code intelligence: failed — continuing without' });
     return [];
   }
-}
-
-/**
- * Create a SKIPPED result when all files are filtered out.
- */
-function createSkippedResult(input: ReviewInput, startTime: number): ReviewResult {
-  const primary = input.providerChain?.[0];
-
-  // Build a dynamic skipped result (legacy keys always present)
-  const skippedToolResult = { status: 'skipped' as const, findings: [], executionTimeMs: 0 };
-  const staticAnalysis: import('./types.js').StaticAnalysisResult = {
-    semgrep: { ...skippedToolResult },
-    trivy: { ...skippedToolResult },
-    cpd: { ...skippedToolResult },
-  };
-
-  // Collect all tool names for the toolsSkipped metadata
-  const allToolNames = ['semgrep', 'trivy', 'cpd'];
-
-  // When registry is enabled, include all registered tools as skipped
-  if (isToolRegistryEnabled()) {
-    initializeDefaultTools();
-    for (const tool of toolRegistry.getAll()) {
-      if (!staticAnalysis[tool.name]) {
-        staticAnalysis[tool.name] = { ...skippedToolResult };
-      }
-      if (!allToolNames.includes(tool.name)) {
-        allToolNames.push(tool.name);
-      }
-    }
-  }
-
-  return {
-    status: 'SKIPPED' as ReviewStatus,
-    summary: 'All files in the diff matched ignore patterns. No review was performed.',
-    findings: [],
-    staticAnalysis,
-    memoryContext: null,
-    metadata: {
-      mode: input.mode,
-      provider: primary?.provider ?? input.provider ?? 'none',
-      model: primary?.model ?? input.model ?? 'unknown',
-      tokensUsed: 0,
-      executionTimeMs: Date.now() - startTime,
-      toolsRun: [],
-      toolsSkipped: allToolNames,
-    },
-  };
-}
-
-/**
- * Create a result with only static analysis findings (no AI).
- * Used when AI review is disabled or when all providers fail.
- */
-function createStaticOnlyResult(
-  staticResult: import('./types.js').StaticAnalysisResult,
-  mode: import('./types.js').ReviewMode,
-  startTime: number,
-): ReviewResult {
-  // Determine status from static findings severity (dynamic — all tools)
-  const allFindings = Object.values(staticResult).flatMap((toolResult) =>
-    toolResult && typeof toolResult === 'object' && 'findings' in toolResult
-      ? toolResult.findings
-      : [],
-  );
-  const hasCriticalOrHigh = allFindings.some(
-    (f) => f.severity === 'critical' || f.severity === 'high',
-  );
-
-  return {
-    status: hasCriticalOrHigh ? 'FAILED' : 'PASSED',
-    summary:
-      allFindings.length > 0
-        ? `Static analysis found ${allFindings.length} finding(s). AI review was not performed.`
-        : 'Static analysis found no issues. AI review was not performed.',
-    findings: [], // Will be merged in step 7
-    staticAnalysis: staticResult,
-    memoryContext: null,
-    metadata: {
-      mode,
-      provider: 'none',
-      model: 'static-only',
-      tokensUsed: 0,
-      executionTimeMs: Date.now() - startTime,
-      toolsRun: [],
-      toolsSkipped: [],
-    },
-  };
 }
