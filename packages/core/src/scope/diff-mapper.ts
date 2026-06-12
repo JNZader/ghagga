@@ -7,39 +7,45 @@
  * Pure functions with no side effects.
  */
 
+import { matchHunkHeader, parseUnifiedDiff } from '../diff/index.js';
 import type { AffectedSymbol, DiffHunk, SymbolInfo } from './types.js';
 
 // ─── Hunk Parsing ──────────────────────────────────────────────
 
 /**
- * Regex to match unified diff hunk headers.
- * Format: @@ -oldStart[,oldCount] +newStart[,newCount] @@
- *
- * Examples:
- *   @@ -10,5 +10,7 @@
- *   @@ -1 +1,3 @@
- *   @@ -0,0 +1,20 @@
- */
-const HUNK_HEADER_RE = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/;
-
-/**
  * Parse unified diff content to extract hunk line ranges.
+ *
+ * Thin adapter over the unified parser (`src/diff/parse.ts`): model hunks
+ * are mapped down to the 4 captures this module has always returned. Bare
+ * hunk fragments WITHOUT any `diff --git` header (a documented input shape —
+ * "raw unified diff content for a single file") land in the model's
+ * `preamble`, so those lines are scanned with the shared `matchHunkHeader`
+ * (THE single hunk-header regex of core, spec R8).
+ *
+ * KNOWN synthetic-only divergence vs the pre-adapter regex (`\s+`
+ * separators): headers with tabs or multiple spaces (`@@  -1,2  +3,4  @@`)
+ * no longer match. git only ever emits the single-space form; pinned in
+ * `src/diff/__tests__/parity-parse-hunks.test.ts`.
  *
  * @param diffContent - Raw unified diff content for a single file
  * @returns Array of DiffHunk objects with line ranges
  */
 export function parseHunks(diffContent: string): DiffHunk[] {
+  const { preamble, files } = parseUnifiedDiff(diffContent);
   const hunks: DiffHunk[] = [];
-  const lines = diffContent.split('\n');
 
-  for (const line of lines) {
-    const match = HUNK_HEADER_RE.exec(line);
-    if (match) {
+  for (const line of preamble) {
+    const match = matchHunkHeader(line);
+    if (match) hunks.push(match);
+  }
+
+  for (const file of files) {
+    for (const hunk of file.hunks) {
       hunks.push({
-        oldStart: Number.parseInt(match[1]!, 10),
-        oldCount: match[2] !== undefined ? Number.parseInt(match[2], 10) : 1,
-        newStart: Number.parseInt(match[3]!, 10),
-        newCount: match[4] !== undefined ? Number.parseInt(match[4], 10) : 1,
+        oldStart: hunk.oldStart,
+        oldCount: hunk.oldCount,
+        newStart: hunk.newStart,
+        newCount: hunk.newCount,
       });
     }
   }

@@ -41,9 +41,30 @@ const HEADER_QUOTED_NEW_RE = /^diff --git a\/(.+) "b\/((?:[^"\\]|\\.)*)"$/;
 /**
  * Strict hunk header with the 4 captures (design decision: based on
  * scope/diff-mapper.ts, single-space form as emitted by git; omitted counts
- * default to 1).
+ * default to 1). THE single hunk-header regex of packages/core (spec R8).
  */
 const HUNK_HEADER_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+
+/**
+ * Match a hunk header line with THE single strict hunk-header regex (spec
+ * R8). Returns the 4 captures (omitted counts default to 1) or `null`.
+ *
+ * Exported for adapters that must scan raw lines themselves — e.g. bare hunk
+ * fragments without any `diff --git` header, which `parseUnifiedDiff` keeps
+ * in `preamble` and therefore never turn into model hunks.
+ */
+export function matchHunkHeader(
+  line: string,
+): { oldStart: number; oldCount: number; newStart: number; newCount: number } | null {
+  const m = HUNK_HEADER_RE.exec(line);
+  if (!m) return null;
+  return {
+    oldStart: Number.parseInt(m[1] ?? '0', 10),
+    oldCount: m[2] !== undefined ? Number.parseInt(m[2], 10) : 1,
+    newStart: Number.parseInt(m[3] ?? '0', 10),
+    newCount: m[4] !== undefined ? Number.parseInt(m[4], 10) : 1,
+  };
+}
 
 /**
  * `---`/`+++` lines: quoted, unquoted or /dev/null. Git appends a trailing
@@ -262,16 +283,9 @@ export function parseUnifiedDiff(raw: string): ParsedDiff {
     state.rawLines.push(line);
 
     // 4) New hunk?
-    const hm = HUNK_HEADER_RE.exec(line);
+    const hm = matchHunkHeader(line);
     if (hm) {
-      currentHunk = {
-        oldStart: Number.parseInt(hm[1] ?? '0', 10),
-        oldCount: hm[2] !== undefined ? Number.parseInt(hm[2], 10) : 1,
-        newStart: Number.parseInt(hm[3] ?? '0', 10),
-        newCount: hm[4] !== undefined ? Number.parseInt(hm[4], 10) : 1,
-        header: line,
-        lines: [],
-      };
+      currentHunk = { ...hm, header: line, lines: [] };
       state.hunks.push(currentHunk);
       continue;
     }

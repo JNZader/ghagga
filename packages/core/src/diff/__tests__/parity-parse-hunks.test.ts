@@ -112,6 +112,27 @@ describe('parity on bare hunk fragments (no `diff --git` header at all)', () => 
   });
 });
 
+describe('KNOWN synthetic-only divergence: loose whitespace separators (pinned)', () => {
+  // The pre-adapter regex used `\s+` separators; the unified model uses THE
+  // single strict single-space regex (design decision, spec R8). git only
+  // ever emits the single-space form — these inputs are hand-crafted.
+  it.each([
+    ['double spaces', '@@  -1,2  +3,4  @@'],
+    ['tab separators', '@@\t-1,2\t+3,4\t@@'],
+  ])('%s: legacy matched, unified model ignores', (_label, header) => {
+    expect(baselineParseHunks(header)).toEqual([
+      { oldStart: 1, oldCount: 2, newStart: 3, newCount: 4 },
+    ]);
+    expect(parseHunks(header)).toEqual([]);
+  });
+
+  it('the strict single-space form (what git emits) stays in full parity', () => {
+    const raw = '@@ -1,2 +3,4 @@';
+    expect(parseHunks(raw)).toEqual(baselineParseHunks(raw));
+    expect(parseHunks(raw)).toHaveLength(1);
+  });
+});
+
 describe('gate 5.1 aggregate (non-vacuous)', () => {
   it('the corpus exercises a meaningful number of hunks', () => {
     let total = 0;
