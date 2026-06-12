@@ -1,0 +1,502 @@
+diff --git a/packages/core/src/agents/fan-out-lenses.test.ts b/packages/core/src/agents/fan-out-lenses.test.ts
+index e73b44e..6c80e0b 100644
+--- a/packages/core/src/agents/fan-out-lenses.test.ts
++++ b/packages/core/src/agents/fan-out-lenses.test.ts
+@@ -391,7 +391,11 @@ describe('runFanOutReview', () => {
+     const result = await runFanOutReview(makeInput({ generateFns: [fn], lenses: ['security'] }));
+ 
+     expect(result.metadata.mode).toBe('fan-out');
+-    expect(result.metadata.modelsUsed).toEqual(['security:anthropic/claude-sonnet-4-20250514']);
++    // modelsUsed echoes the input provider/model as `lens:provider/model`.
++    // makeInput uses provider 'gateway' (the post-refactor provider type), so
++    // the entry is gateway/… — the old hardcoded 'anthropic' was a stale
++    // leftover from before the legacy-provider → provider-chain rename.
++    expect(result.metadata.modelsUsed).toEqual(['security:gateway/claude-sonnet-4-20250514']);
+   });
+ });
+ 
+diff --git a/packages/core/src/compress/index.test.ts b/packages/core/src/compress/index.test.ts
+index dd104af..362422b 100644
+--- a/packages/core/src/compress/index.test.ts
++++ b/packages/core/src/compress/index.test.ts
+@@ -17,9 +17,15 @@ function makeFinding(
+ 
+ describe('compressToolFindings — deduplication', () => {
+   it('removes findings with identical 60-char message prefixes', () => {
++    // Dedup keys on the first 60 chars of the message (message.slice(0, 60)).
++    // `sharedPrefix` is EXACTLY 60 chars, and the first two findings diverge at
++    // char 61 ('X' vs 'Y') — so their dedup keys are identical and they collapse
++    // to one; the third has a distinct prefix and survives.
++    const sharedPrefix = 'no-unused-vars: a variable is declared but its value is neve';
++    expect(sharedPrefix.length).toBe(60);
+     const findings: ToolFinding[] = [
+-      makeFinding('eslint', 'a.ts', "no-unused-vars: variable 'x' is defined but never used"),
+-      makeFinding('eslint', 'b.ts', "no-unused-vars: variable 'y' is defined but never used"),
++      makeFinding('eslint', 'a.ts', `${sharedPrefix}X (unused: x)`),
++      makeFinding('eslint', 'b.ts', `${sharedPrefix}Y (unused: y)`),
+       makeFinding('eslint', 'c.ts', 'no-console: unexpected console statement'),
+     ];
+     const { findings: out } = compressToolFindings(findings, { deduplicateMessages: true });
+@@ -122,10 +128,13 @@ describe('compressToolFindings — stats', () => {
+ 
+ describe('compressStaticAnalysisBlock — similar line collapsing', () => {
+   it('collapses consecutive lines differing only by number', () => {
++    // Lines that are identical once line numbers are normalized away collapse
++    // into one canonical line plus a "... and N similar issue(s)" marker.
++    // (The fixture must differ ONLY by numbers — letters survive normalization.)
+     const raw = [
+-      "src/foo.ts:10: unused variable 'x'",
+-      "src/foo.ts:20: unused variable 'y'",
+-      "src/foo.ts:30: unused variable 'z'",
++      'src/foo.ts:10: maximum line length exceeded',
++      'src/foo.ts:20: maximum line length exceeded',
++      'src/foo.ts:30: maximum line length exceeded',
+       'src/bar.ts:5: missing semicolon',
+     ].join('\n');
+ 
+diff --git a/packages/core/src/memory/persist.test.ts b/packages/core/src/memory/persist.test.ts
+index ab5acbe..790feb7 100644
+--- a/packages/core/src/memory/persist.test.ts
++++ b/packages/core/src/memory/persist.test.ts
+@@ -236,9 +236,8 @@ describe('persistReviewObservations', () => {
+   it('redacts a secret smuggled into finding.file (real stripPrivateData)', async () => {
+     // Use the REAL implementation for this case so we exercise the actual
+     // redaction patterns, not the [STRIPPED] stub.
+-    const { stripPrivateData: realStrip } = await vi.importActual<typeof import('./privacy.js')>(
+-      './privacy.js',
+-    );
++    const { stripPrivateData: realStrip } =
++      await vi.importActual<typeof import('./privacy.js')>('./privacy.js');
+     mockStripPrivateData.mockImplementation(realStrip);
+ 
+     const secret = 'sk-ant-abcdefghijklmnopqrstuvwxyz0123456789';
+@@ -419,9 +418,18 @@ describe('persistReviewObservations', () => {
+     await persistReviewObservations(storage, 'project', 1, result);
+ 
+     const savedObs = vi.mocked(storage.saveObservation).mock.calls[0]?.[0];
+-    // Title format: "category: sanitized_message.slice(0, 80)"
+-    // The sanitized message is [STRIPPED] + longMessage
+-    expect(savedObs.title?.length).toBeLessThanOrEqual('bug: '.length + 80);
++    // Title format: "[CATEGORY_LABEL] category: sanitized_message.slice(0, 80)"
++    // — the persist layer prepends a taxonomy [CATEGORY_LABEL] tag (added with
++    // the taxonomy feature) ahead of the "category: message" body. The message
++    // portion itself is what must be capped at 80 chars, so we assert the
++    // sanitized message inside the title is truncated rather than measuring the
++    // (prefix-dependent) total length.
++    const title = savedObs.title ?? '';
++    // The message body follows the last "bug: " separator.
++    const messagePortion = title.slice(title.lastIndexOf('bug: ') + 'bug: '.length);
++    expect(messagePortion.length).toBeLessThanOrEqual(80);
++    // And the long message must NOT survive in full.
++    expect(messagePortion).not.toContain('A'.repeat(81));
+   });
+ 
+   // ── Summary observation ──
+diff --git a/packages/core/src/memory/taxonomy.ts b/packages/core/src/memory/taxonomy.ts
+index 8493fe7..d4fa82b 100644
+--- a/packages/core/src/memory/taxonomy.ts
++++ b/packages/core/src/memory/taxonomy.ts
+@@ -118,7 +118,12 @@ const CATEGORY_RULES: CategoryRule[] = [
+     keywords: [
+       'depends on',
+       'calls',
+-      'uses',
++      // NOTE: the bare verb 'uses' is intentionally NOT a relationship keyword.
++      // "X uses Y" is a factual statement ("the auth module uses JWT"), not a
++      // structural relationship. It lived in BOTH this rule and 'fact', and
++      // since rules are evaluated in order, relationship (higher up) wrongly
++      // won every factual "uses" sentence. Relationship keywords are reserved
++      // for explicit structural verbs (inherits/extends/imports/…).
+       'inherits',
+       'extends',
+       'implements',
+diff --git a/packages/core/src/security.test.ts b/packages/core/src/security.test.ts
+index 41dd3f2..25ed319 100644
+--- a/packages/core/src/security.test.ts
++++ b/packages/core/src/security.test.ts
+@@ -59,6 +59,181 @@ const cliFiles = safeGetTsFiles(join(monorepoRoot, 'apps', 'cli', 'src'));
+ const dbFiles = safeGetTsFiles(join(monorepoRoot, 'packages', 'db', 'src'));
+ const allSourceFiles = [...coreFiles, ...serverFiles, ...cliFiles, ...dbFiles];
+ 
++// ─── Lexical scanner ────────────────────────────────────────────
++
++/**
++ * Neutralize comments, string literals, and regex literals so that a downstream
++ * scan only sees real code. Stripped spans are replaced with spaces (offsets and
++ * line numbers are preserved, so error messages keep pointing at the right place).
++ *
++ * Implemented as a SINGLE left-to-right pass with explicit lexical state, because
++ * the naive multi-`.replace` approach is order-dependent and unsound:
++ *   - stripping `//` line comments before strings turns
++ *     `const url = "https://x"; eval(payload)` into `const url = ` (the `//`
++ *     inside the URL is wrongly treated as a comment → the real `eval()` is lost);
++ *   - a single-quote string regex that stops at `\n` misses line-continuation
++ *     strings (`'\` + newline), so code after the (still open) string leaks
++ *     through as if it were code.
++ *
++ * States handled: line comment, block comment, single/double/template string
++ * (with `\\.` escapes and, for templates, basic nesting of `${ ... }`), and
++ * regex literals (disambiguated from division by the previous significant char).
++ */
++export function stripNonCode(src: string): string {
++  const out: string[] = [];
++  const n = src.length;
++  let i = 0;
++
++  // Last significant (non-whitespace, non-stripped) code char emitted. Used to
++  // decide whether a `/` starts a regex literal or is a division operator.
++  let lastSignificant = '';
++
++  // Emit a char verbatim; track it as the last significant code char.
++  const emit = (ch: string): void => {
++    out.push(ch);
++    if (ch.trim() !== '') lastSignificant = ch;
++  };
++  // Replace a span [start, end) with spaces, preserving newlines for line counts.
++  const blank = (start: number, end: number): void => {
++    for (let k = start; k < end; k++) out.push(src[k] === '\n' ? '\n' : ' ');
++  };
++
++  // A `/` begins a regex literal when the previous significant char is one that
++  // cannot end an expression (so a `/` after it must be a regex, not division).
++  const regexAllowedAfter = (ch: string): boolean => {
++    if (ch === '') return true; // start of file
++    // Identifiers, numbers, and closing brackets/parens end an expression →
++    // a following `/` is division, not a regex.
++    if (/[A-Za-z0-9_$)\]}]/.test(ch)) return false;
++    return true;
++  };
++
++  while (i < n) {
++    const ch = src[i];
++    const next = src[i + 1];
++
++    // Line comment
++    if (ch === '/' && next === '/') {
++      let j = i + 2;
++      while (j < n && src[j] !== '\n') j++;
++      blank(i, j);
++      i = j;
++      continue;
++    }
++
++    // Block comment
++    if (ch === '/' && next === '*') {
++      let j = i + 2;
++      while (j < n && !(src[j] === '*' && src[j + 1] === '/')) j++;
++      j = Math.min(n, j + 2); // consume closing */
++      blank(i, j);
++      i = j;
++      continue;
++    }
++
++    // Single- or double-quoted string (handles `\\.` escapes incl. line
++    // continuation `\` + newline; an unterminated string blanks to EOF).
++    if (ch === "'" || ch === '"') {
++      const quote = ch;
++      let j = i + 1;
++      while (j < n) {
++        if (src[j] === '\\') {
++          j += 2; // skip escaped char (covers `\` + newline line-continuation)
++          continue;
++        }
++        if (src[j] === quote) {
++          j++;
++          break;
++        }
++        j++;
++      }
++      blank(i, j);
++      lastSignificant = quote; // a string is an expression value
++      i = j;
++      continue;
++    }
++
++    // Template literal (handles escapes + basic `${ ... }` nesting).
++    if (ch === '`') {
++      let j = i + 1;
++      let depth = 0;
++      while (j < n) {
++        const c = src[j];
++        if (c === '\\') {
++          j += 2;
++          continue;
++        }
++        if (depth === 0 && c === '`') {
++          j++;
++          break;
++        }
++        if (depth === 0 && c === '$' && src[j + 1] === '{') {
++          depth++;
++          j += 2;
++          continue;
++        }
++        if (depth > 0 && c === '{') {
++          depth++;
++          j++;
++          continue;
++        }
++        if (depth > 0 && c === '}') {
++          depth--;
++          j++;
++          continue;
++        }
++        j++;
++      }
++      blank(i, j);
++      lastSignificant = '`';
++      i = j;
++      continue;
++    }
++
++    // Regex literal (only when context says a `/` cannot be division).
++    if (ch === '/' && regexAllowedAfter(lastSignificant)) {
++      let j = i + 1;
++      let inClass = false;
++      let closed = false;
++      while (j < n) {
++        const c = src[j];
++        if (c === '\\') {
++          j += 2;
++          continue;
++        }
++        if (c === '\n') break; // regex literals can't span newlines → not a regex
++        if (c === '[') {
++          inClass = true;
++        } else if (c === ']') {
++          inClass = false;
++        } else if (c === '/' && !inClass) {
++          j++;
++          closed = true;
++          break;
++        }
++        j++;
++      }
++      if (closed) {
++        // consume trailing flags
++        while (j < n && /[a-z]/i.test(src[j])) j++;
++        blank(i, j);
++        lastSignificant = '/'; // regex is an expression value
++        i = j;
++        continue;
++      }
++      // Not actually a regex (no closing slash on this line): treat as division.
++      emit(ch);
++      i++;
++      continue;
++    }
++
++    emit(ch);
++    i++;
++  }
++
++  return out.join('');
++}
++
+ // ─── Tests ──────────────────────────────────────────────────────
+ 
+ describe('Security Audit', () => {
+@@ -269,11 +444,20 @@ describe('Security Audit', () => {
+     });
+ 
+     it('should not contain eval() calls in source code', () => {
+-      // eval() is a security risk — arbitrary code execution
++      // eval() is a security risk — arbitrary code execution.
++      // We only flag REAL call sites. Comments, string literals, and regex
++      // literals must be neutralized first, otherwise the AISVS rule catalog
++      // in aisvs.ts (which uses `/(?:eval|exec|...)\s*\(/` regex literals and
++      // descriptions containing the literal text `eval()`) would trip a false
++      // positive. The naive multi-pass `.replace` approach is order-dependent
++      // and unsound: stripping `//` comments before strings deletes the real
++      // `eval()` in `const url = "https://x"; eval(payload)` because the `//`
++      // inside the URL string is mistaken for a comment. So we scan once,
++      // left-to-right, tracking lexical state. See the unit tests below.
+       const evalPattern = /\beval\s*\(/;
+ 
+       for (const file of allSourceFiles) {
+-        const content = readFileSync(file, 'utf-8');
++        const content = stripNonCode(readFileSync(file, 'utf-8'));
+         expect(
+           evalPattern.test(content),
+           `Found eval() call in ${file} — use safer alternatives`,
+@@ -311,3 +495,50 @@ describe('Security Audit', () => {
+     });
+   });
+ });
++
++// ─── Scanner unit tests ─────────────────────────────────────────
++
++describe('stripNonCode (eval-scan lexer)', () => {
++  const hasEval = (src: string): boolean => /\beval\s*\(/.test(stripNonCode(src));
++
++  it('(a) keeps a real eval() that follows a string containing "//"', () => {
++    // The `//` inside the URL string must NOT be treated as a comment, so the
++    // real eval() after the statement must survive and be detected.
++    const src = 'const url = "https://x"; eval(payload)';
++    expect(hasEval(src)).toBe(true);
++  });
++
++  it('(b) ignores eval( that lives inside a line-continuation string', () => {
++    // A single-quoted string with a `\` line continuation spanning a newline:
++    // the `eval(` is part of the string body, not real code.
++    const src = "const s = 'prefix \\\n eval( still inside the string';";
++    expect(hasEval(src)).toBe(false);
++  });
++
++  it('(c) ignores eval inside regex literals and strings (aisvs.ts shape)', () => {
++    // Mirrors the AISVS catalog: a regex literal alternation `eval|exec` plus a
++    // description string mentioning `eval()`. Neither is a real call site.
++    const src = [
++      'const rule = {',
++      '  description: "LLM response passed to eval(), exec(), or shell execution",',
++      '  pattern: /(?:eval|exec|execSync|spawn|fork)\\s*\\(\\s*(?:result|response)\\b/i,',
++      '};',
++    ].join('\n');
++    expect(hasEval(src)).toBe(false);
++  });
++
++  it('preserves line count when blanking spans (offset stability)', () => {
++    const src = 'a\n// comment\n"str\\ning"\nb';
++    expect(stripNonCode(src).split('\n').length).toBe(src.split('\n').length);
++  });
++
++  it('still detects a plain eval() call', () => {
++    expect(hasEval('eval(userInput)')).toBe(true);
++  });
++
++  it('treats / as division (not regex) after an identifier', () => {
++    // `a / b` is division; the trailing `eval(` is a genuine call site.
++    const src = 'const x = a / b; eval(x)';
++    expect(hasEval(src)).toBe(true);
++  });
++});
+diff --git a/packages/core/src/semantic-diff/index.ts b/packages/core/src/semantic-diff/index.ts
+index 4c63488..3656a36 100644
+--- a/packages/core/src/semantic-diff/index.ts
++++ b/packages/core/src/semantic-diff/index.ts
+@@ -52,19 +52,21 @@ const DECLARATION_PATTERNS: Array<{
+   kind: 'function' | 'class' | 'method' | 'import' | 'export' | 'type';
+   pattern: RegExp;
+ }> = [
++  // NOTE: ORDER MATTERS. The generic "export <name>" pattern is intentionally
++  // listed LAST so that more specific declarations — `export function foo`,
++  // `export class Foo`, `export const fn = () => …`, `export type Foo` — are
++  // classified by their real entity kind (function/class/type) instead of being
++  // swallowed by a catch-all `export` rule. Only plain value re-exports
++  // (e.g. `export const VERSION = '1.0'`, `export default expr`) fall through
++  // to the `export` kind.
++
+   // import statements — match before export/function to avoid conflicts
+   {
+     kind: 'import',
+     pattern:
+       /^\s*import\s+(?:type\s+)?(?:\{[^}]*\}|[\w*]+(?:\s+as\s+\w+)?)\s+from\s+['"][^'"]+['"]/,
+   },
+-  // export default / named
+-  {
+-    kind: 'export',
+-    pattern:
+-      /^\s*export\s+(?:default\s+)?(?:const|let|var|function\*?|async\s+function\*?)\s+(\w+)/,
+-  },
+-  // export type / interface
++  // export type / interface / enum (before the generic export rule)
+   {
+     kind: 'type',
+     pattern: /^\s*export\s+(?:type|interface|enum)\s+(\w+)/,
+@@ -74,31 +76,32 @@ const DECLARATION_PATTERNS: Array<{
+     kind: 'type',
+     pattern: /^\s*(?:type|interface|enum)\s+(\w+)/,
+   },
+-  // class declaration
++  // class declaration (handles `export class` and `export abstract class`)
+   {
+     kind: 'class',
+-    pattern: /^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/,
++    pattern: /^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+(\w+)/,
+   },
+-  // method inside class (indented + no leading "function" keyword, has "()")
++  // top-level function declaration (handles `export function` / `export async function`)
+   {
+-    kind: 'method',
+-    pattern: /^[ \t]+(?:(?:public|private|protected|static|async|override|readonly)\s+)*(\w+)\s*\(/,
++    kind: 'function',
++    pattern: /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\*?\s+(\w+)\s*\(/,
+   },
+-  // top-level function declaration
++  // arrow / function-expression assigned to const/let/var (handles `export const fn = () =>`,
++  // optionally typed: `export const fn: Foo = async () =>`)
+   {
+     kind: 'function',
+-    pattern: /^\s*(?:export\s+)?(?:async\s+)?function\*?\s+(\w+)\s*\(/,
++    pattern:
++      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[\w<>,\s|[\]]+?)?\s*=\s*(?:async\s+)?(?:function\b|\()/,
+   },
+-  // arrow function / const fn = ...
++  // method inside class (indented + no leading "function" keyword, has "()")
+   {
+-    kind: 'function',
+-    pattern: /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(/,
++    kind: 'method',
++    pattern: /^[ \t]+(?:(?:public|private|protected|static|async|override|readonly)\s+)*(\w+)\s*\(/,
+   },
+-  // const fn = async () => or const fn = () =>
++  // generic export of a plain value — LAST so the rules above win first
+   {
+-    kind: 'function',
+-    pattern:
+-      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*\w[\w<>,\s]*?)?\s*=\s*(?:async\s+)?\(/,
++    kind: 'export',
++    pattern: /^\s*export\s+(?:default\s+)?(?:const|let|var)\s+(\w+)/,
+   },
+ ];
+ 
+diff --git a/packages/core/src/tools/remote-query.test.ts b/packages/core/src/tools/remote-query.test.ts
+index 7829477..9da98f8 100644
+--- a/packages/core/src/tools/remote-query.test.ts
++++ b/packages/core/src/tools/remote-query.test.ts
+@@ -6,11 +6,14 @@ import { fetchRemoteFile, searchRemoteCode } from './remote-query.js';
+ const mockFetch = vi.fn();
+ 
+ beforeEach(() => {
++  mockFetch.mockClear();
+   vi.stubGlobal('fetch', mockFetch);
+ });
+ 
+ afterEach(() => {
+   vi.restoreAllMocks();
++  // restoreAllMocks does NOT revert vi.stubGlobal — undo the fetch stub too.
++  vi.unstubAllGlobals();
+ });
+ 
+ // ─── Helpers ────────────────────────────────────────────────────
+diff --git a/packages/core/src/types.test.ts b/packages/core/src/types.test.ts
+index 6357367..f1fbd26 100644
+--- a/packages/core/src/types.test.ts
++++ b/packages/core/src/types.test.ts
+@@ -47,19 +47,13 @@ describe('DEFAULT_SETTINGS', () => {
+ // ─── DEFAULT_MODELS ─────────────────────────────────────────────
+ 
+ describe('DEFAULT_MODELS', () => {
+-  it('should have entries for all 10 LLM providers', () => {
+-    const providers = [
+-      'anthropic',
+-      'openai',
+-      'google',
+-      'github',
+-      'ollama',
+-      'qwen',
+-      'groq',
+-      'cerebras',
+-      'deepseek',
+-      'openrouter',
+-    ] as const;
++  it('should have an entry for every LLMProvider', () => {
++    // The provider model was collapsed to a 3-type chain
++    // (gateway / cli-bridge / ollama) in the mcp-llm-bridge refactor
++    // (types.ts:25). DEFAULT_MODELS is typed `Record<LLMProvider, string>`,
++    // so it must carry exactly these keys — the legacy per-vendor providers
++    // (anthropic/openai/…) no longer exist as first-class provider types.
++    const providers = ['gateway', 'cli-bridge', 'ollama'] as const;
+     for (const provider of providers) {
+       expect(DEFAULT_MODELS).toHaveProperty(provider);
+       expect(typeof DEFAULT_MODELS[provider]).toBe('string');

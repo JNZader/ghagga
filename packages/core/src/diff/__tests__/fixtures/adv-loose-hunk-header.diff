@@ -1,0 +1,7 @@
+diff --git a/loose.ts b/loose.ts
+index 1111111..2222222 100644
+--- a/loose.ts
++++ b/loose.ts
+@@ -1,2 +100
+ contexto
++agregado

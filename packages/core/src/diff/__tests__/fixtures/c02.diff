@@ -1,0 +1,11 @@
+diff --git a/my file.ts b/my file.ts
+index 9864d22..09ca28d 100644
+--- a/my file.ts	
++++ b/my file.ts	
+@@ -1,5 +1,5 @@
+ line one
+ line two
+-line three
++line three CHANGED
+ line four
+ line five

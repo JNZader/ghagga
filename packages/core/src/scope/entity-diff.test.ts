@@ -116,6 +116,54 @@ describe('extractEntityDiffLines', () => {
     expect(lines[0]).toBe('+added at line 6');
     expect(lines[1]).toBe('+added at line 22');
   });
+
+  // ─── CORE-M9 (spec R6): deletions attributed by new-side position ──
+  //
+  // Symbol ranges are NEW-side line numbers (contract of mapDiffToSymbols:
+  // "symbols from the NEW version of the file"). When an earlier hunk
+  // inserts lines, old and new line numbers drift apart — a deletion must be
+  // attributed to the symbol containing the new-side position where the
+  // removal happened, NOT to whatever symbol happens to span its old-side
+  // line number.
+  describe('deletion attribution under old/new drift (CORE-M9, spec R6)', () => {
+    // Hunk 1 inserts 5 lines at the top of the file → every line below it
+    // sits 5 lines lower on the new side. Hunk 2 deletes a line that lives
+    // INSIDE the symbol's new-side range [15, 17] but whose old-side line
+    // number (11) is far above it.
+    const diff = [
+      'diff --git a/src/svc.ts b/src/svc.ts',
+      '--- a/src/svc.ts',
+      '+++ b/src/svc.ts',
+      '@@ -1,2 +1,7 @@',
+      ' line one',
+      '+ins two',
+      '+ins three',
+      '+ins four',
+      '+ins five',
+      '+ins six',
+      ' line two',
+      '@@ -10,4 +15,3 @@ function svc()',
+      ' ctx A',
+      '-removed inside svc',
+      ' ctx B',
+      ' ctx C',
+    ].join('\n');
+
+    it('attributes the deletion to the symbol containing its new-side position', () => {
+      // The deletion happens between new lines 15 (ctx A) and 16 (ctx B):
+      // its live new-side position is 16, inside svc's range [15, 17].
+      const svc = makeSymbol('svc', 15, 17);
+      expect(extractEntityDiffLines(diff, svc)).toEqual(['-removed inside svc']);
+    });
+
+    it('does not attribute the deletion to the symbol that merely spans its old-side number', () => {
+      // New-side lines 10-12 belong to a completely different region of the
+      // new file. The deletion's OLD-side number (11) falls here, but the
+      // removal did not happen inside this symbol.
+      const bystander = makeSymbol('bystander', 10, 12);
+      expect(extractEntityDiffLines(diff, bystander)).toEqual([]);
+    });
+  });
 });
 
 // ─── classifyEntityChanges ────────────────────────────────────

@@ -1,0 +1,48 @@
+{
+  "description": "Stable synthetic SuggestionPatch fixtures for the recursive golden freeze (OQ2). round1 is applied to c01.diff to produce c16.diff (the iteration-2 input, recursive/index.ts:155). round2 simulates extractPatches() output from second-round findings and is applied to c16.diff. The patch without `line` freezes the current silently-dropped behavior. DO NOT edit: snapshots and the 2-iteration golden depend on these being byte-stable.",
+  "round1": [
+    {
+      "file": "src/alpha.ts",
+      "line": 5,
+      "originalMessage": "magic number in alpha5",
+      "suggestion": "export const alpha5 = ALPHA_BASE * 100;",
+      "findingIndex": 0
+    },
+    {
+      "file": "src/beta.ts",
+      "line": 30,
+      "originalMessage": "magic number in beta30",
+      "suggestion": "export const beta30 = BETA_BASE * 1000;",
+      "findingIndex": 1
+    },
+    {
+      "file": "src/gamma.ts",
+      "line": 6,
+      "originalMessage": "gamma6 should not be exported",
+      "suggestion": "const gamma6 = 6;",
+      "findingIndex": 2
+    },
+    {
+      "file": "src/alpha.ts",
+      "originalMessage": "file-level: missing header comment",
+      "suggestion": "add a module-level JSDoc header",
+      "findingIndex": 3
+    }
+  ],
+  "round2": [
+    {
+      "file": "src/alpha.ts",
+      "line": 7,
+      "originalMessage": "second-round finding near alpha7",
+      "suggestion": "export const alpha7 = 7; // validated",
+      "findingIndex": 0
+    },
+    {
+      "file": "src/beta.ts",
+      "line": 31,
+      "originalMessage": "second-round finding near beta31",
+      "suggestion": "export const beta31 = 31; // validated",
+      "findingIndex": 1
+    }
+  ]
+}

@@ -44,10 +44,39 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 
 ---
 
-## REFACTOR 1 — Unificar los 4 parsers de unified-diff 🔧
+## ✅ REFACTOR 1 — Unificar los parsers de unified-diff — RESUELTO 2026-06-12
 
-**Tipo:** behavior-preserving + arregla bugs latentes. **Riesgo:** medio-alto (toca el motor del review).
-**Tamaño estimado:** 1 SDD chico (proponer → spec → apply con TDD → 4vr). **Modelo:** Fable (no es seguridad).
+> **Resolución (SDD `unify-diff-parsers`, branch `refactor/unify-diff-parsers`, base `c51878d`):**
+> los 5 parsers ahora son adapters finos sobre UN parser unificado
+> (`packages/core/src/diff/parse.ts` — única regex de file-header y única de hunk-header
+> en producción, verificado por rg en el check R8). Corpus golden permanente de 23 fixtures
+> (`src/diff/__tests__/fixtures/`) + 5 harnesses de paridad con copias frozen verbatim de las
+> implementaciones viejas + tabla cross-consumer final (`parity-table.test.ts`).
+> - **CORE-M6 CERRADO**: paths quoted parsean + unescape octal/C-style (changelog, semver minor).
+> - **CORE-M9 CERRADO**: deletions atribuidas por posición new-side viva (changelog; flippeó
+>   exactamente 2 snapshots del corpus: c07 y c15, gateado dual-baseline).
+> - **Off-by-N del recursive CONGELADO AS-IS** (spec R7, golden 2-iteraciones) — ticket abajo.
+> - Paridad byte-exacta de `DiffFile.content` verificada (Buffer.equals) → cero cambio en
+>   prompts LLM.
+>
+> Lo que sigue de esta sección queda como histórico (el estado que describía ya no existe).
+
+**Tipo:** behavior-preserving + arregla bugs latentes. **Riesgo:** medio (corregido a la baja, ver nota).
+**Tamaño estimado:** 1 SDD chico (proponer → spec → apply con TDD → 4vr).
+
+> **Corrección post-explore SDD (2026-06-11, verificado contra `c51878d`):**
+> 1. Son **5 parsers, no 4** — `semantic-diff/index.ts:168-203` tiene su propio `parseHunks`
+>    local (hoy `@experimental`, sin callers).
+> 2. **Blast radius real mucho menor al estimado**: `diff-mapper` y `entity-diff` tienen CERO
+>    callers de producción (solo re-exports + tests). El consumo real se concentra en
+>    `pipeline.ts:166/171/379` (parseDiffFiles/filterDiffFiles/truncateDiff) y
+>    `recursive/index.ts:74-156`.
+> 3. **CORE-M6 reframeado**: paths con espacios simples parsean OK (backtracking greedy
+>    accidental); lo que se dropea es la forma **quoted** (`"a/café.ts"`, no-ASCII/control).
+> 4. Restricciones de diseño descubiertas: paridad **byte-exacta** de `DiffFile.content`
+>    (reconstrucción `join('\n')` en `pipeline.ts:227` va al prompt del LLM), parser defensivo
+>    ante diffs truncados (truncateDiff + input ACP arbitrario), y off-by-N pre-existente del
+>    recursive en iteración 2+ (congelar con golden test, NO arreglar de pasada).
 
 ### Estado actual — 4 parsers independientes y divergentes
 
@@ -159,7 +188,36 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   tests stale. Core ahora: **2702/2702 verdes** — la red de seguridad del Refactor 2 está activa.
 - **`semantic-diff` no está cableado a producción** (hallazgo de #209): solo se re-exporta desde
   `core/src/index.ts`, ningún caller real. El bug de precedencia vivió meses sin detectarse por eso.
-  Decidir: wirearlo al pipeline o marcarlo experimental.
+  Decidir: wirearlo al pipeline o marcarlo experimental. *(Update 2026-06-12: ya está anotado
+  `@experimental` en el código desde el SDD unify-diff-parsers; la decisión de wirearlo sigue abierta.)*
+- **Off-by-N del recursive en iteración 2+** (del SDD unify-diff-parsers, spec R7 — congelado, NO
+  arreglado): las líneas `+[SUGGESTED FIX]` inyectadas en la iteración 1 corren el counter target-side
+  cuando `recursive/index.ts:155` re-parsea el diff sintético, así que los patches de la iteración 2
+  aterrizan N líneas más abajo (N = patches previos aplicados arriba). Evidencia ejecutable: el golden
+  `src/diff/__tests__/recursive-golden.test.ts` pinnea las coordenadas corridas (alpha7 cae tras
+  alpha6; beta31 cae tras el marker de round 1) y `parity-apply-virtual-patches.test.ts` congela el
+  walker completo. Arreglarlo = cambio de comportamiento del re-review recursivo → SDD/ticket propio,
+  actualizando ambos harnesses A CONCIENCIA (hoy fallan ante cualquier "mejora" accidental).
+- **CORE-M8 `computeSimilarity`** (`scope/entity-diff.ts:168-187` pre-refactor; hoy en el mismo
+  archivo): dice LCS pero compara char por posición. Quedó EXPLÍCITAMENTE fuera de scope del SDD
+  unify-diff-parsers (es lógica de similarity, no de parsing). Sigue pendiente.
+- **2 bugs pre-existentes de `semantic-diff` congelados por los harnesses de paridad** (hallados por
+  el 3vr de Phase 5-7 del SDD, AMBOS anteriores al refactor y preservados a propósito —
+  `@experimental`, sin callers prod):
+  1. `buildSummary` double-cuenta imports/exports: `semantic-diff/index.ts:357-358` pasa
+     `import_added`/`export_added` como `modifiedKind` a `groupSummary` → un import agregado se
+     reporta como "1 import added, 1 import modified".
+  2. Una class modificada se reporta como `function_modified` (`semantic-diff/index.ts:312` — el
+     union `EntityChangeKind` no tiene `class_modified`).
+  Arreglarlos = delta de comportamiento observable → actualizar `parity-extract-semantic-diff.test.ts`
+  (la copia frozen los reproduce) y el changelog al hacerlo.
+- **Limitación documentada de autoridad de path en headers malformados** (SDD unify-diff-parsers,
+  `src/diff/parse.ts:17-19`): en el header unquoted `diff --git a/x b/y`, un path con ` b/` literal
+  es ambiguo — gana la ÚLTIMA ocurrencia (mismo boundary que la regex histórica). Y cuando el header
+  y la línea `+++ b/` discrepan (solo alcanzable en input malformado, nunca en git/GitHub), la
+  autoridad es `+++ b/` → `rename to` → header (la impl vieja confiaba en el header) — divergencia
+  pinneada en `parity-parse-diff-files.test.ts` (`adv-header-b-mismatch`). No hay fix posible sin
+  formato quoted: es ambigüedad inherente del formato unquoted.
 - **Higiene de lint del monorepo**: el pre-commit hook (`biome check .` repo-wide) falla SIEMPRE por
   errores pre-existentes ajenos (apps/dashboard a11y en ConfirmDialog/ObservationDetailModal,
   packages/db queries.ts formato, api.ts organizeImports, Reviews.tsx exhaustive-deps) → fuerza
@@ -203,8 +261,9 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 2. ~~**22 fallas pre-existentes de core**~~ ✅ 2026-06-11, PR #209 — core 2702/2702.
 3. ~~**Fase 0 DX**: lint a cero + typecheck verde + hook restaurado (PR #210), notas trackeadas,
    dependabot~~ ✅ 2026-06-11.
-4. **Refactor 1** (diff parsers) — SDD con golden tests, 4vr. El corpus de golden tests es un
-   activo permanente.
+4. ~~**Refactor 1** (diff parsers) — SDD con golden tests, 4vr. El corpus de golden tests es un
+   activo permanente.~~ ✅ 2026-06-12, SDD `unify-diff-parsers` (ver sección arriba). El corpus
+   (23 fixtures) + los 6 harnesses de paridad quedaron como activo permanente.
 5. **Refactor 2** (pipeline god-function) — SDD, rama dedicada, 4vr, canary obligatorio.
    Desbloqueado (la suite de core está verde).
 6. **Contratos**: `Review.repo` en `@ghagga/types` (los tipos que mienten son veneno de DX).

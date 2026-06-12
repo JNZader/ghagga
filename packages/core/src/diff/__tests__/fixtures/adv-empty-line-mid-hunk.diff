@@ -1,0 +1,16 @@
+diff --git a/src/stripped.ts b/src/stripped.ts
+index 1111111..2222222 100644
+--- a/src/stripped.ts
++++ b/src/stripped.ts
+@@ -1,5 +1,5 @@
+ antes
+-viejo
++nuevo
+
+ despues
+-viejo2
++nuevo2
+@@ -10,3 +10,3 @@
+ ctx
+-old
++new

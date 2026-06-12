@@ -10,6 +10,7 @@
  * Pure functions with no side effects.
  */
 
+import { matchHunkHeader, parseUnifiedDiff } from '../diff/index.js';
 import type {
   AffectedSymbol,
   EntityChange,
@@ -41,30 +42,44 @@ const COSMETIC_LINE_PATTERNS: RegExp[] = [
 
 /**
  * Extract the actual addition/deletion lines from a diff that fall
- * within a symbol's line range (new-side lines for +, old-side for -).
+ * within a symbol's line range. Symbol ranges are NEW-side line numbers
+ * (contract of mapDiffToSymbols: symbols come from the NEW version of the
+ * file), so BOTH additions and deletions are attributed by the live
+ * new-side position — for a deletion, the new-side line where the removal
+ * happened (CORE-M9 fix; previously deletions were compared by their
+ * OLD-side line number against the new-side ranges, mis-attributing them
+ * whenever earlier hunks made old/new drift apart).
  *
- * Walks the diff content, tracking the current new-side line number
- * via hunk headers and line prefixes, and collects lines that overlap
- * with the symbol's [startLine, endLine] range.
+ * Thin adapter over the unified parser (`src/diff/parse.ts`): the walk runs
+ * over the byte-exact line stream `[...preamble, ...files[].rawLines]`
+ * (≡ `diffContent.split('\n')` by the model's R2 reconstruction invariant),
+ * NOT over `hunk.lines` — preserving the historical behaviors the structured
+ * hunks do not carry: bare hunk fragments without a `diff --git` header
+ * (kept in `preamble`), orphan +/- tails after a genuine empty line
+ * mid-hunk, and metadata lines counted as context. Hunk headers are
+ * detected with the shared `matchHunkHeader` (THE single hunk-header regex
+ * of core, spec R8).
+ *
+ * KNOWN synthetic-only divergence vs the pre-adapter `\s+` regex: hunk
+ * headers with tabs/multiple spaces no longer reset the position counter
+ * (git only emits the single-space form); pinned in
+ * `src/diff/__tests__/parity-extract-entity-diff-lines.test.ts`.
  *
  * @param diffContent - Raw unified diff content for a single file
  * @param symbol - The symbol whose range to extract lines for
  * @returns Array of raw diff lines (with +/- prefix) within the symbol range
  */
 export function extractEntityDiffLines(diffContent: string, symbol: SymbolInfo): string[] {
-  const lines = diffContent.split('\n');
+  const { preamble, files } = parseUnifiedDiff(diffContent);
+  const stream = [...preamble, ...files.flatMap((f) => f.rawLines)];
   const result: string[] = [];
   let currentNewLine = 0;
-  let currentOldLine = 0;
   let inHunk = false;
 
-  const HUNK_RE = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/;
-
-  for (const line of lines) {
-    const hunkMatch = HUNK_RE.exec(line);
-    if (hunkMatch) {
-      currentOldLine = Number.parseInt(hunkMatch[1]!, 10);
-      currentNewLine = Number.parseInt(hunkMatch[2]!, 10);
+  for (const line of stream) {
+    const hunk = matchHunkHeader(line);
+    if (hunk) {
+      currentNewLine = hunk.newStart;
       inHunk = true;
       continue;
     }
@@ -72,22 +87,20 @@ export function extractEntityDiffLines(diffContent: string, symbol: SymbolInfo):
     if (!inHunk) continue;
 
     if (line.startsWith('+') && !line.startsWith('+++')) {
-      // Addition — tracked on new-side line number
+      // Addition — lives at the current new-side line, then advances it.
       if (currentNewLine >= symbol.startLine && currentNewLine <= symbol.endLine) {
         result.push(line);
       }
       currentNewLine++;
     } else if (line.startsWith('-') && !line.startsWith('---')) {
-      // Deletion — tracked on old-side line number but we include if
-      // it maps to the symbol's range (using new-side context position)
-      if (currentOldLine >= symbol.startLine && currentOldLine <= symbol.endLine) {
+      // Deletion — attributed to the new-side position where the removal
+      // happened (CORE-M9). A deletion does NOT advance the new side.
+      if (currentNewLine >= symbol.startLine && currentNewLine <= symbol.endLine) {
         result.push(line);
       }
-      currentOldLine++;
     } else {
-      // Context line — advances both counters
+      // Context (or any other) line — advances the new-side position.
       currentNewLine++;
-      currentOldLine++;
     }
   }
 

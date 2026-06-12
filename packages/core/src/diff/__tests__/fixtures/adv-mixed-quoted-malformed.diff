@@ -1,0 +1,8 @@
+diff --git a/old-with b/inside "b/x"
+index 3333333..4444444 100644
+--- a/old-with
++++ "b/x"
+@@ -1,2 +1,2 @@
+ uno
+-dos
++dos CAMBIADO

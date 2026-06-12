@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- **Quoted diff paths no longer dropped (CORE-M6)** — `parseDiffFiles` now parses `core.quotepath`-quoted headers (`diff --git "a/caf\303\251.ts" "b/caf\303\251.ts"`), unescaping C-style and octal UTF-8 escapes into the real path (`café.ts`). Previously these files were silently dropped from the review AND their diff lines were absorbed into the previous file's `content`, polluting both per-file stats and the diff sent to the LLM. Behavior change in a public API (semver minor); all other inputs remain byte-identical (gated by a golden-corpus byte-parity suite). Under the same umbrella, the experimental `extractSemanticDiff` now resolves the real unescaped path for quoted headers (previously their declarations were attributed to `unknown`).
+- **Entity diff deletions attributed by new-side position (CORE-M9)** — `extractEntityDiffLines` now attributes deletions to the symbol containing the live new-side position where the removal happened. Previously deletions were compared by their OLD-side line number against the NEW-side symbol ranges (the contract of `mapDiffToSymbols`), mis-attributing them whenever earlier hunks made old/new line numbers drift apart (insertions above, deleted-file hunks). Behavior change in a public API with no production callers (semver minor); every other input stays identical to the historical behavior (gated by a dual-baseline parity suite where the frozen legacy copy and the M9-fixed copy differ by exactly one comparison).
+
 ## [2.8.1] - 2026-03-31
 
 ### Fixed

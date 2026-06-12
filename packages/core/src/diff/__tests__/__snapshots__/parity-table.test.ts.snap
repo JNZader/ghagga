@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`cross-consumer parity table (generated report) > matches the pinned table 1`] = `
+"
+| fixture                    | parseDiffFiles | hunks | entity | patches | semantic | Δ                                                           |
+| -------------------------- | -------------- | ----- | ------ | ------- | -------- | ----------------------------------------------------------- |
+| c01                        | 3f +6/-6       | 6h    | 12L    | 3p      | 6c       | —                                                           |
+| c02                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
+| c03                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | M6(parseDiffFiles)                                          |
+| c04                        | 2f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
+| c05                        | 2f +0/-0       | 0h    | 0L     | 0p      | 0c       | —                                                           |
+| c06                        | 1f +3/-0       | 1h    | 3L     | 0p      | 0c       | —                                                           |
+| c07                        | 1f +0/-3       | 1h    | 3L     | 0p      | 0c       | M9(extractEntityDiffLines)                                  |
+| c08                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
+| c09                        | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | —                                                           |
+| c10                        | 1f +0/-0       | 0h    | 0L     | 0p      | 0c       | —                                                           |
+| c11                        | 2f +3/-3       | 3h    | 6L     | 1p      | 3c       | —                                                           |
+| c12                        | 2f +4/-4       | 4h    | 8L     | 2p      | 4c       | —                                                           |
+| c13                        | 0f +0/-0       | 0h    | 0L     | 0p      | 0c       | —                                                           |
+| c14                        | 0f +0/-0       | 0h    | 0L     | 0p      | 0c       | —                                                           |
+| c15                        | 1f +3/-1       | 2h    | 4L     | 0p      | 0c       | M9(extractEntityDiffLines)                                  |
+| c16                        | 3f +9/-6       | 6h    | 15L    | 3p      | 6c       | —                                                           |
+| adv-empty-line-mid-hunk    | 1f +3/-3       | 2h    | 6L     | 0p      | 0c       | —                                                           |
+| adv-header-b-mismatch      | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | M6-path-auth(parseDiffFiles)                                |
+| adv-loose-hunk-header      | 1f +1/-0       | 0h    | 0L     | 0p      | 0c       | R7-walker(applyVirtualPatches)                              |
+| adv-mixed-quoted-malformed | 1f +1/-1       | 1h    | 2L     | 0p      | 0c       | M6-path-auth(parseDiffFiles) R7-walker(applyVirtualPatches) |
+| m6-mixed-quoted            | 2f +2/-2       | 2h    | 4L     | 0p      | 0c       | M6(parseDiffFiles)                                          |
+| m6-quoted-consecutive      | 3f +3/-3       | 3h    | 6L     | 0p      | 0c       | M6(parseDiffFiles)                                          |
+| provenance-gh-api-pr209    | 8f +306/-49    | 13h   | 355L   | 0p      | 15c      | —                                                           |
+"
+`;

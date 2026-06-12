@@ -7,6 +7,7 @@
  */
 
 import { minimatch } from 'minimatch';
+import { parseUnifiedDiff } from '../diff/index.js';
 import { applyPathProtection } from './path-protection.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -26,68 +27,57 @@ export interface DiffFile {
   content: string;
 }
 
-// ─── Constants ──────────────────────────────────────────────────
-
-/**
- * Regex to match the start of a file diff block.
- * Handles both `a/path` and `b/path` formats from git diff.
- */
-const FILE_HEADER_RE = /^diff --git a\/.+ b\/(.+)$/;
-
 // ─── Core Functions ─────────────────────────────────────────────
 
 /**
  * Parse a unified diff string into structured file objects.
  *
- * Splits the diff by file boundaries (diff --git lines), extracts
- * file paths, and counts additions/deletions per file.
+ * Thin adapter over the unified parser (`src/diff/parse.ts`). The contract
+ * is parity with the historical line-splitting implementation (gated by
+ * `diff/__tests__/parity-parse-diff-files.test.ts`):
+ *
+ *  - `content` is rebuilt from the file's `rawLines` — the EXACT slice of the
+ *    input section (header line through the line before the next header),
+ *    so `rawLines.join('\n')` is byte-identical to the historical
+ *    accumulate-and-join, CRLF and trailing empty line included.
+ *  - `additions`/`deletions` use the exact historical predicate over
+ *    rawLines (`startsWith('+') && !startsWith('+++')`), NOT the structured
+ *    hunks — parity on malformed input where hunks never form (C11/C12).
+ *  - `path` parity holds for WELL-FORMED diffs (git/GitHub output, where the
+ *    `diff --git ... b/X` capture always equals the `+++ b/X` line). On
+ *    MALFORMED sections where they disagree, path authority is the new
+ *    parser's: `+++ b/` → `rename to` → header b-side (the baseline trusted
+ *    the header regex). Documented divergence, asserted both-sides in the
+ *    parity harness (`adv-header-b-mismatch`).
+ *  - Documented delta (CORE-M6, changelog): quoted paths
+ *    (`diff --git "a/caf\303\251.ts" ...`, core.quotepath escapes, including
+ *    consecutive quoted sections and mixed-quoted headers) are now parsed
+ *    and unescaped. Previously the file was silently dropped and its diff
+ *    lines were absorbed by the preceding file's `content`.
  *
  * @param diff - Full unified diff string
  * @returns Array of DiffFile objects
  */
 export function parseDiffFiles(diff: string): DiffFile[] {
-  const files: DiffFile[] = [];
-  const lines = diff.split('\n');
-
-  let currentFile: DiffFile | null = null;
-  const contentLines: string[] = [];
-
-  function flushCurrent() {
-    if (currentFile) {
-      currentFile.content = contentLines.join('\n');
-      files.push(currentFile);
-      contentLines.length = 0;
-    }
-  }
-
-  for (const line of lines) {
-    const match = FILE_HEADER_RE.exec(line);
-    if (match) {
-      // Start of a new file — flush previous
-      flushCurrent();
-      currentFile = {
-        path: match[1] ?? '',
-        additions: 0,
-        deletions: 0,
-        content: '',
-      };
-      contentLines.push(line);
-    } else if (currentFile) {
-      contentLines.push(line);
-
+  return parseUnifiedDiff(diff).files.map((file) => {
+    let additions = 0;
+    let deletions = 0;
+    for (const line of file.rawLines) {
       // Count additions and deletions (skip hunk headers and --- / +++ lines)
       if (line.startsWith('+') && !line.startsWith('+++')) {
-        currentFile.additions++;
+        additions++;
       } else if (line.startsWith('-') && !line.startsWith('---')) {
-        currentFile.deletions++;
+        deletions++;
       }
     }
-  }
 
-  // Flush last file
-  flushCurrent();
-
-  return files;
+    return {
+      path: file.path,
+      additions,
+      deletions,
+      content: file.rawLines.join('\n'),
+    };
+  });
 }
 
 /**

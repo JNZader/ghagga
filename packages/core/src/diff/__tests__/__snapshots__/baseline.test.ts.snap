@@ -1,0 +1,1684 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`baseline c01 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
++[SUGGESTED FIX] BASELINE_PROBE_3
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
+ export const alpha6 = 6;
++[SUGGESTED FIX] BASELINE_PROBE_6
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;
+diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+ export const beta8 = 8;
+@@ -27,7 +27,7 @@ export const beta26 = 26;
+ export const beta27 = 27;
+ export const beta28 = 28;
+ export const beta29 = 29;
+-export const beta30 = 30;
++export const beta30 = 3000; // changed
+ export const beta31 = 31;
+ export const beta32 = 32;
+ export const beta33 = 33;
+diff --git a/src/gamma.ts b/src/gamma.ts
+index b2320f6..2513611 100644
+--- a/src/gamma.ts
++++ b/src/gamma.ts
+@@ -2,7 +2,7 @@ export const gamma1 = 1;
+ export const gamma2 = 2;
+ export const gamma3 = 3;
+ export const gamma4 = 4;
+-export const gamma5 = 5;
++export const gamma5 = 500; // changed
+ export const gamma6 = 6;
+ export const gamma7 = 7;
+ export const gamma8 = 8;
+@@ -27,7 +27,7 @@ export const gamma26 = 26;
+ export const gamma27 = 27;
+ export const gamma28 = 28;
+ export const gamma29 = 29;
+-export const gamma30 = 30;
++export const gamma30 = 3000; // changed
+ export const gamma31 = 31;
+ export const gamma32 = 32;
+ export const gamma33 = 33;
+"
+`;
+
+exports[`baseline c01 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-export const alpha5 = 5;",
+      "+export const alpha5 = 500; // changed",
+      "-export const beta5 = 5;",
+      "+export const beta5 = 500; // changed",
+      "-export const gamma5 = 5;",
+      "+export const gamma5 = 500; // changed",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [
+      "-export const alpha30 = 30;",
+      "+export const alpha30 = 3000; // changed",
+      "-export const beta30 = 30;",
+      "+export const beta30 = 3000; // changed",
+      "-export const gamma30 = 30;",
+      "+export const gamma30 = 3000; // changed",
+    ],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c01 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha5",
+      "newSignature": "export const alpha5 = 500; // changed",
+      "oldSignature": "export const alpha5 = 5;",
+    },
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha30",
+      "newSignature": "export const alpha30 = 3000; // changed",
+      "oldSignature": "export const alpha30 = 30;",
+    },
+    {
+      "filePath": "src/beta.ts",
+      "kind": "export_removed",
+      "name": "beta5",
+      "newSignature": "export const beta5 = 500; // changed",
+      "oldSignature": "export const beta5 = 5;",
+    },
+    {
+      "filePath": "src/beta.ts",
+      "kind": "export_removed",
+      "name": "beta30",
+      "newSignature": "export const beta30 = 3000; // changed",
+      "oldSignature": "export const beta30 = 30;",
+    },
+    {
+      "filePath": "src/gamma.ts",
+      "kind": "export_removed",
+      "name": "gamma5",
+      "newSignature": "export const gamma5 = 500; // changed",
+      "oldSignature": "export const gamma5 = 5;",
+    },
+    {
+      "filePath": "src/gamma.ts",
+      "kind": "export_removed",
+      "name": "gamma30",
+      "newSignature": "export const gamma30 = 3000; // changed",
+      "oldSignature": "export const gamma30 = 30;",
+    },
+  ],
+  "summary": "6 export removed",
+}
+`;
+
+exports[`baseline c01 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 2,
+    "content": "diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
+ export const alpha6 = 6;
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;",
+    "deletions": 2,
+    "path": "src/alpha.ts",
+  },
+  {
+    "additions": 2,
+    "content": "diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+ export const beta8 = 8;
+@@ -27,7 +27,7 @@ export const beta26 = 26;
+ export const beta27 = 27;
+ export const beta28 = 28;
+ export const beta29 = 29;
+-export const beta30 = 30;
++export const beta30 = 3000; // changed
+ export const beta31 = 31;
+ export const beta32 = 32;
+ export const beta33 = 33;",
+    "deletions": 2,
+    "path": "src/beta.ts",
+  },
+  {
+    "additions": 2,
+    "content": "diff --git a/src/gamma.ts b/src/gamma.ts
+index b2320f6..2513611 100644
+--- a/src/gamma.ts
++++ b/src/gamma.ts
+@@ -2,7 +2,7 @@ export const gamma1 = 1;
+ export const gamma2 = 2;
+ export const gamma3 = 3;
+ export const gamma4 = 4;
+-export const gamma5 = 5;
++export const gamma5 = 500; // changed
+ export const gamma6 = 6;
+ export const gamma7 = 7;
+ export const gamma8 = 8;
+@@ -27,7 +27,7 @@ export const gamma26 = 26;
+ export const gamma27 = 27;
+ export const gamma28 = 28;
+ export const gamma29 = 29;
+-export const gamma30 = 30;
++export const gamma30 = 3000; // changed
+ export const gamma31 = 31;
+ export const gamma32 = 32;
+ export const gamma33 = 33;
+",
+    "deletions": 2,
+    "path": "src/gamma.ts",
+  },
+]
+`;
+
+exports[`baseline c01 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+]
+`;
+
+exports[`baseline c02 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/my file.ts b/my file.ts
+index 9864d22..09ca28d 100644
+--- a/my file.ts	
++++ b/my file.ts	
+@@ -1,5 +1,5 @@
+ line one
+ line two
+-line three
++line three CHANGED
++[SUGGESTED FIX] BASELINE_PROBE_3
+ line four
+ line five
+
++[SUGGESTED FIX] BASELINE_PROBE_6"
+`;
+
+exports[`baseline c02 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-line three",
+      "+line three CHANGED",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c02 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c02 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 1,
+    "content": "diff --git a/my file.ts b/my file.ts
+index 9864d22..09ca28d 100644
+--- a/my file.ts	
++++ b/my file.ts	
+@@ -1,5 +1,5 @@
+ line one
+ line two
+-line three
++line three CHANGED
+ line four
+ line five
+",
+    "deletions": 1,
+    "path": "my file.ts",
+  },
+]
+`;
+
+exports[`baseline c02 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 5,
+    "newStart": 1,
+    "oldCount": 5,
+    "oldStart": 1,
+  },
+]
+`;
+
+exports[`baseline c03 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"
+index 49de013..11c4483 100644
+--- "a/caf\\303\\251.ts"
++++ "b/caf\\303\\251.ts"
+@@ -1,3 +1,3 @@
+ contenido uno
+-contenido dos
++contenido dos CAMBIADO
+ contenido tres
+"
+`;
+
+exports[`baseline c03 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-contenido dos",
+      "+contenido dos CAMBIADO",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c03 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c03 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 1,
+    "content": "diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"
+index 49de013..11c4483 100644
+--- "a/caf\\303\\251.ts"
++++ "b/caf\\303\\251.ts"
+@@ -1,3 +1,3 @@
+ contenido uno
+-contenido dos
++contenido dos CAMBIADO
+ contenido tres
+",
+    "deletions": 1,
+    "path": "café.ts",
+  },
+]
+`;
+
+exports[`baseline c03 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 3,
+    "newStart": 1,
+    "oldCount": 3,
+    "oldStart": 1,
+  },
+]
+`;
+
+exports[`baseline c04 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/old1.ts b/renamed1.ts
+similarity index 100%
+rename from old1.ts
+rename to renamed1.ts
++[SUGGESTED FIX] BASELINE_PROBE_3
+diff --git a/old2.ts b/renamed2.ts
+similarity index 86%
+rename from old2.ts
+rename to renamed2.ts
+index 18a6c9f..2e851fe 100644
+--- a/old2.ts
++++ b/renamed2.ts
+@@ -3,7 +3,7 @@ other line 2
+ other line 3
+ other line 4
+ other line 5
+-other line 6
++other line six EDITED
+ other line 7
+ other line 8
+ other line 9
+"
+`;
+
+exports[`baseline c04 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-other line 6",
+      "+other line six EDITED",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c04 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c04 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 0,
+    "content": "diff --git a/old1.ts b/renamed1.ts
+similarity index 100%
+rename from old1.ts
+rename to renamed1.ts",
+    "deletions": 0,
+    "path": "renamed1.ts",
+  },
+  {
+    "additions": 1,
+    "content": "diff --git a/old2.ts b/renamed2.ts
+similarity index 86%
+rename from old2.ts
+rename to renamed2.ts
+index 18a6c9f..2e851fe 100644
+--- a/old2.ts
++++ b/renamed2.ts
+@@ -3,7 +3,7 @@ other line 2
+ other line 3
+ other line 4
+ other line 5
+-other line 6
++other line six EDITED
+ other line 7
+ other line 8
+ other line 9
+",
+    "deletions": 1,
+    "path": "renamed2.ts",
+  },
+]
+`;
+
+exports[`baseline c04 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 7,
+    "newStart": 3,
+    "oldCount": 7,
+    "oldStart": 3,
+  },
+]
+`;
+
+exports[`baseline c05 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/bin1.dat b/bin1.dat
+index 8fdf218..43f5d6d 100644
+Binary files a/bin1.dat and b/bin1.dat differ
+diff --git a/bin2.dat b/bin2.dat
+index 4d9d21dcbaa7724721fa92cb1e363d530226c46b..2282dab164ff37b3d5082c241de3a5f1a57ca010 100644
+GIT binary patch
+literal 5
+McmZSh|4%Rq00(yhX#fBK
+
+literal 4
+LcmZSh|4#q_1q}iY
+
+"
+`;
+
+exports[`baseline c05 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c05 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c05 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 0,
+    "content": "diff --git a/bin1.dat b/bin1.dat
+index 8fdf218..43f5d6d 100644
+Binary files a/bin1.dat and b/bin1.dat differ",
+    "deletions": 0,
+    "path": "bin1.dat",
+  },
+  {
+    "additions": 0,
+    "content": "diff --git a/bin2.dat b/bin2.dat
+index 4d9d21dcbaa7724721fa92cb1e363d530226c46b..2282dab164ff37b3d5082c241de3a5f1a57ca010 100644
+GIT binary patch
+literal 5
+McmZSh|4%Rq00(yhX#fBK
+
+literal 4
+LcmZSh|4#q_1q}iY
+
+",
+    "deletions": 0,
+    "path": "bin2.dat",
+  },
+]
+`;
+
+exports[`baseline c05 > parseHunks (scope/diff-mapper.ts) 1`] = `[]`;
+
+exports[`baseline c06 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/brandnew.ts b/brandnew.ts
+new file mode 100644
+index 0000000..0d2d97f
+--- /dev/null
++++ b/brandnew.ts
+@@ -0,0 +1,3 @@
++new line 1
++new line 2
++new line 3
++[SUGGESTED FIX] BASELINE_PROBE_3
+"
+`;
+
+exports[`baseline c06 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "+new line 1",
+      "+new line 2",
+      "+new line 3",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c06 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c06 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 3,
+    "content": "diff --git a/brandnew.ts b/brandnew.ts
+new file mode 100644
+index 0000000..0d2d97f
+--- /dev/null
++++ b/brandnew.ts
+@@ -0,0 +1,3 @@
++new line 1
++new line 2
++new line 3
+",
+    "deletions": 0,
+    "path": "brandnew.ts",
+  },
+]
+`;
+
+exports[`baseline c06 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 3,
+    "newStart": 1,
+    "oldCount": 0,
+    "oldStart": 0,
+  },
+]
+`;
+
+exports[`baseline c07 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/brandnew.ts b/brandnew.ts
+deleted file mode 100644
+index 0d2d97f..0000000
+--- a/brandnew.ts
++++ /dev/null
+@@ -1,3 +0,0 @@
+-new line 1
+-new line 2
+-new line 3
+"
+`;
+
+exports[`baseline c07 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c07 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c07 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 0,
+    "content": "diff --git a/brandnew.ts b/brandnew.ts
+deleted file mode 100644
+index 0d2d97f..0000000
+--- a/brandnew.ts
++++ /dev/null
+@@ -1,3 +0,0 @@
+-new line 1
+-new line 2
+-new line 3
+",
+    "deletions": 3,
+    "path": "brandnew.ts",
+  },
+]
+`;
+
+exports[`baseline c07 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 0,
+    "newStart": 0,
+    "oldCount": 3,
+    "oldStart": 1,
+  },
+]
+`;
+
+exports[`baseline c08 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/crlf.ts b/crlf.ts
+index 6c45140..e1b1baa 100644
+--- a/crlf.ts
++++ b/crlf.ts
+@@ -1,4 +1,4 @@
+ crlf line 1
+-crlf line 2
++crlf line 2 CHANGED
+ crlf line 3
++[SUGGESTED FIX] BASELINE_PROBE_3
+ crlf line 4
+"
+`;
+
+exports[`baseline c08 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-crlf line 2
+",
+      "+crlf line 2 CHANGED
+",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c08 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c08 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 1,
+    "content": "diff --git a/crlf.ts b/crlf.ts
+index 6c45140..e1b1baa 100644
+--- a/crlf.ts
++++ b/crlf.ts
+@@ -1,4 +1,4 @@
+ crlf line 1
+-crlf line 2
++crlf line 2 CHANGED
+ crlf line 3
+ crlf line 4
+",
+    "deletions": 1,
+    "path": "crlf.ts",
+  },
+]
+`;
+
+exports[`baseline c08 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 4,
+    "newStart": 1,
+    "oldCount": 4,
+    "oldStart": 1,
+  },
+]
+`;
+
+exports[`baseline c09 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/nonewline.ts b/nonewline.ts
+index 00e6f42..bedbd6b 100644
+--- a/nonewline.ts
++++ b/nonewline.ts
+@@ -1,3 +1,3 @@
+ nn line 1
+ nn line 2
+-nn last line no newline
+\\ No newline at end of file
++nn last line CHANGED no newline
++[SUGGESTED FIX] BASELINE_PROBE_3
+\\ No newline at end of file
++[SUGGESTED FIX] BASELINE_PROBE_3
+"
+`;
+
+exports[`baseline c09 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-nn last line no newline",
+      "+nn last line CHANGED no newline",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c09 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c09 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 1,
+    "content": "diff --git a/nonewline.ts b/nonewline.ts
+index 00e6f42..bedbd6b 100644
+--- a/nonewline.ts
++++ b/nonewline.ts
+@@ -1,3 +1,3 @@
+ nn line 1
+ nn line 2
+-nn last line no newline
+\\ No newline at end of file
++nn last line CHANGED no newline
+\\ No newline at end of file
+",
+    "deletions": 1,
+    "path": "nonewline.ts",
+  },
+]
+`;
+
+exports[`baseline c09 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 3,
+    "newStart": 1,
+    "oldCount": 3,
+    "oldStart": 1,
+  },
+]
+`;
+
+exports[`baseline c10 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/script.sh b/script.sh
+old mode 100644
+new mode 100755
+
++[SUGGESTED FIX] BASELINE_PROBE_3"
+`;
+
+exports[`baseline c10 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c10 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c10 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 0,
+    "content": "diff --git a/script.sh b/script.sh
+old mode 100644
+new mode 100755
+",
+    "deletions": 0,
+    "path": "script.sh",
+  },
+]
+`;
+
+exports[`baseline c10 > parseHunks (scope/diff-mapper.ts) 1`] = `[]`;
+
+exports[`baseline c11 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
++[SUGGESTED FIX] BASELINE_PROBE_3
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
+ export const alpha6 = 6;
++[SUGGESTED FIX] BASELINE_PROBE_6
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;
+diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+
+[... diff truncated to fit token budget ...]"
+`;
+
+exports[`baseline c11 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-export const alpha5 = 5;",
+      "+export const alpha5 = 500; // changed",
+      "-export const beta5 = 5;",
+      "+export const beta5 = 500; // changed",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [
+      "-export const alpha30 = 30;",
+      "+export const alpha30 = 3000; // changed",
+    ],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c11 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha5",
+      "newSignature": "export const alpha5 = 500; // changed",
+      "oldSignature": "export const alpha5 = 5;",
+    },
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha30",
+      "newSignature": "export const alpha30 = 3000; // changed",
+      "oldSignature": "export const alpha30 = 30;",
+    },
+    {
+      "filePath": "src/beta.ts",
+      "kind": "export_removed",
+      "name": "beta5",
+      "newSignature": "export const beta5 = 500; // changed",
+      "oldSignature": "export const beta5 = 5;",
+    },
+  ],
+  "summary": "3 export removed",
+}
+`;
+
+exports[`baseline c11 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 2,
+    "content": "diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
+ export const alpha6 = 6;
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;",
+    "deletions": 2,
+    "path": "src/alpha.ts",
+  },
+  {
+    "additions": 1,
+    "content": "diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+
+[... diff truncated to fit token budget ...]",
+    "deletions": 1,
+    "path": "src/beta.ts",
+  },
+]
+`;
+
+exports[`baseline c11 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+]
+`;
+
+exports[`baseline c12 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
++[SUGGESTED FIX] BASELINE_PROBE_3
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
+ export const alpha6 = 6;
++[SUGGESTED FIX] BASELINE_PROBE_6
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;
+diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+ export const beta8 = 8;
+@@ -27,7 +27,7 @@ export const beta26 = 26;
+ export const beta27 = 27;
+ export const beta28 = 28;
+ export const beta29 = 29;
+-export const beta30 = 30;
++export const beta30 = 3000; // changed
+ export const beta31 = 31;
+ export const beta32 = 32;
+ export const beta33 = 33;
+diff --git a/src/ga"
+`;
+
+exports[`baseline c12 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-export const alpha5 = 5;",
+      "+export const alpha5 = 500; // changed",
+      "-export const beta5 = 5;",
+      "+export const beta5 = 500; // changed",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [
+      "-export const alpha30 = 30;",
+      "+export const alpha30 = 3000; // changed",
+      "-export const beta30 = 30;",
+      "+export const beta30 = 3000; // changed",
+    ],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c12 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha5",
+      "newSignature": "export const alpha5 = 500; // changed",
+      "oldSignature": "export const alpha5 = 5;",
+    },
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha30",
+      "newSignature": "export const alpha30 = 3000; // changed",
+      "oldSignature": "export const alpha30 = 30;",
+    },
+    {
+      "filePath": "src/beta.ts",
+      "kind": "export_removed",
+      "name": "beta5",
+      "newSignature": "export const beta5 = 500; // changed",
+      "oldSignature": "export const beta5 = 5;",
+    },
+    {
+      "filePath": "src/beta.ts",
+      "kind": "export_removed",
+      "name": "beta30",
+      "newSignature": "export const beta30 = 3000; // changed",
+      "oldSignature": "export const beta30 = 30;",
+    },
+  ],
+  "summary": "4 export removed",
+}
+`;
+
+exports[`baseline c12 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 2,
+    "content": "diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
+ export const alpha6 = 6;
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;",
+    "deletions": 2,
+    "path": "src/alpha.ts",
+  },
+  {
+    "additions": 2,
+    "content": "diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+ export const beta8 = 8;
+@@ -27,7 +27,7 @@ export const beta26 = 26;
+ export const beta27 = 27;
+ export const beta28 = 28;
+ export const beta29 = 29;
+-export const beta30 = 30;
++export const beta30 = 3000; // changed
+ export const beta31 = 31;
+ export const beta32 = 32;
+ export const beta33 = 33;
+diff --git a/src/ga",
+    "deletions": 2,
+    "path": "src/beta.ts",
+  },
+]
+`;
+
+exports[`baseline c12 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+]
+`;
+
+exports[`baseline c13 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"This is definitely not a unified diff.
+It is arbitrary prose that an ACP adapter might receive.
+{"findings": [{"file": "x.ts", "line": 3, "message": "fake"}], "ok": true}
+Even a line mentioning +++ or --- or @@ should not crash anything.
+"
+`;
+
+exports[`baseline c13 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c13 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c13 > parseDiffFiles (utils/diff.ts) 1`] = `[]`;
+
+exports[`baseline c13 > parseHunks (scope/diff-mapper.ts) 1`] = `[]`;
+
+exports[`baseline c14 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `""`;
+
+exports[`baseline c14 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c14 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c14 > parseDiffFiles (utils/diff.ts) 1`] = `[]`;
+
+exports[`baseline c14 > parseHunks (scope/diff-mapper.ts) 1`] = `[]`;
+
+exports[`baseline c15 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/zc.ts b/zc.ts
+index ed02ee0..9662b35 100644
+--- a/zc.ts
++++ b/zc.ts
+@@ -5,0 +6,2 @@ zline 5
++inserted A
++[SUGGESTED FIX] BASELINE_PROBE_6
++inserted B
+@@ -10 +12 @@ zline 9
+-zline 10
++zline 10 CHANGED
+"
+`;
+
+exports[`baseline c15 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "+inserted A",
+      "+inserted B",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c15 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [],
+  "summary": "no entity-level changes detected",
+}
+`;
+
+exports[`baseline c15 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 3,
+    "content": "diff --git a/zc.ts b/zc.ts
+index ed02ee0..9662b35 100644
+--- a/zc.ts
++++ b/zc.ts
+@@ -5,0 +6,2 @@ zline 5
++inserted A
++inserted B
+@@ -10 +12 @@ zline 9
+-zline 10
++zline 10 CHANGED
+",
+    "deletions": 1,
+    "path": "zc.ts",
+  },
+]
+`;
+
+exports[`baseline c15 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 2,
+    "newStart": 6,
+    "oldCount": 0,
+    "oldStart": 5,
+  },
+  {
+    "newCount": 1,
+    "newStart": 12,
+    "oldCount": 1,
+    "oldStart": 10,
+  },
+]
+`;
+
+exports[`baseline c16 > applyVirtualPatches (recursive/patch-extractor.ts) 1`] = `
+"diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
++[SUGGESTED FIX] BASELINE_PROBE_3
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
++[SUGGESTED FIX] export const alpha5 = ALPHA_BASE * 100;
++[SUGGESTED FIX] BASELINE_PROBE_6
+ export const alpha6 = 6;
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;
+diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+ export const beta8 = 8;
+@@ -27,7 +27,7 @@ export const beta26 = 26;
+ export const beta27 = 27;
+ export const beta28 = 28;
+ export const beta29 = 29;
+-export const beta30 = 30;
++export const beta30 = 3000; // changed
++[SUGGESTED FIX] export const beta30 = BETA_BASE * 1000;
+ export const beta31 = 31;
+ export const beta32 = 32;
+ export const beta33 = 33;
+diff --git a/src/gamma.ts b/src/gamma.ts
+index b2320f6..2513611 100644
+--- a/src/gamma.ts
++++ b/src/gamma.ts
+@@ -2,7 +2,7 @@ export const gamma1 = 1;
+ export const gamma2 = 2;
+ export const gamma3 = 3;
+ export const gamma4 = 4;
+-export const gamma5 = 5;
++export const gamma5 = 500; // changed
+ export const gamma6 = 6;
++[SUGGESTED FIX] const gamma6 = 6;
+ export const gamma7 = 7;
+ export const gamma8 = 8;
+@@ -27,7 +27,7 @@ export const gamma26 = 26;
+ export const gamma27 = 27;
+ export const gamma28 = 28;
+ export const gamma29 = 29;
+-export const gamma30 = 30;
++export const gamma30 = 3000; // changed
+ export const gamma31 = 31;
+ export const gamma32 = 32;
+ export const gamma33 = 33;
+"
+`;
+
+exports[`baseline c16 > extractEntityDiffLines (scope/entity-diff.ts) 1`] = `
+[
+  {
+    "lines": [
+      "-export const alpha5 = 5;",
+      "+export const alpha5 = 500; // changed",
+      "+[SUGGESTED FIX] export const alpha5 = ALPHA_BASE * 100;",
+      "-export const beta5 = 5;",
+      "+export const beta5 = 500; // changed",
+      "-export const gamma5 = 5;",
+      "+export const gamma5 = 500; // changed",
+      "+[SUGGESTED FIX] const gamma6 = 6;",
+    ],
+    "symbol": "symEarly",
+  },
+  {
+    "lines": [
+      "-export const alpha30 = 30;",
+      "+export const alpha30 = 3000; // changed",
+      "-export const beta30 = 30;",
+      "+export const beta30 = 3000; // changed",
+      "+[SUGGESTED FIX] export const beta30 = BETA_BASE * 1000;",
+      "-export const gamma30 = 30;",
+      "+export const gamma30 = 3000; // changed",
+    ],
+    "symbol": "symLate",
+  },
+]
+`;
+
+exports[`baseline c16 > extractSemanticDiff (semantic-diff/index.ts) 1`] = `
+{
+  "changes": [
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha5",
+      "newSignature": "export const alpha5 = 500; // changed",
+      "oldSignature": "export const alpha5 = 5;",
+    },
+    {
+      "filePath": "src/alpha.ts",
+      "kind": "export_removed",
+      "name": "alpha30",
+      "newSignature": "export const alpha30 = 3000; // changed",
+      "oldSignature": "export const alpha30 = 30;",
+    },
+    {
+      "filePath": "src/beta.ts",
+      "kind": "export_removed",
+      "name": "beta5",
+      "newSignature": "export const beta5 = 500; // changed",
+      "oldSignature": "export const beta5 = 5;",
+    },
+    {
+      "filePath": "src/beta.ts",
+      "kind": "export_removed",
+      "name": "beta30",
+      "newSignature": "export const beta30 = 3000; // changed",
+      "oldSignature": "export const beta30 = 30;",
+    },
+    {
+      "filePath": "src/gamma.ts",
+      "kind": "export_removed",
+      "name": "gamma5",
+      "newSignature": "export const gamma5 = 500; // changed",
+      "oldSignature": "export const gamma5 = 5;",
+    },
+    {
+      "filePath": "src/gamma.ts",
+      "kind": "export_removed",
+      "name": "gamma30",
+      "newSignature": "export const gamma30 = 3000; // changed",
+      "oldSignature": "export const gamma30 = 30;",
+    },
+  ],
+  "summary": "6 export removed",
+}
+`;
+
+exports[`baseline c16 > parseDiffFiles (utils/diff.ts) 1`] = `
+[
+  {
+    "additions": 3,
+    "content": "diff --git a/src/alpha.ts b/src/alpha.ts
+index 657651a..bf211dc 100644
+--- a/src/alpha.ts
++++ b/src/alpha.ts
+@@ -2,7 +2,7 @@ export const alpha1 = 1;
+ export const alpha2 = 2;
+ export const alpha3 = 3;
+ export const alpha4 = 4;
+-export const alpha5 = 5;
++export const alpha5 = 500; // changed
++[SUGGESTED FIX] export const alpha5 = ALPHA_BASE * 100;
+ export const alpha6 = 6;
+ export const alpha7 = 7;
+ export const alpha8 = 8;
+@@ -27,7 +27,7 @@ export const alpha26 = 26;
+ export const alpha27 = 27;
+ export const alpha28 = 28;
+ export const alpha29 = 29;
+-export const alpha30 = 30;
++export const alpha30 = 3000; // changed
+ export const alpha31 = 31;
+ export const alpha32 = 32;
+ export const alpha33 = 33;",
+    "deletions": 2,
+    "path": "src/alpha.ts",
+  },
+  {
+    "additions": 3,
+    "content": "diff --git a/src/beta.ts b/src/beta.ts
+index 6ac9ab0..bfd79c7 100644
+--- a/src/beta.ts
++++ b/src/beta.ts
+@@ -2,7 +2,7 @@ export const beta1 = 1;
+ export const beta2 = 2;
+ export const beta3 = 3;
+ export const beta4 = 4;
+-export const beta5 = 5;
++export const beta5 = 500; // changed
+ export const beta6 = 6;
+ export const beta7 = 7;
+ export const beta8 = 8;
+@@ -27,7 +27,7 @@ export const beta26 = 26;
+ export const beta27 = 27;
+ export const beta28 = 28;
+ export const beta29 = 29;
+-export const beta30 = 30;
++export const beta30 = 3000; // changed
++[SUGGESTED FIX] export const beta30 = BETA_BASE * 1000;
+ export const beta31 = 31;
+ export const beta32 = 32;
+ export const beta33 = 33;",
+    "deletions": 2,
+    "path": "src/beta.ts",
+  },
+  {
+    "additions": 3,
+    "content": "diff --git a/src/gamma.ts b/src/gamma.ts
+index b2320f6..2513611 100644
+--- a/src/gamma.ts
++++ b/src/gamma.ts
+@@ -2,7 +2,7 @@ export const gamma1 = 1;
+ export const gamma2 = 2;
+ export const gamma3 = 3;
+ export const gamma4 = 4;
+-export const gamma5 = 5;
++export const gamma5 = 500; // changed
+ export const gamma6 = 6;
++[SUGGESTED FIX] const gamma6 = 6;
+ export const gamma7 = 7;
+ export const gamma8 = 8;
+@@ -27,7 +27,7 @@ export const gamma26 = 26;
+ export const gamma27 = 27;
+ export const gamma28 = 28;
+ export const gamma29 = 29;
+-export const gamma30 = 30;
++export const gamma30 = 3000; // changed
+ export const gamma31 = 31;
+ export const gamma32 = 32;
+ export const gamma33 = 33;
+",
+    "deletions": 2,
+    "path": "src/gamma.ts",
+  },
+]
+`;
+
+exports[`baseline c16 > parseHunks (scope/diff-mapper.ts) 1`] = `
+[
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+  {
+    "newCount": 7,
+    "newStart": 2,
+    "oldCount": 7,
+    "oldStart": 2,
+  },
+  {
+    "newCount": 7,
+    "newStart": 27,
+    "oldCount": 7,
+    "oldStart": 27,
+  },
+]
+`;

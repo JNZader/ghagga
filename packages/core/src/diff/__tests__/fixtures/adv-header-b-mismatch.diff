@@ -1,0 +1,8 @@
+diff --git a/f.ts b/HEADER.ts
+index 1111111..2222222 100644
+--- a/f.ts
++++ b/PLUS.ts
+@@ -1,2 +1,2 @@
+ uno
+-dos
++dos CAMBIADO

@@ -4,7 +4,9 @@
  * Instead of raw line diffs, extracts WHAT changed at the entity level:
  * function renamed, class added, method signature changed, etc.
  *
- * Implementation is regex-based — no tree-sitter required.
+ * Implementation is regex-based — no tree-sitter required. File sectioning
+ * is delegated to the unified diff parser (`src/diff/parse.ts`); declaration
+ * detection stays local.
  *
  * ⚠️ EXPERIMENTAL — NOT WIRED TO THE REVIEW PIPELINE.
  * This module is only re-exported from `core/src/index.ts`; it has ZERO
@@ -15,6 +17,8 @@
  * pipeline or removed. DX hygiene decision 2026-06-11 — see REFACTOR-NOTES
  * ("semantic-diff no está cableado a producción").
  */
+
+import { parseUnifiedDiff } from '../diff/index.js';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -163,41 +167,80 @@ interface HunkSet {
 }
 
 /**
- * Parse a unified diff and split added/removed declaration lines per file.
+ * FROZEN LEGACY BEHAVIOR — path resolution for the pre-header
+ * pseudo-section. The historical splitter (`split(/^diff --git /m)`) kept
+ * everything before the first file header as a section of its own and
+ * resolved its "path" by running this tail regex over the FIRST line
+ * (almost always yielding `unknown`). Reachable via arbitrary ACP input
+ * and bare diff fragments, so it is preserved verbatim. This is NOT a
+ * file-header or hunk-header regex (spec R8 keeps those solely in
+ * `src/diff/`): it matches the tail of an already-isolated line.
  */
-function parseHunks(unifiedDiff: string): HunkSet[] {
-  const result: HunkSet[] = [];
-  const filePattern = /^diff --git a\/.+ b\/(.+)$/m;
-  const sections = unifiedDiff.split(/^diff --git /m).filter(Boolean);
+const LEGACY_SECTION_PATH_RE = /a\/.+ b\/(.+)$/;
 
-  for (const section of sections) {
-    const pathMatch = /a\/.+ b\/(.+)$/.exec(section.split('\n')[0] ?? '');
-    const filePath = pathMatch?.[1] ?? 'unknown';
+/** Scan a section's raw lines for added/removed declaration lines. */
+function scanSection(lines: string[], filePath: string): HunkSet {
+  const added: HunkSet['added'] = new Map();
+  const removed: HunkSet['removed'] = new Map();
 
-    const added: HunkSet['added'] = new Map();
-    const removed: HunkSet['removed'] = new Map();
-
-    for (const line of section.split('\n')) {
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        const content = line.slice(1);
-        const decl = extractDeclaration(content);
-        if (decl) {
-          added.set(decl.name, { name: decl.name, signature: content.trim(), kind: decl.kind });
-        }
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        const content = line.slice(1);
-        const decl = extractDeclaration(content);
-        if (decl) {
-          removed.set(decl.name, { name: decl.name, signature: content.trim(), kind: decl.kind });
-        }
+  for (const line of lines) {
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      const content = line.slice(1);
+      const decl = extractDeclaration(content);
+      if (decl) {
+        added.set(decl.name, { name: decl.name, signature: content.trim(), kind: decl.kind });
+      }
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      const content = line.slice(1);
+      const decl = extractDeclaration(content);
+      if (decl) {
+        removed.set(decl.name, { name: decl.name, signature: content.trim(), kind: decl.kind });
       }
     }
-
-    result.push({ filePath, added, removed });
   }
 
-  // Suppress unused import warning — filePattern is used for documentation only
-  void filePattern;
+  return { filePath, added, removed };
+}
+
+/**
+ * Split added/removed declaration lines per file.
+ *
+ * Thin adapter over the unified parser (`src/diff/parse.ts`) — replaces the
+ * historical local `parseHunks` that re-split the diff with its own
+ * `/^diff --git /m` regex. Sections scan `rawLines` (NOT the structured
+ * `hunk.lines`): the historical scanner looked at EVERY section line with
+ * the +/- prefix checks, including metadata regions and orphan +/- tails
+ * after a genuine empty line mid-hunk, which structured hunks do not carry.
+ *
+ * Path authority per file = the b-side of the `diff --git` header itself
+ * (`headerNewPath`), which equals the historical regex capture for every
+ * plain header (last ` b/` boundary included). Documented deltas vs the
+ * historical splitter, pinned in
+ * `src/diff/__tests__/parity-extract-semantic-diff.test.ts`:
+ *   - quoted headers (CORE-M6 umbrella): historically the section existed
+ *     but its path never matched the legacy regex → `unknown`; now the real
+ *     unescaped path is resolved.
+ *   - synthetic-only malformed headers (`diff --git <garbage>` mid-diff,
+ *     mixed-quoted forms): the historical splitter opened a new section at
+ *     ANY line starting with `diff --git `; the model only does so for
+ *     parseable headers, so declarations after a garbage header line stay
+ *     attributed to the previous file. Unreachable in git/GitHub/truncateDiff
+ *     output.
+ */
+function collectHunkSets(unifiedDiff: string): HunkSet[] {
+  const { preamble, files } = parseUnifiedDiff(unifiedDiff);
+  const result: HunkSet[] = [];
+
+  // Legacy pre-header pseudo-section (see LEGACY_SECTION_PATH_RE). The
+  // historical splitter dropped it only when empty (`filter(Boolean)`).
+  if (preamble.length > 0 && preamble.join('\n') !== '') {
+    const pathMatch = LEGACY_SECTION_PATH_RE.exec(preamble[0] ?? '');
+    result.push(scanSection(preamble, pathMatch?.[1] ?? 'unknown'));
+  }
+
+  for (const file of files) {
+    result.push(scanSection(file.rawLines, file.headerNewPath || 'unknown'));
+  }
 
   return result;
 }
@@ -214,7 +257,7 @@ function parseHunks(unifiedDiff: string): HunkSet[] {
  * 2026-06-11. API may change or be removed. See the module header and REFACTOR-NOTES.
  */
 export function extractSemanticDiff(unifiedDiff: string): SemanticDiff {
-  const hunkSets = parseHunks(unifiedDiff);
+  const hunkSets = collectHunkSets(unifiedDiff);
   const changes: EntityChange[] = [];
 
   for (const { filePath, added, removed } of hunkSets) {
