@@ -128,11 +128,12 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 
 ---
 
-## ✅ REFACTOR 2 — Partir el god-function `reviewPipeline` — COMPLETADO 2026-06-12 (pendiente PR)
+## ✅ REFACTOR 2 — Partir el god-function `reviewPipeline` — COMPLETADO 2026-06-12 — PR #221 mergeado
 
 > **Resolución (SDD `split-review-pipeline`, branch `refactor/split-review-pipeline`, base
-> `992c69f`):** implementación completa en la rama, batches B0–B6, 4vr por batch; falta el PR a
-> main + canary (B7). `reviewPipeline` quedó como orquestador fino (~30 líneas de función) que
+> `992c69f`):** PR #221 squash-merged @ `aa15e7b` (2026-06-12), canary verde, verificación
+> post-merge verde (core 3296, typecheck 10/10), batches B0–B7 con 4vr por batch.
+> `reviewPipeline` quedó como orquestador fino (~30 líneas de función) que
 > encadena 5 fases sobre un `PipelineState` mutable compartido:
 > `pipeline/prepare.ts` (+ sibling `prepare-graph.ts`) → `gather-context.ts` (+ sibling
 > `gather-safe.ts`) → `execute.ts` → `enrich.ts` → `finalize.ts`, con `state.ts`, `degrade.ts`
@@ -343,8 +344,8 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
    activo permanente.~~ ✅ 2026-06-12, SDD `unify-diff-parsers` (ver sección arriba). El corpus
    (23 fixtures) + los 6 harnesses de paridad quedaron como activo permanente.
 5. ~~**Refactor 2** (pipeline god-function) — SDD, rama dedicada, 4vr, canary obligatorio.~~
-   ✅ 2026-06-12, SDD `split-review-pipeline` (ver sección arriba) — implementado en la rama,
-   pendiente PR a main + canary. Follow-up post-merge: fix del downgrade PASSED-only (PR aparte).
+   ✅ 2026-06-12, SDD `split-review-pipeline` (ver sección arriba) — PR #221 mergeado @ `aa15e7b`,
+   canary verde. Follow-up post-merge: fix del downgrade PASSED-only (PR aparte).
 6. ~~**Contratos**: `Review.repo` en `@ghagga/types`~~ ✅ 2026-06-12, PR #217 (ver sección
    Correctness). El barrido fix-between-SDDs del 2026-06-12 cerró además CORE-M8 (#218),
    los 2 bugs de semantic-diff (#219) y el ticket stale de lint (#216).
