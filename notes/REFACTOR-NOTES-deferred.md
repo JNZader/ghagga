@@ -236,10 +236,15 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   autoridad es `+++ b/` → `rename to` → header (la impl vieja confiaba en el header) — divergencia
   pinneada en `parity-parse-diff-files.test.ts` (`adv-header-b-mismatch`). No hay fix posible sin
   formato quoted: es ambigüedad inherente del formato unquoted.
-- **Higiene de lint del monorepo**: el pre-commit hook (`biome check .` repo-wide) falla SIEMPRE por
-  errores pre-existentes ajenos (apps/dashboard a11y en ConfirmDialog/ObservationDetailModal,
-  packages/db queries.ts formato, api.ts organizeImports, Reviews.tsx exhaustive-deps) → fuerza
-  `--no-verify` en todos los commits. Ticket de higiene propio: limpiar y recuperar el hook.
+- ~~**Higiene de lint del monorepo**~~ ✅ **RESUELTO — verificado 2026-06-12 sobre `4c1f0c3`**.
+  Entrada stale: la deuda ya se había limpiado en #182 (`c7d932d`) y #210 (`6a510d6`, "zero biome
+  errors"). Los 4 sospechosos citados (ConfirmDialog/ObservationDetailModal a11y, queries.ts formato,
+  api.ts organizeImports, Reviews.tsx exhaustive-deps) ya no emiten ningún diagnóstico. Estado actual:
+  `pnpm exec biome check .` → exit 0 (0 errores; 253 warnings deliberadamente degradados a "warn" en
+  `biome.json`) y el pre-commit (`javi-forge ci --quick --no-docker --no-security --no-ci-ghagga`)
+  pasa verde completo — `--no-verify` ya NO es necesario por lint. Gotcha vigente: el paso Compile
+  del hook regenera `apps/action/dist` (churn de bundle; si no se quiere commitear, restaurar con
+  `git checkout -- apps/action/dist` y borrar los artefactos nuevos no trackeados).
 - **`Review.repo` es ficción** (descubierto sprint 3): las review rows del server nunca llevan campo
   `repo`. El dashboard lo papelea con fallback a `fullName`. Fix real: corregir el contrato en
   `@ghagga/types` y mapear server-side.
