@@ -24,6 +24,19 @@ import { resolveGenerateTextFns } from './providers.js';
 import type { PipelineState } from './state.js';
 
 /**
+ * Size gate for semantic-diff extraction: filteredDiff above this length
+ * (in chars) skips the extract entirely. 2 000 000 chars ≈ 2 MB of diff —
+ * roughly 40 000+ lines, an order of magnitude past any human-reviewable
+ * PR and well past the flood-detection threshold (5 000 changed lines →
+ * lightweight). filteredDiff is NEVER truncated (truncateDiff writes the
+ * separate truncatedDiff field), so without a cap a flood-scale diff would
+ * pay regex work proportional to its full size for a purely cosmetic
+ * comment section. The extract is O(n) single-pass, so 2 MB itself is
+ * cheap — the cap exists to bound the tail, not the typical case.
+ */
+export const SEMANTIC_DIFF_MAX_DIFF_CHARS = 2_000_000;
+
+/**
  * Run the enrich phase. Mutates `state.result` in-place.
  */
 export async function enrich(state: PipelineState): Promise<void> {
@@ -79,17 +92,24 @@ export async function enrich(state: PipelineState): Promise<void> {
   // enter failedSteps (no PARTIAL downgrade), but the degradation is still
   // recorded in warnOnlyDegradations so coverageComplete tells the whole
   // truth (call-chain / negative-examples pattern, see pipeline/degrade.ts).
-  await runDegradable(
-    state,
-    {
-      step: 'semantic-diff',
-      warnLabel: '[ghagga] Semantic diff extraction failed (non-fatal):',
-      reportFailure: false,
-    },
-    () => {
-      result.semanticDiff = extractSemanticDiff(state.filteredDiff);
-    },
-  );
+  //
+  // Size gate: skipping an oversized diff is POLICY (flood-style gate),
+  // not an error — semanticDiff simply stays undefined (the comment
+  // renderer shows nothing) and warnOnlyDegradations is NOT touched, so
+  // coverageComplete stays true. Nothing failed; we chose not to compute.
+  if (state.filteredDiff.length <= SEMANTIC_DIFF_MAX_DIFF_CHARS) {
+    await runDegradable(
+      state,
+      {
+        step: 'semantic-diff',
+        warnLabel: '[ghagga] Semantic diff extraction failed (non-fatal):',
+        reportFailure: false,
+      },
+      () => {
+        result.semanticDiff = extractSemanticDiff(state.filteredDiff);
+      },
+    );
+  }
 
   // Add blast-radius metadata (if applicable)
   if (state.blastRadiusMetadata) {

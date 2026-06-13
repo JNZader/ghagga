@@ -468,6 +468,34 @@ describe('reviewCommand — functional tests', () => {
     expect(logSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
   });
 
+  it('json output carries semanticDiff when present — full-result serialization is a DELIBERATE contract', async () => {
+    // Pins the decision documented on ReviewResult.semanticDiff (types.ts):
+    // the field is absent from DB persistence and the HTTP API, but the CLI
+    // --format json path serializes the ENTIRE result, semanticDiff included.
+    // If this test breaks, the CLI JSON contract changed — not an accident.
+    mockExecSync.mockReturnValue('diff content' as never);
+    const result = makeReviewResult({
+      semanticDiff: {
+        changes: [{ kind: 'function_added', name: 'newHelper', filePath: 'src/util.ts' }],
+        summary: '1 function added',
+      },
+    });
+    mockReviewPipeline.mockResolvedValue(result);
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ outputFormat: 'json' }));
+
+    const printed = logSpy.mock.calls.find((c: unknown[]) =>
+      String(c[0]).includes('"semanticDiff"'),
+    );
+    expect(printed).toBeDefined();
+    const parsed = JSON.parse(String(printed?.[0]));
+    expect(parsed.semanticDiff).toEqual({
+      changes: [{ kind: 'function_added', name: 'newHelper', filePath: 'src/util.ts' }],
+      summary: '1 function added',
+    });
+  });
+
   it('should output markdown with status and summary for markdown format', async () => {
     mockExecSync.mockReturnValue('diff content' as never);
     const result = makeReviewResult({

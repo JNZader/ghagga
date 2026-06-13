@@ -23,6 +23,12 @@ vi.mock('../pipeline.js', () => ({
       cpd: { status: 'skipped', findings: [], executionTimeMs: 0 },
     },
     memoryContext: null,
+    // Present in the mock so the artifact test below can pin that the
+    // full-result `review-result` artifact carries it (deliberate contract).
+    semanticDiff: {
+      changes: [{ kind: 'function_added', name: 'newHelper', filePath: 'src/util.ts' }],
+      summary: '1 function added',
+    },
     metadata: {
       mode: 'simple',
       provider: 'gateway',
@@ -197,6 +203,23 @@ describe('ACPAdapter', () => {
       const sarifArtifact = result.artifacts.find((a) => a.type === 'sarif');
       expect(sarifArtifact).toBeDefined();
       expect(sarifArtifact!.mimeType).toBe('application/sarif+json');
+    });
+
+    it('review-result artifact carries semanticDiff — full-result serialization is a DELIBERATE contract', async () => {
+      // Pins the decision documented on ReviewResult.semanticDiff (types.ts):
+      // not in the DB, not on the HTTP API, but the ACP review-result
+      // artifact stringifies the ENTIRE result — semanticDiff included.
+      // If this test breaks, the ACP artifact contract changed — not an accident.
+      const task = adapter.submitTask({ diff: 'test diff' });
+      const result = await adapter.executeTask(task.id);
+
+      const reviewArtifact = result.artifacts.find((a) => a.type === 'review-result');
+      expect(reviewArtifact).toBeDefined();
+      const parsed = JSON.parse(String(reviewArtifact?.data));
+      expect(parsed.semanticDiff).toEqual({
+        changes: [{ kind: 'function_added', name: 'newHelper', filePath: 'src/util.ts' }],
+        summary: '1 function added',
+      });
     });
 
     it('throws for nonexistent task', async () => {

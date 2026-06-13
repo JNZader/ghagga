@@ -377,3 +377,63 @@ describe('extractSemanticDiff — arrow pattern tightening', () => {
     expect(result.changes.filter((c) => c.kind.startsWith('function_'))).toHaveLength(0);
   });
 });
+
+// ─── Generic arrow prefix (wire-semantic-diff B1.5) ──────────────
+//
+// The const-assignment function pattern accepts an OPTIONAL generic prefix
+// before paren-params (`<T>(x) =>`). The prefix is `<[^(]*>` — it cannot
+// contain `(` — so `<` comparisons stay out and the cast false positive
+// stays closed. Both sides are pinned here.
+
+describe('extractSemanticDiff — generic arrow prefix', () => {
+  it('detects a generic arrow: const f = <T>(x: T) => x', () => {
+    const result = extractSemanticDiff(arrowDiff('const identity = <T>(x: T) => x;'));
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'identity' }),
+    ]);
+  });
+
+  it('detects a constrained generic arrow: const f = <T extends object>(x: T) => x', () => {
+    const result = extractSemanticDiff(
+      arrowDiff('export const pick = <T extends object>(x: T) => x;'),
+    );
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'pick' }),
+    ]);
+  });
+
+  it('detects an async generic arrow with return type: async <T>(x: T): Promise<T> =>', () => {
+    const result = extractSemanticDiff(arrowDiff('const load = async <T>(x: T): Promise<T> => x;'));
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'load' }),
+    ]);
+  });
+
+  it('detects a nested generic constraint without parens: <T extends Record<string, K>>', () => {
+    const result = extractSemanticDiff(
+      arrowDiff('const keys = <T extends Record<string, unknown>>(o: T) => Object.keys(o);'),
+    );
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'keys' }),
+    ]);
+  });
+
+  it('does NOT classify a `<` comparison initializer: const a = x < y', () => {
+    const result = extractSemanticDiff(arrowDiff('const isSmaller = x < y;'));
+    expect(result.changes).toHaveLength(0);
+  });
+
+  it('does NOT re-open the cast false positive: const x = (row.metadata as Foo).bar', () => {
+    const result = extractSemanticDiff(
+      arrowDiff('const meta = (row.metadata as { id?: string } | null)?.id;'),
+    );
+    expect(result.changes.filter((c) => c.kind.startsWith('function_'))).toHaveLength(0);
+  });
+
+  it('documented limitation: generic constraint containing parens (<T extends () => void>) is not detected', () => {
+    const result = extractSemanticDiff(
+      arrowDiff('const call = <T extends () => void>(cb: T) => cb();'),
+    );
+    expect(result.changes.filter((c) => c.kind.startsWith('function_'))).toHaveLength(0);
+  });
+});

@@ -337,10 +337,19 @@ export interface ReviewResult {
    * writes the separate `truncatedDiff` field), so counts stay honest even
    * when the prompt diff was cut.
    *
-   * IN-MEMORY ONLY — consumed by `formatReviewComment` for the "What
-   * changed" section. It is NOT persisted (server `saveReview` stores
-   * discrete columns + the metadata blob, never top-level fields) and NOT
-   * sent over the wire (`toReviewDto` is an explicit pick-list).
+   * Consumed by `formatReviewComment` for the "What changed" section.
+   *
+   * Serialization surface (precise truth):
+   *   - NOT persisted: server `saveReview` stores discrete columns + the
+   *     metadata blob, never top-level result fields.
+   *   - NOT on the HTTP API: `toReviewDto` is an explicit pick-list.
+   *   - DOES appear in full-result serializations — `ghagga review
+   *     --format json` (apps/cli review.ts) and the ACP `review-result`
+   *     artifact (acp/adapter.ts) both stringify the entire result. This
+   *     is DELIBERATE (additive-optional field; those consumers already
+   *     own the raw diff) and pinned by tests in apps/cli review.test.ts
+   *     and acp/adapter.test.ts. The CLI JSON output is an observable
+   *     contract — removing/renaming this field is a breaking change there.
    */
   semanticDiff?: import('./semantic-diff/index.js').SemanticDiff;
 

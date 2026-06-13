@@ -1078,7 +1078,7 @@ exports[`golden: chained multi-degradation (B0.5) > blast-radius + memory-search
 }
 `;
 
-exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > call-chain fails (:360): warn only, NO failedSteps entry, status PASSED 1`] = `
+exports[`golden: degradation WITHOUT failedSteps.push — 3 legacy sites (semantic-diff is the 4th, pinned in pipeline.test.ts; do NOT uniformize) > call-chain fails (:360): warn only, NO failedSteps entry, status PASSED 1`] = `
 {
   "events": [
     {
@@ -1176,7 +1176,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
 }
 `;
 
-exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > negative-examples fails (:430): warn only, NO failedSteps entry, status PASSED 1`] = `
+exports[`golden: degradation WITHOUT failedSteps.push — 3 legacy sites (semantic-diff is the 4th, pinned in pipeline.test.ts; do NOT uniformize) > negative-examples fails (:430): warn only, NO failedSteps entry, status PASSED 1`] = `
 {
   "events": [
     {
@@ -1274,7 +1274,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
 }
 `;
 
-exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > self-improve fails (:453): warn only, NO failedSteps entry, status PASSED 1`] = `
+exports[`golden: degradation WITHOUT failedSteps.push — 3 legacy sites (semantic-diff is the 4th, pinned in pipeline.test.ts; do NOT uniformize) > self-improve fails (:453): warn only, NO failedSteps entry, status PASSED 1`] = `
 {
   "events": [
     {

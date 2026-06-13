@@ -17,7 +17,7 @@
  *   - `fileList` is captured BEFORE the blast-radius filter (pipeline.ts:228)
  *     and consumed by call-chain/static/code-intel/negative-examples. The
  *     "call-chain sees PRE-blast-radius fileList" test guards that trap.
- *   - 3 steps degrade WITHOUT failedSteps.push: call-chain (:360),
+ *   - 3 legacy steps degrade WITHOUT failedSteps.push: call-chain (:360),
  *     negative-examples (:430), self-improve (:453). Pinned explicitly.
  *     (wire-semantic-diff added a 4th warn-only site — semantic-diff in
  *     enrich — pinned in pipeline.test.ts, not here. Its golden footprint
@@ -1039,7 +1039,7 @@ describe('golden: forced degradation — 12 failedSteps.push sites', () => {
   });
 });
 
-describe('golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize)', () => {
+describe('golden: degradation WITHOUT failedSteps.push — 3 legacy sites (semantic-diff is the 4th, pinned in pipeline.test.ts; do NOT uniformize)', () => {
   it('call-chain fails (:360): warn only, NO failedSteps entry, status PASSED', async () => {
     (buildCallChainFromDiff as M<typeof buildCallChainFromDiff>).mockImplementationOnce(() => {
       throw new Error('call-chain parser exploded');

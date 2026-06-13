@@ -108,16 +108,25 @@ const DECLARATION_PATTERNS: Array<{
   // arrow / function-expression assigned to const/let/var (handles `export const fn = () =>`,
   // optionally typed: `export const fn: Foo = async () =>`).
   // The RHS must be a real function: `function` keyword, or arrow params
-  // (paren-params, bare single param, optional return-type annotation)
-  // followed by `=>` ON THE SAME LINE. A bare `(` is NOT enough — that
-  // misclassified parenthesized non-function initializers (e.g.
+  // (paren-params — with an optional generic prefix `<T>` / `<T extends X>` —
+  // bare single param, optional return-type annotation) followed by `=>`
+  // ON THE SAME LINE. A bare `(` is NOT enough — that misclassified
+  // parenthesized non-function initializers (e.g.
   // `const x = (row.metadata as Foo).bar`) as function_added.
-  // Known limitation (accepted): a multiline arrow whose `=>` lands on the
-  // next line is not detected.
+  // The generic prefix `<[^(]*>` is anchored to paren-params only (a bare
+  // param after a generic is not valid TS) and cannot contain `(` — so a
+  // `<` comparison initializer (`const a = x < y`) never enters this branch,
+  // and the cast false positive stays closed. Nested generics without parens
+  // (`<T extends Record<string, K>>`) resolve via the greedy last-`>`.
+  // Known limitations (accepted, pinned in index.test.ts):
+  //   - a multiline arrow whose `=>` lands on the next line is not detected;
+  //   - a generic constraint CONTAINING parens (`<T extends () => void>`)
+  //     is not detected (the `[^(]*` guard that keeps comparisons out
+  //     excludes it).
   {
     kind: 'function',
     pattern:
-      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[\w<>,\s|[\]]+?)?\s*=\s*(?:async\s+)?(?:function\b|(?:\([^)]*\)|[\w$]+)\s*(?::[^=]*)?=>)/,
+      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[\w<>,\s|[\]]+?)?\s*=\s*(?:async\s+)?(?:function\b|(?:(?:<[^(]*>\s*)?\([^)]*\)|[\w$]+)\s*(?::[^=]*)?=>)/,
   },
   // method inside class (indented + no leading "function" keyword, has "()")
   {

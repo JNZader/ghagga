@@ -74,6 +74,7 @@ import { buildCallChainFromDiff } from './graph/call-chain.js';
 import type { DependencyGraph, GraphLoader } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
+import { SEMANTIC_DIFF_MAX_DIFF_CHARS } from './pipeline/enrich.js';
 import { reviewPipeline } from './pipeline.js';
 import { extractSemanticDiff } from './semantic-diff/index.js';
 import { formatStaticAnalysisContext, runStaticAnalysis } from './tools/runner.js';
@@ -425,6 +426,65 @@ index 1234567..abcdefg 100644
       );
 
       warnSpy.mockRestore();
+    });
+
+    it('computes over filteredDiff, NOT input.diff: ignored file contributes no entities', async () => {
+      // Two files: one matches ignorePatterns (carries a decoy declaration),
+      // one is reviewable. semanticDiff must only see the reviewable one —
+      // pins that the extract runs on state.filteredDiff (post path filter).
+      const twoFileDiff = `diff --git a/api.generated.ts b/api.generated.ts
+index 1234567..abcdefg 100644
+--- a/api.generated.ts
++++ b/api.generated.ts
+@@ -1,1 +1,2 @@
+ const stub = 0;
++export function ghostFn(): void {}
+diff --git a/src/real.ts b/src/real.ts
+index 1234567..abcdefg 100644
+--- a/src/real.ts
++++ b/src/real.ts
+@@ -1,1 +1,2 @@
+ const x = 1;
++export function realFn(): void {}
+`;
+      const result = await reviewPipeline(
+        makeInput({
+          diff: twoFileDiff,
+          settings: { ...makeInput().settings, ignorePatterns: ['*.generated.ts'] },
+        }),
+      );
+
+      expect(result.semanticDiff).toBeDefined();
+      expect(result.semanticDiff?.changes).toEqual([
+        expect.objectContaining({
+          kind: 'function_added',
+          name: 'realFn',
+          filePath: 'src/real.ts',
+        }),
+      ]);
+      expect(result.semanticDiff?.changes.map((c) => c.name)).not.toContain('ghostFn');
+    });
+
+    it('size gate: oversized filteredDiff skips extraction as POLICY — no degradation recorded', async () => {
+      // One context line pushes filteredDiff past the cap. The gate must
+      // skip the extract WITHOUT calling it, WITHOUT failedSteps, and
+      // WITHOUT flipping coverageComplete — skipping is policy, not failure.
+      const hugeDiff = `diff --git a/src/big.ts b/src/big.ts
+index 1234567..abcdefg 100644
+--- a/src/big.ts
++++ b/src/big.ts
+@@ -1,1 +1,2 @@
+ const pad = '${'x'.repeat(SEMANTIC_DIFF_MAX_DIFF_CHARS)}';
++export function gated(): void {}
+`;
+      const result = await reviewPipeline(makeInput({ diff: hugeDiff }));
+
+      expect(result.status).toBe('PASSED');
+      expect(result.semanticDiff).toBeUndefined();
+      expect(extractSemanticDiff).not.toHaveBeenCalled();
+      expect(result.failedSteps).toBeUndefined();
+      // Deliberate gate ≠ degradation: coverage stays complete.
+      expect(result.coverageComplete).toBe(true);
     });
   });
 
