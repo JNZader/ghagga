@@ -468,7 +468,7 @@ export function formatReviewComment(
     for (const entry of modelsUsed) {
       const [role, model] = entry.includes(':') ? entry.split(':', 2) : ['—', entry];
       // Role/model strings come from provider output — sanitize each cell.
-      comment += `| ${sanitizeTableCell(role ?? '—')} | \`${sanitizeTableCell(model ?? '')}\` |\n`;
+      comment += `| ${sanitizeTableCell(role ?? '—')} | \`${sanitizeInlineCodeName(model ?? '')}\` |\n`;
     }
     comment += '\n</details>\n';
   } else {
