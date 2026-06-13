@@ -312,11 +312,10 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
      `@ghagga/types` (sus tipos están ahora en la superficie pública `.d.ts`). Cero cambio de
      comportamiento wire — la data ya viajaba verbatim (verificado: `saveReview` persiste el
      `ReviewFinding` completo a un jsonb opaco, `toReviewDto` lo castea verbatim).
-     **Follow-up abierto (decisión de PRODUCTO, ver PRE-LAUNCH 🔐)**: el wire ahora OFICIALIZA
-     campos AI-internos que ya se emitían sin tipar — `filterReason` (razonamiento LLM crudo),
-     `exploitabilityDetail`/`usageDetail` (paths internos del repo: `importSites`, `reachableFrom`,
-     `filesScanned`). Ningún consumer los lee hoy. ¿Proyectar en `toReviewDto` para stripearlos del
-     contrato público (dejando solo labels: `exploitability`, `usageLabel`, `aiFiltered` boolean)?
+     **Follow-up ✅ RESUELTO 2026-06-13, PR #228**: el wire ahora PROYECTA — `toReviewDto` stripea
+     `filterReason` (razonamiento LLM crudo) y `exploitabilityDetail`/`usageDetail` (paths internos
+     del repo). `Finding` pasó a `Omit<ReviewFinding, esos3>`; labels/señales se mantienen. CLI/ACP
+     locales siguen con el `ReviewFinding` completo (el user es dueño de su data).
   2. ~~No hay integration test de auth para `GET /api/reviews`~~ ✅ **RESUELTO 2026-06-13, PR #225**
      (`f451352`): S2.6 (per-repo 200), S2.7 (cross-installation 403 — gate corta ANTES de la query),
      S2.8 (path "all repositories" scopeado por installation IDs / aislamiento de tenant). Test-only,
@@ -394,13 +393,13 @@ producción con usuarios, esta lista ES el sprint previo:
 - Test live-PG para `buildTsQuery`
 - Matrix cache key del Action
 - DSH-A6 (doble validación de token en AuthCallback — menor, no seguridad)
-- **Proyección de campos AI-internos en el wire de `/api/reviews`** (descubierto en el 3vr de
-  ReviewFinding re-export, PR #227): el endpoint (auth-gated por token de installation) emite
-  `ReviewFinding` completo, incluyendo `filterReason` (razonamiento LLM verbatim, ej. "Test file,
-  not production code"), `exploitabilityDetail`/`usageDetail` (paths internos del repo). Pre-existente
-  (ya se emitía sin tipar), ningún consumer lo lee. Decisión: ¿stripear esos campos en `toReviewDto`
-  dejando solo labels (`exploitability`/`usageLabel`/`aiFiltered`), igual que `coverageComplete`
-  expone solo el boolean? Es cambio de comportamiento → decidir antes de tener usuarios reales.
+- ~~**Proyección de campos AI-internos en el wire de `/api/reviews`**~~ ✅ **RESUELTO 2026-06-13,
+  PR #228** (`ea87e4e`, 3vr): `toReviewDto` stripea `filterReason` + `exploitabilityDetail`/`usageDetail`
+  de cada finding antes del wire; `Finding = Omit<ReviewFinding, esos3>`. Completitud verificada (único
+  sink HTTP de findings; comment/SARIF/Action outputs no los emiten). Guard fail-closed para jsonb
+  malformado. CLI/ACP locales sin cambios. NOTA pre-existente descartada en el review: `finding.message`
+  puede contener paths del repo del propio caller — no es leak cross-tenant (es la descripción del
+  hallazgo en su propio repo), no se toca.
 - **`model`-cell del comment sin strip de backticks** (`format.ts` ~:466, descubierto en
   wire-semantic-diff): la tabla "Models used" envuelve `model` en backticks vía
   `sanitizeTableCell(model)` SIN el strip de backticks que sí hace `sanitizeInlineCodeName`
