@@ -320,10 +320,18 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
      (`f451352`): S2.6 (per-repo 200), S2.7 (cross-installation 403 — gate corta ANTES de la query),
      S2.8 (path "all repositories" scopeado por installation IDs / aislamiento de tenant). Test-only,
      cross-chequea además la emisión wire de `coverageComplete` (#223). Server suite 556→559.
-- **Test live-PG para tsquery** (sprint 1): el escaping de `buildTsQuery` está string-tested; falta
-  un test de integración con PG real que pruebe que `to_tsquery` acepta el output.
-- **Matrix jobs comparten cache key** (sprint 1): aún con runAttempt, dos jobs en el mismo run-attempt
-  comparten el save key del Action (no-fatal, warned).
+- ~~**Test live-PG para tsquery** (sprint 1)~~ ✅ **RESUELTO 2026-06-13, PR #232**: integration test
+  con testcontainers (`postgres:16-alpine`) que valida que `to_tsquery('english')` acepta el output de
+  `buildTsQuery` (13 inputs edge + probe tsvector que espeja el SQL de `searchObservations`, no la función).
+  Aislamiento doble-barrera: `*.integration.test.ts` excluido del `test` normal (`...configDefaults.exclude`)
+  + config y script `test:integration` separados (no en `turbo.json`) → CI sin Docker intacto. 3vr aprobado.
+- ~~**Matrix jobs comparten cache key** (sprint 1)~~ ❌ **FALSO PROBLEMA — verificado 2026-06-13, NO tocar**:
+  la key compartida `ghagga-${tool}-${RUNNER_OS}` (`apps/action/src/tools/execution.ts:78,96`) es INTENCIONAL —
+  cachea binarios INMUTABLES en paths fijos (trivy/pmd/hadolint) para reusarlos entre jobs. El segundo
+  `saveCache` "que falla" ya está manejado (try/catch → `core.warning` no-fatal, `ReserveCacheError` esperado).
+  Diferenciar la key por run-attempt/job (el "fix" original) causaría cache-miss garantizado en toda la matrix
+  → cada job re-descarga todo. Contraste: el memory cache (`index.ts:217`) sí usa run-attempt porque cachea
+  ESTADO MUTABLE. Único accionable opcional (cosmético): degradar ese warning a `core.debug` para `ReserveCacheError`.
 - **`apps/action/dist/` stale vs source** (descubierto Fase 0): el bundle trackeado de la Action no se
   regeneró tras los cambios de los sprints en `apps/action/src/` (#203/#206). Los consumers pinean tags
   (`@v2.8.1`), así que no hay rotura activa, pero el próximo release necesita un paso deliberado:
@@ -343,7 +351,17 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 ### Dashboard
 - **DSH-A5**: el botón "Validate" del gateway no manda `gatewayUrl` → server responde `valid:true`
   siempre. Toca el path SSRF-validado → 🔐 Opus.
-- **DSH-A6**: `AuthCallback` valida el token dos veces (doble round-trip a GitHub). Baja prioridad.
+- ~~**DSH-A6**: `AuthCallback` valida el token dos veces~~ ✅ **RESUELTO 2026-06-13, PR #231** (5vr):
+  eliminada la validación redundante; `AuthCallback` delega a `loginFromCallback` (única validación).
+  Sin bypass de auth (consenso Opus + Codex); reduce round-trips bajo StrictMode 4→2. Fix-forward:
+  mensaje de error preservado (cero cambio observable) + test con `toHaveBeenCalledTimes(1)`.
+- **DSH-A7** (destapado por el 5vr de DSH-A6): `AuthCallback` no tiene guard anti doble-fire bajo
+  StrictMode (`main.tsx:31`) — el `useEffect` no es idempotente → `loginFromCallback` corre 2x en dev.
+  Peor: `REDIRECT_KEY` se consume en el 1er fire, el 2do `navigate` puede ir a `/` en vez del destino
+  guardado. Pre-existente, 3 voces (Opus-React + Codex 5.4 + 5.5). Fix: ref/once-flag guard.
+- **DSH-A8** (destapado por el 5vr de DSH-A6): el dep array del `useEffect` (`AuthCallback.tsx:84-88`)
+  usa `searchParams.get` en vez de `searchParams`, con `eslint-disable`. Semánticamente incorrecto.
+  Atado a DSH-A7 (arreglar el dep sin el guard empeora el re-fire). Pre-existente, 3 voces.
 
 ---
 
@@ -390,9 +408,11 @@ producción con usuarios, esta lista ES el sprint previo:
 - TOCTOU residual DNS-rebinding (pinear IP en undici)
 - DSH-A5 (Validate del gateway sin `gatewayUrl`)
 - Decisión fail-closed vs degradación en all-dropped (+ decrypt-failure por consistencia)
-- Test live-PG para `buildTsQuery`
-- Matrix cache key del Action
-- DSH-A6 (doble validación de token en AuthCallback — menor, no seguridad)
+- ~~Test live-PG para `buildTsQuery`~~ ✅ RESUELTO PR #232 (testcontainers; ver sección Correctness)
+- ~~Matrix cache key del Action~~ ❌ falso problema (NO tocar; ver sección Correctness)
+- ~~DSH-A6 (doble validación de token en AuthCallback)~~ ✅ RESUELTO PR #231 (ver sección Dashboard)
+- **DSH-A7 / DSH-A8** (nuevos, destapados por el 5vr de DSH-A6 — ver sección Dashboard): guard anti
+  doble-fire bajo StrictMode + dep array `searchParams.get`. Pre-existentes, atados entre sí.
 - ~~**Proyección de campos AI-internos en el wire de `/api/reviews`**~~ ✅ **RESUELTO 2026-06-13,
   PR #228** (`ea87e4e`, 3vr): `toReviewDto` stripea `filterReason` + `exploitabilityDetail`/`usageDetail`
   de cada finding antes del wire; `Finding = Omit<ReviewFinding, esos3>`. Completitud verificada (único
@@ -400,15 +420,10 @@ producción con usuarios, esta lista ES el sprint previo:
   malformado. CLI/ACP locales sin cambios. NOTA pre-existente descartada en el review: `finding.message`
   puede contener paths del repo del propio caller — no es leak cross-tenant (es la descripción del
   hallazgo en su propio repo), no se toca.
-- **`model`-cell del comment sin strip de backticks** (`format.ts` ~:466, descubierto en
-  wire-semantic-diff): la tabla "Models used" envuelve `model` en backticks vía
-  `sanitizeTableCell(model)` SIN el strip de backticks que sí hace `sanitizeInlineCodeName`
-  (= `sanitizeTableCell` + `.replace(/`/g, '')`). `model` viene de `result.metadata.modelsUsed`
-  (output del provider / settings del operador), NO es diff-derived — misma clase que los ítems de
-  config-injection ya parqueados (`checklistContext`, overrides free-form de `mergeCheck`). Hoy no
-  atacable por un PR; un `model` con backtick podría cerrar el span de inline-code y dejar renderizar
-  markup. Cerrarlo cuando se aborde el wrap de config untrusted (mismo barrido): reusar
-  `sanitizeInlineCodeName` en vez de `sanitizeTableCell` crudo para todas las celdas envueltas en
-  backticks.
+- ~~**`model`-cell del comment sin strip de backticks**~~ ✅ **RESUELTO 2026-06-13, PR #230**:
+  `format.ts:471` ahora usa `sanitizeInlineCodeName(model)` (que stripea backticks) en vez de
+  `sanitizeTableCell(model)` crudo. Verificado que es la ÚNICA celda envuelta en backticks del comment.
+  El barrido general de config untrusted (`checklistContext`, overrides free-form de `mergeCheck`) sigue
+  pendiente en sus propias entradas — esta era la única celda de backticks alcanzable por esa vía.
 
 (Los detalles con file:line de cada uno quedan en sus secciones de arriba — salvo los autocontenidos.)
