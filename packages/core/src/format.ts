@@ -188,8 +188,10 @@ export function formatFileCategorySummary(fileList: string[]): string {
   let section = `### Files Changed (${fileList.length})\n`;
 
   for (const cat of categories) {
-    // File names come straight from the PR (attacker-controlled) — sanitize.
-    const basenames = cat.files.map((f) => sanitizeMarkdownText(f.split('/').pop() ?? f, 200));
+    // File names come straight from the PR (attacker-controlled) → contain the
+    // basename in inline code (newline/autolink injection sink). See
+    // sanitizeBasename.
+    const basenames = cat.files.map((f) => sanitizeBasename(f));
     const MAX_SHOWN = 3;
     const shown = basenames.slice(0, MAX_SHOWN);
     const remaining = basenames.length - MAX_SHOWN;
@@ -268,6 +270,31 @@ function splitEntityKind(
  */
 function sanitizeInlineCodeName(name: string): string {
   return sanitizeTableCell(name, 200).replace(/`/g, '');
+}
+
+/**
+ * Render an attacker-controlled file path's BASENAME wrapped in an inline-code
+ * span (`` `name` ``) — safe against markdown-structure injection.
+ *
+ * A file basename is fully attacker-controlled: git emits diff headers for
+ * paths containing arbitrary bytes (octal/`\n` escapes in quoted headers,
+ * decoded by `unescapeQuotedPath` in diff/parse.ts:83 into a REAL newline that
+ * survives into `filePath`). `sanitizeMarkdownText` alone does NOT defang this:
+ * it does not flatten newlines (only normalizes CRLF) and does not suppress
+ * `#1234`/SHA/`@` auto-links. A basename like `x\n# PWNED\n| t |` rendered as
+ * `**${basename}**` therefore breaks the bold span and injects a live heading,
+ * table, and bullets into the bot's own comment; `#refs`/40-hex SHAs in the
+ * basename auto-link (notification spam / forged backlinks).
+ *
+ * Containing the basename in inline code closes all three vectors at once:
+ *   (a) `sanitizeTableCell` flattens `\n`/CRLF to spaces and escapes pipes
+ *       (no structural breakout);
+ *   (b) GitHub does NOT auto-link `#refs`/SHAs/`@mentions` inside a code span;
+ *   (c) `sanitizeInlineCodeName` strips backticks so the name cannot close the
+ *       span and let trailing markup render.
+ */
+function sanitizeBasename(path: string): string {
+  return `\`${sanitizeInlineCodeName(path.split('/').pop() ?? path)}\``;
 }
 
 /**
@@ -362,9 +389,9 @@ export function formatSemanticDiffSection(semanticDiff: SemanticDiff | undefined
       shown++;
     }
     if (fileBullets.length > 0) {
-      // Basename only; path is attacker-controlled → sanitize (pattern :191).
-      const basename = sanitizeMarkdownText(filePath.split('/').pop() ?? filePath, 200);
-      lines.push(`**${basename}**`, ...fileBullets);
+      // Basename only; path is fully attacker-controlled (newline/autolink
+      // injection sink) → contain in inline code. See sanitizeBasename.
+      lines.push(`**${sanitizeBasename(filePath)}**`, ...fileBullets);
     }
   }
 

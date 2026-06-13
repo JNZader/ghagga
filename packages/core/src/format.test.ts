@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { parseUnifiedDiff } from './diff/parse.js';
 import {
   buildStatsBar,
   categorizeFiles,
@@ -663,8 +664,9 @@ describe('formatSemanticDiffSection', () => {
     expect(section).toContain('<details>');
     expect(section).toContain('</details>');
     expect(section).toContain('🧬 What changed (3 entities)');
-    expect(section).toContain('**foo.ts**');
-    expect(section).toContain('**types.ts**');
+    // Basenames are contained in inline code (security: see sanitizeBasename).
+    expect(section).toContain('**`foo.ts`**');
+    expect(section).toContain('**`types.ts`**');
     expect(section).toContain('➕ function `formatSemanticDiffSection`');
     expect(section).toContain('✏️ function `formatReviewComment`');
     expect(section).toContain('➕ type `SemanticDiffMeta`');
@@ -806,8 +808,8 @@ describe('formatSemanticDiffSection', () => {
     }
     changes.push(makeChange({ kind: 'function_added', name: 'b0', filePath: 'src/fileB.ts' }));
     const section = formatSemanticDiffSection(makeSemanticDiff(changes));
-    expect(section).toContain('**fileA.ts**');
-    expect(section).not.toContain('**fileB.ts**');
+    expect(section).toContain('**`fileA.ts`**');
+    expect(section).not.toContain('fileB.ts');
     expect(section).toContain('_+1 more entity_');
     // Every '- ' bullet line is immediately preceded by content (no header with
     // zero bullets): there are exactly 10 bullets and exactly 1 file header.
@@ -827,7 +829,7 @@ describe('formatSemanticDiffSection', () => {
     const second = formatSemanticDiffSection(makeSemanticDiff([...changes]));
     expect(first).toBe(second);
     // Files appear in first-seen order: z.ts (first change) before a.ts.
-    expect(first.indexOf('**z.ts**')).toBeLessThan(first.indexOf('**a.ts**'));
+    expect(first.indexOf('**`z.ts`**')).toBeLessThan(first.indexOf('**`a.ts`**'));
     // Within z.ts, original order: b before c.
     expect(first.indexOf('`b`')).toBeLessThan(first.indexOf('`c`'));
   });
@@ -855,6 +857,16 @@ describe('formatSemanticDiffSection', () => {
 
 // ─── R-seguridad: markdown injection (MANDATORY, blocking) ──────
 
+/**
+ * Remove every inline-code span (`` `...` ``) from a rendered comment so the
+ * REMAINING text can be asserted on. Used to prove that autolink-bearing
+ * tokens (`#refs`, SHAs) survive ONLY inside code spans — where GitHub
+ * suppresses autolinking — and never leak into live markdown.
+ */
+function stripCodeSpans(s: string): string {
+  return s.replace(/`[^`]*`/g, '');
+}
+
 describe('formatSemanticDiffSection — markdown injection', () => {
   // Render every vector through a single helper and assert neutralization.
   function renderName(name: string): string {
@@ -873,10 +885,13 @@ describe('formatSemanticDiffSection — markdown injection', () => {
   it('strips backticks so the inline-code span cannot be broken out of', () => {
     // A backtick would close the `name` span and let trailing markup render.
     const out = renderName('a`b`c');
-    // No bare backtick from the NAME survives — the only backticks present are
-    // the two wrapping the (now backtick-free) name.
-    const backtickCount = (out.match(/`/g) ?? []).length;
-    expect(backtickCount).toBe(2);
+    // Isolate the ENTITY bullet line (the file-header line now also carries a
+    // backtick-wrapped basename, so a whole-document count would be ambiguous).
+    const bulletLine = out.split('\n').find((l) => l.startsWith('- '));
+    expect(bulletLine).toBeDefined();
+    // No bare backtick from the NAME survives — the only backticks on the bullet
+    // line are the two wrapping the (now backtick-free) name.
+    expect((bulletLine?.match(/`/g) ?? []).length).toBe(2);
     expect(out).toContain('`abc`');
   });
 
@@ -938,6 +953,110 @@ describe('formatSemanticDiffSection — markdown injection', () => {
     expect(out).not.toContain('<!--');
     expect(out).toContain('@​');
     expect(out).not.toContain('```');
+  });
+
+  // ── R-seguridad: BASENAME injection (the file HEADER, not the entity name) ──
+  //
+  // The per-file header renders `filePath.split('/').pop()`. The basename is
+  // fully attacker-controlled: git emits diff headers for paths with arbitrary
+  // bytes, and the quoted-header unescaper (diff/parse.ts:83, ESCAPE_MAP n:0x0a
+  // + octal) decodes `\n` into a REAL newline that survives into filePath.
+  // sanitizeMarkdownText alone does NOT defang this (no newline flattening, no
+  // #ref/SHA autolink suppression) — so the header must be contained in inline
+  // code via sanitizeBasename.
+
+  // Render a chosen FILEPATH (not name) through the section, isolating the
+  // file-header line for assertions.
+  function renderPath(filePath: string): string {
+    return formatSemanticDiffSection(
+      makeSemanticDiff([makeChange({ kind: 'function_added', name: 'foo', filePath })]),
+    );
+  }
+
+  it('contains a newline-bearing basename in inline code (no live heading/table injection)', () => {
+    // A path whose basename embeds a real newline + heading + table + bullet.
+    const out = renderPath('src/x\n# PWNED\n| t |\n- forged.ts');
+    // The newline is flattened to a space INSIDE the code span: no markdown
+    // heading on its own line, no forged table row.
+    expect(out).not.toMatch(/\n# PWNED/);
+    expect(out).not.toMatch(/\n\| t \|/);
+    expect(out).not.toMatch(/\n- forged\.ts/);
+    // The basename renders as a single inline-code header line.
+    expect(out).toContain('**`x # PWNED \\| t \\| - forged.ts`**');
+  });
+
+  it('contains a #ref/SHA-bearing basename in inline code (no autolink forgery)', () => {
+    // #1234 and a 40-hex SHA auto-link in a bold span but NOT inside code.
+    const out = renderPath('src/fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts');
+    // The #ref/SHA survive only INSIDE a code span (GitHub suppresses autolinks
+    // there). Strip every inline-code span; no bare "#1234" must remain.
+    expect(out).toContain('`fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts`');
+    expect(stripCodeSpans(out)).not.toContain('#1234');
+  });
+
+  it('keeps a javascript-link basename inert inside inline code', () => {
+    const out = renderPath('src/[x](javascript:alert(1)).ts');
+    // Bracket/paren link syntax is literal text inside the code span.
+    expect(out).toContain('`[x](javascript:alert(1)).ts`');
+    expect(out).not.toMatch(/[^`]\[x\]\(javascript/);
+  });
+
+  it('strips backticks in the basename so the header code span cannot break out', () => {
+    const out = renderPath('src/a`b`c.ts');
+    const headerLine = out.split('\n').find((l) => l.startsWith('**`'));
+    expect(headerLine).toBeDefined();
+    // Exactly the wrapping pair of backticks — none survive from the basename.
+    expect((headerLine?.match(/`/g) ?? []).length).toBe(2);
+    expect(out).toContain('**`abc.ts`**');
+  });
+
+  it('REACHABILITY: a git-quoted \\n header decodes into a filePath newline that the section neutralizes', () => {
+    // Drive the REAL parser: a quoted diff header with a literal \n escape.
+    const raw = [
+      'diff --git "a/src/x\\n# PWNED.ts" "b/src/x\\n# PWNED.ts"',
+      'index 0000000..1111111 100644',
+      '--- "a/src/x\\n# PWNED.ts"',
+      '+++ "b/src/x\\n# PWNED.ts"',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+    ].join('\n');
+    const filePath = parseUnifiedDiff(raw).files[0]?.path ?? '';
+    // Pin the vector: the parser yields a REAL newline in the path.
+    expect(filePath).toContain('\n');
+    // End-to-end: feed the parsed path into the section; no live heading leaks.
+    const out = renderPath(filePath);
+    expect(out).not.toMatch(/\n# PWNED/);
+    expect(out).toContain('**`x # PWNED.ts`**');
+  });
+});
+
+// ─── R-seguridad: formatFileCategorySummary basename injection ───
+//
+// The SAME basename sink exists (pre-B2.5) in the "Files Changed" summary,
+// which renders `**Category**: name1, name2`. It is now contained by the same
+// sanitizeBasename helper.
+
+describe('formatFileCategorySummary — basename injection', () => {
+  it('contains a newline-bearing basename in inline code (no live heading injection)', () => {
+    const out = formatFileCategorySummary(['src/x\n# PWNED\n| t |\n- forged.ts']);
+    expect(out).not.toMatch(/\n# PWNED/);
+    expect(out).not.toMatch(/\n\| t \|/);
+    // Basename rendered as an inline-code span on the category line.
+    expect(out).toContain('`x # PWNED \\| t \\| - forged.ts`');
+  });
+
+  it('contains a #ref-bearing basename in inline code (no autolink forgery)', () => {
+    const out = formatFileCategorySummary([
+      'src/fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts',
+    ]);
+    expect(out).toContain('`fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts`');
+    expect(stripCodeSpans(out)).not.toContain('#1234');
+  });
+
+  it('strips backticks so the basename cannot break out of its code span', () => {
+    const out = formatFileCategorySummary(['src/a`b`c.ts']);
+    expect(out).toContain('`abc.ts`');
   });
 });
 
