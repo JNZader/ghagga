@@ -75,11 +75,6 @@ afterEach(() => {
 
 describe('AuthCallback — token handling', () => {
   it('validates token, saves credentials, and redirects to / (S-R4.1)', async () => {
-    mockFetchGitHubUser.mockResolvedValueOnce({
-      login: 'testuser',
-      id: 42,
-      avatar_url: 'https://avatars.example.com/42',
-    });
     mockLoginFromCallback.mockResolvedValueOnce(true);
 
     renderWithRoute('/auth/callback?token=gho_abc123');
@@ -88,20 +83,27 @@ describe('AuthCallback — token handling', () => {
     expect(screen.getByText('Signing you in...')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(mockFetchGitHubUser).toHaveBeenCalledWith('gho_abc123');
-    });
-
-    await waitFor(() => {
       expect(mockLoginFromCallback).toHaveBeenCalledWith('gho_abc123');
     });
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
     });
+
+    // Validation is delegated to loginFromCallback (which calls the GitHub
+    // API internally). AuthCallback must NOT do a redundant direct
+    // fetchGitHubUser round-trip (DSH-A6: single validation per login).
+    expect(mockFetchGitHubUser).not.toHaveBeenCalled();
+    // The component must delegate validation EXACTLY ONCE — the contract of
+    // the DSH-A6 fix is a single validation per login, not two.
+    expect(mockLoginFromCallback).toHaveBeenCalledTimes(1);
   });
 
-  it('shows error when token is invalid (S-R4.2)', async () => {
-    mockFetchGitHubUser.mockRejectedValueOnce(new Error('Invalid or expired token'));
+  it('shows error when token is invalid (loginFromCallback returns false) (S-R4.2)', async () => {
+    // An invalid/expired token surfaces as loginFromCallback resolving to
+    // false (it swallows the GitHub API rejection internally). AuthCallback
+    // no longer pre-validates the token itself (DSH-A6).
+    mockLoginFromCallback.mockResolvedValueOnce(false);
 
     renderWithRoute('/auth/callback?token=invalid_token');
 
@@ -113,30 +115,24 @@ describe('AuthCallback — token handling', () => {
     expect(screen.getByText('Try Again')).toBeInTheDocument();
     // Should show PAT fallback link
     expect(screen.getByText('Use a Personal Access Token instead')).toBeInTheDocument();
+    // No direct validation round-trip from the component.
+    expect(mockFetchGitHubUser).not.toHaveBeenCalled();
   });
 
-  it('shows error when loginFromCallback returns false (S-R4.2)', async () => {
-    mockFetchGitHubUser.mockResolvedValueOnce({
-      login: 'testuser',
-      id: 42,
-      avatar_url: 'https://avatars.example.com/42',
-    });
-    mockLoginFromCallback.mockResolvedValueOnce(false);
+  it('shows error when loginFromCallback throws (S-R4.2)', async () => {
+    // Defensive: if loginFromCallback unexpectedly throws, the try/catch
+    // still surfaces a friendly error instead of a blank screen.
+    mockLoginFromCallback.mockRejectedValueOnce(new Error('boom'));
 
     renderWithRoute('/auth/callback?token=gho_bad');
 
     await waitFor(() => {
-      expect(screen.getByText(/Could not verify your identity/)).toBeInTheDocument();
+      expect(screen.getByText(/Invalid or expired token/)).toBeInTheDocument();
     });
   });
 
   it('redirects to stored destination after login (S-R4.5)', async () => {
     sessionStorage.setItem(REDIRECT_KEY, '/settings');
-    mockFetchGitHubUser.mockResolvedValueOnce({
-      login: 'testuser',
-      id: 42,
-      avatar_url: 'https://avatars.example.com/42',
-    });
     mockLoginFromCallback.mockResolvedValueOnce(true);
 
     renderWithRoute('/auth/callback?token=gho_abc123');
@@ -226,11 +222,6 @@ describe('AuthCallback — no params', () => {
 
 describe('AuthCallback — URL cleanup', () => {
   it('calls history.replaceState to clean token from URL (S-R5.1)', async () => {
-    mockFetchGitHubUser.mockResolvedValueOnce({
-      login: 'testuser',
-      id: 42,
-      avatar_url: 'https://avatars.example.com/42',
-    });
     mockLoginFromCallback.mockResolvedValueOnce(true);
 
     renderWithRoute('/auth/callback?token=gho_abc123');

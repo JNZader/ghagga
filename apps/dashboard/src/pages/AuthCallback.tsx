@@ -13,7 +13,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { REDIRECT_KEY, useAuth } from '@/lib/auth';
-import { fetchGitHubUser } from '@/lib/oauth';
 
 // ─── Error Messages ─────────────────────────────────────────────
 
@@ -62,10 +61,9 @@ export function AuthCallback() {
 
     async function handleToken(accessToken: string) {
       try {
-        // Validate token against GitHub API
-        await fetchGitHubUser(accessToken);
-
-        // Save credentials via AuthProvider
+        // Validate token + save credentials via AuthProvider.
+        // loginFromCallback internally validates against the GitHub API
+        // (fetchGitHubUser), so no separate validation round-trip is needed.
         const success = await loginFromCallback(accessToken);
 
         if (success) {
@@ -75,7 +73,7 @@ export function AuthCallback() {
           navigate(redirectTo, { replace: true });
         } else {
           setStatus('error');
-          setErrorMessage('Invalid token. Could not verify your identity.');
+          setErrorMessage('Invalid or expired token. Please try again.');
         }
       } catch {
         setStatus('error');
