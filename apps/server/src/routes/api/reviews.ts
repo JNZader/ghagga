@@ -6,7 +6,7 @@
  *   DELETE /api/reviews/:param  (numeric → single review by ID, non-numeric → by repo full name)
  */
 
-import type { Review, ReviewFinding, ReviewMode, ReviewStatus } from '@ghagga/types';
+import type { Finding, Review, ReviewFinding, ReviewMode, ReviewStatus } from '@ghagga/types';
 import type { Database } from 'ghagga-db';
 import {
   clearMemoryObservationsByProject,
@@ -43,6 +43,23 @@ interface ReviewRow {
 }
 
 /**
+ * Project a persisted `ReviewFinding` to the wire `Finding` shape, dropping the
+ * AI-internal detail fields the HTTP API must not expose: raw LLM reasoning
+ * (`filterReason`) and the internal repo paths inside `exploitabilityDetail` /
+ * `usageDetail` (importSites, reachableFrom, filesScanned, …). Labels and
+ * signals (`exploitability`, `usageLabel`, `aiFiltered`, `aiPriority`) are kept.
+ * The local CLI/ACP outputs still emit the full `ReviewFinding` — only this
+ * auth-gated HTTP endpoint, reachable by any installation-token holder, projects.
+ */
+function toWireFinding(raw: unknown): Finding {
+  const finding = { ...(raw as ReviewFinding) };
+  delete finding.filterReason;
+  delete finding.exploitabilityDetail;
+  delete finding.usageDetail;
+  return finding;
+}
+
+/**
  * Map a DB review row to the wire `Review` contract (@ghagga/types).
  *
  * This is where `repo` becomes REAL: reviews rows only store `repositoryId`,
@@ -68,7 +85,15 @@ function toReviewDto(row: ReviewRow, repoFullName: string): Review {
     status: row.status as ReviewStatus,
     mode: row.mode as ReviewMode,
     summary: row.summary ?? '',
-    findings: (row.findings ?? []) as ReviewFinding[],
+    // Drop any non-object entries (corrupt jsonb) before projecting — a
+    // primitive would spread into an indexed-char object on the wire. Real
+    // rows are always ReviewFinding[]; this is fail-closed defense in depth.
+    findings: (row.findings ?? [])
+      .filter(
+        (f): f is Record<string, unknown> =>
+          typeof f === 'object' && f !== null && !Array.isArray(f),
+      )
+      .map(toWireFinding),
     createdAt: row.createdAt.toISOString(),
     ...(typeof coverageComplete === 'boolean' ? { coverageComplete } : {}),
   };

@@ -296,6 +296,76 @@ describe('GET /api/reviews', () => {
     expect(mockCountReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42);
   });
 
+  it('projects findings to the wire shape — strips AI-internal fields, keeps labels', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockGetReviewsByRepoId.mockResolvedValueOnce([
+      fakeDbReviewRow({
+        id: 3,
+        findings: [
+          {
+            severity: 'high',
+            category: 'security',
+            file: 'src/db.ts',
+            line: 42,
+            message: 'Vulnerable dependency',
+            suggestion: 'Upgrade lodash',
+            source: 'trivy',
+            aiPriority: 8,
+            aiFiltered: false,
+            exploitability: 'exploitable',
+            usageLabel: 'in-use',
+            // AI-internal fields the wire MUST drop (raw LLM reasoning + repo paths):
+            filterReason: 'LLM reasoning: looks like a real reachable sink',
+            exploitabilityDetail: {
+              label: 'exploitable',
+              packageName: 'lodash',
+              importSites: ['src/internal/secret-path.ts'],
+              reachableFrom: ['src/server/boot.ts'],
+              reason: 'reachable from the request handler',
+            },
+            usageDetail: {
+              usageLabel: 'in-use',
+              importedSymbols: ['merge'],
+              calledSymbols: ['merge'],
+              filesScanned: ['src/internal/secret-path.ts'],
+              reason: 'called in two modules',
+            },
+          },
+        ],
+      }),
+    ]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(1);
+
+    const app = createApp();
+    const res = await app.request('/api/reviews?repo=owner/repo');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    const finding = json.data[0].findings[0];
+
+    // Internal detail fields are stripped from the wire.
+    expect(finding).not.toHaveProperty('filterReason');
+    expect(finding).not.toHaveProperty('exploitabilityDetail');
+    expect(finding).not.toHaveProperty('usageDetail');
+    // Defense in depth: no internal repo path leaks anywhere in the finding.
+    expect(JSON.stringify(finding)).not.toContain('secret-path');
+
+    // Labels and signals are kept.
+    expect(finding).toMatchObject({
+      severity: 'high',
+      category: 'security',
+      file: 'src/db.ts',
+      line: 42,
+      message: 'Vulnerable dependency',
+      suggestion: 'Upgrade lodash',
+      source: 'trivy',
+      aiPriority: 8,
+      aiFiltered: false,
+      exploitability: 'exploitable',
+      usageLabel: 'in-use',
+    });
+  });
+
   it('uses default pagination when params not provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);
@@ -507,6 +577,50 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
     expect(mockGetReviewsByRepoId).not.toHaveBeenCalled();
     // No row belongs to a foreign tenant repo.
     expect(json.data.every((r: { repo: string }) => r.repo.startsWith('owner/'))).toBe(true);
+  });
+
+  it('strips AI-internal finding fields and drops malformed entries (cross-installation path)', async () => {
+    const user = { ...DEFAULT_USER, installationIds: [100] };
+    mockGetReviewsByInstallationIds.mockResolvedValueOnce([
+      fakeDbReviewRow({
+        id: 5,
+        repositoryId: 42,
+        prNumber: 9,
+        fullName: 'owner/repo-a',
+        findings: [
+          {
+            severity: 'high',
+            category: 'security',
+            file: 'src/db.ts',
+            message: 'Vulnerable dependency',
+            source: 'trivy',
+            exploitability: 'exploitable',
+            // AI-internal fields the wire MUST drop on this path too:
+            filterReason: 'LLM reasoning',
+            exploitabilityDetail: { importSites: ['src/internal/secret-path.ts'] },
+            usageDetail: { filesScanned: ['src/internal/secret-path.ts'] },
+          },
+          // Corrupt jsonb entry — must be dropped, never spread to the wire.
+          'not-an-object',
+        ],
+      }),
+    ]);
+    mockCountReviewsByInstallationIds.mockResolvedValueOnce(1);
+
+    const app = createApp(user);
+    const res = await app.request('/api/reviews');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // The malformed entry is dropped → exactly one finding survives.
+    expect(json.data[0].findings).toHaveLength(1);
+    const finding = json.data[0].findings[0];
+    expect(finding).not.toHaveProperty('filterReason');
+    expect(finding).not.toHaveProperty('exploitabilityDetail');
+    expect(finding).not.toHaveProperty('usageDetail');
+    expect(JSON.stringify(json.data[0])).not.toContain('secret-path');
+    // Labels kept.
+    expect(finding.exploitability).toBe('exploitable');
   });
 
   it('returns pagination.total reflecting the full cross-installation count', async () => {
