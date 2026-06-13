@@ -307,8 +307,10 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   1. El `Finding` del wire es subset del `ReviewFinding` de core (`source` requerido + opcionales
      como `aiPriority` se persisten verbatim → presentes en el wire pero NO declarados en el tipo).
      Candidato: re-exportar `ReviewFinding` desde core como se hizo con `ReviewMode`/`ReviewStatus`.
-  2. No hay integration test de auth para `GET /api/reviews` — la suite integrada cubre
-     `/api/repositories` y `/api/stats` pero no reviews (señalado por Codex).
+  2. ~~No hay integration test de auth para `GET /api/reviews`~~ ✅ **RESUELTO 2026-06-13, PR #225**
+     (`f451352`): S2.6 (per-repo 200), S2.7 (cross-installation 403 — gate corta ANTES de la query),
+     S2.8 (path "all repositories" scopeado por installation IDs / aislamiento de tenant). Test-only,
+     cross-chequea además la emisión wire de `coverageComplete` (#223). Server suite 556→559.
 - **Test live-PG para tsquery** (sprint 1): el escaping de `buildTsQuery` está string-tested; falta
   un test de integración con PG real que pruebe que `to_tsquery` acepta el output.
 - **Matrix jobs comparten cache key** (sprint 1): aún con runAttempt, dos jobs en el mismo run-attempt
