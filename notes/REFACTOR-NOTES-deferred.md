@@ -345,7 +345,15 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
    (23 fixtures) + los 6 harnesses de paridad quedaron como activo permanente.
 5. ~~**Refactor 2** (pipeline god-function) — SDD, rama dedicada, 4vr, canary obligatorio.~~
    ✅ 2026-06-12, SDD `split-review-pipeline` (ver sección arriba) — PR #221 mergeado @ `aa15e7b`,
-   canary verde. Follow-up post-merge: fix del downgrade PASSED-only (PR aparte).
+   canary verde. ~~Follow-up post-merge: fix del downgrade PASSED-only (PR aparte).~~
+   ✅ Follow-up RESUELTO 2026-06-12 (esta rama): el "downgrade a todos los status" del approach
+   original era un ERROR — la Action falla el check SOLO con `FAILED` (`action/index.ts:343`);
+   colapsar FAILED-degradado a PARTIAL pondría en verde PRs con issues críticos. Decisión: veredicto
+   y cobertura son dimensiones ortogonales → campo nuevo `ReviewResult.coverageComplete?: boolean`
+   (false si degradó CUALQUIER step, incluidos los 3 warn-only vía tracking `warnOnlyDegradations`
+   interno; undefined en SKIPPED). Status intacto, downgrade PASSED→PARTIAL literal, test
+   "preserves FAILED" extendido. Wire: doblado en metadata jsonb (sin migración), DTO condicional,
+   indicador ⚠ en dashboard. Semver minor, changelog incluido.
 6. ~~**Contratos**: `Review.repo` en `@ghagga/types`~~ ✅ 2026-06-12, PR #217 (ver sección
    Correctness). El barrido fix-between-SDDs del 2026-06-12 cerró además CORE-M8 (#218),
    los 2 bugs de semantic-diff (#219) y el ticket stale de lint (#216).
