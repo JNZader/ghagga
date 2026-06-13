@@ -54,6 +54,16 @@ export interface Review {
   summary: string;
   findings: Finding[];
   createdAt: string;
+  /**
+   * First-class coverage signal, orthogonal to `status`: `true` = every
+   * pipeline step ran, `false` = at least one step degraded — tracked
+   * failures AND warn-only degradations alike (the latter stay internal:
+   * the wire exposes only this boolean, never their step names, and they
+   * don't downgrade the status). Optional because rows persisted before
+   * the field existed (and SKIPPED reviews, where the pipeline never ran)
+   * carry no value — the server omits the key entirely for those rows.
+   */
+  coverageComplete?: boolean;
 }
 
 export interface Finding {

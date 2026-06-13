@@ -773,7 +773,17 @@ async function processReview(
     findings: reviewResult.findings,
     tokensUsed: reviewResult.metadata.tokensUsed,
     executionTimeMs: reviewResult.metadata.executionTimeMs,
-    metadata: reviewResult.metadata,
+    // The reviews table persists discrete columns + this jsonb blob — NOT the
+    // full ReviewResult. `coverageComplete` is top-level on ReviewResult, so
+    // it's folded into the blob here for the wire to read back (reviews.ts
+    // toReviewDto). Omitted when undefined (SKIPPED early-returns never set
+    // it) so old and not-applicable rows simply lack the key.
+    metadata: {
+      ...reviewResult.metadata,
+      ...(reviewResult.coverageComplete !== undefined
+        ? { coverageComplete: reviewResult.coverageComplete }
+        : {}),
+    },
   });
 
   await job.updateProgress(80);

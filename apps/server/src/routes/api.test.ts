@@ -231,7 +231,16 @@ describe('GET /api/reviews', () => {
   it('returns paginated reviews mapped to the wire Review contract (repo populated)', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([
-      fakeDbReviewRow({ id: 1, prNumber: 10, status: 'PASSED', summary: 'All good', findings: [] }),
+      fakeDbReviewRow({
+        id: 1,
+        prNumber: 10,
+        status: 'PASSED',
+        summary: 'All good',
+        findings: [],
+        // New rows carry coverageComplete inside the metadata jsonb blob
+        // (folded in by the review queue) — the DTO surfaces it on the wire.
+        metadata: { mode: 'simple', coverageComplete: true },
+      }),
       fakeDbReviewRow({ id: 2, prNumber: 11, status: 'FAILED', summary: null, findings: null }),
     ]);
     mockCountReviewsByRepoId.mockResolvedValueOnce(2);
@@ -251,6 +260,7 @@ describe('GET /api/reviews', () => {
         summary: 'All good',
         findings: [],
         createdAt: '2026-01-01T00:00:00.000Z',
+        coverageComplete: true,
       },
       {
         id: 2,
@@ -266,7 +276,10 @@ describe('GET /api/reviews', () => {
     ]);
     // Contract pin: EXACTLY the Review keys — no storage columns leak
     // (repositoryId, tokensUsed, executionTimeMs, metadata) and no fullName.
+    // `coverageComplete` is emitted ONLY when the row's metadata blob carries
+    // a boolean (row 1 here); legacy/SKIPPED rows omit the key entirely.
     expect(Object.keys(json.data[0]).sort()).toEqual([
+      'coverageComplete',
       'createdAt',
       'findings',
       'id',
@@ -276,6 +289,7 @@ describe('GET /api/reviews', () => {
       'status',
       'summary',
     ]);
+    expect(Object.keys(json.data[1])).not.toContain('coverageComplete');
     expect(json.pagination).toEqual({ page: 1, limit: 10, offset: 0, total: 2 });
 
     expect(mockGetReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42, { limit: 10, offset: 0 });
@@ -395,6 +409,10 @@ describe('GET /api/reviews', () => {
       prNumber: 42,
       status: 'PARTIAL' as const,
       summary: 'Static analysis ran but the AI agent failed midway.',
+      // A PARTIAL review always degraded at least one step → the queue
+      // folds coverageComplete: false into the metadata blob. Pin that the
+      // wire emits it alongside the verbatim PARTIAL status.
+      metadata: { mode: 'simple', coverageComplete: false },
     });
     mockGetReviewsByRepoId.mockResolvedValueOnce([partialRow]);
     mockCountReviewsByRepoId.mockResolvedValueOnce(1);
@@ -415,6 +433,7 @@ describe('GET /api/reviews', () => {
       summary: 'Static analysis ran but the AI agent failed midway.',
       findings: [],
       createdAt: '2026-01-01T00:00:00.000Z',
+      coverageComplete: false,
     });
   });
 });
@@ -431,7 +450,15 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
     const user = { ...DEFAULT_USER, installationIds: [100, 200] };
     // Joined rows: each carries its repository fullName (storage shape).
     mockGetReviewsByInstallationIds.mockResolvedValueOnce([
-      fakeDbReviewRow({ id: 1, repositoryId: 42, prNumber: 10, fullName: 'owner/repo-a' }),
+      fakeDbReviewRow({
+        id: 1,
+        repositoryId: 42,
+        prNumber: 10,
+        fullName: 'owner/repo-a',
+        // coverageComplete travels inside the metadata jsonb blob (see the
+        // per-repo path test) — pinned here for the cross-installation path.
+        metadata: { mode: 'simple', coverageComplete: false },
+      }),
       fakeDbReviewRow({
         id: 2,
         repositoryId: 77,
@@ -454,7 +481,10 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
     ]);
     // Contract pin: EXACTLY the Review keys — no storage columns leak
     // (repositoryId, tokensUsed, executionTimeMs, metadata) and no fullName.
+    // `coverageComplete` is emitted ONLY when the row's metadata blob carries
+    // a boolean (row 1 here); legacy/SKIPPED rows omit the key entirely.
     expect(Object.keys(json.data[0]).sort()).toEqual([
+      'coverageComplete',
       'createdAt',
       'findings',
       'id',
@@ -464,6 +494,8 @@ describe('GET /api/reviews (no repo → all caller installations)', () => {
       'status',
       'summary',
     ]);
+    expect(json.data[0].coverageComplete).toBe(false);
+    expect(Object.keys(json.data[1])).not.toContain('coverageComplete');
     // Authz: the query layer is invoked with the caller's installations ONLY.
     expect(mockGetReviewsByInstallationIds).toHaveBeenCalledWith(mockDb, [100, 200], {
       limit: 50,

@@ -113,6 +113,9 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
 
   // Track steps that failed but were gracefully degraded
   const failedSteps: FailedStep[] = [];
+  // Track warn-only degradations (reportFailure: false sites) — never
+  // surface in failedSteps but still count against coverageComplete.
+  const warnOnlyDegradations: string[] = [];
 
   // Resolve whether AI review is enabled
   const aiEnabled = resolveAiEnabled(input);
@@ -207,6 +210,7 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
     input,
     emit,
     failedSteps,
+    warnOnlyDegradations,
     fileList,
     filteredDiff,
   });
@@ -272,6 +276,7 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
     isOllama: false,
     resolvedInputMode: input.mode, // pre-trust value; execute overwrites
     failedSteps,
+    warnOnlyDegradations,
   };
 
   return { kind: 'continue', base };

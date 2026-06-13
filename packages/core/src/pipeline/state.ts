@@ -106,6 +106,16 @@ export interface PipelineStateBase {
   resolvedInputMode: ReviewMode;
 
   failedSteps: FailedStep[];
+
+  /**
+   * Step names of warn-only degradations (`runDegradable` with
+   * `reportFailure: false` — call-chain, negative-examples, self-improve).
+   * These steps degrade WITHOUT entering `failedSteps` (no PARTIAL
+   * downgrade, no wire exposure of the step names), but they still count
+   * against `coverageComplete` — the signal must tell the WHOLE truth
+   * about coverage, tracked or not (see pipeline/finalize.ts).
+   */
+  warnOnlyDegradations: string[];
 }
 
 export interface PipelineState extends PipelineStateBase {
