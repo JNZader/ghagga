@@ -12,7 +12,7 @@
  * result that reaches finalize. It accounts for BOTH degradation kinds:
  * tracked failures (`failedSteps`) AND warn-only degradations
  * (`reportFailure: false` sites — call-chain, negative-examples,
- * self-improve), which never enter `failedSteps`, never trigger the
+ * self-improve, semantic-diff), which never enter `failedSteps`, never trigger the
  * PARTIAL downgrade, and stay internal — but still mean incomplete
  * coverage. SKIPPED early-returns (flood-skip / all-files-filtered)
  * short-circuit in prepare and never reach this phase — they stay

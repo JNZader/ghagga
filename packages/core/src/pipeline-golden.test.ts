@@ -19,6 +19,11 @@
  *     "call-chain sees PRE-blast-radius fileList" test guards that trap.
  *   - 3 steps degrade WITHOUT failedSteps.push: call-chain (:360),
  *     negative-examples (:430), self-improve (:453). Pinned explicitly.
+ *     (wire-semantic-diff added a 4th warn-only site — semantic-diff in
+ *     enrich — pinned in pipeline.test.ts, not here. Its golden footprint
+ *     is the `semanticDiff` field gained by these snapshots: deliberate
+ *     re-bless 2026-06-12, 240 added lines / 0 removed, audited as
+ *     semanticDiff-blocks-only.)
  *   - code-intel's failedSteps.push (:1410) is UNREACHABLE via provider
  *     failures (Promise.allSettled swallows per-file rejections). The only
  *     way to exercise that catch is the emit callback throwing on the

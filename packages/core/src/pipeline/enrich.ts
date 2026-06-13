@@ -18,6 +18,7 @@ import {
 import { analyzeExploitability, analyzeUsage } from '../exploitability/index.js';
 import { rankFindings } from '../ranking/index.js';
 import { recursiveReview } from '../recursive/index.js';
+import { extractSemanticDiff } from '../semantic-diff/index.js';
 import { runDegradable } from './degrade.js';
 import { resolveGenerateTextFns } from './providers.js';
 import type { PipelineState } from './state.js';
@@ -69,6 +70,26 @@ export async function enrich(state: PipelineState): Promise<void> {
   result.metadata.totalAdditions = state.allFiles.reduce((sum, f) => sum + f.additions, 0);
   result.metadata.totalDeletions = state.allFiles.reduce((sum, f) => sum + f.deletions, 0);
   result.metadata.fileList = state.allFiles.map((f) => f.path);
+
+  // Add entity-level semantic diff ("What changed" comment section).
+  // Computed over filteredDiff — settled in prepare and NEVER truncated
+  // (truncateDiff writes the separate truncatedDiff field), so entity and
+  // import counts stay honest even when the prompt diff was cut.
+  // reportFailure: false is DELIBERATE — a cosmetic comment section must not
+  // enter failedSteps (no PARTIAL downgrade), but the degradation is still
+  // recorded in warnOnlyDegradations so coverageComplete tells the whole
+  // truth (call-chain / negative-examples pattern, see pipeline/degrade.ts).
+  await runDegradable(
+    state,
+    {
+      step: 'semantic-diff',
+      warnLabel: '[ghagga] Semantic diff extraction failed (non-fatal):',
+      reportFailure: false,
+    },
+    () => {
+      result.semanticDiff = extractSemanticDiff(state.filteredDiff);
+    },
+  );
 
   // Add blast-radius metadata (if applicable)
   if (state.blastRadiusMetadata) {

@@ -302,3 +302,78 @@ describe('extractSemanticDiff — empty / edge cases', () => {
     expect(result.changes).toHaveLength(0);
   });
 });
+
+// ─── Arrow pattern tightening (wire-semantic-diff D5) ────────────
+//
+// The const/let/var function pattern requires `function` or a same-line `=>`.
+// Both sides are pinned: parenthesized non-function initializers (casts) must
+// NOT classify as functions, and legitimate arrows MUST keep being detected.
+
+const arrowDiff = (line: string) => `diff --git a/src/arrow.ts b/src/arrow.ts
+index abc..def 100644
+--- a/src/arrow.ts
++++ b/src/arrow.ts
+@@ -1,2 +1,3 @@
+ const existing = 1;
++${line}
+`;
+
+describe('extractSemanticDiff — arrow pattern tightening', () => {
+  it('does NOT classify a parenthesized cast initializer as function_added', () => {
+    const result = extractSemanticDiff(
+      arrowDiff(
+        '  const coverageComplete = (row.metadata as { coverageComplete?: unknown } | null)',
+      ),
+    );
+    expect(result.changes.filter((c) => c.kind.startsWith('function_'))).toHaveLength(0);
+  });
+
+  it('does NOT classify a top-level parenthesized non-function initializer as function_added', () => {
+    const result = extractSemanticDiff(arrowDiff('const total = (a + b) * c;'));
+    expect(result.changes).toHaveLength(0);
+  });
+
+  it('still detects a paren-params arrow: const f = (a) => ...', () => {
+    const result = extractSemanticDiff(arrowDiff('const handler = (a) => a + 1;'));
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'handler' }),
+    ]);
+  });
+
+  it('still detects a bare single-param arrow: const f = x => x', () => {
+    const result = extractSemanticDiff(arrowDiff('const identity = x => x;'));
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'identity' }),
+    ]);
+  });
+
+  it('still detects a return-type-annotated arrow: (a: string): Foo =>', () => {
+    const result = extractSemanticDiff(
+      arrowDiff('export const make = (a: string): Foo => ({ a });'),
+    );
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'make' }),
+    ]);
+  });
+
+  it('still detects an async arrow: export const handler = async (req) =>', () => {
+    const result = extractSemanticDiff(
+      arrowDiff('export const handler = async (req) => req.body;'),
+    );
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'handler' }),
+    ]);
+  });
+
+  it('still detects a function expression: const f = function () {}', () => {
+    const result = extractSemanticDiff(arrowDiff('const legacy = function () { return 1; };'));
+    expect(result.changes).toEqual([
+      expect.objectContaining({ kind: 'function_added', name: 'legacy' }),
+    ]);
+  });
+
+  it('documented limitation: multiline arrow with `=>` on the next line is not detected', () => {
+    const result = extractSemanticDiff(arrowDiff('const multi = (veryLongParamA, veryLongParamB)'));
+    expect(result.changes.filter((c) => c.kind.startsWith('function_'))).toHaveLength(0);
+  });
+});

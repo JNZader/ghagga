@@ -106,11 +106,18 @@ const DECLARATION_PATTERNS: Array<{
     pattern: /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\*?\s+(\w+)\s*\(/,
   },
   // arrow / function-expression assigned to const/let/var (handles `export const fn = () =>`,
-  // optionally typed: `export const fn: Foo = async () =>`)
+  // optionally typed: `export const fn: Foo = async () =>`).
+  // The RHS must be a real function: `function` keyword, or arrow params
+  // (paren-params, bare single param, optional return-type annotation)
+  // followed by `=>` ON THE SAME LINE. A bare `(` is NOT enough — that
+  // misclassified parenthesized non-function initializers (e.g.
+  // `const x = (row.metadata as Foo).bar`) as function_added.
+  // Known limitation (accepted): a multiline arrow whose `=>` lands on the
+  // next line is not detected.
   {
     kind: 'function',
     pattern:
-      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[\w<>,\s|[\]]+?)?\s*=\s*(?:async\s+)?(?:function\b|\()/,
+      /^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[\w<>,\s|[\]]+?)?\s*=\s*(?:async\s+)?(?:function\b|(?:\([^)]*\)|[\w$]+)\s*(?::[^=]*)?=>)/,
   },
   // method inside class (indented + no leading "function" keyword, has "()")
   {

@@ -25,6 +25,13 @@ vi.mock('./graph/call-chain.js', async (importOriginal) => {
   return { ...actual, buildCallChainFromDiff: vi.fn(actual.buildCallChainFromDiff) };
 });
 
+// Partial mock (real impl by default): the semantic-diff warn-only test below
+// forces ONE extractSemanticDiff throw via mockImplementationOnce.
+vi.mock('./semantic-diff/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./semantic-diff/index.js')>();
+  return { ...actual, extractSemanticDiff: vi.fn(actual.extractSemanticDiff) };
+});
+
 vi.mock('./agents/workflow.js', () => ({
   runWorkflowReview: vi.fn(),
 }));
@@ -68,6 +75,7 @@ import type { DependencyGraph, GraphLoader } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
 import { reviewPipeline } from './pipeline.js';
+import { extractSemanticDiff } from './semantic-diff/index.js';
 import { formatStaticAnalysisContext, runStaticAnalysis } from './tools/runner.js';
 import type { ReviewInput, ReviewResult } from './types.js';
 import { DEFAULT_SETTINGS } from './types.js';
@@ -342,6 +350,81 @@ index 1234567..abcdefg 100644
         }),
       );
       expect(runSimpleReview).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ── Semantic Diff (enrich, warn-only) ─────────────────────
+
+  describe('semantic diff', () => {
+    it('populates result.semanticDiff from the filtered diff in enrich', async () => {
+      const fnDiff = `diff --git a/src/util.ts b/src/util.ts
+index 1234567..abcdefg 100644
+--- a/src/util.ts
++++ b/src/util.ts
+@@ -1,2 +1,5 @@
+ const x = 1;
++export function newHelper(input: string): string {
++  return input.trim();
++}
+`;
+      const result = await reviewPipeline(makeInput({ diff: fnDiff }));
+
+      expect(result.semanticDiff).toBeDefined();
+      expect(result.semanticDiff?.changes).toEqual([
+        expect.objectContaining({
+          kind: 'function_added',
+          name: 'newHelper',
+          filePath: 'src/util.ts',
+        }),
+      ]);
+      expect(result.semanticDiff?.summary).toBe('1 function added');
+    });
+
+    it('early-return SKIPPED (all files filtered) carries NO semanticDiff', async () => {
+      const mdOnlyDiff = `diff --git a/README.md b/README.md
+index 1234567..abcdefg 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1,2 @@
+ # Hello
++World
+`;
+      const result = await reviewPipeline(
+        makeInput({
+          diff: mdOnlyDiff,
+          settings: { ...makeInput().settings, ignorePatterns: ['*.md'] },
+        }),
+      );
+
+      expect(result.status).toBe('SKIPPED');
+      expect(result.semanticDiff).toBeUndefined();
+    });
+
+    it('extractor throw degrades warn-only: PASSED + no failedSteps + coverageComplete false', async () => {
+      (extractSemanticDiff as MockedFunction<typeof extractSemanticDiff>).mockImplementationOnce(
+        () => {
+          throw new Error('semantic diff exploded');
+        },
+      );
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await reviewPipeline(makeInput());
+
+      // Warn-only contract (reportFailure: false — see pipeline/degrade.ts):
+      // 1. the verdict is untouched — a cosmetic section cannot downgrade it.
+      expect(result.status).toBe('PASSED');
+      // 2. failedSteps stays absent — warn-only step names are internal.
+      expect(result.failedSteps).toBeUndefined();
+      // 3. coverageComplete still tells the truth: a step degraded.
+      expect(result.coverageComplete).toBe(false);
+      // 4. the field is simply absent — silent degradation downstream.
+      expect(result.semanticDiff).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ghagga] Semantic diff extraction failed (non-fatal):',
+        'semantic diff exploded',
+      );
+
+      warnSpy.mockRestore();
     });
   });
 
