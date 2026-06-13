@@ -332,14 +332,36 @@ export interface ReviewResult {
   codeIntelMetadata?: import('./code-intel/types.js').CodeIntelMetadata;
 
   /**
+   * Entity-level semantic diff, computed in the enrich phase over the
+   * FILTERED diff (settled in prepare, NEVER truncated — truncateDiff
+   * writes the separate `truncatedDiff` field), so counts stay honest even
+   * when the prompt diff was cut.
+   *
+   * Consumed by `formatReviewComment` for the "What changed" section.
+   *
+   * Serialization surface (precise truth):
+   *   - NOT persisted: server `saveReview` stores discrete columns + the
+   *     metadata blob, never top-level result fields.
+   *   - NOT on the HTTP API: `toReviewDto` is an explicit pick-list.
+   *   - DOES appear in full-result serializations — `ghagga review
+   *     --format json` (apps/cli review.ts) and the ACP `review-result`
+   *     artifact (acp/adapter.ts) both stringify the entire result. This
+   *     is DELIBERATE (additive-optional field; those consumers already
+   *     own the raw diff) and pinned by tests in apps/cli review.test.ts
+   *     and acp/adapter.test.ts. The CLI JSON output is an observable
+   *     contract — removing/renaming this field is a breaking change there.
+   */
+  semanticDiff?: import('./semantic-diff/index.js').SemanticDiff;
+
+  /**
    * Pipeline steps that failed but were gracefully degraded. Present whenever
    * at least one TRACKED step degraded, REGARDLESS of status — a FAILED or
    * NEEDS_HUMAN_REVIEW review with degraded steps carries it too (only a
    * PASSED review is downgraded to PARTIAL; see pipeline/finalize.ts).
    *
    * NOT exhaustive: a few steps degrade warn-only (call-chain,
-   * negative-examples, self-improve) and never appear here — they surface
-   * ONLY through `coverageComplete === false`.
+   * negative-examples, self-improve, semantic-diff) and never appear here —
+   * they surface ONLY through `coverageComplete === false`.
    */
   failedSteps?: { step: string; error: string }[];
 
@@ -351,7 +373,8 @@ export interface ReviewResult {
    *   - `true`      — every pipeline step ran (full coverage)
    *   - `false`     — at least one step degraded: either a tracked failure
    *                   (see `failedSteps`) OR a warn-only degradation
-   *                   (call-chain, negative-examples, self-improve — internal
+   *                   (call-chain, negative-examples, self-improve,
+   *                   semantic-diff — internal
    *                   steps that never enter `failedSteps` and never trigger
    *                   the PARTIAL downgrade). The verdict stands but was
    *                   produced with incomplete coverage. `false` with an

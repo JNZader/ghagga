@@ -62,6 +62,10 @@ exports[`golden: baseline & modes > baseline: simple mode, all optional steps of
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -150,6 +154,10 @@ exports[`golden: baseline & modes > mode: consensus 1`] = `
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -244,6 +252,10 @@ exports[`golden: baseline & modes > mode: diagnostic falls back to simple on gat
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -332,6 +344,10 @@ exports[`golden: baseline & modes > mode: diagnostic stays diagnostic on ollama 
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -422,6 +438,10 @@ exports[`golden: baseline & modes > mode: fan-out (no lensDir → loadLensesFrom
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -510,6 +530,10 @@ exports[`golden: baseline & modes > mode: workflow 1`] = `
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -609,6 +633,10 @@ exports[`golden: baseline & modes > static-only: aiReviewEnabled=false skips the
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -712,6 +740,23 @@ exports[`golden: blast-radius edges (B0.5) > enableBlastRadius without graphLoad
       ],
       "totalAdditions": 2,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [
+        {
+          "filePath": "src/index.ts",
+          "kind": "function_added",
+          "name": "indexFn",
+          "newSignature": "export function indexFn() {}",
+        },
+        {
+          "filePath": "src/utils.ts",
+          "kind": "function_added",
+          "name": "helper",
+          "newSignature": "export function helper() {}",
+        },
+      ],
+      "summary": "2 function added",
     },
     "staticAnalysis": {
       "cpd": {
@@ -821,6 +866,17 @@ exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warnin
       ],
       "totalAdditions": 2,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [
+        {
+          "filePath": "src/index.ts",
+          "kind": "function_added",
+          "name": "indexFn",
+          "newSignature": "export function indexFn() {}",
+        },
+      ],
+      "summary": "1 function added",
     },
     "staticAnalysis": {
       "cpd": {
@@ -962,6 +1018,10 @@ exports[`golden: chained multi-degradation (B0.5) > blast-radius + memory-search
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -1018,7 +1078,7 @@ exports[`golden: chained multi-degradation (B0.5) > blast-radius + memory-search
 }
 `;
 
-exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > call-chain fails (:360): warn only, NO failedSteps entry, status PASSED 1`] = `
+exports[`golden: degradation WITHOUT failedSteps.push — 3 legacy sites (semantic-diff is the 4th, pinned in pipeline.test.ts; do NOT uniformize) > call-chain fails (:360): warn only, NO failedSteps entry, status PASSED 1`] = `
 {
   "events": [
     {
@@ -1079,6 +1139,10 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -1112,7 +1176,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
 }
 `;
 
-exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > negative-examples fails (:430): warn only, NO failedSteps entry, status PASSED 1`] = `
+exports[`golden: degradation WITHOUT failedSteps.push — 3 legacy sites (semantic-diff is the 4th, pinned in pipeline.test.ts; do NOT uniformize) > negative-examples fails (:430): warn only, NO failedSteps entry, status PASSED 1`] = `
 {
   "events": [
     {
@@ -1173,6 +1237,10 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -1206,7 +1274,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
 }
 `;
 
-exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT uniformize) > self-improve fails (:453): warn only, NO failedSteps entry, status PASSED 1`] = `
+exports[`golden: degradation WITHOUT failedSteps.push — 3 legacy sites (semantic-diff is the 4th, pinned in pipeline.test.ts; do NOT uniformize) > self-improve fails (:453): warn only, NO failedSteps entry, status PASSED 1`] = `
 {
   "events": [
     {
@@ -1267,6 +1335,10 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -1497,6 +1569,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > ai-enhance f
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -1614,6 +1690,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > ai-review fa
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -1721,6 +1801,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > author-trust
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -1832,6 +1916,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > blast-radius
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -1952,6 +2040,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > code-intel f
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -2055,6 +2147,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > doc-validati
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -2182,6 +2278,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > exploitabili
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -2298,6 +2398,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > memory-persi
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -2397,6 +2501,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > memory-searc
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -2515,6 +2623,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > recursive-re
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -2650,6 +2762,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > semantic-ran
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -2765,6 +2881,10 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > static-analy
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -3105,6 +3225,23 @@ Past review: watch the parser.",
       ],
       "totalNewIssues": 1,
     },
+    "semanticDiff": {
+      "changes": [
+        {
+          "filePath": "src/index.ts",
+          "kind": "function_added",
+          "name": "indexFn",
+          "newSignature": "export function indexFn() {}",
+        },
+        {
+          "filePath": "src/utils.ts",
+          "kind": "function_added",
+          "name": "helper",
+          "newSignature": "export function helper() {}",
+        },
+      ],
+      "summary": "2 function added",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -3214,6 +3351,10 @@ exports[`golden: optional steps ON (isolated) > author-trust ON: trusted author 
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -3316,6 +3457,23 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: exceeded cap fa
       ],
       "totalAdditions": 2,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [
+        {
+          "filePath": "src/index.ts",
+          "kind": "function_added",
+          "name": "indexFn",
+          "newSignature": "export function indexFn() {}",
+        },
+        {
+          "filePath": "src/utils.ts",
+          "kind": "function_added",
+          "name": "helper",
+          "newSignature": "export function helper() {}",
+        },
+      ],
+      "summary": "2 function added",
     },
     "staticAnalysis": {
       "cpd": {
@@ -3421,6 +3579,17 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
       ],
       "totalAdditions": 2,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [
+        {
+          "filePath": "src/index.ts",
+          "kind": "function_added",
+          "name": "indexFn",
+          "newSignature": "export function indexFn() {}",
+        },
+      ],
+      "summary": "1 function added",
     },
     "staticAnalysis": {
       "cpd": {
@@ -3534,6 +3703,17 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
       ],
       "totalAdditions": 2,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [
+        {
+          "filePath": "src/index.ts",
+          "kind": "function_added",
+          "name": "indexFn",
+          "newSignature": "export function indexFn() {}",
+        },
+      ],
+      "summary": "1 function added",
     },
     "staticAnalysis": {
       "cpd": {
@@ -3663,6 +3843,10 @@ exports[`golden: optional steps ON (isolated) > checklist ON: context emitted an
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -3774,6 +3958,10 @@ exports[`golden: optional steps ON (isolated) > code-intel ON: provider data flo
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -3895,6 +4083,10 @@ exports[`golden: optional steps ON (isolated) > doc-validation ON: stale referen
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -4018,6 +4210,10 @@ exports[`golden: optional steps ON (isolated) > enhance ON: compute in 5.5, appl
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -4152,6 +4348,10 @@ exports[`golden: optional steps ON (isolated) > exploitability + usage ON: trivy
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -4259,6 +4459,10 @@ exports[`golden: optional steps ON (isolated) > memory ON: search feeds context 
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -4353,6 +4557,10 @@ exports[`golden: optional steps ON (isolated) > negative-examples ON: SqliteMemo
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -4496,6 +4704,10 @@ exports[`golden: optional steps ON (isolated) > recursive-review ON: regressions
       ],
       "totalNewIssues": 1,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -4597,6 +4809,10 @@ exports[`golden: optional steps ON (isolated) > self-improve ON: rules prepended
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -4712,6 +4928,10 @@ exports[`golden: optional steps ON (isolated) > semantic-ranking ON: findings re
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -4831,6 +5051,10 @@ exports[`golden: path-protection tiers (B0.5) > blocked (.env) + redacted (.env.
       "totalAdditions": 3,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -4924,6 +5148,10 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge di
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -5012,6 +5240,10 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > cli-bridge si
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {
@@ -5102,6 +5334,10 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus wit
       "totalAdditions": 1,
       "totalDeletions": 0,
     },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
     "staticAnalysis": {
       "cpd": {
         "error": "not installed",
@@ -5190,6 +5426,10 @@ exports[`golden: providers — cli-bridge & providerChain (B0.5) > consensus wit
       ],
       "totalAdditions": 1,
       "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
     },
     "staticAnalysis": {
       "cpd": {

@@ -109,7 +109,8 @@ export interface PipelineStateBase {
 
   /**
    * Step names of warn-only degradations (`runDegradable` with
-   * `reportFailure: false` — call-chain, negative-examples, self-improve).
+   * `reportFailure: false` — call-chain, negative-examples, self-improve,
+   * semantic-diff).
    * These steps degrade WITHOUT entering `failedSteps` (no PARTIAL
    * downgrade, no wire exposure of the step names), but they still count
    * against `coverageComplete` — the signal must tell the WHOLE truth

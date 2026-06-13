@@ -25,6 +25,13 @@ vi.mock('./graph/call-chain.js', async (importOriginal) => {
   return { ...actual, buildCallChainFromDiff: vi.fn(actual.buildCallChainFromDiff) };
 });
 
+// Partial mock (real impl by default): the semantic-diff warn-only test below
+// forces ONE extractSemanticDiff throw via mockImplementationOnce.
+vi.mock('./semantic-diff/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./semantic-diff/index.js')>();
+  return { ...actual, extractSemanticDiff: vi.fn(actual.extractSemanticDiff) };
+});
+
 vi.mock('./agents/workflow.js', () => ({
   runWorkflowReview: vi.fn(),
 }));
@@ -67,7 +74,9 @@ import { buildCallChainFromDiff } from './graph/call-chain.js';
 import type { DependencyGraph, GraphLoader } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
+import { SEMANTIC_DIFF_MAX_DIFF_CHARS } from './pipeline/enrich.js';
 import { reviewPipeline } from './pipeline.js';
+import { extractSemanticDiff } from './semantic-diff/index.js';
 import { formatStaticAnalysisContext, runStaticAnalysis } from './tools/runner.js';
 import type { ReviewInput, ReviewResult } from './types.js';
 import { DEFAULT_SETTINGS } from './types.js';
@@ -342,6 +351,140 @@ index 1234567..abcdefg 100644
         }),
       );
       expect(runSimpleReview).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ── Semantic Diff (enrich, warn-only) ─────────────────────
+
+  describe('semantic diff', () => {
+    it('populates result.semanticDiff from the filtered diff in enrich', async () => {
+      const fnDiff = `diff --git a/src/util.ts b/src/util.ts
+index 1234567..abcdefg 100644
+--- a/src/util.ts
++++ b/src/util.ts
+@@ -1,2 +1,5 @@
+ const x = 1;
++export function newHelper(input: string): string {
++  return input.trim();
++}
+`;
+      const result = await reviewPipeline(makeInput({ diff: fnDiff }));
+
+      expect(result.semanticDiff).toBeDefined();
+      expect(result.semanticDiff?.changes).toEqual([
+        expect.objectContaining({
+          kind: 'function_added',
+          name: 'newHelper',
+          filePath: 'src/util.ts',
+        }),
+      ]);
+      expect(result.semanticDiff?.summary).toBe('1 function added');
+    });
+
+    it('early-return SKIPPED (all files filtered) carries NO semanticDiff', async () => {
+      const mdOnlyDiff = `diff --git a/README.md b/README.md
+index 1234567..abcdefg 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1,2 @@
+ # Hello
++World
+`;
+      const result = await reviewPipeline(
+        makeInput({
+          diff: mdOnlyDiff,
+          settings: { ...makeInput().settings, ignorePatterns: ['*.md'] },
+        }),
+      );
+
+      expect(result.status).toBe('SKIPPED');
+      expect(result.semanticDiff).toBeUndefined();
+    });
+
+    it('extractor throw degrades warn-only: PASSED + no failedSteps + coverageComplete false', async () => {
+      (extractSemanticDiff as MockedFunction<typeof extractSemanticDiff>).mockImplementationOnce(
+        () => {
+          throw new Error('semantic diff exploded');
+        },
+      );
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await reviewPipeline(makeInput());
+
+      // Warn-only contract (reportFailure: false — see pipeline/degrade.ts):
+      // 1. the verdict is untouched — a cosmetic section cannot downgrade it.
+      expect(result.status).toBe('PASSED');
+      // 2. failedSteps stays absent — warn-only step names are internal.
+      expect(result.failedSteps).toBeUndefined();
+      // 3. coverageComplete still tells the truth: a step degraded.
+      expect(result.coverageComplete).toBe(false);
+      // 4. the field is simply absent — silent degradation downstream.
+      expect(result.semanticDiff).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ghagga] Semantic diff extraction failed (non-fatal):',
+        'semantic diff exploded',
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('computes over filteredDiff, NOT input.diff: ignored file contributes no entities', async () => {
+      // Two files: one matches ignorePatterns (carries a decoy declaration),
+      // one is reviewable. semanticDiff must only see the reviewable one —
+      // pins that the extract runs on state.filteredDiff (post path filter).
+      const twoFileDiff = `diff --git a/api.generated.ts b/api.generated.ts
+index 1234567..abcdefg 100644
+--- a/api.generated.ts
++++ b/api.generated.ts
+@@ -1,1 +1,2 @@
+ const stub = 0;
++export function ghostFn(): void {}
+diff --git a/src/real.ts b/src/real.ts
+index 1234567..abcdefg 100644
+--- a/src/real.ts
++++ b/src/real.ts
+@@ -1,1 +1,2 @@
+ const x = 1;
++export function realFn(): void {}
+`;
+      const result = await reviewPipeline(
+        makeInput({
+          diff: twoFileDiff,
+          settings: { ...makeInput().settings, ignorePatterns: ['*.generated.ts'] },
+        }),
+      );
+
+      expect(result.semanticDiff).toBeDefined();
+      expect(result.semanticDiff?.changes).toEqual([
+        expect.objectContaining({
+          kind: 'function_added',
+          name: 'realFn',
+          filePath: 'src/real.ts',
+        }),
+      ]);
+      expect(result.semanticDiff?.changes.map((c) => c.name)).not.toContain('ghostFn');
+    });
+
+    it('size gate: oversized filteredDiff skips extraction as POLICY — no degradation recorded', async () => {
+      // One context line pushes filteredDiff past the cap. The gate must
+      // skip the extract WITHOUT calling it, WITHOUT failedSteps, and
+      // WITHOUT flipping coverageComplete — skipping is policy, not failure.
+      const hugeDiff = `diff --git a/src/big.ts b/src/big.ts
+index 1234567..abcdefg 100644
+--- a/src/big.ts
++++ b/src/big.ts
+@@ -1,1 +1,2 @@
+ const pad = '${'x'.repeat(SEMANTIC_DIFF_MAX_DIFF_CHARS)}';
++export function gated(): void {}
+`;
+      const result = await reviewPipeline(makeInput({ diff: hugeDiff }));
+
+      expect(result.status).toBe('PASSED');
+      expect(result.semanticDiff).toBeUndefined();
+      expect(extractSemanticDiff).not.toHaveBeenCalled();
+      expect(result.failedSteps).toBeUndefined();
+      // Deliberate gate ≠ degradation: coverage stays complete.
+      expect(result.coverageComplete).toBe(true);
     });
   });
 

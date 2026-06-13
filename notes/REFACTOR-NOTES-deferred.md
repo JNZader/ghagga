@@ -222,10 +222,15 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   Diagnóstico: 2 bugs reales de producción (semantic-diff: precedencia del patrón export anulaba
   function_added/removed/modified; taxonomy: `uses` duplicado en relationship+fact) + 6 grupos de
   tests stale. Core ahora: **2702/2702 verdes** — la red de seguridad del Refactor 2 está activa.
-- **`semantic-diff` no está cableado a producción** (hallazgo de #209): solo se re-exporta desde
-  `core/src/index.ts`, ningún caller real. El bug de precedencia vivió meses sin detectarse por eso.
-  Decidir: wirearlo al pipeline o marcarlo experimental. *(Update 2026-06-12: ya está anotado
-  `@experimental` en el código desde el SDD unify-diff-parsers; la decisión de wirearlo sigue abierta.)*
+- ~~**`semantic-diff` no está cableado a producción**~~ ✅ **RESUELTO 2026-06-13** (SDD
+  `wire-semantic-diff`): wireado al comment del PR. `extractSemanticDiff` corre en la fase enrich
+  (`pipeline/enrich.ts`), el resultado va a `ReviewResult.semanticDiff` y alimenta la sección
+  "What changed" del comment vía `formatSemanticDiffSection` (`format.ts`). Decisión cerrada
+  (wirear, no marcar experimental): los `@experimental` removidos del módulo y del re-export en
+  `core/src/index.ts`; header del módulo reescrito a la verdad actual con las limitaciones reales
+  pinneadas (regex single-line: multiline arrows, generic constraints con parens). El hallazgo
+  original (#209): el bug de precedencia vivió meses sin detectarse PORQUE no estaba cableado —
+  ahora lo está y el extractor tiene callers de producción reales.
 - **Off-by-N del recursive en iteración 2+ — RESUELTO 2026-06-12** (SDD recursive-coordinate-contract;
   reemplaza la nota "congelado AS-IS" del Refactor 1/spec R7). El problema: las líneas `+[SUGGESTED FIX]`
   inyectadas en iter1 corrían el counter target-side cuando `recursive/index.ts` re-parsea el diff
@@ -377,5 +382,15 @@ producción con usuarios, esta lista ES el sprint previo:
 - Test live-PG para `buildTsQuery`
 - Matrix cache key del Action
 - DSH-A6 (doble validación de token en AuthCallback — menor, no seguridad)
+- **`model`-cell del comment sin strip de backticks** (`format.ts` ~:466, descubierto en
+  wire-semantic-diff): la tabla "Models used" envuelve `model` en backticks vía
+  `sanitizeTableCell(model)` SIN el strip de backticks que sí hace `sanitizeInlineCodeName`
+  (= `sanitizeTableCell` + `.replace(/`/g, '')`). `model` viene de `result.metadata.modelsUsed`
+  (output del provider / settings del operador), NO es diff-derived — misma clase que los ítems de
+  config-injection ya parqueados (`checklistContext`, overrides free-form de `mergeCheck`). Hoy no
+  atacable por un PR; un `model` con backtick podría cerrar el span de inline-code y dejar renderizar
+  markup. Cerrarlo cuando se aborde el wrap de config untrusted (mismo barrido): reusar
+  `sanitizeInlineCodeName` en vez de `sanitizeTableCell` crudo para todas las celdas envueltas en
+  backticks.
 
-(Los detalles con file:line de cada uno quedan en sus secciones de arriba.)
+(Los detalles con file:line de cada uno quedan en sus secciones de arriba — salvo los autocontenidos.)

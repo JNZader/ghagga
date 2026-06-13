@@ -45,7 +45,7 @@ export interface DegradableOpts {
    * Whether the failure is pushed to `failedSteps`. Defaults to true.
    * `false` marks a DELIBERATE non-uniformity: the step degrades with
    * a warn only and never surfaces in `failedSteps` (call-chain,
-   * negative-examples, self-improve). The step name is still recorded
+   * negative-examples, self-improve, semantic-diff). The step name is still recorded
    * in `warnOnlyDegradations` so `coverageComplete` reflects it.
    */
   reportFailure?: boolean;

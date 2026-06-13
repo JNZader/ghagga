@@ -6,14 +6,21 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { parseUnifiedDiff } from './diff/parse.js';
 import {
   buildStatsBar,
   categorizeFiles,
   formatFileCategorySummary,
   formatReviewComment,
+  formatSemanticDiffSection,
   SEVERITY_EMOJI,
   STATUS_EMOJI,
 } from './format.js';
+import {
+  type EntityChange,
+  extractSemanticDiff,
+  type SemanticDiff,
+} from './semantic-diff/index.js';
 import type { FindingSeverity, ReviewFinding, ReviewResult } from './types.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -619,5 +626,584 @@ describe('formatFileCategorySummary', () => {
       'src/d.test.ts',
     ]);
     expect(summary).toContain('(+1 more)');
+  });
+});
+
+// ─── formatSemanticDiffSection ──────────────────────────────────
+
+function makeChange(overrides: Partial<EntityChange> = {}): EntityChange {
+  return {
+    kind: 'function_added',
+    name: 'foo',
+    filePath: 'src/foo.ts',
+    ...overrides,
+  };
+}
+
+function makeSemanticDiff(changes: EntityChange[]): SemanticDiff {
+  return { changes, summary: 'test summary' };
+}
+
+describe('formatSemanticDiffSection', () => {
+  it('returns "" for undefined semanticDiff (silent degradation)', () => {
+    expect(formatSemanticDiffSection(undefined)).toBe('');
+  });
+
+  it('returns "" for an empty changes array', () => {
+    expect(formatSemanticDiffSection(makeSemanticDiff([]))).toBe('');
+  });
+
+  it('renders a collapsed <details> with surviving entities grouped by file', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'function_added', name: 'formatSemanticDiffSection' }),
+        makeChange({ kind: 'function_modified', name: 'formatReviewComment' }),
+        makeChange({ kind: 'type_added', name: 'SemanticDiffMeta', filePath: 'src/types.ts' }),
+      ]),
+    );
+    expect(section).toContain('<details>');
+    expect(section).toContain('</details>');
+    expect(section).toContain('🧬 What changed (3 entities)');
+    // Basenames are contained in inline code (security: see sanitizeBasename).
+    expect(section).toContain('**`foo.ts`**');
+    expect(section).toContain('**`types.ts`**');
+    expect(section).toContain('➕ function `formatSemanticDiffSection`');
+    expect(section).toContain('✏️ function `formatReviewComment`');
+    expect(section).toContain('➕ type `SemanticDiffMeta`');
+  });
+
+  // ── R-filtros: drop method kind entirely ──
+
+  it('drops ALL method-kind entries (it()/expect() noise)', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'method_added', name: 'itMethod', filePath: 'src/x.test.ts' }),
+        makeChange({ kind: 'method_modified', name: 'expectMethod', filePath: 'src/x.test.ts' }),
+        makeChange({ kind: 'function_added', name: 'realFn' }),
+      ]),
+    );
+    // No method name renders as a bullet.
+    expect(section).not.toContain('`itMethod`');
+    expect(section).not.toContain('`expectMethod`');
+    // No "method" noun label appears at all.
+    expect(section).not.toContain('method `');
+    expect(section).toContain('`realFn`');
+    // method entries do NOT inflate the entity count
+    expect(section).toContain('(1 entity)');
+  });
+
+  // ── R-filtros: extension gate ──
+
+  it('gates out entities from non-TS/JS files (.md, .py, .go)', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'function_added', name: 'pyFunc', filePath: 'src/script.py' }),
+        makeChange({ kind: 'function_added', name: 'goFunc', filePath: 'pkg/main.go' }),
+        makeChange({ kind: 'type_added', name: 'mdHeading', filePath: 'README.md' }),
+        makeChange({ kind: 'function_added', name: 'tsFunc', filePath: 'src/real.ts' }),
+      ]),
+    );
+    expect(section).not.toContain('pyFunc');
+    expect(section).not.toContain('goFunc');
+    expect(section).not.toContain('mdHeading');
+    expect(section).toContain('tsFunc');
+    expect(section).toContain('(1 entity)');
+  });
+
+  it('accepts the full TS/JS module-extension set (.ts/.tsx/.js/.jsx/.mjs/.cjs/.mts/.cts) and drops the unknown pseudo-path', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'function_added', name: 'tsFn', filePath: 'a.ts' }),
+        makeChange({ kind: 'function_added', name: 'tsxFn', filePath: 'a.tsx' }),
+        makeChange({ kind: 'function_added', name: 'jsFn', filePath: 'a.js' }),
+        makeChange({ kind: 'function_added', name: 'jsxFn', filePath: 'a.jsx' }),
+        makeChange({ kind: 'function_added', name: 'mjsFn', filePath: 'a.mjs' }),
+        makeChange({ kind: 'function_added', name: 'cjsFn', filePath: 'a.cjs' }),
+        makeChange({ kind: 'function_added', name: 'mtsFn', filePath: 'a.mts' }),
+        makeChange({ kind: 'function_added', name: 'ctsFn', filePath: 'a.cts' }),
+        makeChange({ kind: 'function_added', name: 'ghostFn', filePath: 'unknown' }),
+      ]),
+    );
+    for (const name of ['tsFn', 'tsxFn', 'jsFn', 'jsxFn', 'mjsFn', 'cjsFn', 'mtsFn', 'ctsFn']) {
+      expect(section).toContain(name);
+    }
+    expect(section).not.toContain('ghostFn');
+    expect(section).toContain('(8 entities)');
+  });
+
+  it('includes entities from .mts/.cts TypeScript modules (regression: were excluded before the gate widened)', () => {
+    // The gate used to be /\.(?:ts|tsx|js|jsx|mjs|cjs)$/ — it allowed the JS
+    // module variants (.mjs/.cjs) but dropped the TS ones (.mts/.cts), even
+    // though those are real TypeScript files. Pin that they now survive.
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'function_added', name: 'fromMts', filePath: 'src/loader.mts' }),
+        makeChange({ kind: 'class_added', name: 'FromCts', filePath: 'src/legacy.cts' }),
+      ]),
+    );
+    expect(section).toContain('fromMts');
+    expect(section).toContain('FromCts');
+    expect(section).toContain('**`loader.mts`**');
+    expect(section).toContain('**`legacy.cts`**');
+    expect(section).toContain('(2 entities)');
+  });
+
+  // ── R-filtros: imports as counts only ──
+
+  it('renders imports as aggregate counts on one line, without module names', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'function_added', name: 'realFn' }),
+        makeChange({ kind: 'import_added', name: 'react', filePath: 'src/a.ts' }),
+        makeChange({ kind: 'import_added', name: 'lodash', filePath: 'src/a.ts' }),
+        makeChange({ kind: 'import_removed', name: 'old-dep', filePath: 'src/a.ts' }),
+        makeChange({ kind: 'import_modified', name: 'zod', filePath: 'src/a.ts' }),
+      ]),
+    );
+    expect(section).toContain('**Imports:** 2 added · 1 removed · 1 modified');
+    // module names MUST NOT leak
+    expect(section).not.toContain('react');
+    expect(section).not.toContain('lodash');
+    expect(section).not.toContain('old-dep');
+    expect(section).not.toContain('zod');
+    // import changes are surfaced in the summary line too
+    expect(section).toContain('1 entity · 4 import changes');
+  });
+
+  // ── R-render guard: imports-only → no section ──
+
+  it('returns "" when only imports survive (imports-only diff → no section)', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'import_added', name: 'react', filePath: 'src/a.ts' }),
+        makeChange({ kind: 'import_removed', name: 'old', filePath: 'src/a.ts' }),
+      ]),
+    );
+    expect(section).toBe('');
+  });
+
+  it('returns "" when all entities are filtered out (method + non-TS)', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'method_added', name: 'it', filePath: 'src/x.test.ts' }),
+        makeChange({ kind: 'function_added', name: 'pyFn', filePath: 'a.py' }),
+      ]),
+    );
+    expect(section).toBe('');
+  });
+
+  // ── R-filtros: cap + "+N more" ──
+
+  it('caps visible entries at 10 and shows a "+N more" indicator (PR #221 giant class)', () => {
+    const changes: EntityChange[] = [];
+    for (let i = 0; i < 250; i++) {
+      changes.push(makeChange({ kind: 'function_added', name: `fn${i}`, filePath: 'src/big.ts' }));
+    }
+    const section = formatSemanticDiffSection(makeSemanticDiff(changes));
+    // Exactly 10 entity bullet lines rendered.
+    const bulletLines = section.split('\n').filter((l) => l.startsWith('- '));
+    expect(bulletLines).toHaveLength(10);
+    expect(section).toContain('_+240 more entities_');
+    // Summary still reflects the FULL surviving count (honest count).
+    expect(section).toContain('(250 entities)');
+  });
+
+  it('does not show "+N more" when entities fit within the cap', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'function_added', name: 'a' }),
+        makeChange({ kind: 'function_added', name: 'b' }),
+      ]),
+    );
+    expect(section).not.toContain('more entities');
+  });
+
+  it('does not emit a dangling file header when the cap is hit at a file boundary', () => {
+    // 10 entities fill fileA.ts exactly to the cap; fileB.ts must NOT get a
+    // header (it would have zero bullets under it).
+    const changes: EntityChange[] = [];
+    for (let i = 0; i < 10; i++) {
+      changes.push(makeChange({ kind: 'function_added', name: `a${i}`, filePath: 'src/fileA.ts' }));
+    }
+    changes.push(makeChange({ kind: 'function_added', name: 'b0', filePath: 'src/fileB.ts' }));
+    const section = formatSemanticDiffSection(makeSemanticDiff(changes));
+    expect(section).toContain('**`fileA.ts`**');
+    expect(section).not.toContain('fileB.ts');
+    expect(section).toContain('_+1 more entity_');
+    // Every '- ' bullet line is immediately preceded by content (no header with
+    // zero bullets): there are exactly 10 bullets and exactly 1 file header.
+    expect(section.split('\n').filter((l) => l.startsWith('- '))).toHaveLength(10);
+    expect(section.match(/^\*\*[^*]+\*\*$/gm) ?? []).toHaveLength(1);
+  });
+
+  // ── R-filtros: stable deterministic ordering ──
+
+  it('produces byte-identical output for the same input (stable ordering)', () => {
+    const changes: EntityChange[] = [
+      makeChange({ kind: 'function_added', name: 'b', filePath: 'src/z.ts' }),
+      makeChange({ kind: 'function_added', name: 'a', filePath: 'src/a.ts' }),
+      makeChange({ kind: 'type_added', name: 'c', filePath: 'src/z.ts' }),
+    ];
+    const first = formatSemanticDiffSection(makeSemanticDiff([...changes]));
+    const second = formatSemanticDiffSection(makeSemanticDiff([...changes]));
+    expect(first).toBe(second);
+    // Files appear in first-seen order: z.ts (first change) before a.ts.
+    expect(first.indexOf('**`z.ts`**')).toBeLessThan(first.indexOf('**`a.ts`**'));
+    // Within z.ts, original order: b before c.
+    expect(first.indexOf('`b`')).toBeLessThan(first.indexOf('`c`'));
+  });
+
+  // ── R-seguridad: signatures are NEVER rendered ──
+
+  it('never renders oldSignature/newSignature', () => {
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({
+          kind: 'function_modified',
+          name: 'foo',
+          filePath: 'src/a.ts',
+          oldSignature: 'export function foo(secret: InjectMe): void',
+          newSignature: 'export function foo(x: PAYLOAD): void',
+        }),
+      ]),
+    );
+    expect(section).not.toContain('secret');
+    expect(section).not.toContain('InjectMe');
+    expect(section).not.toContain('PAYLOAD');
+    expect(section).toContain('`foo`');
+  });
+});
+
+// ─── R-seguridad: markdown injection (MANDATORY, blocking) ──────
+
+/**
+ * Remove every inline-code span (`` `...` ``) from a rendered comment so the
+ * REMAINING text can be asserted on. Used to prove that autolink-bearing
+ * tokens (`#refs`, SHAs) survive ONLY inside code spans — where GitHub
+ * suppresses autolinking — and never leak into live markdown.
+ */
+function stripCodeSpans(s: string): string {
+  return s.replace(/`[^`]*`/g, '');
+}
+
+describe('formatSemanticDiffSection — markdown injection', () => {
+  // Render every vector through a single helper and assert neutralization.
+  function renderName(name: string): string {
+    return formatSemanticDiffSection(
+      makeSemanticDiff([makeChange({ kind: 'function_added', name, filePath: 'src/evil.ts' })]),
+    );
+  }
+
+  it('escapes table-breaking pipes', () => {
+    const out = renderName('a|b|c');
+    // Raw pipes must not survive unescaped (would break any enclosing table).
+    expect(out).toContain('\\|');
+    expect(out).not.toMatch(/[^\\]\|/);
+  });
+
+  it('strips backticks so the inline-code span cannot be broken out of', () => {
+    // A backtick would close the `name` span and let trailing markup render.
+    const out = renderName('a`b`c');
+    // Isolate the ENTITY bullet line (the file-header line now also carries a
+    // backtick-wrapped basename, so a whole-document count would be ambiguous).
+    const bulletLine = out.split('\n').find((l) => l.startsWith('- '));
+    expect(bulletLine).toBeDefined();
+    // No bare backtick from the NAME survives — the only backticks on the bullet
+    // line are the two wrapping the (now backtick-free) name.
+    expect((bulletLine?.match(/`/g) ?? []).length).toBe(2);
+    expect(out).toContain('`abc`');
+  });
+
+  it('neutralizes a code-fence breakout attempt', () => {
+    const out = renderName('x```js\nalert(1)\n```');
+    // The triple-fence backticks are stripped; the newline-bearing payload is
+    // flattened. No bare fence remains beyond the wrapping pair.
+    expect(out).not.toContain('```');
+    // newlines from the name collapse to spaces (no extra markdown lines).
+    expect(out).not.toContain('alert(1)\n');
+  });
+
+  it('neutralizes markdown/javascript links by keeping them inert inside code', () => {
+    const out = renderName('[click](javascript:alert(1))');
+    // Backticks are intact around the name (no breakout), so the bracket/paren
+    // link syntax is literal text inside the inline-code span — not a live link.
+    expect(out).toContain('`[click](javascript:alert(1))`');
+    // sanity: there is no UNwrapped link rendered outside a code span.
+    expect(out).not.toMatch(/[^`]\[click\]\(javascript/);
+  });
+
+  it('strips HTML comments (hidden prompt-injection payloads)', () => {
+    const out = renderName('safe<!-- inject me -->name');
+    expect(out).not.toContain('<!--');
+    expect(out).not.toContain('inject me');
+  });
+
+  it('neutralizes @mentions (@everyone and @org/team)', () => {
+    const everyone = renderName('@everyone');
+    const team = renderName('@org/team');
+    // A zero-width space is inserted after each '@' to break linkification.
+    expect(everyone).toContain('@​');
+    expect(team).toContain('@​');
+    // The literal "@everyone" / "@org/team" sequences must NOT appear contiguously.
+    expect(everyone).not.toMatch(/@everyone/);
+    expect(team).not.toMatch(/@org\/team/);
+  });
+
+  it('escapes a <details>/</details> breakout attempt', () => {
+    const out = renderName('</details><script>alert(1)</script>');
+    // Every '<' is escaped to &lt; (sanitizeMarkdownText) — the closing tag
+    // cannot terminate the real <details> wrapper, and <script> cannot open.
+    // ('>' is intentionally NOT escaped; neutralizing the opening '<' is
+    // sufficient to defang the tag.)
+    expect(out).toContain('&lt;/details>');
+    expect(out).toContain('&lt;script>');
+    // The injected raw "</details><script>" sequence must NOT survive intact.
+    expect(out).not.toContain('</details><script>');
+    // The real wrapper still closes itself exactly once, on its own line.
+    expect(out.match(/^<\/details>$/m) ?? []).toHaveLength(1);
+  });
+
+  it('combines all vectors in one name without breaking the section', () => {
+    const out = renderName('@everyone|`</details>`<!--x-->[a](javascript:alert(1))```\nbreakout');
+    // Section still well-formed: opens and closes its own <details> exactly once.
+    expect(out.match(/<details>/g) ?? []).toHaveLength(1);
+    expect(out.match(/<\/details>\n/g) ?? []).toHaveLength(1);
+    // No raw injection metacharacters leaked:
+    expect(out).not.toContain('<!--');
+    expect(out).toContain('@​');
+    expect(out).not.toContain('```');
+  });
+
+  // ── R-seguridad: BASENAME injection (the file HEADER, not the entity name) ──
+  //
+  // The per-file header renders `filePath.split('/').pop()`. The basename is
+  // fully attacker-controlled: git emits diff headers for paths with arbitrary
+  // bytes, and the quoted-header unescaper (diff/parse.ts:83, ESCAPE_MAP n:0x0a
+  // + octal) decodes `\n` into a REAL newline that survives into filePath.
+  // sanitizeMarkdownText alone does NOT defang this (no newline flattening, no
+  // #ref/SHA autolink suppression) — so the header must be contained in inline
+  // code via sanitizeBasename.
+
+  // Render a chosen FILEPATH (not name) through the section, isolating the
+  // file-header line for assertions.
+  function renderPath(filePath: string): string {
+    return formatSemanticDiffSection(
+      makeSemanticDiff([makeChange({ kind: 'function_added', name: 'foo', filePath })]),
+    );
+  }
+
+  it('contains a newline-bearing basename in inline code (no live heading/table injection)', () => {
+    // A path whose basename embeds a real newline + heading + table + bullet.
+    const out = renderPath('src/x\n# PWNED\n| t |\n- forged.ts');
+    // The newline is flattened to a space INSIDE the code span: no markdown
+    // heading on its own line, no forged table row.
+    expect(out).not.toMatch(/\n# PWNED/);
+    expect(out).not.toMatch(/\n\| t \|/);
+    expect(out).not.toMatch(/\n- forged\.ts/);
+    // The basename renders as a single inline-code header line.
+    expect(out).toContain('**`x # PWNED \\| t \\| - forged.ts`**');
+  });
+
+  it('contains a #ref/SHA-bearing basename in inline code (no autolink forgery)', () => {
+    // #1234 and a 40-hex SHA auto-link in a bold span but NOT inside code.
+    const out = renderPath('src/fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts');
+    // The #ref/SHA survive only INSIDE a code span (GitHub suppresses autolinks
+    // there). Strip every inline-code span; no bare "#1234" must remain.
+    expect(out).toContain('`fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts`');
+    expect(stripCodeSpans(out)).not.toContain('#1234');
+  });
+
+  it('keeps a javascript-link basename inert inside inline code', () => {
+    const out = renderPath('src/[x](javascript:alert(1)).ts');
+    // Bracket/paren link syntax is literal text inside the code span.
+    expect(out).toContain('`[x](javascript:alert(1)).ts`');
+    expect(out).not.toMatch(/[^`]\[x\]\(javascript/);
+  });
+
+  it('strips backticks in the basename so the header code span cannot break out', () => {
+    const out = renderPath('src/a`b`c.ts');
+    const headerLine = out.split('\n').find((l) => l.startsWith('**`'));
+    expect(headerLine).toBeDefined();
+    // Exactly the wrapping pair of backticks — none survive from the basename.
+    expect((headerLine?.match(/`/g) ?? []).length).toBe(2);
+    expect(out).toContain('**`abc.ts`**');
+  });
+
+  it('REACHABILITY: a git-quoted \\n header decodes into a filePath newline that the section neutralizes', () => {
+    // Drive the REAL parser: a quoted diff header with a literal \n escape.
+    const raw = [
+      'diff --git "a/src/x\\n# PWNED.ts" "b/src/x\\n# PWNED.ts"',
+      'index 0000000..1111111 100644',
+      '--- "a/src/x\\n# PWNED.ts"',
+      '+++ "b/src/x\\n# PWNED.ts"',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+    ].join('\n');
+    const filePath = parseUnifiedDiff(raw).files[0]?.path ?? '';
+    // Pin the vector: the parser yields a REAL newline in the path.
+    expect(filePath).toContain('\n');
+    // End-to-end: feed the parsed path into the section; no live heading leaks.
+    const out = renderPath(filePath);
+    expect(out).not.toMatch(/\n# PWNED/);
+    expect(out).toContain('**`x # PWNED.ts`**');
+  });
+});
+
+// ─── R-seguridad: formatFileCategorySummary basename injection ───
+//
+// The SAME basename sink exists (pre-B2.5) in the "Files Changed" summary,
+// which renders `**Category**: name1, name2`. It is now contained by the same
+// sanitizeBasename helper.
+
+describe('formatFileCategorySummary — basename injection', () => {
+  it('contains a newline-bearing basename in inline code (no live heading injection)', () => {
+    const out = formatFileCategorySummary(['src/x\n# PWNED\n| t |\n- forged.ts']);
+    expect(out).not.toMatch(/\n# PWNED/);
+    expect(out).not.toMatch(/\n\| t \|/);
+    // Basename rendered as an inline-code span on the category line.
+    expect(out).toContain('`x # PWNED \\| t \\| - forged.ts`');
+  });
+
+  it('contains a #ref-bearing basename in inline code (no autolink forgery)', () => {
+    const out = formatFileCategorySummary([
+      'src/fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts',
+    ]);
+    expect(out).toContain('`fix-#1234-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef.ts`');
+    expect(stripCodeSpans(out)).not.toContain('#1234');
+  });
+
+  it('strips backticks so the basename cannot break out of its code span', () => {
+    const out = formatFileCategorySummary(['src/a`b`c.ts']);
+    expect(out).toContain('`abc.ts`');
+  });
+});
+
+// ─── formatReviewComment: "What changed" integration ────────────
+
+describe('formatReviewComment — "What changed" section', () => {
+  it('inserts the section between Summary and Findings', () => {
+    const result = makeResult({
+      summary: 'Some summary.',
+      findings: [makeFinding({ message: 'a finding' })],
+      semanticDiff: makeSemanticDiff([makeChange({ kind: 'function_added', name: 'foo' })]),
+    });
+    const out = formatReviewComment(result);
+    const summaryIdx = out.indexOf('### Summary');
+    const sectionIdx = out.indexOf('🧬 What changed');
+    const findingsIdx = out.indexOf('### Findings');
+    expect(summaryIdx).toBeGreaterThan(-1);
+    expect(sectionIdx).toBeGreaterThan(summaryIdx);
+    expect(findingsIdx).toBeGreaterThan(sectionIdx);
+  });
+
+  // ── R-render: byte-identical when no section renders ──
+
+  it('is byte-identical when semanticDiff is undefined vs absent (no section)', () => {
+    const base = makeResult({ summary: 'identical', findings: [makeFinding()] });
+    const withUndefined = formatReviewComment({ ...base, semanticDiff: undefined });
+    const without = formatReviewComment(base);
+    expect(withUndefined).toBe(without);
+  });
+
+  it('is byte-identical when semanticDiff has 0 surviving entities (imports-only)', () => {
+    const base = makeResult({ summary: 'identical', findings: [makeFinding()] });
+    const without = formatReviewComment(base);
+    const withImportsOnly = formatReviewComment({
+      ...base,
+      semanticDiff: makeSemanticDiff([
+        makeChange({ kind: 'import_added', name: 'react', filePath: 'src/a.ts' }),
+        makeChange({ kind: 'method_added', name: 'it', filePath: 'src/a.test.ts' }),
+        makeChange({ kind: 'function_added', name: 'pyFn', filePath: 'a.py' }),
+      ]),
+    });
+    expect(withImportsOnly).toBe(without);
+  });
+
+  it('is byte-identical for the c05-class diff (zero entity-level changes)', () => {
+    // c05 fixture is a binary-only diff → extractor yields zero changes.
+    const base = makeResult({ summary: 'binary only', findings: [] });
+    const without = formatReviewComment(base);
+    const withEmpty = formatReviewComment({ ...base, semanticDiff: makeSemanticDiff([]) });
+    expect(withEmpty).toBe(without);
+  });
+});
+
+// ─── End-to-end regression: extractSemanticDiff → section ───────
+//
+// Exercises the FULL real path (the extractor the pipeline runs feeds the
+// renderer) rather than hand-built EntityChange fixtures. Asserts the
+// presentation invariants the explore established for real giant/noisy PRs
+// (#217/#221/#223 class): method noise dropped, signatures absent, non-TS
+// gated, output well-formed markdown.
+
+describe('formatSemanticDiffSection — extractSemanticDiff end-to-end', () => {
+  it('renders a real TS diff: surfaces functions, drops method/test noise', () => {
+    const diff = [
+      'diff --git a/src/feature.ts b/src/feature.ts',
+      'index 1111111..2222222 100644',
+      '--- a/src/feature.ts',
+      '+++ b/src/feature.ts',
+      '@@ -1,3 +1,8 @@',
+      '+export function buildThing(x: number): number {',
+      '+  return x * 2;',
+      '+}',
+      '+export const handler = async (req: Req) => {',
+      '+  return req;',
+      '+};',
+      '+import { z } from "zod";',
+    ].join('\n');
+
+    const sd = extractSemanticDiff(diff);
+    const section = formatSemanticDiffSection(sd);
+
+    expect(section).toContain('<details>');
+    expect(section).toContain('</details>');
+    expect(section).toContain('`buildThing`');
+    expect(section).toContain('`handler`');
+    // Imports surfaced as a count, never as the module name.
+    expect(section).toContain('**Imports:** 1 added');
+    expect(section).not.toContain('zod');
+    // No signatures leaked into the rendered section.
+    expect(section).not.toContain('req: Req');
+    expect(section).not.toContain('x: number');
+  });
+
+  it('gates a non-TS (.py) real diff to an empty section', () => {
+    const diff = [
+      'diff --git a/script.py b/script.py',
+      'index 1111111..2222222 100644',
+      '--- a/script.py',
+      '+++ b/script.py',
+      '@@ -1,1 +1,2 @@',
+      '+def do_thing():',
+      '+    pass',
+    ].join('\n');
+
+    // The Python `def` does not match the TS declaration patterns, and even if
+    // it did the extension gate would drop it. Either way: no section.
+    expect(formatSemanticDiffSection(extractSemanticDiff(diff))).toBe('');
+  });
+
+  it('produces deterministic, well-formed output (single <details> pair) on a mixed diff', () => {
+    const diff = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1,1 +1,4 @@',
+      '+export function alpha(): void {}',
+      '+  private helper() {}',
+      'diff --git a/notes.md b/notes.md',
+      '--- a/notes.md',
+      '+++ b/notes.md',
+      '@@ -1,1 +1,2 @@',
+      '+export function ignored(): void {}',
+    ].join('\n');
+
+    const section = formatSemanticDiffSection(extractSemanticDiff(diff));
+    expect(section).toContain('`alpha`');
+    expect(section).not.toContain('ignored'); // .md gated out
+    expect(section.match(/<details>/g) ?? []).toHaveLength(1);
+    expect(section.match(/<\/details>/g) ?? []).toHaveLength(1);
   });
 });
