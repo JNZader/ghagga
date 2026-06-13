@@ -313,10 +313,11 @@ importers:
         version: 4.1.7(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.8.2))
 
   packages/types:
-    devDependencies:
+    dependencies:
       ghagga-core:
         specifier: workspace:*
         version: link:../core
+    devDependencies:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

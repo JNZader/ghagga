@@ -14,6 +14,7 @@ export type {
   Repository,
   RepositorySettings,
   Review,
+  ReviewFinding,
   ReviewMode,
   ReviewStatus,
   ReviewsResponse,

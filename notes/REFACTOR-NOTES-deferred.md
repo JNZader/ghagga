@@ -304,9 +304,19 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   el runtime persiste desde `c35b011`) y `Finding.line` pasó a opcional (core dice `line?`, se
   persiste verbatim; el dashboard ya no renderiza `file:undefined`). Deploy note: server-first.
 - **Follow-ups del 3vr de #217** (anotados, no bloqueantes):
-  1. El `Finding` del wire es subset del `ReviewFinding` de core (`source` requerido + opcionales
-     como `aiPriority` se persisten verbatim → presentes en el wire pero NO declarados en el tipo).
-     Candidato: re-exportar `ReviewFinding` desde core como se hizo con `ReviewMode`/`ReviewStatus`.
+  1. ~~El `Finding` del wire es subset del `ReviewFinding` de core~~ ✅ **RESUELTO 2026-06-13, PR #227**
+     (3vr): `ReviewFinding` re-exportado de `ghagga-core` desde `@ghagga/types` (patrón
+     `ReviewMode`/`ReviewStatus`), `Review.findings: ReviewFinding[]`, `Finding` queda alias
+     `@deprecated`. Server route (productor del contrato) migró al nombre canónico; dashboard
+     `lib/types` también re-exporta `ReviewFinding`; `ghagga-core` movido a `dependencies` de
+     `@ghagga/types` (sus tipos están ahora en la superficie pública `.d.ts`). Cero cambio de
+     comportamiento wire — la data ya viajaba verbatim (verificado: `saveReview` persiste el
+     `ReviewFinding` completo a un jsonb opaco, `toReviewDto` lo castea verbatim).
+     **Follow-up abierto (decisión de PRODUCTO, ver PRE-LAUNCH 🔐)**: el wire ahora OFICIALIZA
+     campos AI-internos que ya se emitían sin tipar — `filterReason` (razonamiento LLM crudo),
+     `exploitabilityDetail`/`usageDetail` (paths internos del repo: `importSites`, `reachableFrom`,
+     `filesScanned`). Ningún consumer los lee hoy. ¿Proyectar en `toReviewDto` para stripearlos del
+     contrato público (dejando solo labels: `exploitability`, `usageLabel`, `aiFiltered` boolean)?
   2. ~~No hay integration test de auth para `GET /api/reviews`~~ ✅ **RESUELTO 2026-06-13, PR #225**
      (`f451352`): S2.6 (per-repo 200), S2.7 (cross-installation 403 — gate corta ANTES de la query),
      S2.8 (path "all repositories" scopeado por installation IDs / aislamiento de tenant). Test-only,
@@ -384,6 +394,13 @@ producción con usuarios, esta lista ES el sprint previo:
 - Test live-PG para `buildTsQuery`
 - Matrix cache key del Action
 - DSH-A6 (doble validación de token en AuthCallback — menor, no seguridad)
+- **Proyección de campos AI-internos en el wire de `/api/reviews`** (descubierto en el 3vr de
+  ReviewFinding re-export, PR #227): el endpoint (auth-gated por token de installation) emite
+  `ReviewFinding` completo, incluyendo `filterReason` (razonamiento LLM verbatim, ej. "Test file,
+  not production code"), `exploitabilityDetail`/`usageDetail` (paths internos del repo). Pre-existente
+  (ya se emitía sin tipar), ningún consumer lo lee. Decisión: ¿stripear esos campos en `toReviewDto`
+  dejando solo labels (`exploitability`/`usageLabel`/`aiFiltered`), igual que `coverageComplete`
+  expone solo el boolean? Es cambio de comportamiento → decidir antes de tener usuarios reales.
 - **`model`-cell del comment sin strip de backticks** (`format.ts` ~:466, descubierto en
   wire-semantic-diff): la tabla "Models used" envuelve `model` en backticks vía
   `sanitizeTableCell(model)` SIN el strip de backticks que sí hace `sanitizeInlineCodeName`
