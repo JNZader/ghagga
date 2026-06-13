@@ -6,7 +6,7 @@
  *   DELETE /api/reviews/:param  (numeric → single review by ID, non-numeric → by repo full name)
  */
 
-import type { Finding, Review, ReviewMode, ReviewStatus } from '@ghagga/types';
+import type { Review, ReviewFinding, ReviewMode, ReviewStatus } from '@ghagga/types';
 import type { Database } from 'ghagga-db';
 import {
   clearMemoryObservationsByProject,
@@ -68,7 +68,7 @@ function toReviewDto(row: ReviewRow, repoFullName: string): Review {
     status: row.status as ReviewStatus,
     mode: row.mode as ReviewMode,
     summary: row.summary ?? '',
-    findings: (row.findings ?? []) as Finding[],
+    findings: (row.findings ?? []) as ReviewFinding[],
     createdAt: row.createdAt.toISOString(),
     ...(typeof coverageComplete === 'boolean' ? { coverageComplete } : {}),
   };

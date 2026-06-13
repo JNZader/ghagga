@@ -11,9 +11,9 @@
 // enums. Adding a new status/mode to core is automatically reflected in
 // @ghagga/types — no manual sync needed. (ReviewMode previously drifted:
 // core persisted 'diagnostic' reviews while this union lacked it.)
-import type { ReviewMode, ReviewStatus } from 'ghagga-core';
+import type { ReviewFinding, ReviewMode, ReviewStatus } from 'ghagga-core';
 
-export type { ReviewMode, ReviewStatus };
+export type { ReviewFinding, ReviewMode, ReviewStatus };
 
 /**
  * Supported LLM provider modes.
@@ -52,7 +52,7 @@ export interface Review {
   status: ReviewStatus;
   mode: ReviewMode;
   summary: string;
-  findings: Finding[];
+  findings: ReviewFinding[];
   createdAt: string;
   /**
    * First-class coverage signal, orthogonal to `status`: `true` = every
@@ -66,19 +66,15 @@ export interface Review {
   coverageComplete?: boolean;
 }
 
-export interface Finding {
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  category: string;
-  file: string;
-  /**
-   * Line number, when applicable. Optional because core's `ReviewFinding`
-   * declares `line?: number` and the server persists findings verbatim —
-   * file-level findings (no specific line) DO reach the wire without it.
-   */
-  line?: number;
-  message: string;
-  suggestion?: string;
-}
+/**
+ * @deprecated Use {@link ReviewFinding}. This was an under-declared 6-field
+ * subset of the wire shape: the server persists findings verbatim, so `source`
+ * (required) and the AI/exploitability fields (`aiPriority`, `exploitability`,
+ * …) DO reach the wire but were absent from this type. It is now an alias of
+ * the canonical `ReviewFinding` (re-exported from `ghagga-core`), so it no
+ * longer lies; new code should reference `ReviewFinding` directly.
+ */
+export type Finding = ReviewFinding;
 
 export interface ReviewsResponse {
   reviews: Review[];
