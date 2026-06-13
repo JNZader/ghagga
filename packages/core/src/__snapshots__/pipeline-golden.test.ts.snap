@@ -1059,7 +1059,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
     },
   ],
   "result": {
-    "coverageComplete": true,
+    "coverageComplete": false,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -1153,7 +1153,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
     },
   ],
   "result": {
-    "coverageComplete": true,
+    "coverageComplete": false,
     "findings": [],
     "memoryContext": null,
     "metadata": {
@@ -1247,7 +1247,7 @@ exports[`golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifor
     },
   ],
   "result": {
-    "coverageComplete": true,
+    "coverageComplete": false,
     "findings": [],
     "memoryContext": null,
     "metadata": {

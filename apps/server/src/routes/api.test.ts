@@ -409,6 +409,10 @@ describe('GET /api/reviews', () => {
       prNumber: 42,
       status: 'PARTIAL' as const,
       summary: 'Static analysis ran but the AI agent failed midway.',
+      // A PARTIAL review always degraded at least one step → the queue
+      // folds coverageComplete: false into the metadata blob. Pin that the
+      // wire emits it alongside the verbatim PARTIAL status.
+      metadata: { mode: 'simple', coverageComplete: false },
     });
     mockGetReviewsByRepoId.mockResolvedValueOnce([partialRow]);
     mockCountReviewsByRepoId.mockResolvedValueOnce(1);
@@ -429,6 +433,7 @@ describe('GET /api/reviews', () => {
       summary: 'Static analysis ran but the AI agent failed midway.',
       findings: [],
       createdAt: '2026-01-01T00:00:00.000Z',
+      coverageComplete: false,
     });
   });
 });

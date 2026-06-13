@@ -1047,6 +1047,9 @@ describe('golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifo
     );
     expect(run.result.failedSteps).toBeUndefined();
     expect(run.result.status).toBe('PASSED');
+    // Warn-only degradation still counts against coverage — the boolean
+    // tells the whole truth even though the step name stays internal.
+    expect(run.result.coverageComplete).toBe(false);
     expect(run.golden.warns).toEqual([
       [
         '[ghagga] Call-chain/reverse-deps failed (degrading gracefully):',
@@ -1065,6 +1068,7 @@ describe('golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifo
     const run = await runGolden(makeInput({ memoryStorage: storage }));
     expect(run.result.failedSteps).toBeUndefined();
     expect(run.result.status).toBe('PASSED');
+    expect(run.result.coverageComplete).toBe(false);
     expect(run.golden.warns).toEqual([
       ['[ghagga] Negative examples load failed (degrading gracefully):', 'negative table missing'],
     ]);
@@ -1080,6 +1084,7 @@ describe('golden: degradation WITHOUT failedSteps.push — 3 sites (do NOT unifo
     );
     expect(run.result.failedSteps).toBeUndefined();
     expect(run.result.status).toBe('PASSED');
+    expect(run.result.coverageComplete).toBe(false);
     expect(run.golden.warns).toEqual([
       [
         '[ghagga] Self-improve rules load failed (degrading gracefully):',

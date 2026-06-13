@@ -45,7 +45,8 @@ export interface DegradableOpts {
    * Whether the failure is pushed to `failedSteps`. Defaults to true.
    * `false` marks a DELIBERATE non-uniformity: the step degrades with
    * a warn only and never surfaces in `failedSteps` (call-chain,
-   * negative-examples, self-improve).
+   * negative-examples, self-improve). The step name is still recorded
+   * in `warnOnlyDegradations` so `coverageComplete` reflects it.
    */
   reportFailure?: boolean;
 }
@@ -54,12 +55,13 @@ export interface DegradableOpts {
  * Run `fn`, degrading gracefully on failure.
  *
  * On throw/rejection: console.warn(warnLabel, message) if warnLabel is
- * set → push `{ step, error }` to `failedSteps` unless
- * `reportFailure === false` → emit `failEmit` if set. The error never
- * propagates — the pipeline continues.
+ * set → push `{ step, error }` to `failedSteps` (or the step name to
+ * `warnOnlyDegradations` when `reportFailure === false`) → emit
+ * `failEmit` if set. The error never propagates — the pipeline
+ * continues.
  */
 export async function runDegradable(
-  state: Pick<PipelineState, 'failedSteps' | 'emit'>,
+  state: Pick<PipelineState, 'failedSteps' | 'warnOnlyDegradations' | 'emit'>,
   opts: DegradableOpts,
   fn: () => Promise<void> | void,
 ): Promise<void> {
@@ -72,6 +74,11 @@ export async function runDegradable(
     }
     if (opts.reportFailure !== false) {
       state.failedSteps.push({ step: opts.step, error: message });
+    } else {
+      // Warn-only degradation: kept OUT of failedSteps (no PARTIAL
+      // downgrade, no wire exposure) but recorded so coverageComplete
+      // can tell the whole truth (see pipeline/finalize.ts).
+      state.warnOnlyDegradations.push(opts.step);
     }
     if (opts.failEmit) {
       state.emit(opts.failEmit);

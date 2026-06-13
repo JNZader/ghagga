@@ -13,7 +13,8 @@
  *   deliberately NOT migrated to `runDegradable` (see degrade.ts).
  * - Call-chain degrades via `runDegradable` with `reportFailure: false`
  *   (DELIBERATE — warn only, never lands in failedSteps; pinned by the
- *   golden degradation suite).
+ *   golden degradation suite). The degradation IS recorded in
+ *   `warnOnlyDegradations` so `coverageComplete` reflects it.
  */
 
 import { computeBlastRadius } from '../graph/blast-radius.js';
@@ -142,15 +143,18 @@ export async function applyBlastRadius(
  * blast-radius is enabled). Returns the prompt context string ('' when
  * disabled, no symbols affected, or degraded).
  */
-export async function buildCallChainContext(args: GraphStepArgs): Promise<string> {
-  const { input, emit, failedSteps, fileList, filteredDiff } = args;
+export async function buildCallChainContext(
+  args: GraphStepArgs & { warnOnlyDegradations: string[] },
+): Promise<string> {
+  const { input, emit, failedSteps, warnOnlyDegradations, fileList, filteredDiff } = args;
   let callChainContext = '';
 
   if (input.settings.enableBlastRadius) {
     // reportFailure: false is DELIBERATE — call-chain degrades with a warn only
     // and never lands in failedSteps (pinned by the golden degradation suite).
+    // It IS recorded in warnOnlyDegradations → coverageComplete reflects it.
     await runDegradable(
-      { failedSteps, emit },
+      { failedSteps, warnOnlyDegradations, emit },
       {
         step: 'call-chain',
         warnLabel: '[ghagga] Call-chain/reverse-deps failed (degrading gracefully):',

@@ -333,9 +333,13 @@ export interface ReviewResult {
 
   /**
    * Pipeline steps that failed but were gracefully degraded. Present whenever
-   * at least one step degraded, REGARDLESS of status — a FAILED or
+   * at least one TRACKED step degraded, REGARDLESS of status — a FAILED or
    * NEEDS_HUMAN_REVIEW review with degraded steps carries it too (only a
    * PASSED review is downgraded to PARTIAL; see pipeline/finalize.ts).
+   *
+   * NOT exhaustive: a few steps degrade warn-only (call-chain,
+   * negative-examples, self-improve) and never appear here — they surface
+   * ONLY through `coverageComplete === false`.
    */
   failedSteps?: { step: string; error: string }[];
 
@@ -345,8 +349,14 @@ export interface ReviewResult {
    * pipeline actually ran to reach it.
    *
    *   - `true`      — every pipeline step ran (full coverage)
-   *   - `false`     — at least one step degraded (see `failedSteps`); the
-   *                   verdict stands but was produced with incomplete coverage
+   *   - `false`     — at least one step degraded: either a tracked failure
+   *                   (see `failedSteps`) OR a warn-only degradation
+   *                   (call-chain, negative-examples, self-improve — internal
+   *                   steps that never enter `failedSteps` and never trigger
+   *                   the PARTIAL downgrade). The verdict stands but was
+   *                   produced with incomplete coverage. `false` with an
+   *                   absent `failedSteps` is therefore VALID: only warn-only
+   *                   steps degraded.
    *   - `undefined` — not applicable: the pipeline never ran (e.g. SKIPPED
    *                   early-returns like flood-skip / all-files-filtered,
    *                   which short-circuit before the finalize phase)

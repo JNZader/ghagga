@@ -324,6 +324,25 @@ describe('Reviews — table rendering', () => {
     expect(screen.getAllByText('Skipped').length).toBeGreaterThanOrEqual(2);
   });
 
+  it('shows the coverage indicator only for rows with coverageComplete false', () => {
+    // Real page integration (not the isolated CoverageIndicator unit test):
+    // the indicator must reach the table row next to the status badge.
+    mockReviewsData([
+      makeReview({ id: 1, repo: 'acme/app', prNumber: 10, coverageComplete: false }),
+      makeReview({ id: 2, repo: 'acme/api', prNumber: 20, coverageComplete: true }),
+      makeReview({ id: 3, repo: 'acme/web', prNumber: 30 }), // legacy row — key absent
+    ]);
+
+    renderReviews();
+
+    const indicators = screen.getAllByRole('img', {
+      name: 'Incomplete coverage — some pipeline steps degraded',
+    });
+    expect(indicators).toHaveLength(1);
+    // The single indicator belongs to the coverageComplete: false row.
+    expect(indicators[0].closest('tr')).toHaveTextContent('acme/app');
+  });
+
   it('renders formatted dates', () => {
     mockReviewsData([makeReview({ createdAt: '2026-03-07T14:00:00Z' })]);
 

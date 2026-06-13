@@ -18,6 +18,13 @@ vi.mock('./graph/blast-radius.js', () => ({
   computeBlastRadius: vi.fn(),
 }));
 
+// Partial mock (real impl by default): the warn-only coverage test below
+// forces ONE buildCallChainFromDiff throw via mockImplementationOnce.
+vi.mock('./graph/call-chain.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./graph/call-chain.js')>();
+  return { ...actual, buildCallChainFromDiff: vi.fn(actual.buildCallChainFromDiff) };
+});
+
 vi.mock('./agents/workflow.js', () => ({
   runWorkflowReview: vi.fn(),
 }));
@@ -56,6 +63,7 @@ import { runSimpleReview } from './agents/simple.js';
 import { runWorkflowReview } from './agents/workflow.js';
 import type { BlastRadiusResult } from './graph/blast-radius.js';
 import { computeBlastRadius } from './graph/blast-radius.js';
+import { buildCallChainFromDiff } from './graph/call-chain.js';
 import type { DependencyGraph, GraphLoader } from './graph/schema.js';
 import { persistReviewObservations } from './memory/persist.js';
 import { searchMemoryForContext } from './memory/search.js';
@@ -840,6 +848,34 @@ diff --git a/README.md b/README.md
       // Coverage signal is ORTHOGONAL to the verdict: FAILED stands, but the
       // incomplete coverage is surfaced first-class instead of via downgrade.
       expect(result.coverageComplete).toBe(false);
+    });
+
+    it('warn-only degradation alone: PASSED + no failedSteps + coverageComplete false', async () => {
+      // Force ONLY call-chain (a reportFailure: false site) to degrade.
+      (
+        buildCallChainFromDiff as MockedFunction<typeof buildCallChainFromDiff>
+      ).mockImplementationOnce(() => {
+        throw new Error('call-chain parser exploded');
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await reviewPipeline(
+        makeInput({
+          fileReader: async () => 'export function helper() {}\n',
+          settings: { ...makeInput().settings, enableBlastRadius: true },
+        }),
+      );
+
+      // The fine-grained orthogonality trio:
+      // 1. status stays PASSED — the PARTIAL downgrade keys off failedSteps,
+      //    and warn-only degradations never enter it.
+      expect(result.status).toBe('PASSED');
+      // 2. failedSteps stays absent — warn-only step names are internal.
+      expect(result.failedSteps).toBeUndefined();
+      // 3. coverageComplete still tells the truth: a step degraded.
+      expect(result.coverageComplete).toBe(false);
+
+      warnSpy.mockRestore();
     });
   });
 

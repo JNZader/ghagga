@@ -65,6 +65,7 @@ export async function gatherContext(state: PipelineStateBase): Promise<void> {
   ) {
     // reportFailure: false is DELIBERATE — negative-examples degrades with a warn
     // only and never lands in failedSteps (pinned by the golden degradation suite).
+    // It IS recorded in warnOnlyDegradations → coverageComplete reflects it.
     await runDegradable(
       state,
       {
@@ -99,6 +100,7 @@ export async function gatherContext(state: PipelineStateBase): Promise<void> {
     const selfImprovePath = input.settings.selfImprovePath;
     // reportFailure: false is DELIBERATE — self-improve degrades with a warn only
     // and never lands in failedSteps (pinned by the golden degradation suite).
+    // It IS recorded in warnOnlyDegradations → coverageComplete reflects it.
     await runDegradable(
       state,
       {
