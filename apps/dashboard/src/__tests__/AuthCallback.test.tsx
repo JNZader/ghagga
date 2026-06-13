@@ -6,6 +6,7 @@
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { REDIRECT_KEY } from '../lib/auth';
@@ -50,6 +51,26 @@ function renderWithRoute(path: string) {
         <Route path="/" element={<div>Dashboard</div>} />
       </Routes>
     </MemoryRouter>,
+  );
+}
+
+/**
+ * Renders the callback under <StrictMode> so React double-invokes the
+ * mount effect (mount → cleanup → mount) in dev/test, replicating the
+ * production dev behaviour that exposes the AuthCallback double-fire.
+ */
+function renderWithRouteStrict(path: string) {
+  return render(
+    <StrictMode>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/login" element={<div>Login Page</div>} />
+          <Route path="/" element={<div>Dashboard</div>} />
+          <Route path="/settings" element={<div>Settings</div>} />
+        </Routes>
+      </MemoryRouter>
+    </StrictMode>,
   );
 }
 
@@ -244,5 +265,94 @@ describe('AuthCallback — URL cleanup', () => {
       '',
       expect.stringContaining('#/auth/callback'),
     );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// AuthCallback — StrictMode idempotency (DSH-A7 / DSH-A8)
+// ═══════════════════════════════════════════════════════════════════
+//
+// Under <StrictMode> React double-invokes the mount effect (mount →
+// cleanup → mount) in dev/test. The callback effect must be idempotent:
+// the token must be processed EXACTLY ONCE per mount, otherwise:
+//   1. loginFromCallback hits the GitHub API twice (double round-trip);
+//   2. the second fire reads REDIRECT_KEY *after* the first fire already
+//      removed it, so the destination collapses to '/' (losing e.g.
+//      '/settings').
+
+describe('AuthCallback — StrictMode idempotency (DSH-A7/A8)', () => {
+  it('processes the token EXACTLY ONCE under StrictMode double-invoke', async () => {
+    // Both fires would resolve true if the effect ran twice; the guard
+    // must ensure only the first fire ever reaches loginFromCallback.
+    mockLoginFromCallback.mockResolvedValue(true);
+
+    renderWithRouteStrict('/auth/callback?token=gho_abc123');
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    // The contract: a single validation per login even when StrictMode
+    // double-invokes the mount effect. Without the guard this is 2.
+    expect(mockLoginFromCallback).toHaveBeenCalledTimes(1);
+    // The URL cleanup (replaceState) must also fire EXACTLY ONCE — without the
+    // guard the second StrictMode mount would re-run the cleanup, double-firing
+    // replaceState. This is the same idempotency contract, observed on R5.
+    expect(mockReplaceState).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows error EXACTLY ONCE under StrictMode when loginFromCallback returns false', async () => {
+    // The guard must protect the ERROR path too, not just the happy path:
+    // an invalid token (loginFromCallback → false) must surface the error
+    // exactly once. Without the guard, the StrictMode double-invoke runs the
+    // effect twice → loginFromCallback called twice → setStatus/setErrorMessage
+    // fire twice (redundant GitHub round-trip + duplicated error handling).
+    mockLoginFromCallback.mockResolvedValue(false);
+
+    renderWithRouteStrict('/auth/callback?token=invalid_token');
+
+    await waitFor(() => {
+      expect(screen.getByText(/Invalid or expired token/)).toBeInTheDocument();
+    });
+
+    // The error path is processed once: a single validation attempt even
+    // though StrictMode double-invokes the mount effect. Without the guard
+    // this is 2.
+    expect(mockLoginFromCallback).toHaveBeenCalledTimes(1);
+    // Single URL cleanup as well — the cleanup runs before the async branch,
+    // so a double-invoke would double-fire it without the guard.
+    expect(mockReplaceState).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows error EXACTLY ONCE under StrictMode when loginFromCallback throws', async () => {
+    // Same idempotency contract on the throw path: the try/catch surfaces the
+    // friendly error, and the guard ensures it happens once despite the
+    // StrictMode double-invoke (no double round-trip / double error handling).
+    mockLoginFromCallback.mockRejectedValue(new Error('boom'));
+
+    renderWithRouteStrict('/auth/callback?token=gho_bad');
+
+    await waitFor(() => {
+      expect(screen.getByText(/Invalid or expired token/)).toBeInTheDocument();
+    });
+
+    expect(mockLoginFromCallback).toHaveBeenCalledTimes(1);
+    expect(mockReplaceState).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the stored redirect destination under StrictMode (no collapse to /)', async () => {
+    sessionStorage.setItem(REDIRECT_KEY, '/settings');
+    mockLoginFromCallback.mockResolvedValue(true);
+
+    renderWithRouteStrict('/auth/callback?token=gho_abc123');
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/settings', { replace: true });
+    });
+
+    // The destination must NOT collapse to '/'. Without the guard, the
+    // first fire removes REDIRECT_KEY and the second fire navigates to '/'.
+    expect(mockNavigate).not.toHaveBeenCalledWith('/', { replace: true });
+    expect(sessionStorage.getItem(REDIRECT_KEY)).toBeNull();
   });
 });

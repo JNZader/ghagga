@@ -10,7 +10,7 @@
  * from react-router-dom which handles this automatically.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { REDIRECT_KEY, useAuth } from '@/lib/auth';
 
@@ -38,7 +38,21 @@ export function AuthCallback() {
   const [status, setStatus] = useState<'loading' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
+  // Once-flag making the callback effect idempotent under React StrictMode,
+  // which double-invokes the mount effect (mount → cleanup → mount) in dev.
+  // Without this, the token would be processed twice: a double GitHub API
+  // round-trip, and a redirect bug where the second fire reads REDIRECT_KEY
+  // *after* the first fire removed it, collapsing the destination to '/'.
+  // The flag is set synchronously before any async work; the cleanup must
+  // NOT reset it, otherwise the second mount reprocesses the token.
+  const processedRef = useRef(false);
+
   useEffect(() => {
+    if (processedRef.current) {
+      return;
+    }
+    processedRef.current = true;
+
     const token = searchParams.get('token');
     const error = searchParams.get('error');
 
@@ -80,12 +94,11 @@ export function AuthCallback() {
         setErrorMessage('Invalid or expired token. Please try again.');
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    loginFromCallback, // No token, no error — redirect to login
-    navigate,
-    searchParams.get,
-  ]);
+    // Deps below are listed to satisfy exhaustive-deps, but the `processedRef`
+    // once-flag guarantees the effect processes the callback EXACTLY ONCE — it
+    // does NOT react to `searchParams` changes by design (a callback page is
+    // single-use: it consumes the token/error on mount and never re-runs).
+  }, [loginFromCallback, navigate, searchParams]);
 
   // ─── Loading State ────────────────────────────────────────────
 
