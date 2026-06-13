@@ -296,6 +296,76 @@ describe('GET /api/reviews', () => {
     expect(mockCountReviewsByRepoId).toHaveBeenCalledWith(mockDb, 42);
   });
 
+  it('projects findings to the wire shape — strips AI-internal fields, keeps labels', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    mockGetReviewsByRepoId.mockResolvedValueOnce([
+      fakeDbReviewRow({
+        id: 3,
+        findings: [
+          {
+            severity: 'high',
+            category: 'security',
+            file: 'src/db.ts',
+            line: 42,
+            message: 'Vulnerable dependency',
+            suggestion: 'Upgrade lodash',
+            source: 'trivy',
+            aiPriority: 8,
+            aiFiltered: false,
+            exploitability: 'exploitable',
+            usageLabel: 'in-use',
+            // AI-internal fields the wire MUST drop (raw LLM reasoning + repo paths):
+            filterReason: 'LLM reasoning: looks like a real reachable sink',
+            exploitabilityDetail: {
+              label: 'exploitable',
+              packageName: 'lodash',
+              importSites: ['src/internal/secret-path.ts'],
+              reachableFrom: ['src/server/boot.ts'],
+              reason: 'reachable from the request handler',
+            },
+            usageDetail: {
+              usageLabel: 'in-use',
+              importedSymbols: ['merge'],
+              calledSymbols: ['merge'],
+              filesScanned: ['src/internal/secret-path.ts'],
+              reason: 'called in two modules',
+            },
+          },
+        ],
+      }),
+    ]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(1);
+
+    const app = createApp();
+    const res = await app.request('/api/reviews?repo=owner/repo');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    const finding = json.data[0].findings[0];
+
+    // Internal detail fields are stripped from the wire.
+    expect(finding).not.toHaveProperty('filterReason');
+    expect(finding).not.toHaveProperty('exploitabilityDetail');
+    expect(finding).not.toHaveProperty('usageDetail');
+    // Defense in depth: no internal repo path leaks anywhere in the finding.
+    expect(JSON.stringify(finding)).not.toContain('secret-path');
+
+    // Labels and signals are kept.
+    expect(finding).toMatchObject({
+      severity: 'high',
+      category: 'security',
+      file: 'src/db.ts',
+      line: 42,
+      message: 'Vulnerable dependency',
+      suggestion: 'Upgrade lodash',
+      source: 'trivy',
+      aiPriority: 8,
+      aiFiltered: false,
+      exploitability: 'exploitable',
+      usageLabel: 'in-use',
+    });
+  });
+
   it('uses default pagination when params not provided', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
     mockGetReviewsByRepoId.mockResolvedValueOnce([]);

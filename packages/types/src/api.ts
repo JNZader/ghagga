@@ -52,7 +52,7 @@ export interface Review {
   status: ReviewStatus;
   mode: ReviewMode;
   summary: string;
-  findings: ReviewFinding[];
+  findings: Finding[];
   createdAt: string;
   /**
    * First-class coverage signal, orthogonal to `status`: `true` = every
@@ -67,14 +67,17 @@ export interface Review {
 }
 
 /**
- * @deprecated Use {@link ReviewFinding}. This was an under-declared 6-field
- * subset of the wire shape: the server persists findings verbatim, so `source`
- * (required) and the AI/exploitability fields (`aiPriority`, `exploitability`,
- * …) DO reach the wire but were absent from this type. It is now an alias of
- * the canonical `ReviewFinding` (re-exported from `ghagga-core`), so it no
- * longer lies; new code should reference `ReviewFinding` directly.
+ * The wire-exposed finding shape: a DELIBERATE projection of core's
+ * {@link ReviewFinding}. The `/api/reviews` HTTP endpoint OMITS the AI-internal
+ * detail fields — raw LLM reasoning (`filterReason`) and the internal repo
+ * paths inside `exploitabilityDetail` / `usageDetail` (`importSites`,
+ * `reachableFrom`, `filesScanned`, …). Only labels and signals reach API
+ * consumers (`exploitability`, `usageLabel`, `aiFiltered`, `aiPriority`), the
+ * same way `coverageComplete` exposes a boolean without the degraded step
+ * names. The projection is enforced server-side in `toReviewDto`; the local
+ * CLI/ACP outputs still carry the full `ReviewFinding` (the user owns that data).
  */
-export type Finding = ReviewFinding;
+export type Finding = Omit<ReviewFinding, 'filterReason' | 'exploitabilityDetail' | 'usageDetail'>;
 
 export interface ReviewsResponse {
   reviews: Review[];
