@@ -215,8 +215,13 @@ export function formatFileCategorySummary(fileList: string[]): string {
  * language): only TS/JS entities are meaningful here. Anything else (`.py`,
  * `.go`, `.md`, the `unknown` pseudo-path from bare diff fragments) is noise
  * and is dropped. Kept in sync with the design (D3).
+ *
+ * Covers the full TS/JS ESM/CJS module-extension set — including the TS
+ * variants `.mts`/`.cts`, which are real TypeScript files (the project's own
+ * canonical TS/JS gate, `tools/plugins/biome.ts`, includes them). Omitting
+ * them would silently drop genuine TS entities from the section.
  */
-const SEMANTIC_DIFF_TS_JS_EXT_RE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
+const SEMANTIC_DIFF_TS_JS_EXT_RE = /\.(?:ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
 
 /** Max entity rows shown before collapsing the rest into a "+N more" line. */
 const SEMANTIC_DIFF_ENTITY_CAP = 10;

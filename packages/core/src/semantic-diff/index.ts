@@ -8,21 +8,29 @@
  * is delegated to the unified diff parser (`src/diff/parse.ts`); declaration
  * detection stays local.
  *
- * ⚠️ EXPERIMENTAL — NOT WIRED TO THE REVIEW PIPELINE.
- * This module is only re-exported from `core/src/index.ts`; it has ZERO
- * production callers (the review pipeline does not consume `extractSemanticDiff`).
- * Because nothing exercised it in prod, a real precedence bug in the declaration
- * patterns lived undetected for months until PR #209 (2026-06-11) added coverage.
- * Treat the public API as unstable until the module is either wired into the
- * pipeline or removed. DX hygiene decision 2026-06-11 — see REFACTOR-NOTES
- * ("semantic-diff no está cableado a producción").
+ * WIRED TO PRODUCTION (SDD wire-semantic-diff, 2026-06-13).
+ * `extractSemanticDiff` runs in the enrich phase (`pipeline/enrich.ts`),
+ * its result lands on `ReviewResult.semanticDiff`, and that feeds the
+ * "What changed" section of the PR comment via `formatSemanticDiffSection`
+ * (`format.ts`). This is no longer an unwired re-export.
+ *
+ * Known limitations (real, by design — the extractor is regex-based, not a
+ * parser, and matches single-line declarations only; all pinned in
+ * `index.test.ts`):
+ *   - a multiline arrow whose `=>` lands on the next line is not detected;
+ *   - a generic constraint CONTAINING parens (`<T extends () => void>`) is
+ *     not detected (the `[^(]*` guard that keeps comparisons out excludes it);
+ *   - declarations spanning multiple lines are matched only by their first
+ *     line.
+ * The presentation layer (`format.ts`) drops `method_*` noise and gates to
+ * TS/JS files, so these misses degrade the cosmetic comment section only —
+ * never the review verdict.
  */
 
 import { parseUnifiedDiff } from '../diff/index.js';
 
 // ─── Types ───────────────────────────────────────────────────────
 
-/** @experimental Part of the unwired semantic-diff module — see module header. */
 export type EntityChangeKind =
   | 'function_added'
   | 'function_removed'
@@ -43,7 +51,6 @@ export type EntityChangeKind =
   | 'type_removed'
   | 'type_modified';
 
-/** @experimental Part of the unwired semantic-diff module — see module header. */
 export interface EntityChange {
   kind: EntityChangeKind;
   name: string;
@@ -54,7 +61,6 @@ export interface EntityChange {
   newSignature?: string;
 }
 
-/** @experimental Part of the unwired semantic-diff module — see module header. */
 export interface SemanticDiff {
   changes: EntityChange[];
   /** Human-readable summary, e.g. "3 functions modified, 1 class added" */
@@ -272,8 +278,8 @@ function collectHunkSets(unifiedDiff: string): HunkSet[] {
  * Returns a SemanticDiff with individual EntityChange items and a
  * human-readable summary string.
  *
- * @experimental Not wired into the review pipeline — no production callers as of
- * 2026-06-11. API may change or be removed. See the module header and REFACTOR-NOTES.
+ * Wired into the review pipeline (enrich phase → `ReviewResult.semanticDiff`
+ * → "What changed" PR comment section). See the module header.
  */
 export function extractSemanticDiff(unifiedDiff: string): SemanticDiff {
   const hunkSets = collectHunkSets(unifiedDiff);

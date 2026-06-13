@@ -710,7 +710,7 @@ describe('formatSemanticDiffSection', () => {
     expect(section).toContain('(1 entity)');
   });
 
-  it('accepts all TS/JS extensions (.ts/.tsx/.js/.jsx/.mjs/.cjs) and drops the unknown pseudo-path', () => {
+  it('accepts the full TS/JS module-extension set (.ts/.tsx/.js/.jsx/.mjs/.cjs/.mts/.cts) and drops the unknown pseudo-path', () => {
     const section = formatSemanticDiffSection(
       makeSemanticDiff([
         makeChange({ kind: 'function_added', name: 'tsFn', filePath: 'a.ts' }),
@@ -719,14 +719,33 @@ describe('formatSemanticDiffSection', () => {
         makeChange({ kind: 'function_added', name: 'jsxFn', filePath: 'a.jsx' }),
         makeChange({ kind: 'function_added', name: 'mjsFn', filePath: 'a.mjs' }),
         makeChange({ kind: 'function_added', name: 'cjsFn', filePath: 'a.cjs' }),
+        makeChange({ kind: 'function_added', name: 'mtsFn', filePath: 'a.mts' }),
+        makeChange({ kind: 'function_added', name: 'ctsFn', filePath: 'a.cts' }),
         makeChange({ kind: 'function_added', name: 'ghostFn', filePath: 'unknown' }),
       ]),
     );
-    for (const name of ['tsFn', 'tsxFn', 'jsFn', 'jsxFn', 'mjsFn', 'cjsFn']) {
+    for (const name of ['tsFn', 'tsxFn', 'jsFn', 'jsxFn', 'mjsFn', 'cjsFn', 'mtsFn', 'ctsFn']) {
       expect(section).toContain(name);
     }
     expect(section).not.toContain('ghostFn');
-    expect(section).toContain('(6 entities)');
+    expect(section).toContain('(8 entities)');
+  });
+
+  it('includes entities from .mts/.cts TypeScript modules (regression: were excluded before the gate widened)', () => {
+    // The gate used to be /\.(?:ts|tsx|js|jsx|mjs|cjs)$/ — it allowed the JS
+    // module variants (.mjs/.cjs) but dropped the TS ones (.mts/.cts), even
+    // though those are real TypeScript files. Pin that they now survive.
+    const section = formatSemanticDiffSection(
+      makeSemanticDiff([
+        makeChange({ kind: 'function_added', name: 'fromMts', filePath: 'src/loader.mts' }),
+        makeChange({ kind: 'class_added', name: 'FromCts', filePath: 'src/legacy.cts' }),
+      ]),
+    );
+    expect(section).toContain('fromMts');
+    expect(section).toContain('FromCts');
+    expect(section).toContain('**`loader.mts`**');
+    expect(section).toContain('**`legacy.cts`**');
+    expect(section).toContain('(2 entities)');
   });
 
   // ── R-filtros: imports as counts only ──
