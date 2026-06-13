@@ -85,7 +85,15 @@ function toReviewDto(row: ReviewRow, repoFullName: string): Review {
     status: row.status as ReviewStatus,
     mode: row.mode as ReviewMode,
     summary: row.summary ?? '',
-    findings: (row.findings ?? []).map(toWireFinding),
+    // Drop any non-object entries (corrupt jsonb) before projecting — a
+    // primitive would spread into an indexed-char object on the wire. Real
+    // rows are always ReviewFinding[]; this is fail-closed defense in depth.
+    findings: (row.findings ?? [])
+      .filter(
+        (f): f is Record<string, unknown> =>
+          typeof f === 'object' && f !== null && !Array.isArray(f),
+      )
+      .map(toWireFinding),
     createdAt: row.createdAt.toISOString(),
     ...(typeof coverageComplete === 'boolean' ? { coverageComplete } : {}),
   };
