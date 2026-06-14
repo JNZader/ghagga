@@ -89,4 +89,14 @@ describe('getClientIp', () => {
     });
     expect(getClientIp(c)).toBe('10.0.0.2');
   });
+
+  it('falls through to X-Real-IP when X-Forwarded-For is whitespace-only', () => {
+    // A blank (whitespace-only) X-Forwarded-For must be treated as absent so a
+    // valid X-Real-IP is still honoured — symmetric with the blank-X-Real-IP case.
+    const c = makeContext({
+      'x-forwarded-for': '   ',
+      'x-real-ip': '192.0.2.55',
+    });
+    expect(getClientIp(c)).toBe('192.0.2.55');
+  });
 });
