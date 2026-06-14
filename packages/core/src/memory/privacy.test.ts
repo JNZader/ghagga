@@ -252,7 +252,9 @@ describe('stripPrivateData', () => {
     for (const text of cases) {
       const result = stripPrivateData(text);
       expect(result, `failed for "${text}"`).toContain('[REDACTED]');
-      const value = text.split(/[:=]\s*/)[1]!;
+      // Each case has a `KEY=value` / `KEY: value` shape, so the split always
+      // yields at least two parts; fall back to '' to keep the assertion safe.
+      const value = text.split(/[:=]\s*/)[1] ?? '';
       expect(result, `failed for "${text}"`).not.toContain(value);
     }
   });

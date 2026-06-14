@@ -18,7 +18,7 @@ import { PageDirection } from './types.js';
 /**
  * Extended Database interface matching GHAGGA's sqlite.ts
  */
-interface DatabaseWithParams extends Database {
+export interface DatabaseWithParams extends Database {
   exec(
     sql: string,
     params?: (string | number | Buffer | null)[],
@@ -30,8 +30,8 @@ import { chunkProjectMemory, shouldCompact } from './chunker.js';
 export class ProjectPageIndexService {
   private db: DatabaseWithParams;
 
-  constructor(db: Database) {
-    this.db = db as DatabaseWithParams;
+  constructor(db: DatabaseWithParams) {
+    this.db = db;
     this.initSchema();
   }
 
