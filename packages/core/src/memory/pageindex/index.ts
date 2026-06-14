@@ -8,13 +8,13 @@ export * from './chunker.js';
 export * from './service.js';
 export * from './types.js';
 
-import { ProjectPageIndexService } from './service.js';
+import { type DatabaseWithParams, ProjectPageIndexService } from './service.js';
 
 export { ProjectPageIndexService };
 
 /**
  * Quick factory function
  */
-export function createProjectPageIndex(db: any) {
+export function createProjectPageIndex(db: DatabaseWithParams) {
   return new ProjectPageIndexService(db);
 }
