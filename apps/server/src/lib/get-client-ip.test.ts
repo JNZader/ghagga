@@ -69,11 +69,34 @@ describe('getClientIp', () => {
     expect(getClientIp(c)).toBe('unknown');
   });
 
+  it("returns 'unknown' for an empty X-Real-IP header", () => {
+    // A present-but-empty X-Real-IP must coalesce to 'unknown', matching the
+    // X-Forwarded-For branch's handling of blank values.
+    const c = makeContext({ 'x-real-ip': '' });
+    expect(getClientIp(c)).toBe('unknown');
+  });
+
+  it("returns 'unknown' for a whitespace-only X-Real-IP header", () => {
+    // A whitespace-only X-Real-IP trims to '' and must coalesce to 'unknown'.
+    const c = makeContext({ 'x-real-ip': '   ' });
+    expect(getClientIp(c)).toBe('unknown');
+  });
+
   it('prefers X-Forwarded-For over X-Real-IP when both are present', () => {
     const c = makeContext({
       'x-forwarded-for': '203.0.113.7, 10.0.0.2',
       'x-real-ip': '192.0.2.55',
     });
     expect(getClientIp(c)).toBe('10.0.0.2');
+  });
+
+  it('falls through to X-Real-IP when X-Forwarded-For is whitespace-only', () => {
+    // A blank (whitespace-only) X-Forwarded-For must be treated as absent so a
+    // valid X-Real-IP is still honoured — symmetric with the blank-X-Real-IP case.
+    const c = makeContext({
+      'x-forwarded-for': '   ',
+      'x-real-ip': '192.0.2.55',
+    });
+    expect(getClientIp(c)).toBe('192.0.2.55');
   });
 });
