@@ -355,13 +355,18 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   eliminada la validación redundante; `AuthCallback` delega a `loginFromCallback` (única validación).
   Sin bypass de auth (consenso Opus + Codex); reduce round-trips bajo StrictMode 4→2. Fix-forward:
   mensaje de error preservado (cero cambio observable) + test con `toHaveBeenCalledTimes(1)`.
-- **DSH-A7** (destapado por el 5vr de DSH-A6): `AuthCallback` no tiene guard anti doble-fire bajo
-  StrictMode (`main.tsx:31`) — el `useEffect` no es idempotente → `loginFromCallback` corre 2x en dev.
-  Peor: `REDIRECT_KEY` se consume en el 1er fire, el 2do `navigate` puede ir a `/` en vez del destino
-  guardado. Pre-existente, 3 voces (Opus-React + Codex 5.4 + 5.5). Fix: ref/once-flag guard.
-- **DSH-A8** (destapado por el 5vr de DSH-A6): el dep array del `useEffect` (`AuthCallback.tsx:84-88`)
-  usa `searchParams.get` en vez de `searchParams`, con `eslint-disable`. Semánticamente incorrecto.
-  Atado a DSH-A7 (arreglar el dep sin el guard empeora el re-fire). Pre-existente, 3 voces.
+- ~~**DSH-A7 / DSH-A8**~~ ✅ **RESUELTO 2026-06-13, PR #234** (5vr): `useRef` once-flag hace el effect
+  del callback OAuth idempotente bajo StrictMode (corre 1 vez, sobrevive mount→cleanup→mount). El bug
+  del `REDIRECT_KEY` (destino → `/`) era DEV-only — StrictMode no dobla effects en prod (cazado por Codex
+  5.4); el guard fija dev + endurece contra cualquier re-invocación futura. DSH-A8: dep array
+  `searchParams.get` → `searchParams` + se borró el `eslint-disable` huérfano (el paquete usa Biome, no
+  eslint). Tests StrictMode blindan happy + error/throw (rojo→verde confirmado). 5vr descartó: retry roto
+  (Try Again es `<Link>` que desmonta → reprocesa), y AbortController (colgaría la UI). Cero cambio observable de prod.
+- **DSH-A9** (destapado por el 5vr de DSH-A7/A8, Codex 5.5): el `REDIRECT_KEY` SOLO se preserva en el
+  happy path. Se pierde en error/token-inválido/sin-params (→ `/login` sin `state.from` → `Login.tsx:47-50`
+  cae a `from='/'`) y en expiración 401 (`api.ts:53-63` redirige a `/login?expired=1` sin guardar la ruta).
+  Re-login post-error/expiración desde `/settings` cae a `/`. Pre-existente, 2 voces. Fix: preservar/restaurar
+  `REDIRECT_KEY` también en esos paths.
 
 ---
 
@@ -411,8 +416,8 @@ producción con usuarios, esta lista ES el sprint previo:
 - ~~Test live-PG para `buildTsQuery`~~ ✅ RESUELTO PR #232 (testcontainers; ver sección Correctness)
 - ~~Matrix cache key del Action~~ ❌ falso problema (NO tocar; ver sección Correctness)
 - ~~DSH-A6 (doble validación de token en AuthCallback)~~ ✅ RESUELTO PR #231 (ver sección Dashboard)
-- **DSH-A7 / DSH-A8** (nuevos, destapados por el 5vr de DSH-A6 — ver sección Dashboard): guard anti
-  doble-fire bajo StrictMode + dep array `searchParams.get`. Pre-existentes, atados entre sí.
+- ~~**DSH-A7 / DSH-A8**~~ ✅ RESUELTO PR #234 (5vr; guard StrictMode + dep array — bug era dev-only; ver sección Dashboard)
+- **DSH-A9** (nuevo, destapado por el 5vr de DSH-A7/A8): `REDIRECT_KEY` se pierde en paths de error/expiración (ver sección Dashboard)
 - ~~**Proyección de campos AI-internos en el wire de `/api/reviews`**~~ ✅ **RESUELTO 2026-06-13,
   PR #228** (`ea87e4e`, 3vr): `toReviewDto` stripea `filterReason` + `exploitabilityDetail`/`usageDetail`
   de cada finding antes del wire; `Finding = Omit<ReviewFinding, esos3>`. Completitud verificada (único
