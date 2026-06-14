@@ -9,7 +9,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import initSqlJsModule, { type Database } from 'fts5-sql-bundle';
+import initSqlJsModule from 'fts5-sql-bundle';
 
 // CJS/ESM interop: default import of CJS module may be the module object, not the function
 const initSqlJs =
@@ -34,18 +34,11 @@ import type {
 } from '../types.js';
 import { DEFAULT_DECAY_CONFIG, type DecayConfig } from '../types.js';
 import { computeStrength } from './decay.js';
-import { ProjectPageIndexService } from './pageindex/service.js';
-
-/**
- * Extended Database interface — fts5-sql-bundle types omit the params overload
- * for exec(), but the runtime (sql.js core) supports it.
- */
-interface DatabaseWithParams extends Database {
-  exec(
-    sql: string,
-    params?: (string | number | Buffer | null)[],
-  ): Array<{ columns: string[]; values: unknown[][] }>;
-}
+// DatabaseWithParams is owned by pageindex/service.ts (already exported and
+// imported by pageindex/index.ts). sqlite.ts already depends on that module
+// (ProjectPageIndexService), so importing the type here adds no new edge —
+// reusing it avoids a duplicate definition without creating an import cycle.
+import { type DatabaseWithParams, ProjectPageIndexService } from './pageindex/service.js';
 
 const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS memory_sessions (
