@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { REDIRECT_KEY, useAuth } from '@/lib/auth';
+import { REDIRECT_KEY, safeInternalPath, useAuth } from '@/lib/auth';
 import { API_URL, isServerAvailable } from '@/lib/oauth';
 
 export function Login() {
@@ -9,6 +9,14 @@ export function Login() {
   const location = useLocation();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+
+  // Single, sanitized post-login destination used by EVERY navigate/setter below.
+  // Prefer the router `from` (set by ProtectedRoute); when we arrived without
+  // router state (error/expiry path) `from` collapses to '/', so fall back to
+  // any destination already stashed in REDIRECT_KEY (e.g. '/settings' saved by
+  // ProtectedRoute or the 401 handler). safeInternalPath guarantees we never
+  // navigate off-site, since REDIRECT_KEY is attacker-controllable sessionStorage.
+  const dest = safeInternalPath(from !== '/' ? from : sessionStorage.getItem(REDIRECT_KEY) || '/');
 
   // If navigated from AuthCallback with showPat flag, start with PAT form
   const showPatFromState = (location.state as { showPat?: boolean })?.showPat === true;
@@ -39,14 +47,17 @@ export function Login() {
   // Redirect when authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(from, { replace: true });
+      navigate(dest, { replace: true });
     }
-  }, [isAuthenticated, from, navigate]);
+  }, [isAuthenticated, dest, navigate]);
 
   // Web Flow: redirect to server's /auth/login
   const handleWebFlowLogin = () => {
-    // Store the intended destination before leaving
-    sessionStorage.setItem(REDIRECT_KEY, from);
+    // Persist the (already sanitized) destination so the callback returns the
+    // user where they were headed. `dest` keeps any previously-stashed value
+    // (e.g. '/settings') instead of clobbering it with '/' on an error/expiry
+    // retry, and never points off-site.
+    sessionStorage.setItem(REDIRECT_KEY, dest);
     window.location.href = `${API_URL}/auth/login`;
   };
 
@@ -58,7 +69,9 @@ export function Login() {
     setPatValidating(true);
     try {
       await loginWithToken(patInput.trim());
-      navigate(from, { replace: true });
+      // PAT login now preserves the stashed destination too (DSH-A9 only fixed
+      // the Web Flow path). `dest` is sanitized, so this navigate is safe.
+      navigate(dest, { replace: true });
     } catch {
       // Error is set in auth context
     } finally {

@@ -23,12 +23,18 @@ vi.mock('@/lib/oauth', () => ({
   API_URL: 'https://api.javierzader.com',
 }));
 
-vi.mock('@/lib/auth', () => ({
-  REDIRECT_KEY: 'ghagga_redirect_after_login',
-  useAuth: () => ({
-    loginFromCallback: mockLoginFromCallback,
-  }),
-}));
+vi.mock('@/lib/auth', async () => {
+  // Use the REAL safeInternalPath so the open-redirect hardening is exercised
+  // end-to-end; only useAuth is faked.
+  const actual = await vi.importActual<typeof import('../lib/auth')>('../lib/auth');
+  return {
+    REDIRECT_KEY: 'ghagga_redirect_after_login',
+    safeInternalPath: actual.safeInternalPath,
+    useAuth: () => ({
+      loginFromCallback: mockLoginFromCallback,
+    }),
+  };
+});
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -279,6 +285,107 @@ describe('AuthCallback — URL cleanup', () => {
 //   2. the second fire reads REDIRECT_KEY *after* the first fire already
 //      removed it, so the destination collapses to '/' (losing e.g.
 //      '/settings').
+
+// ═══════════════════════════════════════════════════════════════════
+// AuthCallback — redirect preservation on error / no-params (DSH-A9)
+// ═══════════════════════════════════════════════════════════════════
+//
+// When the callback lands with an `error` param or with no params at all,
+// it must NOT consume or clobber a stashed REDIRECT_KEY. The destination
+// belongs to the *next* successful login; the error/no-params paths only
+// show a message or bounce to /login.
+
+describe('AuthCallback — redirect preservation (DSH-A9)', () => {
+  it('does NOT clear REDIRECT_KEY when arriving with an error param', async () => {
+    sessionStorage.setItem(REDIRECT_KEY, '/settings');
+
+    renderWithRoute('/auth/callback?error=state_expired');
+
+    await waitFor(() => {
+      expect(screen.getByText(/login session expired/)).toBeInTheDocument();
+    });
+
+    // The stashed destination must survive the error path so a subsequent
+    // successful login still lands on /settings.
+    expect(sessionStorage.getItem(REDIRECT_KEY)).toBe('/settings');
+  });
+
+  it('does NOT clear REDIRECT_KEY when arriving with no params', async () => {
+    sessionStorage.setItem(REDIRECT_KEY, '/settings');
+
+    renderWithRoute('/auth/callback');
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
+    });
+
+    expect(sessionStorage.getItem(REDIRECT_KEY)).toBe('/settings');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// AuthCallback — open-redirect hardening (DSH-A9)
+// ═══════════════════════════════════════════════════════════════════
+//
+// REDIRECT_KEY is attacker-controllable (it is plain sessionStorage). The
+// callback navigates to it verbatim, so a value like '//evil.com' would be
+// treated by the browser as a protocol-relative URL → off-site redirect.
+// The callback must only honor internal, single-leading-slash paths.
+
+describe('AuthCallback — open-redirect hardening (DSH-A9)', () => {
+  it('refuses a protocol-relative // path and navigates to / instead', async () => {
+    sessionStorage.setItem(REDIRECT_KEY, '//evil.com');
+    mockLoginFromCallback.mockResolvedValueOnce(true);
+
+    renderWithRoute('/auth/callback?token=gho_abc123');
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    // It must NEVER navigate to the off-site protocol-relative target.
+    expect(mockNavigate).not.toHaveBeenCalledWith('//evil.com', { replace: true });
+    // The unsafe value is consumed/cleared regardless.
+    expect(sessionStorage.getItem(REDIRECT_KEY)).toBeNull();
+  });
+
+  it('refuses a /\\ backslash path (browser-normalized to //) and navigates to /', async () => {
+    sessionStorage.setItem(REDIRECT_KEY, '/\\evil.com');
+    mockLoginFromCallback.mockResolvedValueOnce(true);
+
+    renderWithRoute('/auth/callback?token=gho_abc123');
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalledWith('/\\evil.com', { replace: true });
+  });
+
+  it('refuses a non-internal (no leading slash) path and navigates to /', async () => {
+    sessionStorage.setItem(REDIRECT_KEY, 'https://evil.com');
+    mockLoginFromCallback.mockResolvedValueOnce(true);
+
+    renderWithRoute('/auth/callback?token=gho_abc123');
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalledWith('https://evil.com', { replace: true });
+  });
+
+  it('still honors a legitimate internal path', async () => {
+    sessionStorage.setItem(REDIRECT_KEY, '/settings');
+    mockLoginFromCallback.mockResolvedValueOnce(true);
+
+    renderWithRoute('/auth/callback?token=gho_abc123');
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/settings', { replace: true });
+    });
+  });
+});
 
 describe('AuthCallback — StrictMode idempotency (DSH-A7/A8)', () => {
   it('processes the token EXACTLY ONCE under StrictMode double-invoke', async () => {

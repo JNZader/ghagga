@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { REDIRECT_KEY, safeInternalPath } from './auth';
 import { notifySessionExpired } from './session-expired';
 import type {
   Installation,
@@ -53,6 +54,21 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
     if (response.status === 401) {
       const currentPath = window.location.hash;
       if (!currentPath.includes('/login') && !currentPath.includes('/auth/callback')) {
+        // Preserve where the user was so a successful re-login returns them
+        // there instead of collapsing to '/'. The route lives in the hash as
+        // e.g. '#/settings'; strip the leading '#' (and any '?query') and keep
+        // only safe, internal paths. A bare '/' is not worth stashing.
+        //
+        // DELIBERATE: preservation is pathname-only. The '?query' is dropped
+        // (split('?')[0]) to stay consistent with ProtectedRoute, which stashes
+        // location.pathname (no query) as well. We do NOT round-trip the user
+        // to the EXACT URL — '/settings?tab=tokens' returns to '/settings'. This
+        // matches what the rest of the redirect path can faithfully preserve;
+        // claiming "exactly where you were" would oversell it.
+        const route = safeInternalPath(currentPath.replace(/^#/, '').split('?')[0]);
+        if (route && route !== '/') {
+          sessionStorage.setItem(REDIRECT_KEY, route);
+        }
         localStorage.removeItem('ghagga_token');
         localStorage.removeItem('ghagga_user');
         // Clear the in-memory auth state too (AuthProvider listens for this

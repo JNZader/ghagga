@@ -362,11 +362,15 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   `searchParams.get` → `searchParams` + se borró el `eslint-disable` huérfano (el paquete usa Biome, no
   eslint). Tests StrictMode blindan happy + error/throw (rojo→verde confirmado). 5vr descartó: retry roto
   (Try Again es `<Link>` que desmonta → reprocesa), y AbortController (colgaría la UI). Cero cambio observable de prod.
-- **DSH-A9** (destapado por el 5vr de DSH-A7/A8, Codex 5.5): el `REDIRECT_KEY` SOLO se preserva en el
-  happy path. Se pierde en error/token-inválido/sin-params (→ `/login` sin `state.from` → `Login.tsx:47-50`
-  cae a `from='/'`) y en expiración 401 (`api.ts:53-63` redirige a `/login?expired=1` sin guardar la ruta).
-  Re-login post-error/expiración desde `/settings` cae a `/`. Pre-existente, 2 voces. Fix: preservar/restaurar
-  `REDIRECT_KEY` también en esos paths.
+- ~~**DSH-A9**~~ ✅ **RESUELTO 2026-06-13, PR #235** (5vr + re-check de seguridad): unificado en
+  `REDIRECT_KEY` — el handler 401 (`api.ts`) ahora stashea la ruta (saneada, pathname-only) antes de
+  redirigir; `Login.tsx` computa UN destino saneado usado en TODOS los navigate (Web Flow + **PAT login** +
+  ya-autenticado), así el PAT también preserva el destino. Hardening open-redirect: helper `safeInternalPath`
+  que stripea control chars C0/DEL ANTES de validar + rechaza protocol-relative/no-internal. **El 5vr cazó
+  un bypass real** (Codex 5.4): la 1ra versión aceptaba `/\n/evil.com` (el browser stripea tab/LF/CR → colapsa
+  a `//evil.com` off-site); cerrado y re-verificado contra la WHATWG URL spec (Opus + Codex, sin bypass
+  residual). El 5vr también cazó que la 1ra versión solo cubría OAuth, no PAT. Preservación pathname-only
+  deliberada (query no round-trippeado, consistente con ProtectedRoute). HashRouter = 2da capa de defensa.
 
 ---
 
@@ -417,7 +421,7 @@ producción con usuarios, esta lista ES el sprint previo:
 - ~~Matrix cache key del Action~~ ❌ falso problema (NO tocar; ver sección Correctness)
 - ~~DSH-A6 (doble validación de token en AuthCallback)~~ ✅ RESUELTO PR #231 (ver sección Dashboard)
 - ~~**DSH-A7 / DSH-A8**~~ ✅ RESUELTO PR #234 (5vr; guard StrictMode + dep array — bug era dev-only; ver sección Dashboard)
-- **DSH-A9** (nuevo, destapado por el 5vr de DSH-A7/A8): `REDIRECT_KEY` se pierde en paths de error/expiración (ver sección Dashboard)
+- ~~**DSH-A9**~~ ✅ RESUELTO PR #235 (5vr + re-check seguridad; redirect preservado en error/expiración + PAT + hardening open-redirect — bypass `/\n/` cazado por Codex y cerrado; ver sección Dashboard)
 - ~~**Proyección de campos AI-internos en el wire de `/api/reviews`**~~ ✅ **RESUELTO 2026-06-13,
   PR #228** (`ea87e4e`, 3vr): `toReviewDto` stripea `filterReason` + `exploitabilityDetail`/`usageDetail`
   de cada finding antes del wire; `Finding = Omit<ReviewFinding, esos3>`. Completitud verificada (único

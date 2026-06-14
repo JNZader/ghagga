@@ -38,6 +38,36 @@ const USER_KEY = 'ghagga_user';
 /** sessionStorage key for redirect-after-login destination */
 export const REDIRECT_KEY = 'ghagga_redirect_after_login';
 
+/**
+ * Sanitize a redirect-after-login destination read from sessionStorage.
+ *
+ * REDIRECT_KEY is attacker-controllable (plain sessionStorage), so its value
+ * must never be navigated to verbatim. Only honor in-app, single-leading-slash
+ * paths. Reject:
+ *   - anything not starting with '/'        → 'https://evil.com', 'evil.com'
+ *   - protocol-relative '//...'             → '//evil.com' (off-site)
+ *   - backslash-escaped '/\...'             → browsers normalize '\' to '/'
+ *   - control-char bypass '/\n/evil.com'    → browsers strip \t \n \r per the
+ *     WHATWG URL spec, collapsing '/\n/evil.com' → '//evil.com' (off-site).
+ *     We must strip the same chars BEFORE validating, or the second-slash
+ *     check below is trivially bypassed.
+ * Returns the safe path, or '/' as the default for anything unsafe/empty.
+ */
+export function safeInternalPath(path: string | null | undefined): string {
+  if (!path) return '/';
+  // Strip the control chars the browser silently removes from URLs (the WHATWG
+  // URL parser drops \t \n \r). We strip all of C0 (\x00-\x1F) + DEL (\x7F) to
+  // be safe, then validate the CLEANED string — otherwise '/\n/evil.com' slips
+  // past the second-slash guard and the browser later collapses it to
+  // '//evil.com' (a protocol-relative, off-site URL).
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping these is the whole point
+  const cleaned = path.replace(/[\x00-\x1F\x7F]/g, '');
+  // '//evil.com' (protocol-relative) and '/\evil.com' (browser-normalized to
+  // '//') both escape the origin — reject any second leading slash/backslash.
+  if (!cleaned || cleaned[0] !== '/' || cleaned[1] === '/' || cleaned[1] === '\\') return '/';
+  return cleaned;
+}
+
 // ─── Context ────────────────────────────────────────────────────
 
 const AuthContext = createContext<AuthContextType | null>(null);
