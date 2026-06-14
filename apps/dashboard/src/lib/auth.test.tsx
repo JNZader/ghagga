@@ -518,6 +518,26 @@ describe('safeInternalPath', () => {
     expect(safeInternalPath(input)).toBe(expected);
   });
 
+  // ── Unicode >= U+0080 that the browser does NOT strip from URLs → kept as a
+  //    literal internal path, NOT rejected. The C0/DEL strip is deliberately
+  //    narrow (only tab/LF/CR collapse to // per the WHATWG URL spec); these
+  //    never do, so they must pass through. Guards against over-hardening the
+  //    regex (e.g. widening it to a broad \s class), which would wrongly reject
+  //    legit paths. Built via fromCharCode so the source stays free of raw
+  //    non-ASCII / invisible bytes.
+  it.each([
+    ['U+0085 NEL', 0x85],
+    ['U+2028 line separator', 0x2028],
+    ['U+2029 paragraph separator', 0x2029],
+    ['U+00A0 no-break space', 0xa0],
+    ['U+FEFF zero-width no-break space', 0xfeff],
+    ['U+200B zero-width space', 0x200b],
+    ['U+3000 ideographic space', 0x3000],
+  ])('keeps %s as an internal path (browser does not strip it)', (_label, code) => {
+    const path = `/${String.fromCharCode(code)}/x`;
+    expect(safeInternalPath(path)).toBe(path);
+  });
+
   it('strips embedded control chars but keeps the safe single-slash path', () => {
     // '/sett\tings' has no second-slash escape; after stripping \t it is a
     // plain in-app path. This documents that stripping is unconditional, not
