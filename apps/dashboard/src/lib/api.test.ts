@@ -32,6 +32,7 @@ import {
   useUpdateSettings,
   useValidateProvider,
 } from './api';
+import { REDIRECT_KEY } from './auth';
 import { SESSION_EXPIRED_EVENT } from './session-expired';
 
 // ─── Mocks ──────────────────────────────────────────────────────
@@ -191,6 +192,112 @@ describe('fetchApi 401 handler', () => {
     expect(result.current.error).toBeInstanceOf(ApiError);
     expect((result.current.error as InstanceType<typeof ApiError>).status).toBe(401);
     expect(result.current.error?.message).toBe('Session expired');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// fetchApi 401 handler — redirect-after-login preservation (DSH-A9)
+// ═══════════════════════════════════════════════════════════════════
+//
+// On session expiry the global 401 handler bounces the user to #/login. It
+// must FIRST stash the current route in REDIRECT_KEY so a successful
+// re-login lands the user back where they were — not on '/'. Today the
+// handler never writes REDIRECT_KEY, so the destination is lost.
+
+describe('fetchApi 401 handler — redirect preservation (DSH-A9)', () => {
+  let mockSessionStorage: Record<string, ReturnType<typeof vi.fn>>;
+
+  beforeEach(() => {
+    const store: Record<string, string> = {};
+    mockSessionStorage = {
+      getItem: vi.fn((key: string) => store[key] ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        store[key] = value;
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete store[key];
+      }),
+    };
+    vi.stubGlobal('sessionStorage', mockSessionStorage);
+  });
+
+  it('stashes the current route in REDIRECT_KEY before redirecting on 401', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/settings' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // The route was normalized (leading '#' stripped) and stored so re-login
+    // returns the user to /settings instead of collapsing to '/'.
+    expect(mockSessionStorage.getItem(REDIRECT_KEY)).toBe('/settings');
+    // And it redirects to login as before.
+    expect(window.location.hash).toBe('#/login?expired=1');
+  });
+
+  it('does NOT write REDIRECT_KEY when already on the login page', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/login' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // Being on /login is not a meaningful redirect target — the handler must
+    // not clobber a previously-stashed destination with '/login'.
+    expect(mockSessionStorage.setItem).not.toHaveBeenCalled();
+    expect(mockSessionStorage.getItem(REDIRECT_KEY)).toBeNull();
+  });
+
+  it('does NOT write REDIRECT_KEY when on the auth callback page', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/auth/callback?token=abc' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(mockSessionStorage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('does NOT stash a bare "/" route (nothing meaningful to preserve)', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/' },
+      writable: true,
+    });
+
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+    const { result } = renderHook(() => useRepositories(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // A redirect to '/' is the default anyway — don't overwrite a possibly
+    // better stored value with '/'.
+    expect(mockSessionStorage.setItem).not.toHaveBeenCalled();
+    // Redirect still happens.
+    expect(window.location.hash).toBe('#/login?expired=1');
   });
 });
 

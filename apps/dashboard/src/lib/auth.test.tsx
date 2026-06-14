@@ -6,12 +6,12 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRepositories } from './api';
-import { AuthProvider, useAuth } from './auth';
+import { AuthProvider, ProtectedRoute, safeInternalPath, useAuth } from './auth';
 import {
   consumeSessionExpired,
   notifySessionExpired,
@@ -392,5 +392,136 @@ describe('logout', () => {
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
     expect(result.current.token).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// ProtectedRoute — stashes intended destination (DSH-A9)
+// ═══════════════════════════════════════════════════════════════════
+//
+// When an unauthenticated user hits a protected route, the guard must stash
+// the intended pathname in REDIRECT_KEY and redirect to /login, so a later
+// login returns them to where they were headed.
+
+describe('ProtectedRoute', () => {
+  it('stashes the intended pathname and redirects to /login when unauthenticated', () => {
+    // No stored credentials → isAuthenticated === false
+
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <AuthProvider>
+          <Routes>
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <div>Settings Page</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/login" element={<div>Login Page</div>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    // Redirected to login (protected content not rendered)
+    expect(screen.getByText('Login Page')).toBeInTheDocument();
+    expect(screen.queryByText('Settings Page')).not.toBeInTheDocument();
+    // The intended destination was stashed for redirect-after-login.
+    expect(mockSessionStorage.setItem).toHaveBeenCalledWith(
+      'ghagga_redirect_after_login',
+      '/settings',
+    );
+    expect(sessionStore.ghagga_redirect_after_login).toBe('/settings');
+  });
+
+  it('renders the protected content when authenticated', () => {
+    store.ghagga_token = 'valid-token';
+    store.ghagga_user = JSON.stringify({ githubLogin: 'user', githubUserId: 1, avatarUrl: '' });
+
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <AuthProvider>
+          <Routes>
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <div>Settings Page</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/login" element={<div>Login Page</div>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Settings Page')).toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// safeInternalPath — open-redirect sanitizer (DSH-A9 hardening)
+// ═══════════════════════════════════════════════════════════════════
+//
+// REDIRECT_KEY is plain, attacker-controllable sessionStorage. The helper is
+// the single chokepoint that prevents an open redirect off-site after login.
+//
+// NOTE ON CONTROL-CHAR VECTORS ('/\n/evil.com', '/\r/evil.com', '/\t/evil.com'):
+// these were RED with the previous implementation, which validated the RAW
+// string. Browsers strip \t \n \r from URLs per the WHATWG URL spec, so
+// '/\n/evil.com' collapses to '//evil.com' — a protocol-relative, off-site URL
+// — AFTER the old guard had already approved it. The current implementation
+// strips C0 (\x00-\x1F) + DEL (\x7F) BEFORE validating, closing the bypass.
+
+describe('safeInternalPath', () => {
+  // Build control-char vectors at runtime so the test source stays pure ASCII
+  // (no raw control bytes embedded in the file). NUL = \x00, the rest via escapes.
+  const NUL = String.fromCharCode(0);
+
+  // ── Off-site / malicious vectors → MUST collapse to '/' ──────────
+  it.each([
+    ['//evil.com', 'protocol-relative'],
+    ['/\\evil.com', 'backslash (browser-normalized to //)'],
+    ['\\/evil.com', 'leading backslash, not a slash'],
+    ['https://evil.com', 'absolute off-site URL'],
+    ['javascript:alert(1)', 'javascript: scheme'],
+    ['/\n/evil.com', 'newline bypass (browser strips \\n → //evil.com)'],
+    ['/\r/evil.com', 'carriage-return bypass (browser strips \\r → //evil.com)'],
+    ['/\t/evil.com', 'tab bypass (browser strips \\t → //evil.com)'],
+    ['/\t//evil', 'tab then double-slash bypass'],
+    [`${NUL}//evil.com`, 'NUL prefix bypass (stripped → //evil.com off-site)'],
+    [`/${NUL}/evil.com`, 'NUL after slash (stripped → //evil.com off-site)'],
+    [' /evil', 'leading space — does not start with /'],
+    ['evil.com', 'bare host, no leading slash'],
+  ])('rejects %j (%s) → "/"', (input) => {
+    expect(safeInternalPath(input)).toBe('/');
+  });
+
+  // ── Nullish / empty → '/' ────────────────────────────────────────
+  it.each([
+    [null, 'null'],
+    [undefined, 'undefined'],
+    ['', 'empty string'],
+  ])('returns "/" for %s', (input) => {
+    expect(safeInternalPath(input)).toBe('/');
+  });
+
+  // ── Valid in-app paths → pass through intact ─────────────────────
+  it.each([
+    ['/settings', '/settings'],
+    ['/', '/'],
+    ['/a/b', '/a/b'],
+  ])('passes valid in-app path %j through unchanged', (input, expected) => {
+    expect(safeInternalPath(input)).toBe(expected);
+  });
+
+  it('strips embedded control chars but keeps the safe single-slash path', () => {
+    // '/sett\tings' has no second-slash escape; after stripping \t it is a
+    // plain in-app path. This documents that stripping is unconditional, not
+    // limited to the leading position.
+    expect(safeInternalPath('/sett\tings')).toBe('/settings');
   });
 });

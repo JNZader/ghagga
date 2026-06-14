@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { REDIRECT_KEY, useAuth } from '@/lib/auth';
+import { REDIRECT_KEY, safeInternalPath, useAuth } from '@/lib/auth';
 
 // ─── Error Messages ─────────────────────────────────────────────
 
@@ -81,8 +81,11 @@ export function AuthCallback() {
         const success = await loginFromCallback(accessToken);
 
         if (success) {
-          // Redirect to the original destination or /
-          const redirectTo = sessionStorage.getItem(REDIRECT_KEY) || '/';
+          // Redirect to the original destination or /. REDIRECT_KEY is plain
+          // sessionStorage (attacker-controllable), so sanitize it to an
+          // internal path before navigating — a value like '//evil.com' would
+          // otherwise be treated as a protocol-relative off-site redirect.
+          const redirectTo = safeInternalPath(sessionStorage.getItem(REDIRECT_KEY));
           sessionStorage.removeItem(REDIRECT_KEY);
           navigate(redirectTo, { replace: true });
         } else {

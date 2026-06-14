@@ -23,14 +23,21 @@ vi.mock('@/lib/oauth', () => ({
   API_URL: 'https://api.javierzader.com',
 }));
 
-vi.mock('@/lib/auth', () => ({
-  REDIRECT_KEY: 'ghagga_redirect_after_login',
-  useAuth: () => ({
-    isAuthenticated: false,
-    loginWithToken: mockLoginWithToken,
-    error: null,
-  }),
-}));
+// Use the REAL safeInternalPath so the unified `dest` computation in Login is
+// exercised end-to-end. Only useAuth is faked (per-test isAuthenticated).
+let mockIsAuthenticated = false;
+vi.mock('@/lib/auth', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/auth')>('@/lib/auth');
+  return {
+    REDIRECT_KEY: 'ghagga_redirect_after_login',
+    safeInternalPath: actual.safeInternalPath,
+    useAuth: () => ({
+      isAuthenticated: mockIsAuthenticated,
+      loginWithToken: mockLoginWithToken,
+      error: null,
+    }),
+  };
+});
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -58,6 +65,7 @@ function renderLogin(initialPath = '/login') {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
+  mockIsAuthenticated = false;
 
   // Mock window.location.href
   locationHref = '';
@@ -135,6 +143,29 @@ describe('Login — server online', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign in with GitHub/i }));
 
     expect(sessionStorage.getItem('ghagga_redirect_after_login')).toBe('/');
+  });
+
+  // ─── DSH-A9: do not degrade a previously-stashed destination ─────
+  // When the user arrives at /login WITHOUT router state (e.g. after an
+  // error/expiry redirect), `from` collapses to '/'. The Web Flow handler
+  // must NOT overwrite a good REDIRECT_KEY ('/settings') with '/'.
+  it('preserves an existing REDIRECT_KEY when retried without router state (DSH-A9)', async () => {
+    sessionStorage.setItem('ghagga_redirect_after_login', '/settings');
+    mockIsServerAvailable.mockResolvedValueOnce(true);
+
+    // No state.from → `from` computes to '/'
+    renderLogin();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Sign in with GitHub/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Sign in with GitHub/i }));
+
+    // The stashed destination survives — it is NOT clobbered with '/'.
+    expect(sessionStorage.getItem('ghagga_redirect_after_login')).toBe('/settings');
+    // Redirect to the OAuth endpoint still happens.
+    expect(locationHref).toBe('https://api.javierzader.com/auth/login');
   });
 
   it('shows "Or enter a Personal Access Token" toggle link', async () => {
@@ -255,5 +286,40 @@ describe('Login — PAT fallback toggle', () => {
     fireEvent.click(screen.getByText(/Or enter a Personal Access Token/i));
 
     expect(screen.getByText(/Back to GitHub login/i)).toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// PAT login — preserves stashed destination (DSH-A9 gap fix)
+// ═══════════════════════════════════════════════════════════════════
+//
+// DSH-A9 only wired redirect-preservation into the Web Flow handler. The PAT
+// login path used to navigate to `from` (which collapses to '/' on an
+// error/expiry retry) and so LOST the stashed destination. The unified `dest`
+// now makes PAT honor REDIRECT_KEY too.
+
+describe('Login — PAT login preserves destination', () => {
+  it('navigates to the stashed REDIRECT_KEY after a successful PAT login', async () => {
+    // User was headed to /settings (stashed by ProtectedRoute / 401 handler),
+    // then arrived at /login WITHOUT router state → `from` collapses to '/'.
+    sessionStorage.setItem('ghagga_redirect_after_login', '/settings');
+    // Server offline → the PAT form renders directly (no toggle needed).
+    mockIsServerAvailable.mockResolvedValueOnce(false);
+    mockLoginWithToken.mockResolvedValueOnce(undefined);
+
+    renderLogin();
+
+    const input = await screen.findByLabelText(/Personal Access Token/i);
+    fireEvent.change(input, { target: { value: 'ghp_validtoken' } });
+    fireEvent.click(screen.getByRole('button', { name: /Connect with GitHub/i }));
+
+    await waitFor(() => {
+      expect(mockLoginWithToken).toHaveBeenCalledWith('ghp_validtoken');
+    });
+    // PAT login returns the user to the stashed destination, NOT '/'.
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/settings', { replace: true });
+    });
+    expect(mockNavigate).not.toHaveBeenCalledWith('/', { replace: true });
   });
 });
