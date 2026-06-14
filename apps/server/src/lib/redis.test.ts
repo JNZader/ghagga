@@ -39,8 +39,10 @@ describe('callbackResultKey', () => {
 });
 
 describe('CALLBACK_RESULT_TTL', () => {
-  it('is 720 seconds (12 minutes)', () => {
-    expect(CALLBACK_RESULT_TTL).toBe(720);
+  it('is at least 720 seconds (12 minutes)', () => {
+    // Lower bound, not exact: a legitimate TTL increase should not break this.
+    // The real invariant (TTL > 660 s poll window) is asserted below.
+    expect(CALLBACK_RESULT_TTL).toBeGreaterThanOrEqual(720);
   });
 
   it('outlives the 11-minute (660 s) poll window', () => {
