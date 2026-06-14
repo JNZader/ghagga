@@ -417,6 +417,11 @@ producción con usuarios, esta lista ES el sprint previo:
 - TOCTOU residual DNS-rebinding (pinear IP en undici)
 - DSH-A5 (Validate del gateway sin `gatewayUrl`)
 - Decisión fail-closed vs degradación en all-dropped (+ decrypt-failure por consistencia)
+- **getClientIp trust boundary** (`apps/server/src/lib/get-client-ip.ts`, abierta 2026-06-13): toma la
+  ÚLTIMA IP del `X-Forwarded-For` (anti-spoofing — asume que el proxy de confianza appendea su entrada al
+  final). Headers en blanco (X-Real-IP vacío + XFF whitespace) ya manejados (PR #238). PENDIENTE: verificar
+  que el setup REAL de proxies (Render/Cloudflare) appendea de forma que el cliente NO pueda inyectar una
+  IP falsa como última. Si difiere → IP spoofing → bypass de rate-limit / logging falso. 🔐 Decisión de deployment.
 - ~~Test live-PG para `buildTsQuery`~~ ✅ RESUELTO PR #232 (testcontainers; ver sección Correctness)
 - ~~Matrix cache key del Action~~ ❌ falso problema (NO tocar; ver sección Correctness)
 - ~~DSH-A6 (doble validación de token en AuthCallback)~~ ✅ RESUELTO PR #231 (ver sección Dashboard)
