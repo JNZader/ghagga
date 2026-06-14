@@ -20,5 +20,8 @@ export function getClientIp(c: Context): string {
     const ips = xff.split(',').map((ip) => ip.trim());
     return ips[ips.length - 1] || 'unknown';
   }
-  return c.req.header('x-real-ip') ?? 'unknown';
+  // A present-but-empty (or whitespace-only) X-Real-IP must coalesce to
+  // 'unknown', matching the X-Forwarded-For branch above (?? would leak '').
+  const realIp = c.req.header('x-real-ip')?.trim();
+  return realIp || 'unknown';
 }

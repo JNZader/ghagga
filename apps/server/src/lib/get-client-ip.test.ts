@@ -69,6 +69,19 @@ describe('getClientIp', () => {
     expect(getClientIp(c)).toBe('unknown');
   });
 
+  it("returns 'unknown' for an empty X-Real-IP header", () => {
+    // A present-but-empty X-Real-IP must coalesce to 'unknown', matching the
+    // X-Forwarded-For branch's handling of blank values.
+    const c = makeContext({ 'x-real-ip': '' });
+    expect(getClientIp(c)).toBe('unknown');
+  });
+
+  it("returns 'unknown' for a whitespace-only X-Real-IP header", () => {
+    // A whitespace-only X-Real-IP trims to '' and must coalesce to 'unknown'.
+    const c = makeContext({ 'x-real-ip': '   ' });
+    expect(getClientIp(c)).toBe('unknown');
+  });
+
   it('prefers X-Forwarded-For over X-Real-IP when both are present', () => {
     const c = makeContext({
       'x-forwarded-for': '203.0.113.7, 10.0.0.2',
