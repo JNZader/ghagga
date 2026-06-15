@@ -1,0 +1,35 @@
+# =============================================================================
+# GHAGGA bundled Gitleaks configuration
+# =============================================================================
+# Extends the gitleaks built-in default ruleset and adds a conservative
+# path-based allowlist for test files / fixtures.
+#
+# Tradeoff (accepted by maintainer): this reduces noise from fake tokens in
+# test fixtures at the cost of potentially missing a REAL secret that is
+# hardcoded inside a test/fixture file. Production source is unaffected.
+#
+# NOTE: pinned gitleaks version is 8.21.2 (< 8.25.0), which uses the singular
+# `[allowlist]` table with `paths = [...]` regexes. Do NOT switch to the
+# `[[allowlists]]` array form unless the pinned version is bumped to >= 8.25.0.
+# =============================================================================
+
+title = "GHAGGA Gitleaks configuration"
+
+[extend]
+# Keep all of gitleaks' built-in default rules.
+useDefault = true
+
+[allowlist]
+description = "Ignore secrets found in test files and fixtures (conservative)"
+# Go (RE2) regexes matched against the file path. A finding whose path matches
+# ANY of these is suppressed.
+paths = [
+  '''.*\.test\.[tj]sx?$''',
+  '''.*\.spec\.[tj]sx?$''',
+  '''.*_test\.(py|go)$''',
+  '''.*test_.*\.py$''',
+  '''.*/__tests__/.*''',
+  '''.*/tests?/.*''',
+  '''.*/fixtures?/.*''',
+  '''.*/testdata/.*''',
+]

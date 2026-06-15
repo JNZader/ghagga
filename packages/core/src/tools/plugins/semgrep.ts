@@ -8,10 +8,29 @@
  * Uses ExecutionContext for DI instead of direct child_process.
  */
 
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FindingSeverity, ReviewFinding } from '../../types.js';
 import type { ExecutionContext, RawToolOutput, ToolDefinition } from '../types.js';
 
 const SEMGREP_VERSION = '1.90.0';
+
+/**
+ * Resolve the bundled curated ruleset path relative to this plugin's location.
+ *
+ * Works in BOTH dev (src/tools/plugins/semgrep.ts -> src/tools/semgrep-rules.yml)
+ * and the published build (dist/tools/plugins/semgrep.js -> dist/tools/semgrep-rules.yml),
+ * provided the build copies the .yml into dist/tools/ (see package.json `build` script).
+ *
+ * Returns undefined if the file is not present so the plugin degrades gracefully
+ * to `--config auto` only.
+ */
+export function resolveSemgrepRulesPath(): string | undefined {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const rulesPath = join(here, '..', 'semgrep-rules.yml');
+  return existsSync(rulesPath) ? rulesPath : undefined;
+}
 
 /**
  * Map Semgrep severity to GHAGGA FindingSeverity.
@@ -92,7 +111,18 @@ export const semgrepPlugin: ToolDefinition = {
     _files: string[],
     timeout: number,
   ): Promise<RawToolOutput> {
-    return ctx.exec('semgrep', ['--json', '--config', 'auto', '--quiet', repoDir], {
+    // Always run the broad registry ruleset (`auto`) AND, when available, ghagga's
+    // own curated rules bundled with the package. Semgrep unions multiple --config
+    // flags, so the curated rules run even offline. Degrade gracefully if missing.
+    const configArgs = ['--config', 'auto'];
+    const rulesPath = resolveSemgrepRulesPath();
+    if (rulesPath) {
+      configArgs.push('--config', rulesPath);
+    } else {
+      ctx.log('warn', 'semgrep: bundled semgrep-rules.yml not found, using --config auto only');
+    }
+
+    return ctx.exec('semgrep', ['--json', ...configArgs, '--quiet', repoDir], {
       timeoutMs: timeout,
       allowExitCodes: [1], // semgrep returns 1 when findings are present
     });
