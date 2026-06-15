@@ -27,12 +27,16 @@ rules:
           - metavariable-regex:
               metavariable: $VAR
               regex: (?i)(secret|token|api[_-]?key|apikey|password|passwd|pwd|credential|auth[_-]?token|private[_-]?key|access[_-]?key|client[_-]?secret)
-      # (b) string VALUE matches a known high-signal secret shape
+      # (b) string VALUE matches a known high-signal secret shape.
+      # High-signal provider prefixes ONLY. The generic base64/hex {32,}
+      # alternates were REMOVED (2026-06-15, 3vr): they matched any
+      # UUID/SHA/cache-key/blob → massive FPs. Real secrets are still caught
+      # here by prefix, or by the secret-keyword var-name branch (a).
       - patterns:
           - pattern: $VAR = "$VAL"
           - metavariable-regex:
               metavariable: $VAL
-              regex: (AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|[A-Za-z0-9+/]{32,}={0,2}|[0-9a-fA-F]{32,})
+              regex: (AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9-]{20,}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)
     message: "Possible hardcoded secret. Use environment variables."
     severity: ERROR
     languages: [java, kotlin, javascript, typescript, python, go, rust]

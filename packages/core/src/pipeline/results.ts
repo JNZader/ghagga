@@ -14,7 +14,7 @@ import type { ReviewFinding, ReviewInput, ReviewResult, ReviewStatus } from '../
  * the changed-file scope filter. They live in lockfiles / manifests
  * (package-lock.json, go.sum, …) that are usually NOT in the staged diff, yet
  * a vulnerable transitive dependency is still a real risk for the change. We
- * key on BOTH the `source` (Trivy is the SCA scanner) and the
+ * match EITHER the `source` (Trivy is the SCA scanner) or the
  * `dependency-vulnerability` category to be robust against future SCA tools.
  */
 function isScaFinding(f: ReviewFinding): boolean {
@@ -29,11 +29,15 @@ function isScaFinding(f: ReviewFinding): boolean {
  *
  * A finding is verdict-driving when it is:
  *   - an SCA / dependency-vulnerability finding (exempt — see isScaFinding), OR
- *   - located in one of the changed / blast-radius "affected" files.
+ *   - located in one of the changed "affected" files.
  *
- * `affectedFiles` is the blast-radius-expanded set when available, otherwise
- * the literal changed-file set. When it is undefined or empty we fall back to
- * legacy behavior (every finding counts) — never silently pass everything.
+ * `affectedFiles` is the set of changed (diff) files that survived blast-radius
+ * filtering — a SUBSET of the diff. It does NOT include out-of-diff dependents.
+ * That is intentional: a static finding in an unchanged file is pre-existing and
+ * must not fail the change, even when that file depends on something we touched
+ * (the whole point is to stop failing on unrelated repo-wide debt). When
+ * affectedFiles is undefined or empty we fall back to legacy behavior (every
+ * finding counts) — never silently pass everything.
  */
 export function isVerdictDrivingFinding(
   f: ReviewFinding,
@@ -109,7 +113,7 @@ export function createStaticOnlyResult(
       : [],
   );
 
-  // Only IN-SCOPE (changed/blast-radius) findings + SCA/dependency findings may
+  // Only IN-SCOPE (changed-file) findings + SCA/dependency findings may
   // drive the verdict. Repo-wide pre-existing findings from unrelated files
   // stay visible (merged informational in enrich step 7) but do NOT fail it.
   const affectedSet =
