@@ -13,6 +13,8 @@ on:
       - 'apps/server/**'
       - 'packages/core/**'
       - 'packages/db/**'
+      - 'packages/types/**'
+      - 'tsconfig.base.json'
       - 'package.json'
       - 'pnpm-workspace.yaml'
       - 'pnpm-lock.yaml'
