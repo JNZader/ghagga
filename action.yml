@@ -96,5 +96,5 @@ outputs:
     description: 'Number of findings from the review'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'apps/action/dist/index.js'
