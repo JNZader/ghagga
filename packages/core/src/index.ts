@@ -139,6 +139,14 @@ export {
 
 // ─── Providers (for direct model access) ────────────────────────
 
+// Provider-chain → GenerateTextFn resolution. Exported so out-of-pipeline
+// callers (e.g. the server issue-analysis worker) can resolve a backend from a
+// ReviewInput-shaped object and inject the resulting GenerateTextFn into agents
+// the SAME way the review pipeline's execute step does (pipeline/execute.ts).
+export {
+  resolveGenerateTextFns,
+  resolvePrimaryProvider,
+} from './pipeline/providers.js';
 export type { CLIBridgeOptions, CLIToolName } from './providers/cli-bridge.js';
 export {
   CLIConfigurationError,
@@ -155,6 +163,33 @@ export {
   createGatewayGenerateFn,
   createOllamaGenerateFn,
 } from './providers/generate-fn.js';
+
+// ─── Issue-Triage Agent (issue-triage feature) ──────────────────
+
+export type {
+  IssueClassification,
+  IssueComment,
+  IssueTriageInput,
+  IssueTriageResult,
+  IssueTriageSource,
+} from './agents/issue-triage.js';
+export {
+  DEFAULT_CLASSIFICATION,
+  DEFAULT_CONFIDENCE,
+  ISSUE_CLASSIFICATIONS,
+  runIssueTriage,
+} from './agents/issue-triage.js';
+export { ISSUE_TRIAGE_SYSTEM } from './agents/prompts.js';
+export type {
+  IssueDedupMatch as CoreIssueDedupMatch,
+  IssueDedupResult,
+} from './memory/search.js';
+export {
+  buildIssueSearchQuery,
+  DEDUP_SCORE_THRESHOLD,
+  findIssueDuplicates,
+  ISSUE_TRIAGE_OBSERVATION_TYPE,
+} from './memory/search.js';
 
 // ─── Negative Examples ──────────────────────────────────────────
 

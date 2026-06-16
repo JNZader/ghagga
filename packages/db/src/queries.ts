@@ -5,8 +5,13 @@ import {
   type DbProviderChainEntry,
   DEFAULT_REPO_SETTINGS,
   githubUserMappings,
+  type IssueDedupMatch,
+  type IssueDraftKind,
+  type IssueDraftSource,
+  type IssueDraftStatus,
   installationSettings,
   installations,
+  issueDrafts,
   memoryObservations,
   memorySessions,
   type RepoSettings,
@@ -337,6 +342,53 @@ export async function saveReview(
   const [result] = await db.insert(reviews).values(data).returning();
   // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert/update
   return result!;
+}
+
+// ─── Issue Drafts (Issue-Triage Agent) ──────────────────────────
+
+/**
+ * Persist a triage DRAFT produced by the issue-analysis worker.
+ *
+ * The worker NEVER posts a GitHub comment — it only inserts a DRAFT row that a
+ * human later approves in the dashboard. The `issue_drafts` table enforces a
+ * partial-unique invariant: AT MOST ONE open DRAFT per (repository, issue)
+ * (uq_issue_drafts_open_draft, predicate `status = 'DRAFT'`).
+ *
+ * Conflict handling (DECISION): we `onConflictDoNothing` on that partial-unique
+ * index. If a DRAFT for this (repo, issue) is already open, the insert is a
+ * no-op and this returns `undefined` — the caller treats that as "a draft
+ * already exists, skip" rather than overwriting an in-flight human review or
+ * throwing. Re-triaging is allowed only after the prior draft is decided
+ * (APPROVED/REJECTED/POSTED rows fall outside the partial predicate).
+ *
+ * @returns the inserted row, or `undefined` when an open DRAFT already existed.
+ */
+export async function saveIssueDraft(
+  db: Database,
+  data: {
+    repositoryId: number;
+    issueNumber: number;
+    issueTitle: string;
+    status: IssueDraftStatus;
+    draftKind: IssueDraftKind;
+    body: string;
+    sources?: IssueDraftSource[];
+    dedupMatches?: IssueDedupMatch[];
+    tokensUsed?: number;
+  },
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [result] = await db
+    .insert(issueDrafts)
+    .values(data)
+    // Target the partial-unique "one open DRAFT per (repo, issue)" index. The
+    // WHERE mirrors the index predicate so Postgres matches the SAME partial
+    // index. On conflict: do nothing (skip) — returning() yields no row.
+    .onConflictDoNothing({
+      target: [issueDrafts.repositoryId, issueDrafts.issueNumber],
+      where: sql`${issueDrafts.status} = 'DRAFT'`,
+    })
+    .returning();
+  return result;
 }
 
 export async function getReviewsByRepoId(
