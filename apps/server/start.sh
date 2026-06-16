@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/bin/bash
+# bash (not /bin/sh) because the worker branch uses `wait -n`, which is a bash
+# builtin not available in POSIX sh / dash. node:20-slim (Debian) ships bash.
 set -e
 
 # GHAGGA Start Script
@@ -20,7 +22,21 @@ ls -la /usr/local/bin/opencode 2>/dev/null || echo "  ℹ️  /usr/local/bin/ope
 
 if [ "$SERVICE_TYPE" = "worker" ]; then
   echo "🚀 Starting GHAGGA Review Worker..."
-  node apps/server/dist/workers/review.js
+  node apps/server/dist/workers/review.js &
+  REVIEW_PID=$!
+
+  echo "🚀 Starting GHAGGA Issue-Analysis Worker..."
+  node apps/server/dist/workers/issue-analysis.js &
+  ISSUE_PID=$!
+
+  # If EITHER worker exits, tear the container down so the orchestrator restarts
+  # it (a half-dead worker pair must not look healthy). `wait -n` returns on the
+  # first child to exit; kill the survivor before exiting with its status.
+  wait -n
+  EXIT_CODE=$?
+  echo "⚠️  A worker process exited (code ${EXIT_CODE}) — shutting down the worker container"
+  kill "$REVIEW_PID" "$ISSUE_PID" 2>/dev/null || true
+  exit "$EXIT_CODE"
 else
   echo "🔄 Running database migrations..."
   cd /app/packages/db && npx tsx src/migrate.ts

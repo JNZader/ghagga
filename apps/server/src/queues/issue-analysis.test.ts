@@ -19,6 +19,7 @@
  *   - NO GitHub post method is EVER called (the worker is a draft gate)
  */
 
+import { readFileSync } from 'node:fs';
 import type { Job } from 'bullmq';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,6 +90,7 @@ const mockSaveIssueDraft = vi.fn().mockResolvedValue({ id: 99 });
 const mockCreateDatabaseFromEnv = vi.fn(() => ({}));
 const mockGetRepositoryById = vi.fn();
 const mockGetEffectiveRepoSettings = vi.fn();
+const mockGetOpenIssueDraft = vi.fn();
 
 vi.mock('ghagga-db', () => ({
   decrypt: (v: string) => mockDecrypt(v),
@@ -96,6 +98,22 @@ vi.mock('ghagga-db', () => ({
   createDatabaseFromEnv: () => mockCreateDatabaseFromEnv(),
   getRepositoryById: (...args: unknown[]) => mockGetRepositoryById(...args),
   getEffectiveRepoSettings: (...args: unknown[]) => mockGetEffectiveRepoSettings(...args),
+  getOpenIssueDraft: (...args: unknown[]) => mockGetOpenIssueDraft(...args),
+}));
+
+// ─── ./review.js mock — reuse the worker's SSRF + normalize helpers ──
+// The worker imports `revalidateGatewayChain` + `normalizeLegacyProvider` from
+// the review queue. We mock that module so (a) importing it never spins up the
+// real review Queue/Worker/Redis, and (b) we can ASSERT the SSRF re-validation
+// helper actually runs on the triage path and control what it returns.
+const mockRevalidateGatewayChain = vi.fn();
+const mockNormalizeLegacyProvider = vi.fn();
+
+vi.mock('./review.js', () => ({
+  // Default: pass the chain through unchanged (no SSRF drop). Tests override.
+  revalidateGatewayChain: (...args: unknown[]) => mockRevalidateGatewayChain(...args),
+  // Mirror the real 3-variant normalize closely enough for the worker's needs.
+  normalizeLegacyProvider: (...args: unknown[]) => mockNormalizeLegacyProvider(...args),
 }));
 
 // ─── GitHub client mock — EVERY method is a spy so we can prove no post ──
@@ -182,10 +200,25 @@ beforeEach(() => {
   mockFormatMemoryContext.mockReturnValue('formatted memory context');
 
   // Default repo settings: a usable provider chain so AI is enabled.
-  mockGetRepositoryById.mockResolvedValue({ id: 1, encryptedApiKey: null });
+  mockGetRepositoryById.mockResolvedValue({
+    id: 1,
+    encryptedApiKey: null,
+    llmProvider: 'gateway',
+    llmModel: 'legacy-model',
+  });
   mockGetEffectiveRepoSettings.mockResolvedValue({
     providerChain: [{ provider: 'gateway', model: 'test-model', encryptedApiKey: null }],
   });
+
+  // No open draft by default (Stage-0 pre-check passes through).
+  mockGetOpenIssueDraft.mockResolvedValue(undefined);
+
+  // SSRF re-validation: pass the chain through unchanged by default.
+  mockRevalidateGatewayChain.mockImplementation(async (chain: unknown[]) => chain);
+  // normalizeLegacyProvider: identity for the 3 valid variants, gateway otherwise.
+  mockNormalizeLegacyProvider.mockImplementation((raw: string) =>
+    raw === 'cli-bridge' || raw === 'ollama' || raw === 'gateway' ? raw : 'gateway',
+  );
 
   // PostgresMemoryStorage instances expose search + save. Use a function
   // expression (NOT an arrow) so it is constructable via `new`.
@@ -343,5 +376,228 @@ describe('processIssueAnalysis — never posts (hard gate)', () => {
 
     expect(mockPostComment).not.toHaveBeenCalled();
     expect(mockAddCommentReaction).not.toHaveBeenCalled();
+  });
+
+  // The behavioral assertions above only prove "no post" on the SUCCESS paths.
+  // Cover the EXCEPTION paths too so the guarantee is not a vacuous pass: even
+  // when the agent or the persist throws, nothing is ever posted.
+  it('never posts when runIssueTriage throws', async () => {
+    mockRunIssueTriage.mockRejectedValueOnce(new Error('LLM exploded'));
+
+    await expect(capturedProcessor?.(makeFakeJob(makeJobData()))).rejects.toThrow('LLM exploded');
+
+    expect(mockPostComment).not.toHaveBeenCalled();
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+  });
+
+  it('never posts when saveIssueDraft throws (transient DB error → BullMQ retry)', async () => {
+    mockSaveIssueDraft.mockRejectedValueOnce(new Error('connection reset'));
+
+    // Re-thrown so BullMQ retries — the Stage-0 pre-check makes the retry
+    // idempotent. Still NEVER posts.
+    await expect(capturedProcessor?.(makeFakeJob(makeJobData()))).rejects.toThrow(
+      'connection reset',
+    );
+
+    expect(mockPostComment).not.toHaveBeenCalled();
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+  });
+
+  // STRUCTURAL guard: the never-post guarantee is enforced by the source itself
+  // not importing any GitHub posting client — not merely by behavior. If a future
+  // edit pulls `postComment`/`deleteComment`/`addCommentReaction` from the github
+  // client into this module, this test fails.
+  it('module source imports NO github posting client', () => {
+    const src = readFileSync(new URL('./issue-analysis.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/from\s+['"][^'"]*github\/client[^'"]*['"]/);
+    expect(src).not.toMatch(/\bpostComment\b/);
+    expect(src).not.toMatch(/\bdeleteComment\b/);
+    expect(src).not.toMatch(/\baddCommentReaction\b/);
+  });
+});
+
+// ─── Stage 0: existing-open-draft pre-check ─────────────────────
+
+describe('processIssueAnalysis — existing-open-draft pre-check', () => {
+  it('skips early when an open DRAFT already exists (no dedup, no LLM, no memory)', async () => {
+    mockGetOpenIssueDraft.mockResolvedValueOnce({ id: 7, draftKind: 'ANALYSIS' });
+
+    const result = await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    expect(result).toMatchObject({ success: true, skipped: 'draft-pending' });
+    // No expensive work happened.
+    expect(mockFindIssueDuplicates).not.toHaveBeenCalled();
+    expect(mockRunIssueTriage).not.toHaveBeenCalled();
+    expect(mockSaveObservation).not.toHaveBeenCalled();
+    // No new draft is inserted.
+    expect(mockSaveIssueDraft).not.toHaveBeenCalled();
+    expect(mockPostComment).not.toHaveBeenCalled();
+  });
+
+  it('proceeds normally when no open DRAFT exists', async () => {
+    mockGetOpenIssueDraft.mockResolvedValueOnce(undefined);
+
+    await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    expect(mockRunIssueTriage).toHaveBeenCalledTimes(1);
+    expect(mockSaveIssueDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues (does not block) when the pre-check read fails', async () => {
+    mockGetOpenIssueDraft.mockRejectedValueOnce(new Error('db read failed'));
+
+    const result = await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    // Falls through to normal triage; the insert conflict remains the guard.
+    expect(result).toMatchObject({ success: true });
+    expect(mockRunIssueTriage).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── SSRF re-validation on the triage path ──────────────────────
+
+describe('processIssueAnalysis — SSRF re-validation (DNS-rebinding TOCTOU)', () => {
+  it('runs revalidateGatewayChain on the provider chain before analysis', async () => {
+    mockGetEffectiveRepoSettings.mockResolvedValueOnce({
+      providerChain: [
+        { provider: 'gateway', model: 'm', encryptedApiKey: null, gatewayUrl: 'https://ok/' },
+      ],
+    });
+
+    await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    expect(mockRevalidateGatewayChain).toHaveBeenCalledTimes(1);
+    const passedChain = mockRevalidateGatewayChain.mock.calls[0]?.[0];
+    expect(passedChain).toEqual([
+      { provider: 'gateway', model: 'm', encryptedApiKey: null, gatewayUrl: 'https://ok/' },
+    ]);
+  });
+
+  it('drops a rebound gateway entry: SSRF re-validation empties the chain → NEEDS_INFO', async () => {
+    mockGetEffectiveRepoSettings.mockResolvedValueOnce({
+      providerChain: [
+        {
+          provider: 'gateway',
+          model: 'm',
+          encryptedApiKey: null,
+          gatewayUrl: 'http://169.254.169.254/',
+        },
+      ],
+    });
+    // No legacy key either → no usable backend after SSRF drop.
+    mockGetRepositoryById.mockResolvedValueOnce({
+      id: 1,
+      encryptedApiKey: null,
+      llmProvider: 'gateway',
+      llmModel: null,
+    });
+    // SSRF re-validation drops the rebound entry.
+    mockRevalidateGatewayChain.mockResolvedValueOnce([]);
+
+    await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    // No LLM call (no usable backend), held as NEEDS_INFO, never posts.
+    expect(mockRunIssueTriage).not.toHaveBeenCalled();
+    const draft = mockSaveIssueDraft.mock.calls[0]?.[1];
+    expect(draft.draftKind).toBe('NEEDS_INFO');
+    expect(mockPostComment).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Legacy single-key credential fallback ──────────────────────
+
+describe('processIssueAnalysis — legacy single-key fallback', () => {
+  it('analyses via legacy llmProvider/llmModel + encryptedApiKey when no chain exists', async () => {
+    // No v3 chain.
+    mockGetEffectiveRepoSettings.mockResolvedValueOnce({ providerChain: [] });
+    // But a legacy single key is present.
+    mockGetRepositoryById.mockResolvedValueOnce({
+      id: 1,
+      encryptedApiKey: 'enc-legacy',
+      llmProvider: 'gateway',
+      llmModel: 'legacy-model',
+    });
+
+    await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    // The legacy key is decrypted and analysis runs (not degraded to NEEDS_INFO).
+    expect(mockDecrypt).toHaveBeenCalledWith('enc-legacy');
+    expect(mockRunIssueTriage).toHaveBeenCalledTimes(1);
+    const draft = mockSaveIssueDraft.mock.calls[0]?.[1];
+    expect(draft.draftKind).toBe('ANALYSIS');
+  });
+});
+
+// ─── Observation content: comments + labels folded in ───────────
+
+describe('processIssueAnalysis — observation content (dedup coverage)', () => {
+  it('includes labels and capped comments in the saved observation', async () => {
+    const job = makeFakeJob(
+      makeJobData({
+        labels: ['needs-triage', 'area/auth'],
+        comments: [
+          { author: 'alice', body: 'I see a NullPointer on login' },
+          { author: 'bob', body: 'reproduces only with SSO enabled' },
+        ],
+      }),
+    );
+
+    await capturedProcessor?.(job);
+
+    expect(mockSaveObservation).toHaveBeenCalledTimes(1);
+    const obs = mockSaveObservation.mock.calls[0]?.[0];
+    expect(obs.content).toContain('Labels: needs-triage, area/auth');
+    expect(obs.content).toContain('alice: I see a NullPointer on login');
+    expect(obs.content).toContain('bob: reproduces only with SSO enabled');
+  });
+});
+
+// ─── Stage ordering: memory saved ONLY after a successful persist ──
+
+describe('processIssueAnalysis — memory save ordering', () => {
+  it('does NOT save the observation when the draft insert conflicts (no phantom)', async () => {
+    // onConflictDoNothing → undefined (an open DRAFT raced past the pre-check).
+    mockSaveIssueDraft.mockResolvedValueOnce(undefined);
+
+    await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    // No phantom observation when nothing persisted.
+    expect(mockSaveObservation).not.toHaveBeenCalled();
+  });
+
+  it('saves the observation AFTER the draft insert (ordering)', async () => {
+    const order: string[] = [];
+    mockSaveIssueDraft.mockImplementationOnce(async () => {
+      order.push('persist');
+      return { id: 99 };
+    });
+    mockSaveObservation.mockImplementationOnce(async () => {
+      order.push('memory');
+      return { id: 7 };
+    });
+
+    await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    expect(order).toEqual(['persist', 'memory']);
+  });
+});
+
+// ─── dedupMatches stripped to the DB shape ──────────────────────
+
+describe('processIssueAnalysis — dedupMatches persistence shape', () => {
+  it('strips relevanceScore before persisting dedupMatches', async () => {
+    mockFindIssueDuplicates.mockResolvedValueOnce({
+      query: 'q',
+      // A weak (non-duplicate) match carrying the observability-only relevanceScore.
+      matches: [{ observationId: 5, title: 'prior', score: 0.3, relevanceScore: 0.99 }],
+      isDuplicate: false,
+    });
+
+    await capturedProcessor?.(makeFakeJob(makeJobData()));
+
+    const draft = mockSaveIssueDraft.mock.calls[0]?.[1];
+    expect(draft.dedupMatches).toEqual([{ observationId: 5, title: 'prior', score: 0.3 }]);
+    // relevanceScore must NOT leak into the persisted jsonb.
+    expect(draft.dedupMatches[0]).not.toHaveProperty('relevanceScore');
   });
 });

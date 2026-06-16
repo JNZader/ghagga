@@ -274,7 +274,7 @@ const VALID_PROVIDERS = new Set(['gateway', 'cli-bridge', 'ollama']);
  * - 'cli-bridge' | 'ollama' | 'gateway' → pass through unchanged
  * - Unknown/empty → 'gateway' (safe fallback, never crashes)
  */
-function normalizeLegacyProvider(
+export function normalizeLegacyProvider(
   raw: string | undefined | null,
 ): 'gateway' | 'cli-bridge' | 'ollama' {
   if (!raw) return 'gateway';

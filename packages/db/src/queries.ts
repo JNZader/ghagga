@@ -391,6 +391,39 @@ export async function saveIssueDraft(
   return result;
 }
 
+/**
+ * Fetch the currently-open DRAFT (if any) for a given (repository, issue).
+ *
+ * Mirrors the partial-unique invariant enforced by `uq_issue_drafts_open_draft`
+ * (predicate `status = 'DRAFT'`): at most one open DRAFT exists per (repo,
+ * issue), so this returns either that single row or `undefined`.
+ *
+ * The issue-analysis worker calls this BEFORE the expensive dedup/LLM stages so
+ * a retry (or a re-triage while a human is still reviewing the prior draft) can
+ * skip early instead of re-charging the LLM and then silently discarding the
+ * result at the onConflictDoNothing insert.
+ *
+ * @returns the open DRAFT row, or `undefined` when none is open.
+ */
+export async function getOpenIssueDraft(
+  db: Database,
+  repositoryId: number,
+  issueNumber: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .select()
+    .from(issueDrafts)
+    .where(
+      and(
+        eq(issueDrafts.repositoryId, repositoryId),
+        eq(issueDrafts.issueNumber, issueNumber),
+        eq(issueDrafts.status, 'DRAFT'),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
 export async function getReviewsByRepoId(
   db: Database,
   repositoryId: number,

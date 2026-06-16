@@ -8,17 +8,30 @@
  * later in the dashboard. It NEVER posts a GitHub comment.
  *
  * Worker stages (per the issue-triage design):
+ *   0. precheck — getOpenIssueDraft: if an open DRAFT already exists for
+ *                 (repo,issue), SKIP early (no dedup, no LLM, no memory save) and
+ *                 return `{ success: true, skipped: 'draft-pending' }`. This makes
+ *                 a BullMQ retry idempotent (no LLM re-charge) and stops a
+ *                 re-triage from doing expensive work only to discard it at the
+ *                 onConflictDoNothing insert.
  *   1. dedup    — findIssueDuplicates over memory (Phase 3). A hit short-circuits
  *                 to a DUPLICATE draft (cheap: no LLM call).
  *   2. analyze  — runIssueTriage (Phase 2) with a memoryContext built from the
  *                 dedup matches and an injected, RESOLVED generateFn (the SAME
- *                 backend-resolution the review pipeline uses — never hardwired).
+ *                 backend-resolution + SSRF/legacy hardening the review pipeline
+ *                 uses — never hardwired).
  *   3. gate     — confidence threshold: below it (or unparseable → 0), the draft
  *                 is HELD as NEEDS_INFO (routes to a human), never auto-concluded.
  *   4. persist  — insert the DRAFT (status=DRAFT). One open DRAFT per (repo,issue)
  *                 is enforced in the DB; a conflict is skipped gracefully.
  *   5. memory   — save THIS issue under ISSUE_TRIAGE_OBSERVATION_TYPE so future
- *                 dedup can find it (dedup filters by that exact type).
+ *                 dedup can find it (dedup filters by that exact type). Runs ONLY
+ *                 AFTER the draft persisted successfully (no phantom observation
+ *                 on persist-failure, and no retry-self-poison where attempt 2
+ *                 finds attempt 1's observation and short-circuits as duplicate).
+ *                 NOTE: the DUPLICATE path saves NOTHING — the issue IS a dup of an
+ *                 already-stored observation, so the citation points at the
+ *                 ORIGINAL; creating a second observation would pollute dedup.
  *
  * The webhook routing that ENQUEUES these jobs (and the GitHub fetch of issue
  * title/body/labels) lives in Phase 5 — this worker CONSUMES a payload that
@@ -44,17 +57,24 @@ import {
   resolvePrimaryProvider,
   runIssueTriage,
 } from 'ghagga-core';
-import type { Database, DbProviderChainEntry, IssueDraftKind } from 'ghagga-db';
+import type { Database, DbProviderChainEntry, IssueDedupMatch, IssueDraftKind } from 'ghagga-db';
 import {
   createDatabaseFromEnv,
   decrypt,
   getEffectiveRepoSettings,
+  getOpenIssueDraft,
   getRepositoryById,
   saveIssueDraft,
 } from 'ghagga-db';
 import Redis from 'ioredis';
 import { logger as rootLogger } from '../lib/logger.js';
 import { PostgresMemoryStorage } from '../memory/postgres.js';
+// SECURITY: reuse the review worker's provider hardening verbatim — do NOT
+// reimplement. `revalidateGatewayChain` is the DNS-rebinding TOCTOU SSRF
+// re-validation (review.ts:66); `normalizeLegacyProvider` remaps stale/legacy
+// provider strings to the 3-variant v3 set (review.ts:277). Importing them keeps
+// triage and review on a single source of truth for outbound-URL trust.
+import { normalizeLegacyProvider, revalidateGatewayChain } from './review.js';
 
 const logger = rootLogger.child({ module: 'issue-analysis-queue' });
 
@@ -123,6 +143,12 @@ export interface IssueAnalysisJobData {
   /**
    * Issue comments (untrusted), if the Phase-5 fetcher attached them. Capped by
    * MAX_ISSUE_COMMENTS in the worker as a defensive measure.
+   *
+   * CARRY-FORWARD (Phase 5 — webhook fetch/enqueue): the worker's MAX_ISSUE_COMMENTS
+   * cap is DEFENSIVE and runs only AFTER the payload already landed in Redis.
+   * The Phase-5 fetcher MUST cap BOTH the comment COUNT and the total payload
+   * SIZE before enqueue — a huge comment body smuggled into job.data is an
+   * unbounded Redis job payload (DoS) that the worker-side cap cannot prevent.
    */
   comments?: IssueComment[];
   /** The triggering comment id (for correlation / future reaction feedback). */
@@ -154,37 +180,104 @@ export const issueAnalysisQueue = new Queue<IssueAnalysisJobData, unknown, strin
  * DB at processing time. Degrades gracefully (empty chain) when the repo or DB
  * is gone, so the worker can still produce a NEEDS_INFO/duplicate draft.
  */
+interface TriageEncryptedCredentials {
+  providerChain: DbProviderChainEntry[] | undefined;
+  /** Legacy single encrypted key (repositories.encrypted_api_key). */
+  encryptedApiKey: string | null;
+  /** Legacy provider id (repositories.llm_provider) — drives the v3 normalize. */
+  legacyProvider: string | null;
+  /** Legacy model id (repositories.llm_model). */
+  legacyModel: string | null;
+}
+
 async function resolveEncryptedCredentials(
   repositoryId: number,
   db: Database | undefined,
   log: { warn: (obj: unknown, msg?: string) => void },
-): Promise<{ providerChain: DbProviderChainEntry[] | undefined; encryptedApiKey: string | null }> {
+): Promise<TriageEncryptedCredentials> {
+  const empty: TriageEncryptedCredentials = {
+    providerChain: undefined,
+    encryptedApiKey: null,
+    legacyProvider: null,
+    legacyModel: null,
+  };
   if (!db) {
     log.warn({ repositoryId }, 'No DB handle — AI triage disabled for this job');
-    return { providerChain: undefined, encryptedApiKey: null };
+    return empty;
   }
   try {
     const repo = await getRepositoryById(db, repositoryId);
     if (!repo) {
       log.warn({ repositoryId }, 'Repository not found — AI triage disabled for this job');
-      return { providerChain: undefined, encryptedApiKey: null };
+      return empty;
     }
     const effective = await getEffectiveRepoSettings(db, repo);
     const chain = effective.providerChain;
     return {
       providerChain: chain.length > 0 ? chain : undefined,
       encryptedApiKey: repo.encryptedApiKey ?? null,
+      legacyProvider: repo.llmProvider ?? null,
+      legacyModel: repo.llmModel ?? null,
     };
   } catch (error) {
     log.warn({ repositoryId, error: String(error) }, 'Failed to fetch credentials — AI disabled');
-    return { providerChain: undefined, encryptedApiKey: null };
+    return empty;
   }
 }
 
 /**
+ * Build a single-entry runtime chain from the legacy single-key credentials,
+ * matching review.ts's legacy fallback (review.ts:649-688): repos that pre-date
+ * the v3 provider chain store `llmProvider`/`llmModel` + a single
+ * `encryptedApiKey`. Without this, such a repo (which still works for PR review)
+ * would degrade triage to NEEDS_INFO. The provider string is normalised and the
+ * key is decrypt-guarded (a corrupt key yields no usable entry, never crashes).
+ *
+ * Returns an empty array when there is no usable legacy key (the worker then
+ * degrades to NEEDS_INFO, never posts).
+ */
+function buildLegacyRuntimeChain(
+  creds: Pick<TriageEncryptedCredentials, 'encryptedApiKey' | 'legacyProvider' | 'legacyModel'>,
+  log: { warn: (obj: unknown, msg?: string) => void },
+): {
+  provider: LLMProvider;
+  model: string;
+  apiKey: string;
+  gatewayUrl?: string;
+  cliModel?: string;
+}[] {
+  if (!creds.encryptedApiKey) return [];
+  let apiKey: string;
+  try {
+    apiKey = decrypt(creds.encryptedApiKey);
+  } catch {
+    log.warn(
+      { provider: creds.legacyProvider },
+      'legacy credential decryption failed — treating legacy key as absent',
+    );
+    return [];
+  }
+  return [
+    {
+      provider: normalizeLegacyProvider(creds.legacyProvider) as LLMProvider,
+      model: creds.legacyModel ?? '',
+      apiKey,
+    },
+  ];
+}
+
+/**
  * Build a runtime provider chain (decrypted keys) from the DB chain. Mirrors the
- * decrypt-and-skip-on-corruption logic in review.ts: a corrupt entry is skipped,
- * never crashes the job.
+ * review pipeline's mapping loop (review.ts:608-647): a corrupt entry is skipped
+ * (never crashes the job), and every provider string is run through
+ * `normalizeLegacyProvider` so a legacy/stale value ('anthropic', 'openai', …)
+ * is remapped to the v3 3-variant set BEFORE the pipeline resolvers see it —
+ * instead of being unsafely cast to LLMProvider.
+ *
+ * SSRF: the caller MUST hand a chain that already passed `revalidateGatewayChain`
+ * (DNS-rebinding TOCTOU re-validation). `gatewayUrl` is copied through verbatim
+ * here, so an unvalidated URL reaching this function would smuggle past the SSRF
+ * guard. See `processIssueAnalysis` — it revalidates the DB chain first.
  */
 function buildRuntimeChain(
   dbChain: DbProviderChainEntry[] | undefined,
@@ -221,7 +314,9 @@ function buildRuntimeChain(
       gatewayUrl?: string;
       cliModel?: string;
     } = {
-      provider: entry.provider as LLMProvider,
+      // Normalise legacy/stale provider strings (review.ts parity) — never an
+      // unchecked cast.
+      provider: normalizeLegacyProvider(entry.provider) as LLMProvider,
       model: entry.model,
       apiKey,
     };
@@ -293,6 +388,41 @@ function buildMemoryContextFromDedup(dedup: IssueDedupResult): string | null {
   return formatMemoryContext(observations) || null;
 }
 
+// ─── Observation content ────────────────────────────────────────
+
+/** Per-comment body cap when folding comments into the saved observation. */
+const OBSERVATION_COMMENT_BODY_CAP = 500;
+
+/**
+ * Build the saved observation's content for future dedup.
+ *
+ * `findIssueDuplicates` builds its keyword query from the stored title + content,
+ * so the discriminating keywords MUST live in this string. The issue body +
+ * classification alone omit LABELS and COMMENTS — both already fetched/analysed —
+ * which means a later issue whose distinguishing terms live only in a comment or
+ * a label would NOT be matched. Folding capped comments + labels in closes that
+ * gap. Comments are already count-capped (MAX_ISSUE_COMMENTS) by the caller; each
+ * body is length-capped here as a second-line defense against context blowup.
+ */
+function buildObservationContent(
+  issueBody: string,
+  classification: IssueTriageResult['classification'],
+  labels: string[],
+  comments: IssueComment[],
+): string {
+  const parts = [issueBody, `\nClassification: ${classification}`];
+  if (labels.length > 0) {
+    parts.push(`\nLabels: ${labels.join(', ')}`);
+  }
+  if (comments.length > 0) {
+    const rendered = comments
+      .map((c) => `- ${c.author}: ${c.body.slice(0, OBSERVATION_COMMENT_BODY_CAP)}`)
+      .join('\n');
+    parts.push(`\nComments:\n${rendered}`);
+  }
+  return parts.join('\n');
+}
+
 // ─── Draft assembly ─────────────────────────────────────────────
 
 /**
@@ -312,9 +442,16 @@ function resolveAnalysisDraftKind(result: IssueTriageResult): IssueDraftKind {
 
 // ─── Job Processor ──────────────────────────────────────────────
 
-async function processIssueAnalysis(
-  job: Job<IssueAnalysisJobData>,
-): Promise<{ success: boolean; reviewId: string; draftKind: IssueDraftKind; persisted: boolean }> {
+interface IssueAnalysisResult {
+  success: boolean;
+  reviewId: string;
+  draftKind?: IssueDraftKind;
+  persisted?: boolean;
+  /** Set ONLY when stage 0 short-circuits on an already-open DRAFT. */
+  skipped?: 'draft-pending';
+}
+
+async function processIssueAnalysis(job: Job<IssueAnalysisJobData>): Promise<IssueAnalysisResult> {
   const data = job.data;
   const { reviewId, installationId, repositoryId, repoFullName, issueNumber } = data;
   const log = logger.child({ reviewId, repoFullName, issueNumber });
@@ -329,6 +466,33 @@ async function processIssueAnalysis(
     db = createDatabaseFromEnv();
   } catch {
     log.warn('Database unavailable — AI triage + memory features disabled for this job');
+  }
+
+  // ── Stage 0: existing-open-draft pre-check (BEFORE any expensive work) ──
+  // If an open DRAFT already exists for (repo,issue), skip dedup + LLM + memory
+  // entirely. This makes a BullMQ retry idempotent (no LLM re-charge) and avoids
+  // doing the expensive work only to silently discard it at the
+  // onConflictDoNothing insert. A re-run from the dashboard (Phase 6) must delete
+  // the prior draft first; until then we surface WHY we skipped.
+  if (db) {
+    try {
+      const existing = await getOpenIssueDraft(db, repositoryId, issueNumber);
+      if (existing) {
+        log.info(
+          { draftId: existing.id, draftKind: existing.draftKind },
+          'Open DRAFT already exists for this issue — skipping triage (no dedup/LLM/memory)',
+        );
+        await job.updateProgress(100);
+        return { success: true, reviewId, skipped: 'draft-pending' };
+      }
+    } catch (error) {
+      // A read failure here must NOT block triage — fall through and let the
+      // onConflictDoNothing insert remain the final guard against a duplicate.
+      log.warn(
+        { error: String(error) },
+        'Open-draft pre-check failed — continuing (insert conflict remains the guard)',
+      );
+    }
   }
 
   const memoryStorage: MemoryStorage | undefined = db
@@ -348,8 +512,20 @@ async function processIssueAnalysis(
   let tokensUsed = 0;
   let sources: IssueTriageResult['sources'] = [];
 
+  // The memory observation to write IFF the draft persists successfully. Built in
+  // the analyze branch only (the DUPLICATE path saves NOTHING — see below).
+  // Deferring it past a successful persist fixes BOTH the phantom observation on
+  // persist-failure AND the retry-self-poison (attempt 2 finding attempt 1's
+  // observation and short-circuiting as a duplicate).
+  let pendingObservation:
+    | { project: string; type: string; title: string; content: string }
+    | undefined;
+
   if (dedup.isDuplicate) {
     // Cheap path: a confident dedup hit short-circuits before the LLM call.
+    // It saves NO observation: this issue IS a duplicate of one ALREADY stored,
+    // so the citation points at the ORIGINAL; creating a second observation would
+    // pollute dedup with a near-identical row.
     draftKind = 'DUPLICATE';
     const links = dedup.matches
       .map((m) => `- ${m.title} (observation #${m.observationId}, overlap ${m.score.toFixed(2)})`)
@@ -359,8 +535,34 @@ async function processIssueAnalysis(
   } else {
     // ── Stage 2: analyze ──────────────────────────────────────
     await job.updateProgress(45);
-    const { providerChain: dbChain } = await resolveEncryptedCredentials(repositoryId, db, log);
-    const runtimeChain = buildRuntimeChain(dbChain, log);
+    const creds = await resolveEncryptedCredentials(repositoryId, db, log);
+
+    // SECURITY: SSRF re-validation at EXECUTION time (DNS-rebinding TOCTOU). Run
+    // the SAME `revalidateGatewayChain` the review worker uses (review.ts:592)
+    // BEFORE building the runtime chain, so a stored gatewayUrl that now resolves
+    // to a private/loopback/metadata address is DROPPED before reaching the
+    // pipeline. Without this, a tampered/rebound URL would be copied through
+    // buildRuntimeChain verbatim.
+    const rawDbChain = (creds.providerChain ?? []) as DbProviderChainEntry[];
+    const safeDbChain = await revalidateGatewayChain(rawDbChain, log);
+    if (rawDbChain.length > 0 && safeDbChain.length === 0) {
+      log.warn(
+        { entriesIn: rawDbChain.length },
+        'All provider chain entries dropped by SSRF re-validation — AI triage may degrade to NEEDS_INFO',
+      );
+    }
+
+    let runtimeChain = buildRuntimeChain(safeDbChain, log);
+    // Legacy fallback (review.ts:649-688 parity): repos that work for PR review
+    // via legacy llmProvider/llmModel + a single encryptedApiKey must triage too,
+    // not silently degrade to NEEDS_INFO.
+    if (runtimeChain.length === 0) {
+      runtimeChain = buildLegacyRuntimeChain(creds, log);
+      if (runtimeChain.length > 0) {
+        log.info({ provider: runtimeChain[0]?.provider }, 'Using legacy single-key credentials');
+      }
+    }
+
     const resolved = resolveTriageGenerateFn(runtimeChain);
 
     if (!resolved) {
@@ -395,29 +597,47 @@ async function processIssueAnalysis(
         'Triage analysis complete',
       );
 
-      // ── Stage 5: save THIS issue to memory for FUTURE dedup ────
-      // CRITICAL: must use ISSUE_TRIAGE_OBSERVATION_TYPE or dedup (which filters
-      // by that exact type) will never find it. Best-effort: a memory-save
-      // failure must not fail the job or block the draft.
-      if (memoryStorage) {
-        try {
-          await memoryStorage.saveObservation({
-            project: repoFullName,
-            type: ISSUE_TRIAGE_OBSERVATION_TYPE,
-            title: `Issue #${issueNumber}: ${data.issueTitle}`,
-            content: `${data.issueBody}\n\nClassification: ${result.classification}`,
-          });
-        } catch (error) {
-          log.warn({ error: String(error) }, 'Failed to persist issue observation for dedup');
-        }
-      }
+      // Stage the observation to be written AFTER a successful persist. Include
+      // the (capped) comments + labels so future dedup — whose query is built
+      // from title/body keywords — can also match issues whose discriminating
+      // keywords live in COMMENTS or LABELS, not just the body.
+      pendingObservation = {
+        project: repoFullName,
+        type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+        title: `Issue #${issueNumber}: ${data.issueTitle}`,
+        content: buildObservationContent(
+          data.issueBody,
+          result.classification,
+          data.labels,
+          comments,
+        ),
+      };
     }
   }
 
   // ── Stage 4: persist the DRAFT (NEVER post) ──────────────────
+  // SECURITY/CORRECTNESS: this persist+memory block is wrapped so the worker
+  // DEGRADES, never crashes — and so NO partial state (memory saved without a
+  // draft) can result. The memory save runs ONLY after a successful insert.
+  //
+  // Behavior on a transient DB error from saveIssueDraft: we RE-THROW so BullMQ
+  // retries. The Stage-0 pre-check makes that retry idempotent (a draft that DID
+  // land on a prior attempt short-circuits next time), and the
+  // onConflictDoNothing insert is the final guard. Re-throwing here never
+  // violates the "never posts" contract — this worker has no posting path at all.
   await job.updateProgress(80);
   let persisted = false;
   if (db) {
+    // Strip dedup matches to the DB-declared shape { observationId, title, score }
+    // BEFORE persisting. core's IssueDedupMatch carries an optional
+    // `relevanceScore` (observability only) that the jsonb column type omits —
+    // dropping it keeps the stored blob faithful to the declared type.
+    const dedupMatches: IssueDedupMatch[] = dedup.matches.map((m) => ({
+      observationId: m.observationId,
+      title: m.title,
+      score: m.score,
+    }));
+
     const inserted = await saveIssueDraft(db, {
       repositoryId,
       issueNumber,
@@ -426,19 +646,34 @@ async function processIssueAnalysis(
       draftKind,
       body,
       sources,
-      dedupMatches: dedup.matches,
+      dedupMatches,
       tokensUsed,
     });
     if (inserted) {
       persisted = true;
       log.info({ draftId: inserted.id, draftKind }, 'Issue draft persisted (DRAFT, not posted)');
+
+      // ── Stage 5: save THIS issue to memory — ONLY after a successful persist ──
+      // CRITICAL: must use ISSUE_TRIAGE_OBSERVATION_TYPE or dedup (which filters
+      // by that exact type) will never find it. Best-effort: a memory-save
+      // failure must not fail the job or block the (already-persisted) draft.
+      // Gating on `persisted === true` prevents the phantom observation on a
+      // persist-failure and the retry-self-poison described above.
+      if (memoryStorage && pendingObservation) {
+        try {
+          await memoryStorage.saveObservation(pendingObservation);
+        } catch (error) {
+          log.warn({ error: String(error) }, 'Failed to persist issue observation for dedup');
+        }
+      }
     } else {
-      // onConflictDoNothing → an open DRAFT already exists for this (repo,issue).
-      // Skip gracefully rather than overwrite an in-flight human review.
-      log.info('Open DRAFT already exists for this issue — skipping insert');
+      // onConflictDoNothing → an open DRAFT already exists for this (repo,issue)
+      // (raced past the Stage-0 pre-check). Skip gracefully and do NOT save the
+      // observation — there is no new draft to back it.
+      log.info('Open DRAFT already exists for this issue — skipping insert (no memory save)');
     }
   } else {
-    log.warn('No DB handle — draft could not be persisted');
+    log.warn('No DB handle — draft could not be persisted (no memory save)');
   }
 
   await job.updateProgress(100);
