@@ -113,6 +113,122 @@ export async function fetchPRDetails(
   return { headSha: data.head.sha, baseBranch: data.base.ref, prAuthor: data.user.login };
 }
 
+// ─── Issue Data ─────────────────────────────────────────────────
+
+/**
+ * Fetch a single issue's title, body, and labels.
+ *
+ * Used by the issue_comment handler (Phase 5 issue-triage routing) to build the
+ * IssueAnalysisJobData payload for a plain (non-PR) issue. The worker does NOT
+ * fetch — it consumes a payload-carried snapshot — so this is the authoritative
+ * fetch boundary. The caller is responsible for the payload size/count caps.
+ *
+ * Returns `body` as an empty string when GitHub sends `null` (issues with no
+ * body), and `labels` as the label `name` strings.
+ */
+export async function getIssue(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  token: string,
+): Promise<{ title: string; body: string; labels: string[] }> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`;
+
+  const data = await githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error fetching issue: ${response.status} ${response.statusText}`);
+    }
+
+    return (await response.json()) as {
+      title: string;
+      body: string | null;
+      labels?: Array<{ name: string } | string>;
+    };
+  });
+
+  const labels = (data.labels ?? [])
+    .map((l) => (typeof l === 'string' ? l : l.name))
+    .filter((name): name is string => typeof name === 'string' && name.length > 0);
+
+  return { title: data.title ?? '', body: data.body ?? '', labels };
+}
+
+/**
+ * Fetch issue comments (author + body), most-recent-first, capped at `maxCount`.
+ *
+ * SECURITY/DoS: this is the fetch boundary for untrusted issue-comment bodies
+ * that end up in a Redis job payload. GitHub returns comments oldest-first; we
+ * page (bounded by MAX_PAGES) only as far as needed, then keep the `maxCount`
+ * MOST RECENT comments. The CALLER additionally enforces a total-payload byte
+ * budget (per-comment + body truncation) before enqueue — `maxCount` alone does
+ * not bound total bytes because a single comment body can be arbitrarily large.
+ *
+ * Returns `{ author, body }` pairs. A comment with a missing/null author falls
+ * back to the literal `'unknown'`. Degrades to an empty list on the first failed
+ * page rather than throwing (triage proceeds with title+body only).
+ */
+export async function listIssueComments(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  token: string,
+  maxCount: number,
+): Promise<Array<{ author: string; body: string }>> {
+  if (maxCount <= 0) return [];
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`;
+  const MAX_PAGES = 5;
+
+  try {
+    return await githubCircuitBreaker.execute(async () => {
+      const all: Array<{ author: string; body: string }> = [];
+
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const url = `${baseUrl}?per_page=100&page=${page}`;
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github.v3+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `GitHub API error listing issue comments: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const comments = (await response.json()) as Array<{
+          body: string | null;
+          user: { login: string } | null;
+        }>;
+
+        for (const c of comments) {
+          all.push({ author: c.user?.login ?? 'unknown', body: c.body ?? '' });
+        }
+
+        if (comments.length < 100) break;
+      }
+
+      // Keep the most recent `maxCount` (GitHub returns oldest-first).
+      return all.slice(-maxCount);
+    });
+  } catch {
+    // Non-fatal: triage can proceed with title+body only.
+    return [];
+  }
+}
+
 /**
  * Fetch the unified diff for a pull request.
  */
