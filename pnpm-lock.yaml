@@ -53,7 +53,7 @@ importers:
         version: 9.6.1(@types/node@25.9.1)
       '@stryker-mutator/typescript-checker':
         specifier: ^9.6.1
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.1))(typescript@5.9.3)
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.1))(typescript@6.0.3)
       '@stryker-mutator/vitest-runner':
         specifier: ^9.6.1
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.1))(vitest@4.1.9)
@@ -64,8 +64,8 @@ importers:
         specifier: ^0.44.0
         version: 0.44.0
       typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2))
@@ -98,8 +98,8 @@ importers:
         specifier: ^4.22.4
         version: 4.22.4
       typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2))
@@ -168,8 +168,8 @@ importers:
         specifier: ^4.3.1
         version: 4.3.1
       typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
       vite:
         specifier: ^8.0.16
         version: 8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2)
@@ -238,8 +238,8 @@ importers:
         specifier: ^4.22.4
         version: 4.22.4
       typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2))
@@ -281,8 +281,8 @@ importers:
         specifier: ^25.9.1
         version: 25.9.1
       typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2))
@@ -312,8 +312,8 @@ importers:
         specifier: ^4.22.4
         version: 4.22.4
       typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2))
@@ -325,8 +325,8 @@ importers:
         version: link:../core
     devDependencies:
       typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
 
 packages:
 
@@ -3773,8 +3773,8 @@ packages:
     resolution: {integrity: sha512-k4kX5Up6qA68D0Cby2AK+6+vM5k3qTxe+/3FqhnHRExjY5cfbOnzjQZbP/LXleF8hVoDvDqxlgk9KK83HoBZlQ==}
     engines: {node: '>= 16.0.0'}
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -5320,13 +5320,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@stryker-mutator/typescript-checker@9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.1))(typescript@5.9.3)':
+  '@stryker-mutator/typescript-checker@9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.1))(typescript@6.0.3)':
     dependencies:
       '@stryker-mutator/api': 9.6.1
       '@stryker-mutator/core': 9.6.1(@types/node@25.9.1)
       '@stryker-mutator/util': 9.6.1
       semver: 7.7.4
-      typescript: 5.9.3
+      typescript: 6.0.3
 
   '@stryker-mutator/util@9.6.1': {}
 
@@ -7403,7 +7403,7 @@ snapshots:
       tunnel: 0.0.6
       underscore: 1.13.8
 
-  typescript@5.9.3: {}
+  typescript@6.0.3: {}
 
   underscore@1.13.8: {}
 
