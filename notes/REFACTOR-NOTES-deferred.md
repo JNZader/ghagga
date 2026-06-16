@@ -10,6 +10,40 @@
 
 ---
 
+## 🚀 ESTADO — v3.0.0 PUBLICADA EN NPM (2026-06-15)
+
+> **main @ `e1a6944`.** Release coordinado mayor: `ghagga-core`, `ghagga`, `ghagga-db`
+> los 3 en **3.0.0** en npm **con provenance SLSA** (drift core-2.9.1-vs-resto MUERTO).
+> changesets wireado en lockstep. **Por qué v3** (no v2.10): breaking changes reales
+> (CLI `--provider` rechaza legacy, `applyVirtualPatches` firma, `ghagga-db` borró
+> delegated-CI) — varios mal-etiquetados "minor" en el changelog, corregidos.
+>
+> **Resuelto esta sesión (2026-06-15):**
+> - Bug de scoping: el static-analysis ahora se filtra a los changed files (no falla
+>   por deuda repo-wide). Reglas custom de semgrep wireadas al pipeline activo + tuneadas.
+> - getClientIp: documentado honesto (deployment real = Coolify/Hetzner, NO Render;
+>   ghagga **no está deployado**) — ver su entrada abajo, **ya no es "verificar Render"**.
+> - 5 PRs Dependabot resueltas (4 merge + migración TS6 #246). `actions/checkout` v6 +
+>   `action.yml` node24 (deprecation Node 20).
+>
+> **Gotchas del release (para la próxima):** el publish.yml exige **Actions habilitadas
+> en el repo** (estaban OFF) + **NPM_TOKEN válido** (granular bypass-2FA o automation).
+> Trusted Publishing bloqueado (pnpm no soporta OIDC, issue pnpm#9812). Repo público =
+> Actions gratis. Las PRs post-3.0.0 NO tienen changeset → agregar para el próximo bump.
+>
+> **Follow-ups nuevos (sin fecha urgente):** command-injection taint precision (FP en
+> `exec` propio); copy-assets try/catch; gitleaks-secrets-no-exentos-del-scope;
+> Trusted Publishing cuando pnpm cierre #9812.
+>
+> **PRÓXIMA FEATURE → 3.1.0:** issue-triage agent (webhook `issues` + label-gate →
+> diagnostic + memory dedup + cola de aprobación en dashboard + GH Projects). Diseño
+> completo en engram. Ref: claude.ai/share/9e6b1461.
+>
+> **PRE-LAUNCH 🔐 sigue PARQUEADO** (server no deployado) — vuelve a importar el día que
+> deployees el server para el issue-triage. Ver sección abajo.
+
+---
+
 ## ✅ ACCIÓN DE MERGE — RESUELTA 2026-06-11
 
 > Los 4 PRs mergeados en orden: #203 `2c0c596`, #204 `9a2e818`, #205 `b0f3a78`, #206 `be535c5`
@@ -417,11 +451,13 @@ producción con usuarios, esta lista ES el sprint previo:
 - TOCTOU residual DNS-rebinding (pinear IP en undici)
 - DSH-A5 (Validate del gateway sin `gatewayUrl`)
 - Decisión fail-closed vs degradación en all-dropped (+ decrypt-failure por consistencia)
-- **getClientIp trust boundary** (`apps/server/src/lib/get-client-ip.ts`, abierta 2026-06-13): toma la
-  ÚLTIMA IP del `X-Forwarded-For` (anti-spoofing — asume que el proxy de confianza appendea su entrada al
-  final). Headers en blanco (X-Real-IP vacío + XFF whitespace) ya manejados (PR #238). PENDIENTE: verificar
-  que el setup REAL de proxies (Render/Cloudflare) appendea de forma que el cliente NO pueda inyectar una
-  IP falsa como última. Si difiere → IP spoofing → bypass de rate-limit / logging falso. 🔐 Decisión de deployment.
+- ~~**getClientIp trust boundary** (`apps/server/src/lib/get-client-ip.ts`)~~ ✅ **DOCUMENTADO 2026-06-15**
+  (commit `5e7665c`): toma la ÚLTIMA IP del XFF; consumidores = SOLO 3 rate-limiters (api/oauth/webhook),
+  no auth/logging/DB → blast radius = rate-limit. El comentario "Render" era **stale** (el deployment migró
+  a Coolify/Hetzner y ghagga **no está deployado** — la box vieja fue torn down). Reemplazado por un
+  contrato de trust-boundary abstracto, **validate-at-deploy-time** (last-IP correcto SOLO con 1 proxy de
+  confianza que appendea + puerto del app firewalleado). No hay nada vivo que verificar hasta que deployees.
+  🔐 Decisión de deployment, diferida hasta el deploy real del server.
 - ~~Test live-PG para `buildTsQuery`~~ ✅ RESUELTO PR #232 (testcontainers; ver sección Correctness)
 - ~~Matrix cache key del Action~~ ❌ falso problema (NO tocar; ver sección Correctness)
 - ~~DSH-A6 (doble validación de token en AuthCallback)~~ ✅ RESUELTO PR #231 (ver sección Dashboard)
