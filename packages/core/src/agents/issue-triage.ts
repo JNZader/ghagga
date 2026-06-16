@@ -27,7 +27,12 @@
 import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type { Hypothesis, LLMProvider, ProgressCallback } from '../types.js';
 import { parseHypotheses } from './diagnostic.js';
-import { buildMemoryContext, ISSUE_TRIAGE_SYSTEM, wrapUntrustedDescription } from './prompts.js';
+import {
+  buildMemoryContext,
+  ISSUE_TRIAGE_SYSTEM,
+  sanitizeLabel,
+  wrapUntrustedDescription,
+} from './prompts.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -79,11 +84,12 @@ export interface IssueTriageInput {
   /** API key — carried for parity with sibling agents (unused directly here). */
   apiKey: string;
   /**
-   * Resolved generation function. Required — the caller resolves the backend and
-   * injects it (mirrors audit.ts / simple.ts / workflow.ts). Makes the agent
-   * trivially testable without real API calls.
+   * Resolved generation function. REQUIRED — the caller resolves the backend and
+   * injects it (mirrors the required `apiKey`/`model` fields). The runtime guard
+   * in `runIssueTriage` is retained as defense-in-depth for untyped JS callers
+   * that could still pass `undefined` past the type system.
    */
-  generateFn?: GenerateTextFn;
+  generateFn: GenerateTextFn;
   onProgress?: ProgressCallback;
 }
 
@@ -111,23 +117,64 @@ export interface IssueTriageResult {
 
 // ─── Output Parsing ─────────────────────────────────────────────
 
-/** Map a raw CLASSIFICATION value to the taxonomy; default to 'question'. */
+/**
+ * Default classification when the model omits or garbles the CLASSIFICATION line.
+ * `question` is the SAFE fallback: it carries the weakest action semantics (asks
+ * a human for info) rather than asserting a `bug`/`feature` the model didn't
+ * actually commit to.
+ */
+export const DEFAULT_CLASSIFICATION: IssueClassification = 'question';
+
+/**
+ * Map a raw CLASSIFICATION value to the taxonomy; default to `question`.
+ *
+ * Models emit variants the strict equality check silently dropped to the default
+ * (`Bug`, `bug.`, `bugfix`, `This is a bug`). Normalize the captured value
+ * (lowercase, strip trailing punctuation/whitespace) and match a known
+ * classification as a LEADING token before falling back. The fallback remains a
+ * deliberate, documented choice for genuinely unmatched output.
+ */
 function parseClassification(text: string): IssueClassification {
-  const match = /^\s*CLASSIFICATION:\s*(\S+)/im.exec(text);
-  const raw = match?.[1]?.toLowerCase();
-  return ISSUE_CLASSIFICATIONS.includes(raw as IssueClassification)
-    ? (raw as IssueClassification)
-    : 'question';
+  // Capture the rest of the CLASSIFICATION line (not just the first token) so
+  // phrasings like "This is a bug" are reachable via leading-token matching.
+  const match = /^[ \t]*CLASSIFICATION:[ \t]*(.+)$/im.exec(text);
+  const raw = match?.[1]?.toLowerCase().trim();
+  if (!raw) return DEFAULT_CLASSIFICATION;
+
+  // Tokenize on non-letter runs (drops trailing `.`, surrounding prose
+  // punctuation, etc.) and find the first token that IS or STARTS WITH a known
+  // classification — covers `bug`, `bug.`, `bugfix`, and `this is a bug`.
+  const tokens = raw.split(/[^a-z]+/).filter(Boolean);
+  for (const token of tokens) {
+    const hit = ISSUE_CLASSIFICATIONS.find((c) => token === c || token.startsWith(c));
+    if (hit) return hit;
+  }
+  return DEFAULT_CLASSIFICATION;
 }
 
-/** Parse the numeric CONFIDENCE line, clamped to [0,1]; default 0. */
+/**
+ * Default numeric confidence when the model omits or garbles the CONFIDENCE line.
+ * NOTE: `0` here means "no parseable confidence" — the Phase 4 worker owns the
+ * unparseable-vs-genuinely-low interpretation; this layer only guarantees a real
+ * number is captured when the model DID emit one.
+ */
+export const DEFAULT_CONFIDENCE = 0;
+
+/**
+ * Parse the numeric CONFIDENCE line, clamped to [0,1]; default `DEFAULT_CONFIDENCE`.
+ *
+ * The value need NOT end the line — `CONFIDENCE: 0.82 (high confidence)` is valid
+ * and must yield `0.82`, not the default. The regex is anchored to the
+ * CONFIDENCE line (`^...CONFIDENCE:`) so it cannot steal a number off a
+ * HYPOTHESIS/other line, and captures the FIRST numeric token after the colon,
+ * tolerating trailing prose. (Hypothesis blocks use word confidences like
+ * "high", which carry no numeric token and are handled by parseHypotheses.)
+ */
 function parseConfidence(text: string): number {
-  // Match a CONFIDENCE line whose value is numeric (the hypothesis blocks use
-  // word confidences like "high" — those are handled by parseHypotheses).
-  const match = /^\s*CONFIDENCE:\s*([0-9]*\.?[0-9]+)\s*$/im.exec(text);
-  if (!match?.[1]) return 0;
+  const match = /^[ \t]*CONFIDENCE:[ \t]*([0-9]*\.?[0-9]+)/im.exec(text);
+  if (!match?.[1]) return DEFAULT_CONFIDENCE;
   const value = Number.parseFloat(match[1]);
-  if (Number.isNaN(value)) return 0;
+  if (Number.isNaN(value)) return DEFAULT_CONFIDENCE;
   return Math.min(1, Math.max(0, value));
 }
 
@@ -194,10 +241,14 @@ function parseSources(text: string): IssueTriageSource[] {
  * and defangs forged boundary tokens).
  */
 function buildIssuePrompt(input: IssueTriageInput): string {
+  // Labels are repo metadata but NOT inherently safe: a crafted GitHub label can
+  // carry newlines or `<>`/quote chars that would inject structure into this
+  // TRUSTED line (it sits OUTSIDE the untrusted fence). Sanitize each label
+  // (strip newlines + `<>`, cap length) before joining — mirrors the label
+  // hygiene in `wrapUntrusted`. Empty-after-strip labels are dropped.
+  const safeLabels = input.labels.map(sanitizeLabel).filter(Boolean);
   const labelLine =
-    input.labels.length > 0
-      ? `Repository labels (trusted metadata): ${input.labels.join(', ')}`
-      : '';
+    safeLabels.length > 0 ? `Repository labels (trusted metadata): ${safeLabels.join(', ')}` : '';
 
   // Compose the untrusted issue text. Comments are part of the untrusted
   // channel — concatenate them into the same fenced block.
@@ -228,7 +279,10 @@ function buildIssuePrompt(input: IssueTriageInput): string {
 export async function runIssueTriage(input: IssueTriageInput): Promise<IssueTriageResult> {
   const emit = input.onProgress ?? (() => {});
 
-  if (!input.generateFn) {
+  // Defense-in-depth: the type makes generateFn required, but an untyped JS
+  // caller could still pass undefined. Cast through unknown so the always-truthy
+  // narrowing is intentional and the runtime guard survives type-checking.
+  if (!(input.generateFn as GenerateTextFn | undefined)) {
     throw new Error(
       'runIssueTriage requires generateFn to be provided in IssueTriageInput. ' +
         'The caller must resolve the backend and pass a GenerateTextFn instance.',

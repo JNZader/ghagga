@@ -395,6 +395,17 @@ function capUntrusted(content: string): string {
 }
 
 /**
+ * The complete set of structural boundary markers the UNTRUSTED_CONTENT_POLICY
+ * declares as data boundaries. EVERY untrusted channel must defang ALL of these,
+ * not just its own tag: the policy tells the model that `</UNTRUSTED>` (and the
+ * `<USER_DIFF>`/`<USER_DESCRIPTION>` pair) terminate untrusted scope, so a forged
+ * `</UNTRUSTED>` buried inside an issue body fenced as <USER_DESCRIPTION> is a
+ * scope-confusion vector unless it is also neutralized. Keep this in sync with
+ * the marker names enumerated in UNTRUSTED_CONTENT_POLICY above.
+ */
+export const BOUNDARY_MARKERS = ['UNTRUSTED', 'USER_DIFF', 'USER_DESCRIPTION'] as const;
+
+/**
  * Defang the structural markers an attacker could use to forge our boundaries.
  * Shared by both the <UNTRUSTED> wrapper and the <USER_DIFF>/<USER_DESCRIPTION>
  * wrappers so every attacker-influenceable channel gets the same treatment.
@@ -442,7 +453,10 @@ function defangMarkers(content: string, markers: string[], defangCodeFence: bool
 export function sanitizeUntrusted(content: string): string {
   // Cap length first (surrogate-safe) so downstream replacements operate on bounded input.
   const capped = capUntrusted(content);
-  return defangMarkers(capped, ['UNTRUSTED'], false);
+  // Defang the FULL boundary-marker set, not just <UNTRUSTED>: a payload forging
+  // any policy-declared boundary (e.g. </USER_DESCRIPTION>) is a scope-confusion
+  // vector regardless of which channel carries it.
+  return defangMarkers(capped, [...BOUNDARY_MARKERS], false);
 }
 
 /**
@@ -453,7 +467,12 @@ export function sanitizeUntrusted(content: string): string {
  */
 function sanitizeForMarker(content: string, marker: string, hasInnerCodeFence: boolean): string {
   const capped = capUntrusted(content);
-  return defangMarkers(capped, [marker], hasInnerCodeFence);
+  // Defang the FULL boundary-marker set (its own marker is in BOUNDARY_MARKERS),
+  // so a forged </UNTRUSTED> inside a <USER_DESCRIPTION>/<USER_DIFF> channel is
+  // neutralized too — the policy treats </UNTRUSTED> as an end-of-data boundary.
+  // `marker` is retained for documentation of the channel's primary tag.
+  void marker;
+  return defangMarkers(capped, [...BOUNDARY_MARKERS], hasInnerCodeFence);
 }
 
 /**
@@ -469,6 +488,31 @@ function sanitizeForMarker(content: string, marker: string, hasInnerCodeFence: b
  * @param content - The untrusted content to fence.
  * @returns The fenced block, or '' if content is empty/whitespace.
  */
+/**
+ * Maximum characters retained per sanitized label. Labels are short metadata
+ * tokens (GitHub label names cap at 50 chars); anything longer is attacker
+ * padding and is truncated.
+ */
+export const LABEL_CHAR_CAP = 80;
+
+/**
+ * Sanitize a short metadata label that will be placed in the TRUSTED frame
+ * (OUTSIDE any untrusted fence). Labels are repo metadata but are NOT inherently
+ * safe: a crafted GitHub label can carry newlines or `<>`/quote characters that
+ * would inject structure into the trusted scaffold. Strip the structural
+ * characters (mirrors the label hygiene in `wrapUntrusted`) and cap the length.
+ *
+ * @param label - A single label string.
+ * @returns The sanitized single-line label (may be empty after stripping).
+ */
+export function sanitizeLabel(label: string): string {
+  return label
+    .replace(/["\n\r<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, LABEL_CHAR_CAP);
+}
+
 export function wrapUntrusted(label: string, content: string): string {
   if (!content || !content.trim()) return '';
   const safeLabel = label.replace(/["\n<>]/g, ' ').trim();
