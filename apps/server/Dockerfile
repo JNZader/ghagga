@@ -32,6 +32,7 @@ COPY packages/db/ ./packages/db/
 COPY packages/core/ ./packages/core/
 COPY packages/types/ ./packages/types/
 COPY apps/server/ ./apps/server/
+COPY templates/ ./templates/
 
 # Build all packages in dependency order (types re-exports from core; server uses types)
 RUN pnpm --filter ghagga-db build && \
