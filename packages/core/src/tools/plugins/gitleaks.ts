@@ -7,11 +7,29 @@
  * Uses ExecutionContext for DI instead of direct child_process.
  */
 
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ReviewFinding } from '../../types.js';
 import type { ExecutionContext, RawToolOutput, ToolDefinition } from '../types.js';
 
 const GITLEAKS_VERSION = '8.21.2';
 const GITLEAKS_BIN = '/usr/local/bin/gitleaks';
+
+/**
+ * Resolve the bundled gitleaks config (extends defaults + test-file allowlist).
+ *
+ * Works in BOTH dev (src/tools/plugins/gitleaks.ts -> src/tools/gitleaks-config.toml)
+ * and the published build (dist/tools/plugins/gitleaks.js -> dist/tools/gitleaks-config.toml),
+ * provided the build copies the .toml into dist/tools/ (see package.json `build` script).
+ *
+ * Returns undefined if missing so the plugin degrades gracefully to default rules.
+ */
+export function resolveGitleaksConfigPath(): string | undefined {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const configPath = join(here, '..', 'gitleaks-config.toml');
+  return existsSync(configPath) ? configPath : undefined;
+}
 
 /** Gitleaks JSON finding structure */
 interface GitleaksFinding {
@@ -86,20 +104,27 @@ export const gitleaksPlugin: ToolDefinition = {
   ): Promise<RawToolOutput> {
     const reportPath = '/tmp/gitleaks-result.json';
 
-    await ctx.exec(
-      'gitleaks',
-      [
-        'detect',
-        `--source=${repoDir}`,
-        '--report-format=json',
-        `--report-path=${reportPath}`,
-        '--no-git',
-        '--exit-code=0',
-      ],
-      {
-        timeoutMs: timeout,
-      },
-    );
+    const detectArgs = [
+      'detect',
+      `--source=${repoDir}`,
+      '--report-format=json',
+      `--report-path=${reportPath}`,
+      '--no-git',
+      '--exit-code=0',
+    ];
+
+    // Apply ghagga's bundled config (default rules + test-file allowlist) when
+    // available. Degrade gracefully to gitleaks' built-in defaults if missing.
+    const configPath = resolveGitleaksConfigPath();
+    if (configPath) {
+      detectArgs.push(`--config=${configPath}`);
+    } else {
+      ctx.log('warn', 'gitleaks: bundled gitleaks-config.toml not found, using default rules only');
+    }
+
+    await ctx.exec('gitleaks', detectArgs, {
+      timeoutMs: timeout,
+    });
 
     // Read the report file and return it as stdout
     return ctx.exec('cat', [reportPath], {

@@ -6,9 +6,29 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RawToolOutput } from '../../types.js';
+import type { ExecOptions, ExecutionContext } from '../../types.js';
 import { gitleaksPlugin, parseGitleaksOutput } from '../gitleaks.js';
+
+// ─── Mock ExecutionContext helper ───────────────────────────────
+
+function makeMockCtx(): {
+  ctx: ExecutionContext;
+  calls: Array<{ command: string; args: string[]; opts: ExecOptions }>;
+} {
+  const calls: Array<{ command: string; args: string[]; opts: ExecOptions }> = [];
+  const ctx: ExecutionContext = {
+    exec: vi.fn(async (command: string, args: string[], opts: ExecOptions) => {
+      calls.push({ command, args, opts });
+      return { stdout: '[]', stderr: '', exitCode: 0, timedOut: false };
+    }),
+    cacheRestore: vi.fn(async () => false),
+    cacheSave: vi.fn(async () => {}),
+    log: vi.fn(),
+  };
+  return { ctx, calls };
+}
 
 // ─── Fixture Data ───────────────────────────────────────────────
 
@@ -40,6 +60,28 @@ describe('gitleaksPlugin metadata', () => {
 
   it('has correct output format', () => {
     expect(gitleaksPlugin.outputFormat).toBe('json');
+  });
+});
+
+// ─── run() — config arg ─────────────────────────────────────────
+
+describe('gitleaksPlugin.run', () => {
+  it('passes --config pointing at the bundled gitleaks-config.toml', async () => {
+    const { ctx, calls } = makeMockCtx();
+    await gitleaksPlugin.run(ctx, '/workspace', [], 60_000);
+    // The detect call is the first exec; find the one with the config arg
+    const detectCall = calls.find((c) =>
+      c.args.some((a) => a.startsWith('--config=') && a.endsWith('gitleaks-config.toml')),
+    );
+    expect(detectCall, 'expected a --config=<...gitleaks-config.toml> arg').toBeDefined();
+  });
+
+  it('still scans the repoDir with --no-git', async () => {
+    const { ctx, calls } = makeMockCtx();
+    await gitleaksPlugin.run(ctx, '/workspace', [], 60_000);
+    const detectCall = calls.find((c) => c.args.includes('detect'));
+    expect(detectCall?.args).toContain('--source=/workspace');
+    expect(detectCall?.args).toContain('--no-git');
   });
 });
 

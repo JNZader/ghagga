@@ -139,12 +139,21 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
   // ── Step 6: Execute agent mode (or skip if AI disabled) ────
   let result: ReviewResult;
 
+  // Changed / blast-radius "affected" file set used to scope static-analysis
+  // findings in the static-only verdict (createStaticOnlyResult). `filteredFiles`
+  // IS the blast-radius-narrowed set when blast radius is enabled, and the
+  // literal changed-file set (post ignore-pattern filter) otherwise — so it
+  // already serves as both the expanded set and the fallback. Static tools scan
+  // the whole repo, so without this scope a 1-file change would fail on
+  // unrelated repo-wide pre-existing findings.
+  const affectedFiles = state.filteredFiles.map((f) => f.path);
+
   // activeProvider / isCliBridge / isGateway / isOllama are resolved above (Step 5.5)
 
   if (!aiEnabled) {
     // Static-only mode: no LLM calls
     emit({ step: 'agent-start', message: 'AI review disabled — returning static analysis only' });
-    result = createStaticOnlyResult(staticResult, resolvedInputMode, startTime);
+    result = createStaticOnlyResult(staticResult, resolvedInputMode, startTime, affectedFiles);
   } else {
     // ── Unified dispatch: all backends, all modes ──────────────
     // Step 1: Build GenerateTextFn(s) for the detected backend
@@ -280,7 +289,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
         error: error instanceof Error ? error.message : String(error),
       });
       emit({ step: 'agent-failed', message: 'AI review failed — returning static analysis only' });
-      result = createStaticOnlyResult(staticResult, resolvedInputMode, startTime);
+      result = createStaticOnlyResult(staticResult, resolvedInputMode, startTime, affectedFiles);
       result.status = 'NEEDS_HUMAN_REVIEW';
       result.summary = `AI review failed (${error instanceof Error ? error.message : 'unknown error'}). Static analysis results are shown below.`;
     }

@@ -6,15 +6,37 @@
 
 rules:
   # ===== SECRETS =====
+  # Precision note: a bare `$VAR = "..."` matches almost every string-constant
+  # assignment, which floods results with false positives. This rule only fires
+  # when EITHER (a) the assigned name/key looks secret-ish (keyword regex) OR
+  # (b) the literal value matches a known high-signal secret shape (provider
+  # prefixes, JWT, or a long base64/hex blob). Both name and value are captured
+  # so the two conditions can be OR'd via pattern-either.
   - id: hardcoded-secret-generic
-    patterns:
-      - pattern-either:
-          - pattern: $VAR = "..."
-          - pattern: |
-              "$VAR": "..."
-      - metavariable-regex:
-          metavariable: $VAR
-          regex: (?i)(password|secret|api_key|apikey|token|credentials|auth)
+    # Each pattern-either branch re-includes the base assignment pattern so the
+    # metavariable ($VAR / $VAL) is bound in the same scope as its regex filter.
+    # NOTE: the JSON-object-key form (`"key": "value"`) was intentionally dropped
+    # from this multi-language rule because it is not parseable as a pattern in
+    # java/kotlin/python/go/rust and a single parse failure disables the whole
+    # rule. The cross-language assignment form (`$VAR = "$VAL"`) is what survives
+    # everywhere and carries the signal.
+    pattern-either:
+      # (a) variable/key NAME looks like a secret
+      - patterns:
+          - pattern: $VAR = "$VAL"
+          - metavariable-regex:
+              metavariable: $VAR
+              regex: (?i)(secret|token|api[_-]?key|apikey|password|passwd|pwd|credential|auth[_-]?token|private[_-]?key|access[_-]?key|client[_-]?secret)
+      # (b) string VALUE matches a known high-signal secret shape.
+      # High-signal provider prefixes ONLY. The generic base64/hex {32,}
+      # alternates were REMOVED (2026-06-15, 3vr): they matched any
+      # UUID/SHA/cache-key/blob → massive FPs. Real secrets are still caught
+      # here by prefix, or by the secret-keyword var-name branch (a).
+      - patterns:
+          - pattern: $VAR = "$VAL"
+          - metavariable-regex:
+              metavariable: $VAL
+              regex: (AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9-]{20,}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)
     message: "Possible hardcoded secret. Use environment variables."
     severity: ERROR
     languages: [java, kotlin, javascript, typescript, python, go, rust]
@@ -129,10 +151,83 @@ rules:
     languages: [go]
 
   # ===== COMMAND INJECTION =====
+  # Precision tradeoff: we catch the literal `child_process.exec(...)` member
+  # call AND the destructured / aliased forms, but the bare `exec(...)` and the
+  # aliased `cp.exec(...)` branches are scoped with `pattern-inside` to a file
+  # that actually imports/requires `child_process` (or `node:child_process`).
+  # This avoids flagging unrelated `.exec()` calls (RegExp.exec, Mongoose
+  # query.exec) while still catching the realistic forms:
+  #   import { exec } from 'node:child_process'; exec(userInput)
+  #   import cp from 'child_process';            cp.exec(userInput)
+  #   const cp = require('child_process');       cp.exec(userInput)
+  #   const { exec } = require('child_process');  exec(userInput)
+  # Accepted residual risk: a bare `exec(userInput)` in a file that imports
+  # child_process but where `exec` is actually a DIFFERENT local function would
+  # be a false positive. This is rare and the security upside outweighs it.
   - id: command-injection-node
     pattern-either:
+      # Direct member call on the child_process namespace.
       - pattern: child_process.exec($USER_INPUT, ...)
       - pattern: child_process.execSync($USER_INPUT, ...)
+      # Named import: `import { exec } from 'child_process'` -> bare exec(...).
+      - patterns:
+          - pattern-either:
+              - pattern: exec($USER_INPUT, ...)
+              - pattern: execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              import { ..., exec, ... } from "child_process"
+              ...
+      - patterns:
+          - pattern-either:
+              - pattern: exec($USER_INPUT, ...)
+              - pattern: execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              import { ..., exec, ... } from "node:child_process"
+              ...
+      - patterns:
+          - pattern-either:
+              - pattern: exec($USER_INPUT, ...)
+              - pattern: execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              import { ..., execSync, ... } from "child_process"
+              ...
+      - patterns:
+          - pattern-either:
+              - pattern: exec($USER_INPUT, ...)
+              - pattern: execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              import { ..., execSync, ... } from "node:child_process"
+              ...
+      # Default / namespace import: `import cp from 'child_process'` -> cp.exec().
+      - patterns:
+          - pattern-either:
+              - pattern: $CP.exec($USER_INPUT, ...)
+              - pattern: $CP.execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              import $CP from "child_process"
+              ...
+      - patterns:
+          - pattern-either:
+              - pattern: $CP.exec($USER_INPUT, ...)
+              - pattern: $CP.execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              import $CP from "node:child_process"
+              ...
+      # require namespace: `const cp = require('child_process')` -> cp.exec().
+      - patterns:
+          - pattern-either:
+              - pattern: $CP.exec($USER_INPUT, ...)
+              - pattern: $CP.execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              $CP = require("child_process")
+              ...
+      - patterns:
+          - pattern-either:
+              - pattern: $CP.exec($USER_INPUT, ...)
+              - pattern: $CP.execSync($USER_INPUT, ...)
+          - pattern-inside: |
+              $CP = require("node:child_process")
+              ...
     message: "Potential command injection - use execFile instead"
     severity: ERROR
     languages: [javascript, typescript]

@@ -1,6 +1,6 @@
 {
   "name": "ghagga-core",
-  "version": "2.9.1",
+  "version": "3.0.0",
   "private": false,
   "type": "module",
   "description": "Core review engine for GHAGGA — AI-powered multi-agent code reviewer",
@@ -40,7 +40,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-assets.mjs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

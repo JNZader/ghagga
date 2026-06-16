@@ -7,9 +7,29 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RawToolOutput } from '../../types.js';
+import type { ExecOptions, ExecutionContext } from '../../types.js';
 import { mapSemgrepSeverity, parseSemgrepOutput, semgrepPlugin } from '../semgrep.js';
+
+// ─── Mock ExecutionContext helper ───────────────────────────────
+
+function makeMockCtx(): {
+  ctx: ExecutionContext;
+  calls: Array<{ command: string; args: string[]; opts: ExecOptions }>;
+} {
+  const calls: Array<{ command: string; args: string[]; opts: ExecOptions }> = [];
+  const ctx: ExecutionContext = {
+    exec: vi.fn(async (command: string, args: string[], opts: ExecOptions) => {
+      calls.push({ command, args, opts });
+      return { stdout: '{"results":[]}', stderr: '', exitCode: 0, timedOut: false };
+    }),
+    cacheRestore: vi.fn(async () => false),
+    cacheSave: vi.fn(async () => {}),
+    log: vi.fn(),
+  };
+  return { ctx, calls };
+}
 
 // ─── Fixture Data ───────────────────────────────────────────────
 
@@ -46,6 +66,41 @@ describe('semgrepPlugin metadata', () => {
   it('does not have a detect function (always-on)', () => {
     // always-on tools may or may not have detect; it's not required
     // The registry accepts this
+  });
+});
+
+// ─── run() — config args ────────────────────────────────────────
+
+describe('semgrepPlugin.run', () => {
+  it('passes --config auto', async () => {
+    const { ctx, calls } = makeMockCtx();
+    await semgrepPlugin.run(ctx, '/workspace', [], 60_000);
+    expect(calls).toHaveLength(1);
+    const args = calls[0]?.args ?? [];
+    const autoIdx = args.indexOf('auto');
+    expect(autoIdx).toBeGreaterThan(0);
+    expect(args[autoIdx - 1]).toBe('--config');
+  });
+
+  it('passes a second --config pointing at the bundled semgrep-rules.yml', async () => {
+    const { ctx, calls } = makeMockCtx();
+    await semgrepPlugin.run(ctx, '/workspace', [], 60_000);
+    const args = calls[0]?.args ?? [];
+    // There must be a --config arg whose value ends with semgrep-rules.yml
+    const rulesArg = args.find((a) => a.endsWith('semgrep-rules.yml'));
+    expect(rulesArg, 'expected a --config <...semgrep-rules.yml> arg').toBeDefined();
+    // and it must be preceded by --config
+    const idx = args.indexOf(rulesArg as string);
+    expect(args[idx - 1]).toBe('--config');
+  });
+
+  it('still scans the repoDir and keeps --json --quiet', async () => {
+    const { ctx, calls } = makeMockCtx();
+    await semgrepPlugin.run(ctx, '/workspace', [], 60_000);
+    const args = calls[0]?.args ?? [];
+    expect(args).toContain('--json');
+    expect(args).toContain('--quiet');
+    expect(args[args.length - 1]).toBe('/workspace');
   });
 });
 
