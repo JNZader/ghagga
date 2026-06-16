@@ -12,7 +12,7 @@
 
 ## 🚀 ESTADO — v3.0.0 PUBLICADA EN NPM (2026-06-15)
 
-> **main @ `e1a6944`.** Release coordinado mayor: `ghagga-core`, `ghagga`, `ghagga-db`
+> **main @ `251d2a8`** (sprint de CI cerrado 2026-06-16). Release coordinado mayor: `ghagga-core`, `ghagga`, `ghagga-db`
 > los 3 en **3.0.0** en npm **con provenance SLSA** (drift core-2.9.1-vs-resto MUERTO).
 > changesets wireado en lockstep. **Por qué v3** (no v2.10): breaking changes reales
 > (CLI `--provider` rechaza legacy, `applyVirtualPatches` firma, `ghagga-db` borró
@@ -26,14 +26,32 @@
 > - 5 PRs Dependabot resueltas (4 merge + migración TS6 #246). `actions/checkout` v6 +
 >   `action.yml` node24 (deprecation Node 20).
 >
+> **Sprint de CI (2026-06-16) — al re-habilitar Actions afloraron 2 workflows rotos:**
+> - deploy-pages.yml (#249): orden `Setup pnpm` antes de `setup-node cache:pnpm`. Verde.
+> - docker.yml/server Dockerfile (#250 types + #251 templates): 2 bugs latentes tapados
+>   uno por otro (server importa @ghagga/types type-only sin copiarlo → TS2307; builder
+>   no copiaba `templates/`). Verificado con `docker build` completo local + CI. Verde.
+> - Hygiene (#252): SHA-pin de los 4 `docker/*`; publish.yml node 20→22; ci.yml
+>   permissions least-priv; timeout-minutes; concurrency en docker.yml.
+> - **CI re-habilitado FULL (#253)**: composite `.github/actions/setup` (DRY del
+>   boilerplate ×4), triggers PR+push-main+dispatch, jobs paralelos, split test(PR)/
+>   coverage(main push). `gh workflow enable ci.yml` (estaba manual-disabled de cuando
+>   era privado). Verificado en PR real #254. **Gap cerrado**: los PRs ahora gatean el
+>   backend, no solo el canary del dashboard.
+> - Lint debt (#254): biome organizeImports en 2 tests de esta sesión. Fix. Quedan
+>   ~250 warnings pre-existentes (no bloquean).
+>
 > **Gotchas del release (para la próxima):** el publish.yml exige **Actions habilitadas
-> en el repo** (estaban OFF) + **NPM_TOKEN válido** (granular bypass-2FA o automation).
-> Trusted Publishing bloqueado (pnpm no soporta OIDC, issue pnpm#9812). Repo público =
-> Actions gratis. Las PRs post-3.0.0 NO tienen changeset → agregar para el próximo bump.
+> en el repo** + **NPM_TOKEN válido** (granular bypass-2FA o automation). Trusted
+> Publishing bloqueado (pnpm no soporta OIDC, pnpm#9812). Repo público = Actions gratis.
+> Las PRs post-3.0.0 NO tienen changeset → agregar para el próximo bump.
 >
 > **Follow-ups nuevos (sin fecha urgente):** command-injection taint precision (FP en
-> `exec` propio); copy-assets try/catch; gitleaks-secrets-no-exentos-del-scope;
-> Trusted Publishing cuando pnpm cierre #9812.
+> `exec` propio); copy-assets try/catch; gitleaks-secrets-no-exentos-del-scope; Trusted
+> Publishing cuando pnpm cierre #9812; **del audit de CI**: server Dockerfile node 20→22
+> (build-verify); política del `security` audit (¿fallar en CRITICAL?); `apps/action/
+> Dockerfile` (--filter names equivocados + dockerignore, dormido); cleanup de los ~250
+> biome warnings.
 >
 > **PRÓXIMA FEATURE → 3.1.0:** issue-triage agent (webhook `issues` + label-gate →
 > diagnostic + memory dedup + cola de aprobación en dashboard + GH Projects). Diseño
