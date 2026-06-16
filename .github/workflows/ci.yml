@@ -19,6 +19,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege: CI only reads the repo.
+permissions:
+  contents: read
+
 jobs:
   # ── Detect Changes ─────────────────────────────────────────
   # Runs first to determine which downstream jobs should execute.
@@ -26,6 +30,7 @@ jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
     steps:
@@ -58,6 +63,7 @@ jobs:
   security:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
     continue-on-error: true
@@ -85,6 +91,7 @@ jobs:
   check:
     name: Typecheck & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
 
@@ -114,6 +121,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
 
@@ -140,6 +148,7 @@ jobs:
   test:
     name: Tests + Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes, check]
     if: needs.changes.outputs.code == 'true'
 
