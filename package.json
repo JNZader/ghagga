@@ -24,10 +24,10 @@
     "release": "turbo build && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "^2.5.0",
     "@changesets/cli": "^2.31.0",
-    "@vitest/coverage-v8": "^4.1.7",
-    "turbo": "^2.9.14"
+    "@vitest/coverage-v8": "^4.1.9",
+    "turbo": "^2.9.18"
   },
   "pnpm": {
     "overrides": {
