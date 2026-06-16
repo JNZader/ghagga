@@ -10,8 +10,12 @@ vi.mock('./context.js', () => ({
 
 import { formatMemoryContext } from './context.js';
 import {
+  buildIssueSearchQuery,
   buildSearchQuery,
+  DEDUP_SCORE_THRESHOLD,
   DEFAULT_IGNORED_SEGMENTS,
+  findIssueDuplicates,
+  MAX_ISSUE_SEARCH_TERMS,
   MAX_SEARCH_TERMS,
   searchMemoryForContext,
 } from './search.js';
@@ -474,5 +478,225 @@ describe('buildSearchQuery', () => {
     expect(DEFAULT_IGNORED_SEGMENTS.size).toBeGreaterThan(0);
     expect(DEFAULT_IGNORED_SEGMENTS.has('src')).toBe(true);
     expect(DEFAULT_IGNORED_SEGMENTS.has('node_modules')).toBe(true);
+  });
+});
+
+// ─── Issue dedup: query builder ─────────────────────────────────
+
+describe('buildIssueSearchQuery', () => {
+  it('builds a keyword query from a realistic title + body', () => {
+    const title = 'Login button throws TypeError on Safari';
+    const body = 'When I click the login button on Safari the console shows a TypeError.';
+    const query = buildIssueSearchQuery(title, body);
+
+    // Meaningful terms survive, lowercased.
+    expect(query).toContain('login');
+    expect(query).toContain('button');
+    expect(query).toContain('typeerror');
+    expect(query).toContain('safari');
+    // Whole query is lowercase.
+    expect(query).toBe(query.toLowerCase());
+  });
+
+  it('strips markdown code fences and inline code so noise does not become terms', () => {
+    const title = 'Crash in parser';
+    const body = [
+      'The parser crashes. Repro:',
+      '```ts',
+      'const sideEffectToken = doSomethingWeird();',
+      '```',
+      'Inline `anotherNoiseToken` here.',
+    ].join('\n');
+    const query = buildIssueSearchQuery(title, body);
+
+    expect(query).toContain('parser');
+    expect(query).toContain('crash');
+    // Code-fenced and inline-code identifiers must NOT leak into the query.
+    expect(query).not.toContain('sideeffecttoken');
+    expect(query).not.toContain('anothernoisetoken');
+  });
+
+  it('drops stopwords and short tokens', () => {
+    const query = buildIssueSearchQuery('The and of to is a', 'it be on at in');
+    // Pure stopwords/short tokens → empty query.
+    expect(query).toBe('');
+  });
+
+  it('dedupes repeated terms', () => {
+    const query = buildIssueSearchQuery('cache cache cache', 'cache invalidation cache');
+    const terms = query.split(' ').filter(Boolean);
+    const cacheCount = terms.filter((t) => t === 'cache').length;
+    expect(cacheCount).toBe(1);
+    expect(terms).toContain('invalidation');
+  });
+
+  it('caps the number of terms at MAX_ISSUE_SEARCH_TERMS', () => {
+    // Build a body with many distinct long words.
+    const words = Array.from({ length: 40 }, (_, i) => `distinctword${i}`).join(' ');
+    const query = buildIssueSearchQuery('header', words);
+    const terms = query.split(' ').filter(Boolean);
+    expect(terms.length).toBeLessThanOrEqual(MAX_ISSUE_SEARCH_TERMS);
+  });
+
+  it('returns empty string for empty/degenerate issue text', () => {
+    expect(buildIssueSearchQuery('', '')).toBe('');
+    expect(buildIssueSearchQuery('   ', '\n\t  ')).toBe('');
+    expect(buildIssueSearchQuery('!!! ??? ...', '--- ###')).toBe('');
+  });
+
+  it('strips punctuation from terms', () => {
+    const query = buildIssueSearchQuery('Webhook(timeout)!', 'retry... handler;');
+    expect(query).toContain('webhook');
+    expect(query).toContain('timeout');
+    expect(query).toContain('retry');
+    expect(query).toContain('handler');
+    expect(query).not.toMatch(/[(),.;!?]/);
+  });
+
+  it('exports MAX_ISSUE_SEARCH_TERMS as a positive number', () => {
+    expect(typeof MAX_ISSUE_SEARCH_TERMS).toBe('number');
+    expect(MAX_ISSUE_SEARCH_TERMS).toBeGreaterThan(0);
+  });
+});
+
+// ─── Issue dedup: match + threshold ─────────────────────────────
+
+describe('findIssueDuplicates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function makeRow(overrides: Partial<MemoryObservationRow> = {}): MemoryObservationRow {
+    return {
+      id: 42,
+      type: 'bugfix',
+      title: 'Prior login crash',
+      content: 'We fixed the login crash before.',
+      filePaths: null,
+      severity: null,
+      ...overrides,
+    };
+  }
+
+  it('exports a conservative DEDUP_SCORE_THRESHOLD in (0,1]', () => {
+    expect(typeof DEDUP_SCORE_THRESHOLD).toBe('number');
+    expect(DEDUP_SCORE_THRESHOLD).toBeGreaterThan(0);
+    expect(DEDUP_SCORE_THRESHOLD).toBeLessThanOrEqual(1);
+  });
+
+  it('passes the built keyword query to searchObservations with limit 5', async () => {
+    const storage = createMockStorage();
+    await findIssueDuplicates(storage, 'owner/repo', 'Login button crash', 'crashes on click');
+
+    expect(storage.searchObservations).toHaveBeenCalledTimes(1);
+    const [project, query, options] = vi.mocked(storage.searchObservations).mock.calls[0];
+    expect(project).toBe('owner/repo');
+    expect(query).toContain('login');
+    expect(query).toContain('crash');
+    expect(options).toEqual({ limit: 5 });
+  });
+
+  it('flags a STRONG match (score ≥ threshold) as a duplicate', async () => {
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockResolvedValue([makeRow({ id: 7, title: 'Same login crash', strength: 0.95 })]),
+    });
+
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+
+    expect(result.isDuplicate).toBe(true);
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]).toEqual({
+      observationId: 7,
+      title: 'Same login crash',
+      score: 0.95,
+    });
+  });
+
+  it('does NOT block on a WEAK match (score < threshold)', async () => {
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockResolvedValue([makeRow({ id: 8, title: 'Loosely related', strength: 0.05 })]),
+    });
+
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+
+    // Weak match is surfaced as a candidate but never marked a hard duplicate.
+    expect(result.isDuplicate).toBe(false);
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0].score).toBe(0.05);
+  });
+
+  it('treats a missing strength as score 0 (never a duplicate)', async () => {
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockResolvedValue([makeRow({ id: 9, title: 'No strength field' })]),
+    });
+
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+
+    expect(result.isDuplicate).toBe(false);
+    expect(result.matches[0].score).toBe(0);
+  });
+
+  it('returns no matches and no duplicate when storage finds nothing', async () => {
+    const storage = createMockStorage();
+    const result = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'Brand new issue',
+      'never seen',
+    );
+
+    expect(result.matches).toEqual([]);
+    expect(result.isDuplicate).toBe(false);
+  });
+
+  it('skips the search and returns empty when issue text is degenerate', async () => {
+    const storage = createMockStorage();
+    const result = await findIssueDuplicates(storage, 'owner/repo', '!!!', '   ');
+
+    expect(storage.searchObservations).not.toHaveBeenCalled();
+    expect(result.query).toBe('');
+    expect(result.matches).toEqual([]);
+    expect(result.isDuplicate).toBe(false);
+  });
+
+  it('returns null storage gracefully (no throw, no duplicate)', async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    const result = await findIssueDuplicates(null as any, 'owner/repo', 'Login crash', 'crashes');
+    expect(result.matches).toEqual([]);
+    expect(result.isDuplicate).toBe(false);
+  });
+
+  it('degrades gracefully when searchObservations throws', async () => {
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockRejectedValue(new Error('db down')),
+    });
+
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+    expect(result.matches).toEqual([]);
+    expect(result.isDuplicate).toBe(false);
+  });
+
+  it('orders matches by score descending and flags duplicate when the TOP is strong', async () => {
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockResolvedValue([
+          makeRow({ id: 1, title: 'weak', strength: 0.1 }),
+          makeRow({ id: 2, title: 'strong', strength: 0.9 }),
+        ]),
+    });
+
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+
+    expect(result.matches.map((m) => m.observationId)).toEqual([2, 1]);
+    expect(result.isDuplicate).toBe(true);
   });
 });
