@@ -53,9 +53,15 @@
 > Dockerfile` (--filter names equivocados + dockerignore, dormido); cleanup de los ~250
 > biome warnings.
 >
-> **PRÓXIMA FEATURE → 3.1.0:** issue-triage agent (webhook `issues` + label-gate →
-> diagnostic + memory dedup + cola de aprobación en dashboard + GH Projects). Diseño
-> completo en engram. Ref: claude.ai/share/9e6b1461.
+> **3.1.0 issue-triage agent — EN CURSO (sesión 2026-06-16), branch `feat/issue-triage-agent` (7 commits sobre main, SIN pushear):**
+> Planning completo (explore→propose→spec→design→tasks, todo en engram `sdd/issue-triage-agent/*`).
+> **Scope LOCKEADO:** gating SOLO comando `/ghagga triage` (label-gate→3.2), GH Projects v2→3.2, permiso delta = solo `issues`.
+> - ✅ **Phase 1** tabla `issue_drafts` — f1e5eca + 2e72554 (3vr: bigint comment-id por overflow int4, CHECK status/kind, partial-unique 1-open-DRAFT)
+> - ✅ **Phase 2** agente core issue-triage — 68647aa + 2a03ba9 (5vr cazó 2 HIGH injection: labels sin sanitizar al frame trusted + sets de markers boundary disjuntos; ambos fixeados. DI `generateFn`, no importa db)
+> - ✅ **Phase 3** memory dedup — 3ed7cc0 + 5553242 (2vr) + 8c66035 (3vr). El score era **recencia (decay strength), no relevancia** → Path A: gate por **keyword-overlap backend-agnóstico** (relevanceScore bm25/ts_rank = telemetría), Engram over-fetch, short-query guard
+> - 🔲 **Phase 4 (PRÓXIMO)** queue+worker `issue-analysis` · 🔲 Phase 5 webhook routing (invertir drop en webhook.ts:356, reusar parseCommentCommand+ALLOWED_ASSOCIATIONS) · 🔲 Phase 6 dashboard approval · 🔲 Phase 7 permiso `issues`+changeset(minor)+docs
+> **Carry-forwards para Phase 4 (CRÍTICOS):** save-path DEBE persistir bajo `ISSUE_TRIAGE_OBSERVATION_TYPE='issue-triage'` (sino dedup no encuentra nada, sin error) · resolver+inyectar `generateFn` igual que audit/simple · gate confidence 4.2: `0` puede ser "unparseable" no "low" · capear comment-count en el fetcher (DoS ingestión) · validar citations file-path model-claimed con acceso al repo · provenance marking del draft en dashboard (defender al human approver).
+> **Blocker de release:** NO shippea hasta deployar server + cerrar PRE-LAUNCH 🔐. Código buildeable/testeable local YA (core 3440 + server 579 verde). Diseño ref: claude.ai/share/9e6b1461.
 >
 > **PRE-LAUNCH 🔐 sigue PARQUEADO** (server no deployado) — vuelve a importar el día que
 > deployees el server para el issue-triage. Ver sección abajo.
