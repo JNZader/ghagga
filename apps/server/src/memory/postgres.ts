@@ -76,11 +76,20 @@ export class PostgresMemoryStorage implements MemoryStorage {
     // NOTE: queries.ts updates lastAccessedAt AFTER selecting, but the returned
     // rows still carry the pre-update timestamp, so this mirrors SQLite's
     // "compute on old value, then bump" ordering.
-    // `rows` arrive ordered by RELEVANCE (ts_rank DESC, or hybrid finalScore DESC
-    // in ghagga-db searchObservations). The 0-based position is therefore a stable
-    // relevance rank; we surface it as a saturating [0,1] relevanceScore for
-    // observability. Use the PRE-decay-filter index so a dropped decayed row does
-    // not inflate the relevance of later rows.
+    // `rows` arrive ordered by RELEVANCE (ts_rank DESC on the keyword-only path,
+    // or hybrid finalScore DESC = 0.7*cosine + 0.3*ts_rank in ghagga-db
+    // searchObservations). The 0-based position is therefore a stable relevance
+    // rank; we surface it as a saturating [0,1] relevanceScore for observability.
+    //
+    // HONEST TELEMETRY NOTE: on the HYBRID path this relevanceScore is the
+    // normalized POSITION in a MIXED semantic+keyword ranking, NOT pure keyword
+    // relevance — so it is backend-native ordinal relevance, non-comparable
+    // across backends, and TELEMETRY ONLY (issue dedup gates on a
+    // backend-agnostic keyword overlap, never on this field). See the
+    // MemoryObservationRow.relevanceScore doc in ghagga-core types.ts.
+    //
+    // Use the PRE-decay-filter index so a dropped decayed row does not inflate
+    // the relevance of later rows.
     const now = new Date();
     const result: MemoryObservationRow[] = [];
     let rank0 = 0;

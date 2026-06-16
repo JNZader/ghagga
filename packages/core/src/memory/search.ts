@@ -210,8 +210,29 @@ export const ISSUE_TRIAGE_OBSERVATION_TYPE = 'issue-triage';
  * FALSE POSITIVES (wrongly suppress analysis of a real new issue). Tune with
  * real issues. NOTE: re-picked from the old 0.6-on-decay-`strength` value,
  * which gated on pure recency and was meaningless as relevance.
+ *
+ * SHORT-QUERY DEGRADATION (known v1 limitation): the overlap score is a COARSE
+ * step function when the query has few distinctive terms. With a 1-term query a
+ * single shared token yields score 1.0 (a guaranteed false-positive on the
+ * gate); with 2 terms the only scores possible are 0 / 0.5 / 1.0, so 0.6
+ * collapses to "share both terms". To avoid auto-suppressing a real issue on too
+ * little signal, {@link findIssueDuplicates} additionally requires the query to
+ * carry at least {@link MIN_DEDUP_QUERY_TERMS} distinctive terms before it will
+ * EVER set `isDuplicate`. A 1-term query therefore never auto-flags — it still
+ * SURFACES candidates (they appear in `matches` as context for the agent/human),
+ * it just never hard-blocks. (The proper fix is IDF/semantic similarity in a
+ * later phase; the term-count floor is the conservative v1 guard.)
  */
 export const DEDUP_SCORE_THRESHOLD = 0.6;
+
+/**
+ * Minimum number of distinctive query terms required before issue dedup will set
+ * `isDuplicate` (hard-block). Below this floor the keyword-overlap score carries
+ * too little signal — a 1-term query flags on a single shared token (1.0) — so
+ * dedup only SURFACES candidates as context and never auto-suppresses. See the
+ * SHORT-QUERY DEGRADATION note on {@link DEDUP_SCORE_THRESHOLD}.
+ */
+export const MIN_DEDUP_QUERY_TERMS = 2;
 
 /**
  * Common English stopwords plus issue-tracker boilerplate. Dropped from issue
@@ -335,16 +356,11 @@ function stripCode(text: string): string {
 export function buildIssueSearchQuery(issueTitle: string, issueBody: string): string {
   // Title first → its keywords rank ahead of the body's under the term cap.
   const raw = `${issueTitle ?? ''}\n${issueBody ?? ''}`;
-  const cleaned = stripCode(raw).toLowerCase();
-
-  const terms = new Set<string>();
-  for (const token of cleaned.split(/[^a-z0-9]+/)) {
-    if (token.length < MIN_ISSUE_TERM_LENGTH) continue;
-    if (ISSUE_STOPWORDS.has(token)) continue;
-    terms.add(token);
-    if (terms.size >= MAX_ISSUE_SEARCH_TERMS) break;
-  }
-
+  // SINGLE SOURCE OF TRUTH: share the exact tokenization pipeline with
+  // `tokenizeIssueText` (strip code → lowercase → split → drop stopwords +
+  // short tokens). Here we additionally cap at MAX_ISSUE_SEARCH_TERMS so the
+  // most salient (title-first) keywords survive.
+  const terms = extractIssueTerms(raw, MAX_ISSUE_SEARCH_TERMS);
   return [...terms].join(' ');
 }
 
@@ -354,16 +370,35 @@ export function buildIssueSearchQuery(issueTitle: string, issueBody: string): st
  * non-word chars → drop stopwords + short tokens), WITHOUT the term cap.
  *
  * Used to score keyword overlap between an issue and a candidate observation.
- * Sharing this pipeline guarantees the overlap math compares like-for-like
- * tokens on both sides.
+ * Sharing the {@link extractIssueTerms} pipeline guarantees the overlap math
+ * compares like-for-like tokens on both sides.
  */
 function tokenizeIssueText(text: string): Set<string> {
+  return extractIssueTerms(text);
+}
+
+/**
+ * Shared tokenization pipeline — the SINGLE SOURCE OF TRUTH for turning issue /
+ * observation prose into a deduped bag of meaningful keyword terms:
+ * strip code → lowercase → split on non-word chars → drop stopwords + tokens
+ * shorter than {@link MIN_ISSUE_TERM_LENGTH}, preserving first-seen order.
+ *
+ * Both {@link buildIssueSearchQuery} (capped) and {@link tokenizeIssueText}
+ * (uncapped) delegate here so the QUERY side and the CANDIDATE side are always
+ * tokenized identically — a prerequisite for the overlap score to be meaningful.
+ *
+ * @param text - Raw text to tokenize (may be null/undefined → empty set).
+ * @param cap  - Optional max number of terms (stops early once reached).
+ *   Undefined ⇒ uncapped. See the asymmetric-cap note on {@link issueOverlapScore}.
+ */
+function extractIssueTerms(text: string, cap?: number): Set<string> {
   const cleaned = stripCode(text ?? '').toLowerCase();
   const terms = new Set<string>();
   for (const token of cleaned.split(/[^a-z0-9]+/)) {
     if (token.length < MIN_ISSUE_TERM_LENGTH) continue;
     if (ISSUE_STOPWORDS.has(token)) continue;
     terms.add(token);
+    if (cap !== undefined && terms.size >= cap) break;
   }
   return terms;
 }
@@ -379,6 +414,18 @@ function tokenizeIssueText(text: string): Set<string> {
  * score-less Engram. This is NOT per-query-top normalization: a candidate that
  * shares 1 of 8 query terms scores 0.125, not 1.0 — only a candidate echoing
  * MOST of the issue's distinctive keywords clears the bar.
+ *
+ * KNOWN v1 LIMITATIONS (accepted trade-offs — dedup FLAGS, never hard-blocks,
+ * and semantic similarity is the Phase-N upgrade):
+ *   (a) IDF-BLIND + ASYMMETRIC TERM CAP. Every shared term counts equally — a
+ *       boilerplate term weighs the same as a rare distinctive one (no inverse
+ *       document frequency). Compounding this, the QUERY side is capped at
+ *       {@link MAX_ISSUE_SEARCH_TERMS} (via buildIssueSearchQuery) while the
+ *       CANDIDATE side ({@link tokenizeIssueText}) is UNCAPPED. Since the score
+ *       normalizes by the (capped) query term set, a verbose candidate that
+ *       happens to echo the query's capped terms can score high — a directional
+ *       bias toward verbose candidates. Accepted for v1: the gate flags, a human
+ *       still adjudicates.
  *
  * @param queryTerms - The deduped issue keyword terms (from the dedup query).
  * @param candidateText - The candidate observation's title + content.
@@ -434,9 +481,11 @@ export interface IssueDedupResult {
   matches: IssueDedupMatch[];
   /**
    * True ONLY when the top match's keyword-overlap score ≥
-   * {@link DEDUP_SCORE_THRESHOLD}. Weak matches are still returned in `matches`
-   * but never set this flag — the worker uses this to decide a DUPLICATE draft
-   * vs. continuing to full analysis.
+   * {@link DEDUP_SCORE_THRESHOLD} AND the query carried at least
+   * {@link MIN_DEDUP_QUERY_TERMS} distinctive terms (the short-query guard — a
+   * 1-term query never auto-flags). Weak/under-signalled matches are still
+   * returned in `matches` but never set this flag — the worker uses this to
+   * decide a DUPLICATE draft vs. continuing to full analysis.
    */
   isDuplicate: boolean;
 }
@@ -487,6 +536,16 @@ export async function findIssueDuplicates(
 
     // Scope to issue-origin observations ONLY (shared type constant) so dedup
     // never matches arbitrary memory (patterns, bugfixes, PR notes).
+    //
+    // KNOWN v1 LIMITATION (b) — STEMMING MISMATCH (accepted trade-off): on
+    // Postgres, RETRIEVAL uses `to_tsquery('english', …)` which stems terms
+    // (throw/throws/throwing collapse to one root), but the overlap SCORER below
+    // ({@link issueOverlapScore} / {@link tokenizeIssueText}) does exact-token
+    // matching with NO stemming. So Postgres may RETRIEVE a morphological variant
+    // that the scorer then fails to credit (throw vs throws → counted as
+    // non-overlapping) → morphological FALSE NEGATIVES. Acceptable for v1: dedup
+    // is conservative-by-design (prefers misses over false suppressions); a
+    // stemmed/semantic scorer is the Phase-N upgrade.
     const observations = await storage.searchObservations(project, query, {
       limit: 5,
       type: ISSUE_TRIAGE_OBSERVATION_TYPE,
@@ -502,8 +561,16 @@ export async function findIssueDuplicates(
       .map((row) => toDedupMatch(row, queryTerms))
       .sort((a, b) => b.score - a.score);
 
-    // Conservative: only the TOP (highest-overlap) match gates the duplicate flag.
-    const isDuplicate = matches.length > 0 && matches[0].score >= DEDUP_SCORE_THRESHOLD;
+    // Conservative gate: only the TOP (highest-overlap) match can flag a dup, AND
+    // ONLY when the query carries enough distinctive terms for the overlap score
+    // to be meaningful. Below MIN_DEDUP_QUERY_TERMS the score is a coarse step
+    // function (a 1-term query scores 1.0 on a single shared token), so we never
+    // auto-suppress — candidates are still surfaced in `matches` as context, they
+    // just don't hard-block. See SHORT-QUERY DEGRADATION on DEDUP_SCORE_THRESHOLD.
+    const isDuplicate =
+      queryTerms.size >= MIN_DEDUP_QUERY_TERMS &&
+      matches.length > 0 &&
+      matches[0].score >= DEDUP_SCORE_THRESHOLD;
 
     return { query, matches, isDuplicate };
   } catch (error) {

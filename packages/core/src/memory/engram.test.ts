@@ -216,6 +216,73 @@ describe('EngramMemoryStorage', () => {
       expect(results[0]?.type).toBe('bugfix');
     });
 
+    it('over-fetches (limit*3) when a type filter is present so a type-matched dup beyond the first `limit` keyword hits is still found', async () => {
+      mockHealthCheck.mockResolvedValue(true);
+      // Server returns keyword matches ordered by relevance. The first TWO are
+      // OTHER types; the real issue-triage match is THIRD. With limit=2 and NO
+      // over-fetch, the server would only hand back the first 2 (both wrong
+      // type) and the genuine dup at position 3 would be silently missed.
+      // Over-fetching limit*3 = 6 lets the client-side filter still see it.
+      mockSearch.mockResolvedValue([
+        makeEngramObservation({ id: 1, type: 'pattern', title: 'noise A' }),
+        makeEngramObservation({ id: 2, type: 'pattern', title: 'noise B' }),
+        makeEngramObservation({ id: 3, type: 'issue-triage', title: 'real dup' }),
+      ]);
+
+      const storage = await EngramMemoryStorage.create({
+        host: 'http://localhost:7437',
+        timeout: 5000,
+      });
+      const results = await storage?.searchObservations('acme/widgets', 'login crash', {
+        limit: 2,
+        type: 'issue-triage',
+      });
+
+      // Over-fetch factor: limit (2) * 3 = 6 rows requested from the server.
+      expect(mockSearch).toHaveBeenCalledWith('login crash', 'acme/widgets', 6);
+      // The type-matched dup beyond the first `limit` keyword hits is recovered.
+      expect(results).toHaveLength(1);
+      expect(results[0]?.id).toBe(3);
+      expect(results[0]?.type).toBe('issue-triage');
+    });
+
+    it('does NOT over-fetch when no type filter is present (fetches exactly `limit`)', async () => {
+      mockHealthCheck.mockResolvedValue(true);
+      mockSearch.mockResolvedValue([]);
+
+      const storage = await EngramMemoryStorage.create({
+        host: 'http://localhost:7437',
+        timeout: 5000,
+      });
+      await storage?.searchObservations('acme/widgets', 'auth', { limit: 5 });
+
+      // No type filter → nothing to drop → fetch exactly `limit`, not limit*3.
+      expect(mockSearch).toHaveBeenCalledWith('auth', 'acme/widgets', 5);
+    });
+
+    it('slices a type-filtered over-fetch back to `limit` (never returns more than asked)', async () => {
+      mockHealthCheck.mockResolvedValue(true);
+      // Four type-matched rows returned by the over-fetch; caller asked for 2.
+      mockSearch.mockResolvedValue([
+        makeEngramObservation({ id: 1, type: 'issue-triage', title: 'a' }),
+        makeEngramObservation({ id: 2, type: 'issue-triage', title: 'b' }),
+        makeEngramObservation({ id: 3, type: 'issue-triage', title: 'c' }),
+        makeEngramObservation({ id: 4, type: 'issue-triage', title: 'd' }),
+      ]);
+
+      const storage = await EngramMemoryStorage.create({
+        host: 'http://localhost:7437',
+        timeout: 5000,
+      });
+      const results = await storage?.searchObservations('acme/widgets', 'q', {
+        limit: 2,
+        type: 'issue-triage',
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results?.map((r) => r.id)).toEqual([1, 2]);
+    });
+
     it('uses default limit of 10 when not specified', async () => {
       mockHealthCheck.mockResolvedValue(true);
       mockSearch.mockResolvedValue([]);

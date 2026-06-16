@@ -1448,6 +1448,26 @@ describe('findIssueDuplicates (real SQLite adapter, integration)', () => {
     expect(dup.matches[0]?.score).toBeGreaterThanOrEqual(DEDUP_SCORE_THRESHOLD);
     expect(dup.matches[0]?.title).toContain('Login button');
 
+    // FALSE-POSITIVE PREVENTION (explicit): the same store also holds the
+    // unrelated "Database migration timeout during deploy" bait. Query it with
+    // its OWN distinctive terms — it WILL retrieve that bait row, but the
+    // INCOMING issue here is a genuinely different one ("connection pool
+    // exhausted under load") that shares NO distinctive keywords with either
+    // stored issue. The overlap must stay below the threshold so a real new
+    // issue is never auto-suppressed. (Exercises the prevention path directly,
+    // rather than only implying it via the positive case above.)
+    const notDup = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'Connection pool exhausted under heavy concurrent load',
+      'The service rejects requests once the connection pool saturates.',
+    );
+    expect(notDup.isDuplicate).toBe(false);
+    // Whatever (if anything) FTS surfaces, no candidate clears the gate.
+    for (const m of notDup.matches) {
+      expect(m.score).toBeLessThan(DEDUP_SCORE_THRESHOLD);
+    }
+
     await storage.close();
   });
 

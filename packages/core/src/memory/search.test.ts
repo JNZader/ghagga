@@ -18,6 +18,7 @@ import {
   ISSUE_TRIAGE_OBSERVATION_TYPE,
   MAX_ISSUE_SEARCH_TERMS,
   MAX_SEARCH_TERMS,
+  MIN_DEDUP_QUERY_TERMS,
   searchMemoryForContext,
 } from './search.js';
 
@@ -795,6 +796,69 @@ describe('findIssueDuplicates', () => {
 
     expect(result.matches[0].score).toBe(0);
     expect(result.isDuplicate).toBe(false);
+  });
+
+  it('SHORT-QUERY GUARD: a 1-term query never auto-flags, even on a perfect 1.0 overlap', async () => {
+    // Single distinctive term → a candidate that echoes it scores 1.0, which the
+    // raw threshold would flag. The MIN_DEDUP_QUERY_TERMS guard must veto the
+    // hard-block: the candidate is still surfaced as context, but isDuplicate=false.
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockResolvedValue([
+          makeRow({ id: 20, title: 'webhook', content: 'webhook handling notes' }),
+        ]),
+    });
+
+    // Title 'webhook' + empty body → query is the single term 'webhook'.
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'webhook', '');
+
+    expect(result.query.split(' ').filter(Boolean)).toHaveLength(1);
+    expect(result.matches).toHaveLength(1);
+    // Overlap is a perfect 1.0 …
+    expect(result.matches[0].score).toBe(1);
+    // … but the short-query guard prevents the auto-suppression.
+    expect(result.isDuplicate).toBe(false);
+  });
+
+  it('2-TERM BOUNDARY: a 2-term query CAN flag once it clears the threshold', async () => {
+    // Two distinctive terms, both shared → overlap 1.0 ≥ threshold AND
+    // queryTerms.size (2) === MIN_DEDUP_QUERY_TERMS → the guard permits the flag.
+    expect(MIN_DEDUP_QUERY_TERMS).toBe(2);
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockResolvedValue([
+          makeRow({ id: 21, title: 'webhook timeout', content: 'webhook timeout on retry' }),
+        ]),
+    });
+
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'webhook timeout', '');
+
+    expect(result.query.split(' ').filter(Boolean)).toHaveLength(2);
+    expect(result.matches[0].score).toBeGreaterThanOrEqual(DEDUP_SCORE_THRESHOLD);
+    expect(result.isDuplicate).toBe(true);
+  });
+
+  it('2-TERM BOUNDARY: a 2-term query with only ONE shared term (0.5 < threshold) does NOT flag', async () => {
+    // Guard is satisfied (2 terms) but overlap 0.5 < 0.6 → still not a dup.
+    const storage = createMockStorage({
+      searchObservations: vi
+        .fn<MemoryStorage['searchObservations']>()
+        .mockResolvedValue([
+          makeRow({ id: 22, title: 'webhook', content: 'webhook delivery notes only' }),
+        ]),
+    });
+
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'webhook timeout', '');
+
+    expect(result.matches[0].score).toBeCloseTo(0.5, 10);
+    expect(result.isDuplicate).toBe(false);
+  });
+
+  it('exports MIN_DEDUP_QUERY_TERMS as a positive integer ≥ 2', () => {
+    expect(typeof MIN_DEDUP_QUERY_TERMS).toBe('number');
+    expect(MIN_DEDUP_QUERY_TERMS).toBeGreaterThanOrEqual(2);
   });
 
   it('orders matches by keyword overlap descending and flags the strong TOP', async () => {

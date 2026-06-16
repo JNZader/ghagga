@@ -664,21 +664,29 @@ export interface MemoryObservationRow {
   strength?: number;
 
   /**
-   * Backend-native keyword RELEVANCE of this row to the search query, normalized
-   * to [0,1] (higher = more relevant). This is ORTHOGONAL to {@link strength}
-   * (which is pure recency/decay): relevanceScore measures how well the row's
-   * text matched the query terms.
+   * Backend-native ORDINAL RELEVANCE of this row in the search ranking, normalized
+   * to [0,1] (higher = ranked more relevant). This is ORTHOGONAL to {@link strength}
+   * (which is pure recency/decay): relevanceScore reflects the row's position in
+   * the backend's own relevance order.
    *
-   * Populated by adapters that expose a usable ranking signal:
-   *   - SQLite: saturating transform of FTS5 `bm25()` (sqlite.ts).
-   *   - Postgres: saturating transform of `ts_rank` positional rank (postgres.ts).
+   * NON-COMPARABLE ACROSS BACKENDS — each adapter derives it from a different
+   * native signal, so a 0.8 on one backend does not mean the same as a 0.8 on
+   * another:
+   *   - SQLite: saturating transform of FTS5 `bm25()` — pure KEYWORD relevance
+   *     (sqlite.ts).
+   *   - Postgres: saturating transform of the row's 0-based RANK position. On the
+   *     keyword-only path that rank is `ts_rank`, but on the HYBRID path it is the
+   *     position in a MIXED semantic+keyword ranking (finalScore = 0.7*cosine +
+   *     0.3*ts_rank, per ghagga-db queries.ts) — NOT pure keyword relevance
+   *     (postgres.ts).
    *   - Engram: UNDEFINED — its REST `/api/search` returns no relevance score
    *     (engram-client.ts), so there is nothing sound to surface.
    *
-   * ADDITIVE / OPTIONAL: existing consumers ignore it. It is telemetry/observability
-   * only — issue dedup does NOT gate on it (it uses a backend-agnostic keyword
-   * overlap so the gate behaves identically across all three backends, including
-   * the score-less Engram). See `findIssueDuplicates` in memory/search.ts.
+   * ADDITIVE / OPTIONAL: existing consumers ignore it. TELEMETRY/OBSERVABILITY
+   * ONLY, NOT USED FOR GATING — issue dedup does NOT gate on it (it uses a
+   * backend-agnostic keyword overlap so the gate behaves identically across all
+   * three backends, including the score-less Engram). See `findIssueDuplicates`
+   * in memory/search.ts.
    */
   relevanceScore?: number;
 }
