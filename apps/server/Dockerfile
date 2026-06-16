@@ -21,6 +21,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/db/package.json packages/db/tsconfig.json ./packages/db/
 COPY packages/core/package.json packages/core/tsconfig.json ./packages/core/
+COPY packages/types/package.json packages/types/tsconfig.json ./packages/types/
 COPY apps/server/package.json apps/server/tsconfig.json ./apps/server/
 
 # Install all dependencies (including dev for building)
@@ -29,11 +30,13 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY packages/db/ ./packages/db/
 COPY packages/core/ ./packages/core/
+COPY packages/types/ ./packages/types/
 COPY apps/server/ ./apps/server/
 
-# Build all packages in dependency order
+# Build all packages in dependency order (types re-exports from core; server uses types)
 RUN pnpm --filter ghagga-db build && \
     pnpm --filter ghagga-core build && \
+    pnpm --filter @ghagga/types build && \
     pnpm --filter @ghagga/server build
 
 # Prune dev dependencies for production image
@@ -87,6 +90,10 @@ COPY --from=builder /app/packages/db/src/migrate.ts ./packages/db/src/migrate.ts
 COPY --from=builder /app/packages/core/dist ./packages/core/dist
 COPY --from=builder /app/packages/core/package.json ./packages/core/
 COPY --from=builder /app/packages/core/node_modules ./packages/core/node_modules
+
+# Types package (dist only — server imports it type-only; keeps the workspace symlink valid)
+COPY --from=builder /app/packages/types/dist ./packages/types/dist
+COPY --from=builder /app/packages/types/package.json ./packages/types/
 
 # Server package (dist only)
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
