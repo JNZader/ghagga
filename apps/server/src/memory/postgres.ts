@@ -7,7 +7,7 @@ import type {
   MemoryStats,
   MemoryStorage,
 } from 'ghagga-core';
-import { computeStrength, DEFAULT_DECAY_CONFIG } from 'ghagga-core';
+import { computeStrength, DEFAULT_DECAY_CONFIG, normalizeRankRelevance } from 'ghagga-core';
 import type { Database, memoryObservations } from 'ghagga-db';
 import {
   clearAllMemoryObservations,
@@ -76,9 +76,17 @@ export class PostgresMemoryStorage implements MemoryStorage {
     // NOTE: queries.ts updates lastAccessedAt AFTER selecting, but the returned
     // rows still carry the pre-update timestamp, so this mirrors SQLite's
     // "compute on old value, then bump" ordering.
+    // `rows` arrive ordered by RELEVANCE (ts_rank DESC, or hybrid finalScore DESC
+    // in ghagga-db searchObservations). The 0-based position is therefore a stable
+    // relevance rank; we surface it as a saturating [0,1] relevanceScore for
+    // observability. Use the PRE-decay-filter index so a dropped decayed row does
+    // not inflate the relevance of later rows.
     const now = new Date();
     const result: MemoryObservationRow[] = [];
+    let rank0 = 0;
     for (const row of rows) {
+      const relevanceScore = normalizeRankRelevance(rank0);
+      rank0++;
       const strength = computeStrength(row.lastAccessedAt, now, this.decayConfig);
       if (strength < this.decayConfig.minStrength) continue;
       result.push({
@@ -89,6 +97,7 @@ export class PostgresMemoryStorage implements MemoryStorage {
         filePaths: row.filePaths ?? null,
         severity: row.severity ?? null,
         strength,
+        relevanceScore,
       });
       // Cap at the originally-requested limit: we over-fetched only to absorb
       // decay drops, never to return MORE than the caller asked for.

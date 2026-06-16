@@ -15,6 +15,7 @@ import {
   DEDUP_SCORE_THRESHOLD,
   DEFAULT_IGNORED_SEGMENTS,
   findIssueDuplicates,
+  ISSUE_TRIAGE_OBSERVATION_TYPE,
   MAX_ISSUE_SEARCH_TERMS,
   MAX_SEARCH_TERMS,
   searchMemoryForContext,
@@ -516,6 +517,41 @@ describe('buildIssueSearchQuery', () => {
     expect(query).not.toContain('anothernoisetoken');
   });
 
+  it('strips multi-backtick / nested code fences without leaking inner tokens', () => {
+    const title = 'Renderer breaks';
+    // A 4-backtick fence wrapping a nested triple fence — the greedy `{3,}
+    // pattern must consume the WHOLE outer block, not stop at the inner ```.
+    const body = [
+      'The renderer breaks. Example:',
+      '````md',
+      '```js',
+      'const leakedInnerToken = compute();',
+      '```',
+      '````',
+      'trailing keyword',
+    ].join('\n');
+    const query = buildIssueSearchQuery(title, body);
+
+    expect(query).toContain('renderer');
+    expect(query).toContain('breaks');
+    // Nothing from inside the (malformed/nested) fence may survive.
+    expect(query).not.toContain('leakedinnertoken');
+    expect(query).not.toContain('compute');
+    // Text OUTSIDE the fence (after it fully closes) must remain.
+    expect(query).toContain('trailing');
+    expect(query).toContain('keyword');
+  });
+
+  it('drops the added stopwords "using" and "via"', () => {
+    const query = buildIssueSearchQuery('Crash using handler', 'reproduced via webhook');
+    const terms = query.split(' ').filter(Boolean);
+    expect(terms).not.toContain('using');
+    expect(terms).not.toContain('via');
+    expect(query).toContain('crash');
+    expect(query).toContain('handler');
+    expect(query).toContain('webhook');
+  });
+
   it('drops stopwords and short tokens', () => {
     const query = buildIssueSearchQuery('The and of to is a', 'it be on at in');
     // Pure stopwords/short tokens → empty query.
@@ -569,7 +605,7 @@ describe('findIssueDuplicates', () => {
   function makeRow(overrides: Partial<MemoryObservationRow> = {}): MemoryObservationRow {
     return {
       id: 42,
-      type: 'bugfix',
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
       title: 'Prior login crash',
       content: 'We fixed the login crash before.',
       filePaths: null,
@@ -584,7 +620,12 @@ describe('findIssueDuplicates', () => {
     expect(DEDUP_SCORE_THRESHOLD).toBeLessThanOrEqual(1);
   });
 
-  it('passes the built keyword query to searchObservations with limit 5', async () => {
+  it('exports ISSUE_TRIAGE_OBSERVATION_TYPE as a non-empty string', () => {
+    expect(typeof ISSUE_TRIAGE_OBSERVATION_TYPE).toBe('string');
+    expect(ISSUE_TRIAGE_OBSERVATION_TYPE.length).toBeGreaterThan(0);
+  });
+
+  it('passes the keyword query AND the issue-triage type filter, with limit 5', async () => {
     const storage = createMockStorage();
     await findIssueDuplicates(storage, 'owner/repo', 'Login button crash', 'crashes on click');
 
@@ -593,53 +634,90 @@ describe('findIssueDuplicates', () => {
     expect(project).toBe('owner/repo');
     expect(query).toContain('login');
     expect(query).toContain('crash');
-    expect(options).toEqual({ limit: 5 });
+    // MEDIUM fix: dedup is scoped by observation type, not all memory.
+    expect(options).toEqual({ limit: 5, type: ISSUE_TRIAGE_OBSERVATION_TYPE });
   });
 
-  it('flags a STRONG match (score ≥ threshold) as a duplicate', async () => {
+  it('flags a STRONG keyword-overlap match (≥ threshold) as a duplicate', async () => {
+    // Issue query terms: login, button, throws, typeerror, safari. The candidate
+    // echoes ALL of them → overlap 1.0 ≥ threshold → duplicate.
     const storage = createMockStorage({
-      searchObservations: vi
-        .fn<MemoryStorage['searchObservations']>()
-        .mockResolvedValue([makeRow({ id: 7, title: 'Same login crash', strength: 0.95 })]),
+      searchObservations: vi.fn<MemoryStorage['searchObservations']>().mockResolvedValue([
+        makeRow({
+          id: 7,
+          title: 'Login button throws TypeError on Safari',
+          content: 'The login button throws a TypeError on Safari.',
+        }),
+      ]),
     });
 
-    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+    const result = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'Login button throws TypeError on Safari',
+      '',
+    );
 
     expect(result.isDuplicate).toBe(true);
     expect(result.matches).toHaveLength(1);
-    expect(result.matches[0]).toEqual({
-      observationId: 7,
-      title: 'Same login crash',
-      score: 0.95,
-    });
+    expect(result.matches[0].observationId).toBe(7);
+    expect(result.matches[0].score).toBeGreaterThanOrEqual(DEDUP_SCORE_THRESHOLD);
   });
 
-  it('does NOT block on a WEAK match (score < threshold)', async () => {
+  it('REGRESSION: a WEAKLY-RELATED but recent observation is NOT flagged', async () => {
+    // This is the exact false-positive the OLD code produced: it gated on decay
+    // `strength` (pure recency), so a RECENT but unrelated observation (strength
+    // ~1.0) was wrongly flagged a duplicate. Here the candidate is recent
+    // (strength 1.0) AND has a high adapter relevanceScore, but shares only ONE
+    // of the issue's many distinctive keywords → low overlap → must NOT block.
     const storage = createMockStorage({
-      searchObservations: vi
-        .fn<MemoryStorage['searchObservations']>()
-        .mockResolvedValue([makeRow({ id: 8, title: 'Loosely related', strength: 0.05 })]),
+      searchObservations: vi.fn<MemoryStorage['searchObservations']>().mockResolvedValue([
+        makeRow({
+          id: 8,
+          title: 'Database migration timeout on deploy',
+          content: 'The login link is mentioned once but this is about migrations.',
+          strength: 1.0, // recently accessed — old code would have flagged this
+          relevanceScore: 0.99, // even a high native score must not gate
+        }),
+      ]),
     });
 
-    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+    const result = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'Login button throws TypeError on Safari rendering pipeline',
+      '',
+    );
 
-    // Weak match is surfaced as a candidate but never marked a hard duplicate.
     expect(result.isDuplicate).toBe(false);
     expect(result.matches).toHaveLength(1);
-    expect(result.matches[0].score).toBe(0.05);
+    expect(result.matches[0].score).toBeLessThan(DEDUP_SCORE_THRESHOLD);
+    // relevanceScore is surfaced for observability but does NOT drive the gate.
+    expect(result.matches[0].relevanceScore).toBe(0.99);
   });
 
-  it('treats a missing strength as score 0 (never a duplicate)', async () => {
+  it('boundary: an overlap EXACTLY at the threshold counts as a duplicate', async () => {
+    // Query has 5 distinct terms; candidate shares exactly 3 → 0.6 == threshold.
+    // (alpha bravo charlie delta echo) ∩ (alpha bravo charlie) = 3/5 = 0.6.
     const storage = createMockStorage({
-      searchObservations: vi
-        .fn<MemoryStorage['searchObservations']>()
-        .mockResolvedValue([makeRow({ id: 9, title: 'No strength field' })]),
+      searchObservations: vi.fn<MemoryStorage['searchObservations']>().mockResolvedValue([
+        makeRow({
+          id: 11,
+          title: 'alpha bravo charlie',
+          content: 'alpha bravo charlie only',
+        }),
+      ]),
     });
 
-    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+    const result = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'alpha bravo charlie delta echo',
+      '',
+    );
 
-    expect(result.isDuplicate).toBe(false);
-    expect(result.matches[0].score).toBe(0);
+    expect(result.matches[0].score).toBeCloseTo(DEDUP_SCORE_THRESHOLD, 10);
+    expect(result.isDuplicate).toBe(true); // gate is `>= threshold`
   });
 
   it('returns no matches and no duplicate when storage finds nothing', async () => {
@@ -653,6 +731,28 @@ describe('findIssueDuplicates', () => {
 
     expect(result.matches).toEqual([]);
     expect(result.isDuplicate).toBe(false);
+  });
+
+  it('surfaces the adapter relevanceScore but never gates on it', async () => {
+    const storage = createMockStorage({
+      searchObservations: vi.fn<MemoryStorage['searchObservations']>().mockResolvedValue([
+        makeRow({
+          id: 12,
+          title: 'cache invalidation bug',
+          content: 'cache invalidation race',
+          relevanceScore: 0.42,
+        }),
+      ]),
+    });
+
+    const result = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'cache invalidation race condition',
+      '',
+    );
+
+    expect(result.matches[0].relevanceScore).toBe(0.42);
   });
 
   it('skips the search and returns empty when issue text is degenerate', async () => {
@@ -684,17 +784,40 @@ describe('findIssueDuplicates', () => {
     expect(result.isDuplicate).toBe(false);
   });
 
-  it('orders matches by score descending and flags duplicate when the TOP is strong', async () => {
+  it('handles a candidate with empty text gracefully (overlap 0, never a dup)', async () => {
     const storage = createMockStorage({
       searchObservations: vi
         .fn<MemoryStorage['searchObservations']>()
-        .mockResolvedValue([
-          makeRow({ id: 1, title: 'weak', strength: 0.1 }),
-          makeRow({ id: 2, title: 'strong', strength: 0.9 }),
-        ]),
+        .mockResolvedValue([makeRow({ id: 13, title: '', content: '' })]),
     });
 
-    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash', 'crashes');
+    const result = await findIssueDuplicates(storage, 'owner/repo', 'Login crash bug', 'crashes');
+
+    expect(result.matches[0].score).toBe(0);
+    expect(result.isDuplicate).toBe(false);
+  });
+
+  it('orders matches by keyword overlap descending and flags the strong TOP', async () => {
+    // Issue terms: login, crash, rendering, pipeline.
+    const storage = createMockStorage({
+      searchObservations: vi.fn<MemoryStorage['searchObservations']>().mockResolvedValue([
+        // shares 1/4 → 0.25 (weak)
+        makeRow({ id: 1, title: 'weak', content: 'login only mentioned here' }),
+        // shares 4/4 → 1.0 (strong)
+        makeRow({
+          id: 2,
+          title: 'login crash in rendering pipeline',
+          content: 'login crash rendering pipeline',
+        }),
+      ]),
+    });
+
+    const result = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'login crash rendering pipeline',
+      '',
+    );
 
     expect(result.matches.map((m) => m.observationId)).toEqual([2, 1]);
     expect(result.isDuplicate).toBe(true);

@@ -79,6 +79,8 @@ describe('PostgresMemoryStorage — core methods', () => {
         fetchLimit: 30,
         embedFn: undefined,
       });
+      // Rows arrive relevance-ordered; relevanceScore is a saturating [0,1] map
+      // of the 0-based rank (rank 0 → 1.0, rank 4 → 0.5). Here ranks 0 and 1.
       expect(result).toEqual([
         {
           id: 1,
@@ -88,6 +90,7 @@ describe('PostgresMemoryStorage — core methods', () => {
           filePaths: ['src/a.ts'],
           severity: null,
           strength: 1,
+          relevanceScore: 1, // rank 0
         },
         {
           id: 2,
@@ -97,8 +100,34 @@ describe('PostgresMemoryStorage — core methods', () => {
           filePaths: null,
           severity: null,
           strength: 1,
+          relevanceScore: 4 / 5, // rank 1 → k/(rank+k) = 4/5 = 0.8
         },
       ]);
+    });
+
+    it('surfaces a saturating [0,1] relevanceScore from the relevance-ordered rank', async () => {
+      const fresh = new Date();
+      mockSearchObservations.mockResolvedValueOnce(
+        [0, 1, 2, 3, 4].map((i) => ({
+          id: i + 1,
+          type: 'pattern',
+          title: `T${i}`,
+          content: 'C',
+          filePaths: null,
+          lastAccessedAt: fresh,
+        })),
+      );
+
+      const result = await storage.searchObservations('proj', 'q');
+      // k/(rank+k) with k=4: ranks 0..4 → 1, 0.8, 0.667, 0.571, 0.5
+      expect(result[0]?.relevanceScore).toBe(1);
+      expect(result[1]?.relevanceScore).toBeCloseTo(0.8, 10);
+      expect(result[4]?.relevanceScore).toBeCloseTo(0.5, 10);
+      // Monotonically non-increasing with rank.
+      for (let i = 1; i < result.length; i++) {
+        // biome-ignore lint/style/noNonNullAssertion: known fixture length
+        expect(result[i]!.relevanceScore!).toBeLessThan(result[i - 1]!.relevanceScore!);
+      }
     });
 
     it('passes options (limit, type) plus over-fetch (fetchLimit = limit*3) to ghagga-db', async () => {

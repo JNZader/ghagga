@@ -169,13 +169,47 @@ export const MAX_ISSUE_SEARCH_TERMS = 12;
 const MIN_ISSUE_TERM_LENGTH = 3;
 
 /**
- * Conservative dedup score threshold. A candidate is treated as a hard
- * DUPLICATE only when the TOP match's score (decay `strength`, 0..1) is at
- * or above this value. Weak matches are still surfaced as candidates (they
- * become `memoryContext` for the agent + `dedupMatches` on the draft) but they
- * MUST NOT block: false-positive dedup would silently bury a legitimate new
- * issue. Default is intentionally high; tune with real issues (design D4 /
- * spec "never blocks on weak matches").
+ * Observation type under which triaged issues are persisted in memory.
+ *
+ * SHARED CONSTANT — dedup scopes its memory search to THIS type so it only
+ * matches prior issue-origin observations, not arbitrary memory (patterns,
+ * bugfixes, PR notes). Phase 4's save-path MUST persist every triaged issue
+ * under EXACTLY this `type`, or dedup will find nothing.
+ *
+ * CARRY-FORWARD NOTE (Phase 4): when the ingestion worker saves a triaged issue
+ * via `storage.saveObservation`, set `type: ISSUE_TRIAGE_OBSERVATION_TYPE`.
+ * Until that save-path lands, `findIssueDuplicates` will correctly return an
+ * empty, non-duplicate result (there is nothing of this type to match) — that
+ * is EXPECTED, not a bug.
+ */
+export const ISSUE_TRIAGE_OBSERVATION_TYPE = 'issue-triage';
+
+/**
+ * Conservative dedup similarity threshold, in [0,1].
+ *
+ * A candidate is treated as a hard DUPLICATE only when its KEYWORD-OVERLAP
+ * similarity to the issue (see {@link issueOverlapScore}) is at or above this
+ * value. Weak matches are still surfaced as candidates (they become
+ * `memoryContext` for the agent + `dedupMatches` on the draft) but MUST NOT
+ * block: a false-positive dedup would silently bury a legitimate new issue.
+ *
+ * WHY KEYWORD OVERLAP (not the adapter's bm25/ts_rank `relevanceScore`):
+ * the three storage backends expose incomparable native signals — SQLite bm25
+ * (unbounded), Postgres ts_rank (small positive), and Engram NONE at all
+ * (its REST search returns no score). Gating on `relevanceScore` would give a
+ * single threshold three different meanings and silently DISABLE dedup on
+ * Engram. Instead we gate on a backend-AGNOSTIC Jaccard overlap of the dedup
+ * query terms against the candidate's title+content — identical math for all
+ * three backends, so one absolute threshold is genuinely meaningful and
+ * comparable. (The adapter `relevanceScore` is still surfaced on rows as
+ * telemetry and could graduate to the gate if Engram ever exposes scores.)
+ *
+ * 0.6 = "≥60% of the issue's distinctive keywords also appear in the prior
+ * observation". This is intentionally conservative: it prefers FALSE NEGATIVES
+ * (miss a dup → the agent/human still sees the candidate as context) over
+ * FALSE POSITIVES (wrongly suppress analysis of a real new issue). Tune with
+ * real issues. NOTE: re-picked from the old 0.6-on-decay-`strength` value,
+ * which gated on pure recency and was meaningless as relevance.
  */
 export const DEDUP_SCORE_THRESHOLD = 0.6;
 
@@ -244,6 +278,8 @@ const ISSUE_STOPWORDS = new Set([
   'should',
   'could',
   'does',
+  'using',
+  'via',
   // issue-tracker boilerplate
   'issue',
   'bug',
@@ -267,9 +303,14 @@ const ISSUE_STOPWORDS = new Set([
 function stripCode(text: string): string {
   return (
     text
-      // Fenced blocks: ```lang\n...\n``` (and ~~~ fences). Non-greedy, multiline.
-      .replace(/```[\s\S]*?```/g, ' ')
-      .replace(/~~~[\s\S]*?~~~/g, ' ')
+      // Fenced blocks: an opening run of N (≥3) backticks closes on a run of the
+      // SAME length (backreference \1). This makes a longer fence (e.g. a 4-tick
+      // ````md block) swallow any shorter ``` fences nested inside it, instead of
+      // a non-greedy `{3,}…`{3,} which would stop at the first inner ``` and leak
+      // the inner code tokens into the keyword query. Non-greedy body, multiline.
+      .replace(/(`{3,})[\s\S]*?\1/g, ' ')
+      // Tilde fences: ~~~lang\n...\n~~~ (same backreference treatment).
+      .replace(/(~{3,})[\s\S]*?\1/g, ' ')
       // Inline code: `token`
       .replace(/`[^`]*`/g, ' ')
   );
@@ -308,6 +349,53 @@ export function buildIssueSearchQuery(issueTitle: string, issueBody: string): st
 }
 
 /**
+ * Tokenize arbitrary issue/observation text into the SAME bag of meaningful
+ * keyword terms `buildIssueSearchQuery` uses (strip code → lowercase → split on
+ * non-word chars → drop stopwords + short tokens), WITHOUT the term cap.
+ *
+ * Used to score keyword overlap between an issue and a candidate observation.
+ * Sharing this pipeline guarantees the overlap math compares like-for-like
+ * tokens on both sides.
+ */
+function tokenizeIssueText(text: string): Set<string> {
+  const cleaned = stripCode(text ?? '').toLowerCase();
+  const terms = new Set<string>();
+  for (const token of cleaned.split(/[^a-z0-9]+/)) {
+    if (token.length < MIN_ISSUE_TERM_LENGTH) continue;
+    if (ISSUE_STOPWORDS.has(token)) continue;
+    terms.add(token);
+  }
+  return terms;
+}
+
+/**
+ * Backend-AGNOSTIC keyword-overlap similarity in [0,1] between an issue's dedup
+ * query terms and a candidate observation's text.
+ *
+ * Score = |queryTerms ∩ candidateTerms| / |queryTerms|  (overlap coefficient,
+ * normalized by the QUERY side). Bounded, monotonic in shared keywords, and —
+ * crucially — identical math for EVERY backend, so {@link DEDUP_SCORE_THRESHOLD}
+ * means the same thing whether the candidate came from SQLite, Postgres, or the
+ * score-less Engram. This is NOT per-query-top normalization: a candidate that
+ * shares 1 of 8 query terms scores 0.125, not 1.0 — only a candidate echoing
+ * MOST of the issue's distinctive keywords clears the bar.
+ *
+ * @param queryTerms - The deduped issue keyword terms (from the dedup query).
+ * @param candidateText - The candidate observation's title + content.
+ */
+function issueOverlapScore(queryTerms: Set<string>, candidateText: string): number {
+  if (queryTerms.size === 0) return 0;
+  const candidateTerms = tokenizeIssueText(candidateText);
+  if (candidateTerms.size === 0) return 0;
+
+  let shared = 0;
+  for (const term of queryTerms) {
+    if (candidateTerms.has(term)) shared++;
+  }
+  return shared / queryTerms.size;
+}
+
+/**
  * A candidate duplicate surfaced by issue dedup.
  *
  * NOTE: structurally identical to `IssueDedupMatch` in the db package
@@ -322,8 +410,20 @@ export interface IssueDedupMatch {
   observationId: number;
   /** Matched observation title (for the draft's "likely duplicate" citation). */
   title: string;
-  /** Match score in [0,1] (decay `strength`; 0 when strength is absent). */
+  /**
+   * Match score in [0,1] — the backend-AGNOSTIC keyword-overlap similarity
+   * between the issue's dedup query terms and this observation's title+content
+   * (see {@link issueOverlapScore}). This is the signal {@link DEDUP_SCORE_THRESHOLD}
+   * gates on. It is NOT the adapter's `relevanceScore` (bm25/ts_rank), which is
+   * incomparable across backends and absent on Engram.
+   */
   score: number;
+  /**
+   * The adapter's native keyword RELEVANCE for this row (saturating bm25/ts_rank
+   * → [0,1]), passed through for observability/telemetry. Undefined on backends
+   * that expose no relevance score (Engram). NOT used by the dedup gate.
+   */
+  relevanceScore?: number;
 }
 
 /** Result of an issue dedup pass. */
@@ -333,19 +433,25 @@ export interface IssueDedupResult {
   /** Candidate matches, ordered by score descending. May be empty. */
   matches: IssueDedupMatch[];
   /**
-   * True ONLY when the top match's score ≥ {@link DEDUP_SCORE_THRESHOLD}.
-   * Weak matches are still returned in `matches` but never set this flag — the
-   * worker uses this to decide a DUPLICATE draft vs. continuing to full analysis.
+   * True ONLY when the top match's keyword-overlap score ≥
+   * {@link DEDUP_SCORE_THRESHOLD}. Weak matches are still returned in `matches`
+   * but never set this flag — the worker uses this to decide a DUPLICATE draft
+   * vs. continuing to full analysis.
    */
   isDuplicate: boolean;
 }
 
-/** Map a raw observation row to a dedup match (score = decay strength, default 0). */
-function toDedupMatch(row: MemoryObservationRow): IssueDedupMatch {
+/**
+ * Map a raw observation row to a dedup match. `score` is the backend-agnostic
+ * keyword-OVERLAP similarity (the gate signal); the adapter's native
+ * `relevanceScore` is passed through for observability only.
+ */
+function toDedupMatch(row: MemoryObservationRow, queryTerms: Set<string>): IssueDedupMatch {
   return {
     observationId: row.id,
     title: row.title,
-    score: row.strength ?? 0,
+    score: issueOverlapScore(queryTerms, `${row.title}\n${row.content}`),
+    relevanceScore: row.relevanceScore,
   };
 }
 
@@ -379,14 +485,24 @@ export async function findIssueDuplicates(
     const query = buildIssueSearchQuery(issueTitle, issueBody);
     if (!query) return empty;
 
-    const observations = await storage.searchObservations(project, query, { limit: 5 });
+    // Scope to issue-origin observations ONLY (shared type constant) so dedup
+    // never matches arbitrary memory (patterns, bugfixes, PR notes).
+    const observations = await storage.searchObservations(project, query, {
+      limit: 5,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+    });
     if (!observations || observations.length === 0) {
       return { query, matches: [], isDuplicate: false };
     }
 
-    const matches = observations.map(toDedupMatch).sort((a, b) => b.score - a.score);
+    // Gate on backend-agnostic keyword overlap (see DEDUP_SCORE_THRESHOLD docs):
+    // measure each candidate's overlap with the SAME deduped query terms.
+    const queryTerms = new Set(query.split(/\s+/).filter(Boolean));
+    const matches = observations
+      .map((row) => toDedupMatch(row, queryTerms))
+      .sort((a, b) => b.score - a.score);
 
-    // Conservative: only the TOP (highest-scoring) match gates the duplicate flag.
+    // Conservative: only the TOP (highest-overlap) match gates the duplicate flag.
     const isDuplicate = matches.length > 0 && matches[0].score >= DEDUP_SCORE_THRESHOLD;
 
     return { query, matches, isDuplicate };

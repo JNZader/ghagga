@@ -168,7 +168,12 @@ export {
 
 export { formatMemoryContext } from './memory/context.js';
 export { detectContradictions } from './memory/contradiction.js';
-export { computeStrength, decayPhase } from './memory/decay.js';
+export {
+  computeStrength,
+  decayPhase,
+  normalizeBm25Relevance,
+  normalizeRankRelevance,
+} from './memory/decay.js';
 export { EngramMemoryStorage } from './memory/engram.js';
 export {
   createProjectPageIndex,
