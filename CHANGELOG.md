@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+> Post-3.0.0 maintenance merged to `main` (no changeset yet — add one before the next
+> `changeset version`, or these won't be picked up for the version bump).
+
+### Changed
+- **TypeScript 6.0** — bumped `typescript` to `^6.0.3` across all 7 workspaces (#246). TS 6.0 stopped auto-including `@types/node` when `lib` is set explicitly and made `baseUrl` a deprecation error; fixed via `types: ["node"]` in the base tsconfig, adding `@types/node` to `@ghagga/types`, and dropping the deprecated `baseUrl` in the dashboard tsconfig (paths now resolve relative to the tsconfig — TS 7-ready).
+- **Dependency bumps** — `commander` 14 → 15 (#243); the `minor-and-patch` group of 23 deps (#245); `actions/setup-node` 6.3 → 6.4 (#240); `actions/deploy-pages` 4 → 5 (#241).
+- **CI/runtime on Node 24** — `actions/checkout` 4.2.2 → 6.0.3 and the Action's own runtime `node20` → `node24` (#247), ahead of the GitHub Actions Node 20 deprecation (forced 2026-06-16, removed 2026-09-16).
+
 ## [3.0.0] - 2026-06-15
 
 > Coordinated major release. The published packages (`ghagga-core`, `ghagga`,
