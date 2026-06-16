@@ -1,19 +1,18 @@
 # ============================================
-# GHAGGA v2 — CI Pipeline
+# GHAGGA — CI Pipeline
 # ============================================
-# Runs on every push and PR to main.
-# Includes: typecheck, lint, test+coverage, security audit, mutation testing.
-#
-# Path-based filtering: doc-only changes (*.md, docs/, openspec/, etc.)
-# skip expensive jobs to save GitHub Actions minutes.
-# Uses dorny/paths-filter to detect changes, so skipped jobs show as
-# "skipped" (not "failed") — compatible with branch protection rules.
+# Runs on PRs to main (fast gate) and on pushes to main (+ coverage).
+# Path-filtered: doc-only changes skip the heavy jobs.
+# Setup (pnpm + Node + install) is centralized in .github/actions/setup.
 
 name: CI
 
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,12 +24,10 @@ permissions:
 
 jobs:
   # ── Detect Changes ─────────────────────────────────────────
-  # Runs first to determine which downstream jobs should execute.
-  # Lightweight: only checks out code and runs git diff, no install.
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     outputs:
       code: ${{ steps.filter.outputs.code }}
     steps:
@@ -58,8 +55,9 @@ jobs:
               - '.dockerignore'
               - 'render.yaml'
               - '.github/workflows/**'
+              - '.github/actions/**'
 
-  # ── Security Scanning (audit #5) ───────────────────────────
+  # ── Security Scanning (advisory) ───────────────────────────
   security:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -67,23 +65,11 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
     continue-on-error: true
-
     steps:
       - name: Checkout
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - name: Setup
+        uses: ./.github/actions/setup
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
 
@@ -94,26 +80,13 @@ jobs:
     timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
-
     steps:
       - name: Checkout
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - name: Setup
+        uses: ./.github/actions/setup
       - name: Typecheck all packages
         run: pnpm exec turbo typecheck
-
       - name: Build all packages
         run: pnpm exec turbo build
 
@@ -124,55 +97,47 @@ jobs:
     timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
-
     steps:
       - name: Checkout
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - name: Setup
+        uses: ./.github/actions/setup
       - name: Lint
         run: pnpm lint
 
-  # ── Tests + Coverage (audit #6) ────────────────────────────
+  # ── Tests (PR: fast, no coverage) ──────────────────────────
   test:
-    name: Tests + Coverage
+    name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [changes, check]
-    if: needs.changes.outputs.code == 'true'
-
+    if: needs.changes.outputs.code == 'true' && github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Run tests
+        run: pnpm exec turbo test
+        env:
+          ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+  # ── Tests + Coverage (main push / manual only) ─────────────
+  coverage:
+    name: Tests + Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [changes, check]
+    if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+      - name: Setup
+        uses: ./.github/actions/setup
       - name: Run tests with coverage
         run: pnpm exec turbo test:coverage
         env:
           ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-
       - name: Upload coverage reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -183,4 +148,3 @@ jobs:
             apps/*/coverage/
           retention-days: 7
           if-no-files-found: ignore
-
