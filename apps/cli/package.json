@@ -48,7 +48,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@clack/prompts": "^1.4.0",
+    "@clack/prompts": "^1.5.1",
     "chalk": "^5.6.0",
     "fts5-sql-bundle": "^1.0.2",
     "ghagga-core": "workspace:*",
@@ -56,9 +56,9 @@
     "dotenv": "^17.4.2"
   },
   "devDependencies": {
-    "tsx": "^4.22.3",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.0",
-    "vitest": "^4.1.7",
+    "vitest": "^4.1.9",
     "@types/node": "^25.9.1"
   }
 }
