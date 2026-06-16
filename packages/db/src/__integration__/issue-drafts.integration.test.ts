@@ -85,9 +85,18 @@ describe('integration: issue_drafts lifecycle (real PostgreSQL)', () => {
     const draftId = await insertDraft(repoId, 7, 'DRAFT');
 
     await pool.query(`UPDATE issue_drafts SET status = 'APPROVED' WHERE id = $1`, [draftId]);
+
+    // Read back the intermediate APPROVED state BEFORE transitioning to POSTED,
+    // so a silently-ignored UPDATE (e.g. a bad WHERE) can't slip through.
+    const approved = await pool.query(`SELECT status FROM issue_drafts WHERE id = $1`, [draftId]);
+    expect(approved.rows[0].status).toBe('APPROVED');
+
+    // GitHub comment IDs are 64-bit; use a value > int4 max (2,147,483,647) to
+    // prove the bigint column round-trips a real-world id without overflow.
+    const bigCommentId = 9_876_543_210;
     await pool.query(
       `UPDATE issue_drafts SET status = 'POSTED', posted_comment_id = $2 WHERE id = $1`,
-      [draftId, 99999],
+      [draftId, bigCommentId],
     );
 
     const { rows } = await pool.query(
@@ -95,7 +104,7 @@ describe('integration: issue_drafts lifecycle (real PostgreSQL)', () => {
       [draftId],
     );
     expect(rows[0].status).toBe('POSTED');
-    expect(rows[0].posted_comment_id).toBe(99999);
+    expect(Number(rows[0].posted_comment_id)).toBe(bigCommentId);
   });
 
   it('transitions DRAFT → REJECTED without ever posting', async () => {
@@ -144,6 +153,22 @@ describe('integration: issue_drafts partial-unique constraint (real PostgreSQL)'
     const repoId = await seedRepository(2005);
     await insertDraft(repoId, 42, 'POSTED');
     await expect(insertDraft(repoId, 42, 'POSTED')).resolves.toBeGreaterThan(0);
+  });
+});
+
+describe('integration: issue_drafts CHECK constraints (real PostgreSQL)', () => {
+  it('rejects an invalid status value via chk_issue_drafts_status', async () => {
+    const repoId = await seedRepository(4001);
+    await expect(insertDraft(repoId, 1, 'BOGUS')).rejects.toThrow(
+      /chk_issue_drafts_status|violates check constraint/i,
+    );
+  });
+
+  it('rejects an invalid draft_kind value via chk_issue_drafts_draft_kind', async () => {
+    const repoId = await seedRepository(4002);
+    await expect(insertDraft(repoId, 1, 'DRAFT', 'WRONG_KIND')).rejects.toThrow(
+      /chk_issue_drafts_draft_kind|violates check constraint/i,
+    );
   });
 });
 

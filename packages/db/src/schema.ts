@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -204,8 +206,10 @@ export const issueDrafts = pgTable(
     body: text('body').notNull(), // editable cited markdown report
     sources: jsonb('sources').$type<IssueDraftSource[]>(),
     dedupMatches: jsonb('dedup_matches').$type<IssueDedupMatch[]>(),
-    tokensUsed: integer('tokens_used').default(0),
-    postedCommentId: integer('posted_comment_id'), // set on POSTED
+    tokensUsed: integer('tokens_used').default(0).notNull(),
+    // GitHub comment IDs are 64-bit and already exceed int4's max, so this
+    // must be bigint to avoid out-of-range at insert time. Nullable: set on POSTED.
+    postedCommentId: bigint('posted_comment_id', { mode: 'number' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -218,6 +222,17 @@ export const issueDrafts = pgTable(
     uniqueIndex('uq_issue_drafts_open_draft')
       .on(t.repositoryId, t.issueNumber)
       .where(sql`${t.status} = 'DRAFT'`),
+    // DB-level CHECK mirroring the exported const unions. The partial-unique
+    // "one open DRAFT" index is only as strong as the validity of `status`,
+    // so this hardens that invariant at the database boundary.
+    check(
+      'chk_issue_drafts_status',
+      sql`${t.status} IN (${sql.raw(ISSUE_DRAFT_STATUSES.map((v) => `'${v}'`).join(', '))})`,
+    ),
+    check(
+      'chk_issue_drafts_draft_kind',
+      sql`${t.draftKind} IN (${sql.raw(ISSUE_DRAFT_KINDS.map((v) => `'${v}'`).join(', '))})`,
+    ),
   ],
 );
 

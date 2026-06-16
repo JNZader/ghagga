@@ -1,5 +1,5 @@
 {
-  "id": "632c8b2c-829a-4a89-b036-99073771c838",
+  "id": "90547770-8c2b-4638-8c7a-f84b891d488f",
   "prevId": "02303d5c-c93a-48a0-bf4b-b27c0bd29b08",
   "version": "7",
   "dialect": "postgresql",
@@ -304,12 +304,12 @@
           "name": "tokens_used",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": 0
         },
         "posted_comment_id": {
           "name": "posted_comment_id",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
@@ -400,7 +400,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "chk_issue_drafts_status": {
+          "name": "chk_issue_drafts_status",
+          "value": "\"issue_drafts\".\"status\" IN ('DRAFT', 'APPROVED', 'REJECTED', 'POSTED')"
+        },
+        "chk_issue_drafts_draft_kind": {
+          "name": "chk_issue_drafts_draft_kind",
+          "value": "\"issue_drafts\".\"draft_kind\" IN ('ANALYSIS', 'DUPLICATE', 'NEEDS_INFO')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.memory_observations": {

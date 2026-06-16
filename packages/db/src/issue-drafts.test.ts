@@ -9,12 +9,19 @@
  * `__integration__/issue-drafts.integration.test.ts` (Docker-gated).
  */
 
-import { getTableConfig } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 import { ISSUE_DRAFT_KINDS, ISSUE_DRAFT_STATUSES, issueDrafts, repositories } from './schema.js';
 
 const config = getTableConfig(issueDrafts);
 const columns = new Map(config.columns.map((c) => [c.name, c]));
+
+// drizzle stores index predicates / CHECK expressions as SQL AST objects whose
+// default stringification is "[object Object]". Render them to literal SQL so we
+// can assert on the actual value lists, not merely that *some* predicate exists.
+const dialect = new PgDialect();
+const renderSql = (expr: SQL | undefined): string => (expr ? dialect.sqlToQuery(expr).sql : '');
 
 describe('issue_drafts table', () => {
   it('is named "issue_drafts"', () => {
@@ -55,6 +62,7 @@ describe('issue_drafts table', () => {
       'status',
       'draft_kind',
       'body',
+      'tokens_used',
       'created_at',
       'updated_at',
     ]) {
@@ -83,9 +91,15 @@ describe('issue_drafts table', () => {
     expect(columns.get('dedup_matches')?.columnType).toBe('PgJsonb');
   });
 
-  it('defaults tokens_used to 0', () => {
+  it('defaults tokens_used to 0 and is NOT NULL (a counter must never be null)', () => {
     expect(columns.get('tokens_used')?.hasDefault).toBe(true);
     expect(columns.get('tokens_used')?.default).toBe(0);
+    expect(columns.get('tokens_used')?.notNull).toBe(true);
+  });
+
+  it('uses bigint for posted_comment_id (GitHub comment IDs exceed int4)', () => {
+    // GitHub comment IDs are 64-bit; int4 would overflow at insert time.
+    expect(columns.get('posted_comment_id')?.columnType).toBe('PgBigInt53');
   });
 
   it('defaults created_at and updated_at to now()', () => {
@@ -126,7 +140,28 @@ describe('issue_drafts table', () => {
       'issue_number',
     ]);
     // The partial predicate (WHERE status = 'DRAFT') is what makes it "open draft only".
+    // Assert it actually references DRAFT, not merely that *a* predicate exists —
+    // the invariant is worthless if the predicate matched the wrong status.
     expect(partial?.where, 'partial index must carry a WHERE predicate').toBeDefined();
+    expect(renderSql(partial?.where)).toContain("'DRAFT'");
+  });
+
+  it('declares DB-level CHECK constraints on status and draft_kind mirroring the const unions', () => {
+    const checks = new Map(config.checks.map((c) => [c.name, c]));
+
+    const statusCheck = checks.get('chk_issue_drafts_status');
+    expect(statusCheck, 'status CHECK must exist').toBeDefined();
+    const statusSql = renderSql(statusCheck?.value);
+    for (const value of ISSUE_DRAFT_STATUSES) {
+      expect(statusSql).toContain(`'${value}'`);
+    }
+
+    const kindCheck = checks.get('chk_issue_drafts_draft_kind');
+    expect(kindCheck, 'draft_kind CHECK must exist').toBeDefined();
+    const kindSql = renderSql(kindCheck?.value);
+    for (const value of ISSUE_DRAFT_KINDS) {
+      expect(kindSql).toContain(`'${value}'`);
+    }
   });
 });
 
