@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   doublePrecision,
@@ -9,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
 
@@ -158,6 +160,64 @@ export const reviews = pgTable(
   (t) => [
     index('idx_reviews_repository').on(t.repositoryId),
     index('idx_reviews_created_at').on(t.createdAt),
+  ],
+);
+
+// ─── Issue Drafts (Issue-Triage Agent) ──────────────────────────
+// Net-new, additive table. Unlike `reviews` (PR-centric, posts immediately),
+// the triage worker persists a DRAFT and NEVER auto-posts — a human approves
+// it in the dashboard, which then posts the comment via the issues API.
+
+/** Draft lifecycle: worker inserts DRAFT → human edits → APPROVED → POSTED, or → REJECTED. */
+export const ISSUE_DRAFT_STATUSES = ['DRAFT', 'APPROVED', 'REJECTED', 'POSTED'] as const;
+export type IssueDraftStatus = (typeof ISSUE_DRAFT_STATUSES)[number];
+
+/** What the worker produced: a full analysis, a duplicate match, or a missing-info request. */
+export const ISSUE_DRAFT_KINDS = ['ANALYSIS', 'DUPLICATE', 'NEEDS_INFO'] as const;
+export type IssueDraftKind = (typeof ISSUE_DRAFT_KINDS)[number];
+
+/** Cited source backing a draft claim (memory observation or issue excerpt). */
+export interface IssueDraftSource {
+  title: string;
+  type: string;
+  ref: string;
+}
+
+/** A prior observation surfaced by the dedup stage. */
+export interface IssueDedupMatch {
+  observationId: number;
+  title: string;
+  score: number;
+}
+
+export const issueDrafts = pgTable(
+  'issue_drafts',
+  {
+    id: serial('id').primaryKey(),
+    repositoryId: integer('repository_id')
+      .references(() => repositories.id, { onDelete: 'cascade' })
+      .notNull(),
+    issueNumber: integer('issue_number').notNull(),
+    issueTitle: varchar('issue_title', { length: 500 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull(), // DRAFT | APPROVED | REJECTED | POSTED
+    draftKind: varchar('draft_kind', { length: 20 }).notNull(), // ANALYSIS | DUPLICATE | NEEDS_INFO
+    body: text('body').notNull(), // editable cited markdown report
+    sources: jsonb('sources').$type<IssueDraftSource[]>(),
+    dedupMatches: jsonb('dedup_matches').$type<IssueDedupMatch[]>(),
+    tokensUsed: integer('tokens_used').default(0),
+    postedCommentId: integer('posted_comment_id'), // set on POSTED
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (t) => [
+    index('idx_issue_drafts_repository').on(t.repositoryId),
+    index('idx_issue_drafts_status').on(t.status),
+    // At most ONE open DRAFT per (repository, issue). Approved/rejected/posted
+    // rows are excluded by the partial predicate, so re-triaging after a
+    // decision is allowed.
+    uniqueIndex('uq_issue_drafts_open_draft')
+      .on(t.repositoryId, t.issueNumber)
+      .where(sql`${t.status} = 'DRAFT'`),
   ],
 );
 

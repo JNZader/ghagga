@@ -1,0 +1,1000 @@
+{
+  "id": "632c8b2c-829a-4a89-b036-99073771c838",
+  "prevId": "02303d5c-c93a-48a0-bf4b-b27c0bd29b08",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.github_user_mappings": {
+      "name": "github_user_mappings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "github_user_id": {
+          "name": "github_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "github_login": {
+          "name": "github_login",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "installation_id": {
+          "name": "installation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_user_mappings_github_user": {
+          "name": "idx_user_mappings_github_user",
+          "columns": [
+            {
+              "expression": "github_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "github_user_mappings_installation_id_installations_id_fk": {
+          "name": "github_user_mappings_installation_id_installations_id_fk",
+          "tableFrom": "github_user_mappings",
+          "tableTo": "installations",
+          "columnsFrom": [
+            "installation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_user_installation": {
+          "name": "uq_user_installation",
+          "nullsNotDistinct": false,
+          "columns": [
+            "github_user_id",
+            "installation_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.installation_settings": {
+      "name": "installation_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "installation_id": {
+          "name": "installation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_chain": {
+          "name": "provider_chain",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "ai_review_enabled": {
+          "name": "ai_review_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "review_mode": {
+          "name": "review_mode",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'simple'"
+        },
+        "settings": {
+          "name": "settings",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{\"enableSemgrep\":true,\"enableTrivy\":true,\"enableCpd\":true,\"enableMemory\":true,\"customRules\":[],\"ignorePatterns\":[\"*.md\",\"*.txt\",\".gitignore\",\"LICENSE\",\"*.lock\"],\"reviewLevel\":\"normal\",\"disabledTools\":[]}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "installation_settings_installation_id_installations_id_fk": {
+          "name": "installation_settings_installation_id_installations_id_fk",
+          "tableFrom": "installation_settings",
+          "tableTo": "installations",
+          "columnsFrom": [
+            "installation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "installation_settings_installation_id_unique": {
+          "name": "installation_settings_installation_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "installation_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.installations": {
+      "name": "installations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "github_installation_id": {
+          "name": "github_installation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_login": {
+          "name": "account_login",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_type": {
+          "name": "account_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "installations_github_installation_id_unique": {
+          "name": "installations_github_installation_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "github_installation_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.issue_drafts": {
+      "name": "issue_drafts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "repository_id": {
+          "name": "repository_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issue_number": {
+          "name": "issue_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issue_title": {
+          "name": "issue_title",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "draft_kind": {
+          "name": "draft_kind",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sources": {
+          "name": "sources",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dedup_matches": {
+          "name": "dedup_matches",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tokens_used": {
+          "name": "tokens_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "posted_comment_id": {
+          "name": "posted_comment_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_issue_drafts_repository": {
+          "name": "idx_issue_drafts_repository",
+          "columns": [
+            {
+              "expression": "repository_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_issue_drafts_status": {
+          "name": "idx_issue_drafts_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uq_issue_drafts_open_draft": {
+          "name": "uq_issue_drafts_open_draft",
+          "columns": [
+            {
+              "expression": "repository_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "issue_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"issue_drafts\".\"status\" = 'DRAFT'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "issue_drafts_repository_id_repositories_id_fk": {
+          "name": "issue_drafts_repository_id_repositories_id_fk",
+          "tableFrom": "issue_drafts",
+          "tableTo": "repositories",
+          "columnsFrom": [
+            "repository_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.memory_observations": {
+      "name": "memory_observations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "project": {
+          "name": "project",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "severity": {
+          "name": "severity",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "topic_key": {
+          "name": "topic_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "file_paths": {
+          "name": "file_paths",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::jsonb"
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revision_count": {
+          "name": "revision_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_accessed_at": {
+          "name": "last_accessed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "double precision[]",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_observations_project": {
+          "name": "idx_observations_project",
+          "columns": [
+            {
+              "expression": "project",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_observations_topic_key": {
+          "name": "idx_observations_topic_key",
+          "columns": [
+            {
+              "expression": "topic_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_observations_type": {
+          "name": "idx_observations_type",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_observations_content_hash": {
+          "name": "idx_observations_content_hash",
+          "columns": [
+            {
+              "expression": "content_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_observations_created_at": {
+          "name": "idx_observations_created_at",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_observations_last_accessed_at": {
+          "name": "idx_observations_last_accessed_at",
+          "columns": [
+            {
+              "expression": "last_accessed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "memory_observations_session_id_memory_sessions_id_fk": {
+          "name": "memory_observations_session_id_memory_sessions_id_fk",
+          "tableFrom": "memory_observations",
+          "tableTo": "memory_sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.memory_sessions": {
+      "name": "memory_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "project": {
+          "name": "project",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pr_number": {
+          "name": "pr_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_memory_sessions_project": {
+          "name": "idx_memory_sessions_project",
+          "columns": [
+            {
+              "expression": "project",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.repositories": {
+      "name": "repositories",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "github_repo_id": {
+          "name": "github_repo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "installation_id": {
+          "name": "installation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "settings": {
+          "name": "settings",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{\"enableSemgrep\":true,\"enableTrivy\":true,\"enableCpd\":true,\"enableMemory\":true,\"customRules\":[],\"ignorePatterns\":[\"*.md\",\"*.txt\",\".gitignore\",\"LICENSE\",\"*.lock\"],\"reviewLevel\":\"normal\",\"disabledTools\":[]}'::jsonb"
+        },
+        "review_mode": {
+          "name": "review_mode",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'simple'"
+        },
+        "use_global_settings": {
+          "name": "use_global_settings",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "provider_chain": {
+          "name": "provider_chain",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "ai_review_enabled": {
+          "name": "ai_review_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "encrypted_api_key": {
+          "name": "encrypted_api_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "llm_provider": {
+          "name": "llm_provider",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'gateway'"
+        },
+        "llm_model": {
+          "name": "llm_model",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "workflow_installed_at": {
+          "name": "workflow_installed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "workflow_sha": {
+          "name": "workflow_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_repositories_installation": {
+          "name": "idx_repositories_installation",
+          "columns": [
+            {
+              "expression": "installation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_repositories_full_name": {
+          "name": "idx_repositories_full_name",
+          "columns": [
+            {
+              "expression": "full_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "repositories_installation_id_installations_id_fk": {
+          "name": "repositories_installation_id_installations_id_fk",
+          "tableFrom": "repositories",
+          "tableTo": "installations",
+          "columnsFrom": [
+            "installation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "repositories_github_repo_id_unique": {
+          "name": "repositories_github_repo_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "github_repo_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.reviews": {
+      "name": "reviews",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "repository_id": {
+          "name": "repository_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pr_number": {
+          "name": "pr_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "findings": {
+          "name": "findings",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tokens_used": {
+          "name": "tokens_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "execution_time_ms": {
+          "name": "execution_time_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_reviews_repository": {
+          "name": "idx_reviews_repository",
+          "columns": [
+            {
+              "expression": "repository_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_reviews_created_at": {
+          "name": "idx_reviews_created_at",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "reviews_repository_id_repositories_id_fk": {
+          "name": "reviews_repository_id_repositories_id_fk",
+          "tableFrom": "reviews",
+          "tableTo": "repositories",
+          "columnsFrom": [
+            "repository_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
