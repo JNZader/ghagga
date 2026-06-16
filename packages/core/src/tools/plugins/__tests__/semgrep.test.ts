@@ -8,8 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import type { RawToolOutput } from '../../types.js';
-import type { ExecOptions, ExecutionContext } from '../../types.js';
+import type { ExecOptions, ExecutionContext, RawToolOutput } from '../../types.js';
 import { mapSemgrepSeverity, parseSemgrepOutput, semgrepPlugin } from '../semgrep.js';
 
 // ─── Mock ExecutionContext helper ───────────────────────────────
