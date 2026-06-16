@@ -32,8 +32,10 @@ if [ "$SERVICE_TYPE" = "worker" ]; then
   # If EITHER worker exits, tear the container down so the orchestrator restarts
   # it (a half-dead worker pair must not look healthy). `wait -n` returns on the
   # first child to exit; kill the survivor before exiting with its status.
-  wait -n
-  EXIT_CODE=$?
+  # `wait -n || EXIT_CODE=$?` so a non-zero worker exit doesn't trip `set -e`
+  # before the explicit survivor-kill + exit below (caught by 4vr re-verify).
+  EXIT_CODE=0
+  wait -n || EXIT_CODE=$?
   echo "⚠️  A worker process exited (code ${EXIT_CODE}) — shutting down the worker container"
   kill "$REVIEW_PID" "$ISSUE_PID" 2>/dev/null || true
   exit "$EXIT_CODE"
