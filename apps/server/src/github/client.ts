@@ -7,6 +7,7 @@
 
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
+import { logger } from '../lib/logger.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -173,21 +174,29 @@ export async function getIssue(
  * oldest-first by ascending comment id and does NOT accept `sort`/`direction`
  * (only `since`/`page`/`per_page` — verified against the REST docs). To return
  * the NEWEST comments we therefore:
- *   1. read the FIRST page with the SMALLEST page size that satisfies the cap
- *      (`per_page = min(maxCount, 100)`) plus the `Link` header to learn the
- *      LAST page number,
- *   2. fetch that LAST page,
- *   3. keep the trailing `maxCount` of the combined newest data.
- * This bounds the fetch to ~`maxCount` rows (at most 2 pages) instead of paging
- * the oldest 500 and slicing the tail — the old behavior, which on a >500-comment
- * issue returned the OLDEST 500's tail, not the newest.
+ *   1. read the FIRST page with the MAX page size (`per_page = 100`) plus the
+ *      `Link` header to learn the LAST page number,
+ *   2. fetch that LAST page (the newest comments),
+ *   3. if the last page holds FEWER than `maxCount` comments AND a previous page
+ *      exists, ALSO fetch the previous page so the newest-`maxCount` window is
+ *      complete across the page boundary,
+ *   4. concatenate in chronological (oldest→newest) order and keep the trailing
+ *      `maxCount`.
+ * Because `per_page = 100`, the last two pages always cover ≥ `maxCount` for any
+ * sane `maxCount ≤ 100`, so this bounds the fetch to at most 3 HTTP calls (the
+ * page-1 probe for the `Link` header, the last page, and one previous page) —
+ * never paging the oldest 500 and slicing the tail (the pre-fix behavior on a
+ * >500-comment issue returned the OLDEST 500's tail, not the newest).
  *
  * The CALLER additionally enforces a total-payload byte budget (per-comment +
  * body truncation) before enqueue — `maxCount` alone does not bound total bytes
  * because a single comment body can be arbitrarily large.
  *
- * Returns `{ author, body }` pairs, OLDEST→NEWEST within the kept window. A
- * comment with a missing/null author falls back to the literal `'unknown'`.
+ * Returns `{ author, body }` pairs, OLDEST→NEWEST within the kept window (so the
+ * agent reads them in chronological order). A comment with a missing/null author
+ * falls back to the literal `'unknown'`. A present-but-malformed `Link` header
+ * does NOT silently return the oldest comments — it logs a warn and falls back
+ * to the trailing `maxCount` of whatever page 1 returned.
  *
  * THROWS on a failed page so the caller can distinguish "no comments" from
  * "fetch failed" and log accordingly (the caller degrades to `[]` + a warn).
@@ -201,8 +210,9 @@ export async function listIssueComments(
 ): Promise<Array<{ author: string; body: string }>> {
   if (maxCount <= 0) return [];
   const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`;
-  // Cap the fetch to ~maxCount rows so we never pull 500 when a few are wanted.
-  const perPage = Math.min(Math.max(maxCount, 1), 100);
+  // Always request the MAX page size: this guarantees the last (and, if needed,
+  // the previous) page together cover ≥ maxCount for any sane maxCount ≤ 100.
+  const perPage = 100;
 
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -216,39 +226,68 @@ export async function listIssueComments(
       body: c.body ?? '',
     }));
 
-  // GitHub exposes the last page via rel="last" in the Link header.
-  const lastPageFrom = (link: string | null): number | null => {
+  const fetchPage = async (page: number) => {
+    const res = await fetch(`${baseUrl}?per_page=${perPage}&page=${page}`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      throw new Error(`GitHub API error listing issue comments: ${res.status} ${res.statusText}`);
+    }
+    return res;
+  };
+
+  // GitHub exposes the last page via rel="last" in the Link header. Returns the
+  // parsed page number, `null` when there is no Link header (single page), or
+  // `'malformed'` when a Link header is present but unparseable.
+  const lastPageFrom = (link: string | null): number | null | 'malformed' => {
     if (!link) return null;
     const m = link.match(/[?&]page=(\d+)[^>]*>;\s*rel="last"/);
-    return m?.[1] ? Number.parseInt(m[1], 10) : null;
+    if (!m?.[1]) return 'malformed';
+    const n = Number.parseInt(m[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : 'malformed';
   };
 
   return githubCircuitBreaker.execute(async () => {
-    const firstUrl = `${baseUrl}?per_page=${perPage}&page=1`;
-    const firstRes = await fetch(firstUrl, { headers, signal: AbortSignal.timeout(10_000) });
-    if (!firstRes.ok) {
-      throw new Error(
-        `GitHub API error listing issue comments: ${firstRes.status} ${firstRes.statusText}`,
-      );
-    }
+    // Probe page 1 — both for its contents and for the Link header.
+    const firstRes = await fetchPage(1);
     const firstPage = parse(await firstRes.json());
     const lastPage = lastPageFrom(firstRes.headers.get('link'));
 
-    // Single page of results: it already holds every comment — keep the newest.
-    if (lastPage === null || lastPage <= 1) {
+    // No Link header → single page; it already holds every comment.
+    if (lastPage === null) {
       return firstPage.slice(-maxCount);
     }
 
-    // Otherwise jump straight to the last page (the newest comments) and keep
-    // the trailing `maxCount`. At most 2 HTTP calls regardless of comment count.
-    const lastUrl = `${baseUrl}?per_page=${perPage}&page=${lastPage}`;
-    const lastRes = await fetch(lastUrl, { headers, signal: AbortSignal.timeout(10_000) });
-    if (!lastRes.ok) {
-      throw new Error(
-        `GitHub API error listing issue comments: ${lastRes.status} ${lastRes.statusText}`,
+    // Malformed Link header → do NOT silently return the oldest comments; log
+    // and fall back to the trailing maxCount of whatever page 1 returned.
+    if (lastPage === 'malformed') {
+      logger.warn(
+        { owner, repo, issueNumber },
+        'listIssueComments: malformed GitHub Link header — falling back to page 1 tail',
       );
+      return firstPage.slice(-maxCount);
     }
-    return parse(await lastRes.json()).slice(-maxCount);
+
+    // rel="last" points at page 1 → page 1 IS the whole set.
+    if (lastPage <= 1) {
+      return firstPage.slice(-maxCount);
+    }
+
+    // Fetch the last page (the newest comments).
+    let window = parse(await (await fetchPage(lastPage)).json());
+
+    // The last page can be partial (e.g. 105 total, per_page=100 → page 2 has
+    // only 5). If it underfills the window AND a previous page exists, prepend
+    // the previous page so the newest-maxCount window is complete across the
+    // boundary. page 1 is already in hand — only re-fetch intermediate pages.
+    if (window.length < maxCount && lastPage > 1) {
+      const prevPage = lastPage - 1;
+      const prev = prevPage === 1 ? firstPage : parse(await (await fetchPage(prevPage)).json());
+      window = [...prev, ...window];
+    }
+
+    return window.slice(-maxCount);
   });
 }
 

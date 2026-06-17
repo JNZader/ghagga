@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '../lib/logger.js';
 import {
   fetchGraphFromBranch,
   fetchGraphMetadata,
@@ -455,19 +456,23 @@ describe('listIssueComments — newest-first fetch', () => {
     expect(result.map((c) => c.body)).toEqual(['c2', 'c3', 'c4']);
   });
 
-  it('caps per_page to ~maxCount (does not request 100 when few are wanted)', async () => {
+  it('always requests per_page=100 (max) regardless of maxCount', async () => {
     mockFetch.mockResolvedValueOnce(res([{ author: 'a', body: 'x' }]));
     await listIssueComments('owner', 'repo', 1, 'token', 20);
-    expect(mockFetch.mock.calls[0][0]).toContain('per_page=20');
+    expect(mockFetch.mock.calls[0][0]).toContain('per_page=100');
   });
 
-  it('many pages: jumps straight to the LAST page (newest) — 2 fetches total', async () => {
-    // First page (oldest) advertises rel="last" page=9. The fix must NOT page
-    // 1..9; it reads page 1 (for the Link header) then jumps to page 9.
-    const oldest = Array.from({ length: 20 }, (_, i) => ({ author: `o${i}`, body: `old${i}` }));
-    const newestPage = Array.from({ length: 20 }, (_, i) => ({ author: `n${i}`, body: `new${i}` }));
+  it('many pages, full last page: jumps straight to the LAST page — 2 fetches', async () => {
+    // Page 1 (oldest) advertises rel="last" page=9. The fix must NOT page 1..9;
+    // it reads page 1 (for the Link header) then jumps to page 9. The last page
+    // is FULL (≥ maxCount), so no previous page is needed.
+    const oldest = Array.from({ length: 100 }, (_, i) => ({ author: `o${i}`, body: `old${i}` }));
+    const newestPage = Array.from({ length: 100 }, (_, i) => ({
+      author: `n${i}`,
+      body: `new${i}`,
+    }));
     const link =
-      '<https://api.github.com/repositories/1/issues/1/comments?per_page=20&page=9>; rel="last"';
+      '<https://api.github.com/repositories/1/issues/1/comments?per_page=100&page=9>; rel="last"';
     mockFetch
       .mockResolvedValueOnce(res(oldest, link)) // page 1
       .mockResolvedValueOnce(res(newestPage)); // page 9
@@ -478,7 +483,127 @@ describe('listIssueComments — newest-first fetch', () => {
     expect(mockFetch.mock.calls[0][0]).toContain('page=1');
     expect(mockFetch.mock.calls[1][0]).toContain('page=9');
     // Returns the trailing 5 of the NEWEST page, not the tail of the oldest.
-    expect(result.map((c) => c.body)).toEqual(['new15', 'new16', 'new17', 'new18', 'new19']);
+    expect(result.map((c) => c.body)).toEqual(['new95', 'new96', 'new97', 'new98', 'new99']);
+  });
+
+  it('21 comments, maxCount=20: completes the window from the previous page (regression)', async () => {
+    // The regression: per_page used to == maxCount (20), so page 1 = 1..20 and
+    // the last page (page 2) = comment 21 only → returned 1 comment. With the
+    // fix, per_page=100 → page 1 advertises rel="last" page=2 (the 21st comment),
+    // the partial last page underfills, so page 1 is prepended → newest 20.
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ author: `u${i}`, body: `c${i}` }));
+    const page2 = [{ author: 'u100', body: 'c100' }]; // single newest comment
+    const link =
+      '<https://api.github.com/repositories/1/issues/1/comments?per_page=100&page=2>; rel="last"';
+    // Two distinct pages, but emulate a 101-comment issue (window math is the
+    // same as the 21/20 case: last page underfills maxCount).
+    mockFetch
+      .mockResolvedValueOnce(res(page1, link)) // page 1 (probe)
+      .mockResolvedValueOnce(res(page2)); // page 2 (last, partial)
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 20);
+
+    // page 1 already in hand (prevPage === 1) → only 2 fetches, NOT 3.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Newest 20: c81..c99 (tail of page 1) + c100 (page 2).
+    const expected = [...Array.from({ length: 19 }, (_, i) => `c${81 + i}`), 'c100'];
+    expect(result.map((c) => c.body)).toEqual(expected);
+    expect(result).toHaveLength(20);
+  });
+
+  it('partial last page, intermediate previous page: 3 fetches complete the window', async () => {
+    // 105 comments, per_page=100 → page 1 = c0..c99, page 2 (last) = c100..c104
+    // (only 5). maxCount=20 underfills from the last page, and the previous page
+    // is an INTERMEDIATE page (page 1 here, but exercise the > 1 path with page 3).
+    // Model a 3-page issue: page 3 (last) = 5 comments, prev = page 2 (full 100).
+    const page2 = Array.from({ length: 100 }, (_, i) => ({ author: `m${i}`, body: `mid${i}` }));
+    const page3 = Array.from({ length: 5 }, (_, i) => ({ author: `n${i}`, body: `new${i}` }));
+    const link =
+      '<https://api.github.com/repositories/1/issues/1/comments?per_page=100&page=3>; rel="last"';
+    mockFetch
+      .mockResolvedValueOnce(res([], link)) // page 1 (probe; content irrelevant here)
+      .mockResolvedValueOnce(res(page3)) // page 3 (last, partial — 5)
+      .mockResolvedValueOnce(res(page2)); // page 2 (previous, intermediate → re-fetched)
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 20);
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch.mock.calls[1][0]).toContain('page=3');
+    expect(mockFetch.mock.calls[2][0]).toContain('page=2');
+    // Newest 20 = trailing 15 of page 2 (mid85..mid99) + 5 of page 3 (new0..new4).
+    const expected = [
+      ...Array.from({ length: 15 }, (_, i) => `mid${85 + i}`),
+      ...Array.from({ length: 5 }, (_, i) => `new${i}`),
+    ];
+    expect(result.map((c) => c.body)).toEqual(expected);
+  });
+
+  it('missing Link header (single page) → trailing maxCount of page 1', async () => {
+    const comments = Array.from({ length: 8 }, (_, i) => ({ author: `u${i}`, body: `c${i}` }));
+    mockFetch.mockResolvedValueOnce(res(comments)); // no link arg → header null
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 3);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.map((c) => c.body)).toEqual(['c5', 'c6', 'c7']);
+  });
+
+  it('malformed Link header → warns and falls back to page 1 tail (NOT oldest)', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const comments = Array.from({ length: 6 }, (_, i) => ({ author: `u${i}`, body: `c${i}` }));
+    // Link present but no rel="last" page number → malformed.
+    const badLink = '<https://api.github.com/...>; rel="next", <garbage>; rel="prev"';
+    mockFetch.mockResolvedValueOnce(res(comments, badLink));
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 3);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    // Falls back to the NEWEST 3 of page 1, never the oldest.
+    expect(result.map((c) => c.body)).toEqual(['c3', 'c4', 'c5']);
+    warnSpy.mockRestore();
+  });
+
+  it('exactly maxCount on a single page → returns all, in order', async () => {
+    const comments = Array.from({ length: 4 }, (_, i) => ({ author: `u${i}`, body: `c${i}` }));
+    mockFetch.mockResolvedValueOnce(res(comments));
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 4);
+
+    expect(result.map((c) => c.body)).toEqual(['c0', 'c1', 'c2', 'c3']);
+  });
+
+  it('total < maxCount (single page) → returns all available', async () => {
+    const comments = [
+      { author: 'a', body: 'c0' },
+      { author: 'b', body: 'c1' },
+    ];
+    mockFetch.mockResolvedValueOnce(res(comments));
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 20);
+
+    expect(result.map((c) => c.body)).toEqual(['c0', 'c1']);
+  });
+
+  it('zero comments (empty single page) → empty array', async () => {
+    mockFetch.mockResolvedValueOnce(res([]));
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 20);
+
+    expect(result).toEqual([]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rel="last" pointing at page 1 → treats page 1 as the whole set (1 fetch)', async () => {
+    const comments = Array.from({ length: 5 }, (_, i) => ({ author: `u${i}`, body: `c${i}` }));
+    const link =
+      '<https://api.github.com/repositories/1/issues/1/comments?per_page=100&page=1>; rel="last"';
+    mockFetch.mockResolvedValueOnce(res(comments, link));
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 3);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.map((c) => c.body)).toEqual(['c2', 'c3', 'c4']);
   });
 
   it('THROWS on a failed page (caller distinguishes fetch-fail from no-comments)', async () => {
