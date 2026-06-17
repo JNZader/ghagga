@@ -53,6 +53,10 @@
 > Dockerfile` (--filter names equivocados + dockerignore, dormido); cleanup de los ~250
 > biome warnings.
 >
+> **Follow-ups del issue-triage (2026-06-16/17, fix-between-SDDs):**
+> - 🐛 **cli-bridge `gemini` exige `GEMINI_API_KEY` aunque usa Google OAuth** (`packages/core/src/providers/cli-bridge.ts:163-181`): `validateCredentials` hace hard-fail con `CLIConfigurationError` antes de invocar el CLI, aunque `gemini` autentica por OAuth sin key. Hacer el credential opcional con OAuth fallback (aplica también a `copilot`). Descubierto en el smoke test REAL del agente — ningún unit test lo vio (todos inyectan generateFn).
+> - **`COMMAND_REGEX` no anclado a línea** (quoting-injection): un maintainer citando `/ghagga triage` de un attacker dispara. Compartido con el review trigger → hardening per-path (no tocar el shared, separar regexes).
+>
 > **3.1.0 issue-triage agent — IMPLEMENTACIÓN COMPLETA 7/7 FASES (sesión 2026-06-16), branch `feat/issue-triage-agent` (17 commits sobre main, SIN pushear, release-blocked):**
 > Planning + las 7 fases, cada una con review multi-voz (3vr/4vr/5vr) + fix-forward. Todo en engram `sdd/issue-triage-agent/*`.
 > **Scope LOCKEADO:** gating SOLO comando `/ghagga triage` (label-gate→3.2), GH Projects v2→3.2, permiso delta = solo `issues`.
