@@ -126,6 +126,8 @@ The on-demand trigger uses the same pipeline and settings as automatic reviews. 
 
 **Who can trigger?** Anyone with a contribution relationship to the repository: owners, members, collaborators, contributors, and first-time contributors. Users with no association (`NONE`) or placeholder accounts (`MANNEQUIN`) are rejected.
 
+> **Issues, not just PRs**: a maintainer can also comment `/ghagga triage` on a plain issue to run the [issue-triage agent](issue-triage.md), which drafts an analysis for human approval (it never auto-posts). Triage uses a **stricter** write-association gate (`OWNER` / `MEMBER` / `COLLABORATOR` only) and requires the `Issues: Read and write` App permission.
+
 ## Self-Hosted Mode (BullMQ)
 
 In server mode, the pipeline runs via a **BullMQ job queue** backed by Redis. When a webhook receives a PR event, it enqueues a job in the `review` queue. A separate worker process picks up the job and executes the review pipeline. Each review generates a **correlation ID** (`reviewId`) that is propagated through all steps and included in the PR comment for end-to-end tracing.

@@ -29,7 +29,10 @@ Go from zero to your first AI code review in under 5 minutes. This guide walks y
 | **Pull requests** | Read and write | Fetch PR diffs and post review comments |
 | **Contents** | Read and write | Inject the static-analysis workflow at `.github/workflows/ghagga.yml` |
 | **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
+| **Issues** | Read and write | Issue-triage (`/ghagga triage`): read the issue + its comments, post the approved draft comment |
 | **Metadata** | Read-only | List repositories (auto-selected by GitHub) |
+
+> **Re-consent note**: The `Issues` permission was added for the issue-triage feature. Existing installations must **re-approve** the App's permissions before it keeps working — GitHub prompts admins automatically when a new scope is requested.
 
 > **Note**: GHAGGA does **not** request the `Secrets` permission. LLM API keys are encrypted with AES-256-GCM and stored inside GHAGGA's own database, not in GitHub repository secrets. The per-dispatch callback secret travels via `workflow_dispatch` inputs, not via repo secrets.
 

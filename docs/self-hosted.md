@@ -58,9 +58,12 @@ Under **Repository permissions**:
 | **Pull requests** | Read and write | Fetch PR diffs and post review comments |
 | **Contents** | Read and write | Inject the static-analysis workflow file at `.github/workflows/ghagga.yml` |
 | **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
+| **Issues** | Read and write | Issue-triage (`/ghagga triage`): read the issue + its comments, post the approved draft comment |
 | **Metadata** | Read-only (auto-selected) | List repositories and installations |
 
 Under **Account permissions**: Leave everything as "No access".
+
+> **Re-consent note**: If you add the `Issues` permission to an **already-installed** App, GitHub requires each installation to re-approve the new scope before the App keeps working. New installations grant it as part of the initial consent.
 
 > **Note**: GHAGGA does **not** require the `Secrets: Read and write` permission. The static-analysis runner is an inline workflow injected into each target repo; the per-dispatch callback secret travels via `workflow_dispatch` inputs, not via GitHub Actions repository secrets.
 

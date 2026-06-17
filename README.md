@@ -32,6 +32,7 @@ What makes it different:
 - **Static analysis runs first.** 17 deterministic tools (Semgrep, Trivy, Gitleaks, Ruff, clippy, …) catch known issues before a single LLM token is spent. Findings are injected into the review prompt so the model focuses on logic and architecture.
 - **It remembers.** Past decisions, bugfixes, and patterns persist across reviews (PostgreSQL, SQLite, or [Engram](https://github.com/Gentleman-Programming/engram)) and feed back into future ones — with full-text search, strength decay, and privacy stripping.
 - **Five orchestration strategies.** From a fast single pass to multi-agent consensus voting, picked per review by cost/confidence tradeoff.
+- **Issue triage, too.** A maintainer can comment `/ghagga triage` on an issue to dedupe and classify it; the agent drafts an analysis for human approval in the dashboard and never auto-posts. See [Issue Triage](https://ghagga.javierzader.com/docs/issue-triage).
 - **No runner infrastructure.** Server mode injects an inline GitHub Actions workflow into each target repo and dispatches it — heavy analysis runs on the repo's own free CI minutes, secured with per-dispatch HMAC secrets.
 
 ## By the Numbers

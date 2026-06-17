@@ -10,6 +10,7 @@
   - [Review Modes](review-modes.md)
 
 - Features
+  - [Issue Triage](issue-triage.md)
   - [Static Analysis](static-analysis.md)
   - [Tool Candidates](static-analysis-candidates.md)
   - [Health Check](health.md)
