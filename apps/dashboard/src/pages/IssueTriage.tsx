@@ -21,6 +21,17 @@ const STATUS_STYLES: Record<IssueDraftStatus, string> = {
   REJECTED: 'bg-red-500/15 text-red-400',
 };
 
+// APPROVED is a TRANSIENT "posting in progress" lock (the server claims the
+// draft DRAFT→APPROVED before calling GitHub, then resolves it to POSTED or back
+// to DRAFT on failure). It is NOT an actionable, stuck state — surface it as
+// "Posting…" so a maintainer doesn't treat it as a draft awaiting a decision.
+const STATUS_LABELS: Record<IssueDraftStatus, string> = {
+  DRAFT: 'DRAFT',
+  APPROVED: 'POSTING…',
+  POSTED: 'POSTED',
+  REJECTED: 'REJECTED',
+};
+
 function DraftStatusBadge({ status }: { status: IssueDraftStatus }) {
   return (
     <span
@@ -29,7 +40,7 @@ function DraftStatusBadge({ status }: { status: IssueDraftStatus }) {
         STATUS_STYLES[status],
       )}
     >
-      {status}
+      {STATUS_LABELS[status]}
     </span>
   );
 }
@@ -105,7 +116,19 @@ function DraftDetail({ draft, onClose }: DraftDetailProps) {
       );
 
     if (bodyDirty) {
-      editDraft.mutate({ id: draft.id, body }, { onSuccess: post });
+      // Persist the dirty edit FIRST, then post. If the PATCH fails we must NOT
+      // proceed to approve and must NOT swallow the error — surface it and stop,
+      // keeping the modal open so the maintainer sees what happened.
+      editDraft.mutate(
+        { id: draft.id, body },
+        {
+          onSuccess: post,
+          onError: (e) => {
+            setShowApprove(false);
+            addToast({ message: e.message, type: 'error' });
+          },
+        },
+      );
     } else {
       post();
     }

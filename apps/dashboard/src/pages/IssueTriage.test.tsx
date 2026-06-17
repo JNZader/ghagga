@@ -171,4 +171,64 @@ describe('IssueTriage detail', () => {
     expect(textarea.value).toBe(evil);
     expect(container.querySelector('img[src="x"]')).toBeNull();
   });
+
+  it('renders an injection-laden body as PLAIN TEXT on the DECIDED read-only path too', () => {
+    // Closes the coverage gap: the editable (textarea) path was covered, but the
+    // decided render path is `<p whitespace-pre-wrap>{body}</p>`. It must ALSO
+    // render the untrusted string as text, never create an <img> node.
+    const evil = '<img src=x onerror=alert(1)>**not bold**';
+    mockUseIssueDrafts.mockReturnValue({
+      data: [makeDraft({ status: 'POSTED', postedCommentId: 1, body: evil })],
+      isLoading: false,
+      isError: false,
+    });
+    const { container } = renderPage();
+    fireEvent.click(screen.getByText('App crashes on startup'));
+    // No editable textarea on the decided path.
+    expect(screen.queryByLabelText('Edit comment body')).not.toBeInTheDocument();
+    // The exact string shows as text content, and no <img> element exists.
+    expect(screen.getByText(evil)).toBeInTheDocument();
+    expect(container.querySelector('img[src="x"]')).toBeNull();
+  });
+
+  it('approve with a DIRTY edit that FAILS to PATCH: error shown, approve NOT called', () => {
+    // The edit must be persisted before posting; if the PATCH fails the error is
+    // surfaced and approve must NOT fire (no swallowed failure, no silent modal).
+    mockEditMutate.mockImplementation((_vars, opts) => {
+      opts?.onError?.(new Error('save failed'));
+    });
+    renderPage();
+    fireEvent.click(screen.getByText('App crashes on startup'));
+    // Make the body dirty.
+    const textarea = screen.getByLabelText('Edit comment body');
+    fireEvent.change(textarea, { target: { value: 'Edited but will fail' } });
+    // Approve through the confirm dialog.
+    fireEvent.click(screen.getByText('Approve & post'));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByText('Approve & post'));
+
+    // The dirty edit was attempted...
+    expect(mockEditMutate).toHaveBeenCalledWith(
+      { id: 9, body: 'Edited but will fail' },
+      expect.any(Object),
+    );
+    // ...it failed, so approve was NEVER called, and the error toast is shown.
+    expect(mockApproveMutate).not.toHaveBeenCalled();
+    expect(screen.getByText('save failed')).toBeInTheDocument();
+  });
+
+  it('shows the APPROVED draft as a transient "POSTING…" state, not an actionable DRAFT', () => {
+    mockUseIssueDrafts.mockReturnValue({
+      data: [makeDraft({ status: 'APPROVED' })],
+      isLoading: false,
+      isError: false,
+    });
+    renderPage();
+    // Badge shows POSTING…, not the raw APPROVED, and there is no actionable row
+    // edit/approve control once opened (decided → read-only).
+    expect(screen.getAllByText('POSTING…').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText('App crashes on startup'));
+    expect(screen.queryByLabelText('Edit comment body')).not.toBeInTheDocument();
+    expect(screen.queryByText('Approve & post')).not.toBeInTheDocument();
+  });
 });

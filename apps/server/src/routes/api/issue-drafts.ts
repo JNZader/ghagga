@@ -12,13 +12,26 @@
  *     (auth middleware) and scopes draft access to THAT set. A user can never
  *     read or act on a draft whose `repositoryId` is outside their repos.
  *   - The approve path RE-VERIFIES repo ownership BEFORE posting (defense in
- *     depth), and the POSTED transition is the DB-level idempotency guard: a
- *     duplicate/concurrent approve matches zero DRAFT rows and does NOT re-post.
+ *     depth). EXACTLY-ONCE POSTING is enforced by a CAS posting-lock: approve
+ *     atomically claims the draft (DRAFT → APPROVED) BEFORE calling postComment,
+ *     so of N concurrent approvers only ONE ever reaches GitHub; the losers get
+ *     a 409 before any side effect. On a successful post the claim resolves
+ *     forward (APPROVED → POSTED); on a failed post it reverts (APPROVED →
+ *     DRAFT) so a human can retry. APPROVED is a TRANSIENT "posting" state.
+ *
+ *     Lifecycle: DRAFT → APPROVED (posting) → POSTED   (or → DRAFT on failure).
+ *
  *   - The worker NEVER posts; posting only ever happens here, on human approval.
+ *
+ *   EXISTENCE ORACLE: a draft the caller does not own is reported as 404 (not
+ *   403) on detail/edit/approve/reject, so a user cannot enumerate which draft
+ *   ids exist in other tenants by distinguishing "exists but not yours" from
+ *   "doesn't exist".
  */
 
 import type { Database } from 'ghagga-db';
 import {
+  claimIssueDraftForPosting,
   getInstallationById,
   getIssueDraftById,
   getReposByInstallationId,
@@ -28,6 +41,7 @@ import {
   listIssueDrafts,
   markIssueDraftPosted,
   rejectIssueDraft,
+  releaseIssueDraftClaim,
   updateIssueDraftBody,
 } from 'ghagga-db';
 import { Hono } from 'hono';
@@ -36,12 +50,33 @@ import { getInstallationToken, postComment } from '../../github/client.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import { generateErrorId, logger } from './utils.js';
 
-/** Max length for an edited draft body — bounds what gets posted to GitHub. */
+/**
+ * Max BYTE length for an edited draft body — bounds what gets posted to GitHub
+ * (GitHub's comment limit is ~65536 BYTES, not UTF-16 code units). We validate
+ * actual UTF-8 byte length below so multibyte content can't smuggle past a
+ * char-count cap.
+ */
 const MAX_DRAFT_BODY_BYTES = 60_000;
 
 const editBodySchema = z.object({
-  body: z.string().min(1).max(MAX_DRAFT_BODY_BYTES),
+  body: z
+    .string()
+    .min(1)
+    .refine((s) => Buffer.byteLength(s, 'utf8') <= MAX_DRAFT_BODY_BYTES, {
+      message: `Body exceeds ${MAX_DRAFT_BODY_BYTES} bytes`,
+    }),
 });
+
+/**
+ * Parse a `:id` path param STRICTLY. `parseInt('9abc', 10)` silently truncates
+ * to 9; `Number('9abc')` is NaN, so a partial-number id is rejected. Returns the
+ * positive integer id, or `null` when the param is not a clean positive integer.
+ */
+function parseIdParam(param: string | undefined): number | null {
+  if (param === undefined) return null;
+  const n = Number(param);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 /**
  * Resolve the INTERNAL repository ids the caller may access, from their
@@ -116,19 +151,18 @@ export function createIssueDraftsRouter(db: Database) {
   // ── GET /api/issue-drafts/:id ───────────────────────────────
   router.get('/api/issue-drafts/:id', async (c) => {
     const user = c.get('user') as AuthUser;
-    const id = parseInt(c.req.param('id'), 10);
-    if (!Number.isInteger(id) || id <= 0) {
+    const id = parseIdParam(c.req.param('id'));
+    if (id === null) {
       return c.json({ error: 'VALIDATION_ERROR', message: 'Invalid draft id' }, 400);
     }
 
     try {
       const draft = await getIssueDraftById(db, id);
-      if (!draft) {
-        return c.json({ error: 'NOT_FOUND', message: 'Draft not found' }, 404);
-      }
       const repoIds = await resolveCallerRepoIds(db, user);
-      if (!repoIds.has(draft.repositoryId)) {
-        return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
+      // EXISTENCE ORACLE: a missing draft AND a foreign draft both return 404 —
+      // a caller cannot tell "exists but not yours" from "doesn't exist".
+      if (!draft || !repoIds.has(draft.repositoryId)) {
+        return c.json({ error: 'NOT_FOUND', message: 'Draft not found' }, 404);
       }
       return c.json({ data: toDraftDto(draft) });
     } catch (err) {
@@ -144,8 +178,8 @@ export function createIssueDraftsRouter(db: Database) {
   // ── PATCH /api/issue-drafts/:id (edit body) ─────────────────
   router.patch('/api/issue-drafts/:id', async (c) => {
     const user = c.get('user') as AuthUser;
-    const id = parseInt(c.req.param('id'), 10);
-    if (!Number.isInteger(id) || id <= 0) {
+    const id = parseIdParam(c.req.param('id'));
+    if (id === null) {
       return c.json({ error: 'VALIDATION_ERROR', message: 'Invalid draft id' }, 400);
     }
 
@@ -165,12 +199,10 @@ export function createIssueDraftsRouter(db: Database) {
 
     try {
       const draft = await getIssueDraftById(db, id);
-      if (!draft) {
-        return c.json({ error: 'NOT_FOUND', message: 'Draft not found' }, 404);
-      }
       const repoIds = await resolveCallerRepoIds(db, user);
-      if (!repoIds.has(draft.repositoryId)) {
-        return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
+      // EXISTENCE ORACLE: missing OR foreign → 404 (no tenant id enumeration).
+      if (!draft || !repoIds.has(draft.repositoryId)) {
+        return c.json({ error: 'NOT_FOUND', message: 'Draft not found' }, 404);
       }
       // DRAFT-only update — a decided draft cannot be edited (returns undefined).
       const updated = await updateIssueDraftBody(db, id, parsed.data.body);
@@ -192,33 +224,35 @@ export function createIssueDraftsRouter(db: Database) {
   });
 
   // ── POST /api/issue-drafts/:id/approve ──────────────────────
-  // Posts the (edited) draft body to the GitHub issue, then transitions to
-  // POSTED. Re-verifies repo ownership BEFORE posting; the POSTED transition is
-  // the DB-level idempotency guard (a double-click / redelivery matches no DRAFT
-  // row and does NOT re-post).
+  // Posts the (edited) draft body to the GitHub issue exactly once.
+  //
+  // EXACTLY-ONCE POSTING: we CLAIM the draft (CAS DRAFT → APPROVED) BEFORE
+  // calling postComment. Of N concurrent approvers only ONE wins the claim and
+  // reaches GitHub; the rest get `undefined` from the claim and a 409 BEFORE any
+  // side effect — so postComment fires at most once. On success the claim
+  // resolves forward (APPROVED → POSTED); on a post FAILURE we revert (APPROVED
+  // → DRAFT) so the human can retry. Repo ownership is re-verified before the
+  // claim. Lifecycle: DRAFT → APPROVED (posting) → POSTED  (or → DRAFT on fail).
   router.post('/api/issue-drafts/:id/approve', async (c) => {
     const user = c.get('user') as AuthUser;
-    const id = parseInt(c.req.param('id'), 10);
-    if (!Number.isInteger(id) || id <= 0) {
+    const id = parseIdParam(c.req.param('id'));
+    if (id === null) {
       return c.json({ error: 'VALIDATION_ERROR', message: 'Invalid draft id' }, 400);
     }
 
     try {
       const draft = await getIssueDraftById(db, id);
-      if (!draft) {
+
+      // RE-AUTHORIZATION before any side effect: the caller MUST own the draft's
+      // repo. EXISTENCE ORACLE: missing OR foreign → 404 (no tenant id leak).
+      const repoIds = await resolveCallerRepoIds(db, user);
+      if (!draft || !repoIds.has(draft.repositoryId)) {
         return c.json({ error: 'NOT_FOUND', message: 'Draft not found' }, 404);
       }
 
-      // RE-AUTHORIZATION before any side effect: the caller MUST own the draft's
-      // repo. Without this a user could post to an issue in a repo they don't own.
-      const repoIds = await resolveCallerRepoIds(db, user);
-      if (!repoIds.has(draft.repositoryId)) {
-        return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
-      }
-
-      // Lifecycle guard: only a DRAFT can be posted. A POSTED/REJECTED/APPROVED
-      // draft must not re-post. (The DB transition re-checks this atomically; this
-      // early check avoids a needless GitHub call + gives a clear 409.)
+      // Early lifecycle hint: a non-DRAFT draft can never be claimed, so 409 now
+      // and skip the repo/token work. (The CAS claim below is the AUTHORITATIVE
+      // guard against the concurrent race — this only avoids needless work.)
       if (draft.status !== 'DRAFT') {
         return c.json({ error: 'CONFLICT', message: `Draft is already ${draft.status}` }, 409);
       }
@@ -244,6 +278,18 @@ export function createIssueDraftsRouter(db: Database) {
         );
       }
 
+      // ── POSTING LOCK (CAS): claim DRAFT → APPROVED BEFORE posting ──
+      // EXACTLY ONE concurrent approver wins this; the losers get undefined and
+      // bail with 409 here, so postComment is never called twice for one draft.
+      const claimed = await claimIssueDraftForPosting(db, id);
+      if (!claimed) {
+        logger.warn(
+          { id, user: user.githubLogin },
+          'Lost the posting claim (concurrent approve already claimed this draft)',
+        );
+        return c.json({ error: 'CONFLICT', message: 'Draft is already being processed' }, 409);
+      }
+
       const [owner, repoName] = repo.fullName.split('/') as [string, string];
       // Token is for the github installation id (NOT our internal row id).
       const token = await getInstallationToken(
@@ -251,24 +297,41 @@ export function createIssueDraftsRouter(db: Database) {
         appId,
         privateKey,
       );
-      const posted = await postComment(owner, repoName, draft.issueNumber, draft.body, token);
 
-      // IDEMPOTENCY: pins status='DRAFT'. If another approve already POSTED this
-      // draft, this matches zero rows and returns undefined — surface a 409 and do
-      // NOT pretend we re-posted. (The comment above was posted in THIS request;
-      // the only way to reach the undefined branch is a concurrent approve that
-      // won the race, which is the intended "exactly one wins" guard.)
+      // From here we OWN the claim. ANY failure before POSTED must release the
+      // claim (APPROVED → DRAFT) so the draft is retryable and not stuck in the
+      // transient APPROVED state.
+      let posted: Awaited<ReturnType<typeof postComment>>;
+      try {
+        posted = await postComment(owner, repoName, claimed.issueNumber, claimed.body, token);
+      } catch (postErr) {
+        // POST FAILED → revert the claim so a human can retry, then surface 502.
+        await releaseIssueDraftClaim(db, id);
+        const errorId = generateErrorId();
+        logger.error(
+          { err: postErr, errorId, id, user: user.githubLogin },
+          'postComment failed during approve; reverted claim to DRAFT',
+        );
+        return c.json(
+          { error: 'POST_FAILED', message: 'Failed to post the comment to GitHub', errorId },
+          502,
+        );
+      }
+
+      // Record the post: CAS APPROVED → POSTED. Since WE own the APPROVED claim,
+      // this is expected to match the row. A defensive `undefined` (someone else
+      // moved it out of APPROVED) is logged but the comment WAS already posted.
       const updated = await markIssueDraftPosted(db, id, posted.id);
       if (!updated) {
         logger.warn(
-          { id, user: user.githubLogin },
-          'Draft transitioned out of DRAFT during approve',
+          { id, commentId: posted.id, user: user.githubLogin },
+          'Draft was no longer APPROVED at POSTED transition (comment already posted)',
         );
         return c.json({ error: 'CONFLICT', message: 'Draft was already decided' }, 409);
       }
 
       logger.info(
-        { id, commentId: posted.id, repo: repo.fullName, issue: draft.issueNumber },
+        { id, commentId: posted.id, repo: repo.fullName, issue: claimed.issueNumber },
         'Issue draft approved and posted',
       );
       return c.json({ data: toDraftDto(updated) });
@@ -285,19 +348,17 @@ export function createIssueDraftsRouter(db: Database) {
   // ── POST /api/issue-drafts/:id/reject ───────────────────────
   router.post('/api/issue-drafts/:id/reject', async (c) => {
     const user = c.get('user') as AuthUser;
-    const id = parseInt(c.req.param('id'), 10);
-    if (!Number.isInteger(id) || id <= 0) {
+    const id = parseIdParam(c.req.param('id'));
+    if (id === null) {
       return c.json({ error: 'VALIDATION_ERROR', message: 'Invalid draft id' }, 400);
     }
 
     try {
       const draft = await getIssueDraftById(db, id);
-      if (!draft) {
-        return c.json({ error: 'NOT_FOUND', message: 'Draft not found' }, 404);
-      }
       const repoIds = await resolveCallerRepoIds(db, user);
-      if (!repoIds.has(draft.repositoryId)) {
-        return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
+      // EXISTENCE ORACLE: missing OR foreign → 404 (no tenant id enumeration).
+      if (!draft || !repoIds.has(draft.repositoryId)) {
+        return c.json({ error: 'NOT_FOUND', message: 'Draft not found' }, 404);
       }
       // DRAFT-only — a decided draft cannot be re-rejected. NEVER posts.
       const updated = await rejectIssueDraft(db, id);

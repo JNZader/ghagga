@@ -486,13 +486,65 @@ export async function updateIssueDraftBody(
 }
 
 /**
- * Atomically transition a DRAFT to POSTED, recording the GitHub comment id.
+ * Atomically CLAIM a DRAFT for posting by flipping it to APPROVED.
  *
- * IDEMPOTENCY/LIFECYCLE: the WHERE clause pins `status = 'DRAFT'`, so a second
- * concurrent/duplicate approve (double-click, BullMQ-style redelivery) matches
- * ZERO rows and returns `undefined` — the post is never repeated. The caller
- * MUST treat `undefined` as "already decided, do not post". Only a DRAFT can be
- * posted; an APPROVED/POSTED/REJECTED row is excluded by the predicate.
+ * This is the POSTING LOCK that makes the GitHub post exactly-once. The WHERE
+ * clause pins `status = 'DRAFT'` and the UPDATE ... RETURNING is a single atomic
+ * compare-and-swap (CAS): of N concurrent approvers, EXACTLY ONE matches the row
+ * (DRAFT → APPROVED) and gets it back; every other caller matches ZERO rows and
+ * gets `undefined`. The winner — and only the winner — proceeds to postComment.
+ *
+ * APPROVED is therefore a TRANSIENT "posting in progress" state, NOT a terminal
+ * decision: it resolves forward to POSTED (markIssueDraftPosted) on a successful
+ * post, or back to DRAFT (releaseIssueDraftClaim) when the post fails so a human
+ * can retry. The caller MUST treat `undefined` as "another approver already
+ * claimed this — return 409 and do NOT post".
+ *
+ * Lifecycle: DRAFT → APPROVED (posting) → POSTED  (or → DRAFT on post failure).
+ */
+export async function claimIssueDraftForPosting(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ status: 'APPROVED', updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .returning();
+  return row;
+}
+
+/**
+ * RELEASE a posting claim by reverting APPROVED → DRAFT after a FAILED post.
+ *
+ * The CAS pins `status = 'APPROVED'` so this only ever un-does an in-flight
+ * posting claim (never a POSTED/REJECTED terminal row). After release the draft
+ * is editable/approvable again, so the human can retry. Returns the reverted row,
+ * or `undefined` when the row was no longer APPROVED (defensive — should not
+ * happen on the post-failure path since the claimer owns the APPROVED row).
+ */
+export async function releaseIssueDraftClaim(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ status: 'DRAFT', updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'APPROVED')))
+    .returning();
+  return row;
+}
+
+/**
+ * Atomically transition an APPROVED (claimed-for-posting) draft to POSTED,
+ * recording the GitHub comment id.
+ *
+ * IDEMPOTENCY/LIFECYCLE: the WHERE clause pins `status = 'APPROVED'` — only the
+ * approver that WON the posting claim (claimIssueDraftForPosting) and actually
+ * posted the comment reaches this. A row that is not APPROVED matches ZERO rows
+ * and returns `undefined`. Combined with the claim CAS this guarantees the post
+ * is recorded exactly once. The caller MUST treat `undefined` as "already
+ * decided, do not pretend we re-posted".
  */
 export async function markIssueDraftPosted(
   db: Database,
@@ -502,7 +554,7 @@ export async function markIssueDraftPosted(
   const [row] = await db
     .update(issueDrafts)
     .set({ status: 'POSTED', postedCommentId, updatedAt: new Date() })
-    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'APPROVED')))
     .returning();
   return row;
 }

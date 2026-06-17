@@ -19,6 +19,8 @@ const mockGetReposByInstallationId = vi.fn();
 const mockGetIssueDraftById = vi.fn();
 const mockListIssueDrafts = vi.fn();
 const mockUpdateIssueDraftBody = vi.fn();
+const mockClaimIssueDraftForPosting = vi.fn();
+const mockReleaseIssueDraftClaim = vi.fn();
 const mockMarkIssueDraftPosted = vi.fn();
 const mockRejectIssueDraft = vi.fn();
 const mockGetRepositoryById = vi.fn();
@@ -30,6 +32,8 @@ vi.mock('ghagga-db', () => ({
   getIssueDraftById: (...a: unknown[]) => mockGetIssueDraftById(...a),
   listIssueDrafts: (...a: unknown[]) => mockListIssueDrafts(...a),
   updateIssueDraftBody: (...a: unknown[]) => mockUpdateIssueDraftBody(...a),
+  claimIssueDraftForPosting: (...a: unknown[]) => mockClaimIssueDraftForPosting(...a),
+  releaseIssueDraftClaim: (...a: unknown[]) => mockReleaseIssueDraftClaim(...a),
   markIssueDraftPosted: (...a: unknown[]) => mockMarkIssueDraftPosted(...a),
   rejectIssueDraft: (...a: unknown[]) => mockRejectIssueDraft(...a),
   getRepositoryById: (...a: unknown[]) => mockGetRepositoryById(...a),
@@ -142,13 +146,23 @@ describe('GET /api/issue-drafts', () => {
 // ─── GET detail (scoping) ───────────────────────────────────────
 
 describe('GET /api/issue-drafts/:id', () => {
-  it('returns 403 when the draft belongs to a repo the caller does not own', async () => {
+  it('returns 404 (NOT 403) for a foreign draft — no existence oracle', async () => {
+    // A draft the caller does not own is indistinguishable from a missing draft,
+    // so a user cannot enumerate which draft ids exist in other tenants.
     mockGetIssueDraftById.mockResolvedValue(makeDraft({ repositoryId: 999 }));
     mockGetReposByInstallationId.mockResolvedValue([{ id: 7 }]); // owns 7, not 999
     const app = createApp();
 
     const res = await app.request('/api/issue-drafts/9');
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects a partial-number id (9abc → 400, not silent truncation to 9)', async () => {
+    const app = createApp();
+    const res = await app.request('/api/issue-drafts/9abc');
+    expect(res.status).toBe(400);
+    // strict parse means we never even looked the draft up
+    expect(mockGetIssueDraftById).not.toHaveBeenCalled();
   });
 
   it('returns the draft when owned', async () => {
@@ -203,7 +217,7 @@ describe('PATCH /api/issue-drafts/:id', () => {
     expect(res.status).toBe(409);
   });
 
-  it('returns 403 when not owned (cannot edit foreign draft)', async () => {
+  it('returns 404 (NOT 403) for a foreign draft — cannot edit + no oracle', async () => {
     mockGetIssueDraftById.mockResolvedValue(makeDraft({ repositoryId: 999 }));
     mockGetReposByInstallationId.mockResolvedValue([{ id: 7 }]);
     const app = createApp();
@@ -213,7 +227,23 @@ describe('PATCH /api/issue-drafts/:id', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: 'edited' }),
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
+    expect(mockUpdateIssueDraftBody).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body whose UTF-8 byte length exceeds the cap (multibyte)', async () => {
+    mockGetIssueDraftById.mockResolvedValue(makeDraft());
+    ownRepo7();
+    const app = createApp();
+    // Each '✓' is 3 UTF-8 bytes; 25k of them = 75k bytes > 60k cap, but only
+    // 25k UTF-16 code units (which a char-count .max(60000) would have ALLOWED).
+    const multibyte = '✓'.repeat(25_000);
+    const res = await app.request('/api/issue-drafts/9', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: multibyte }),
+    });
+    expect(res.status).toBe(400);
     expect(mockUpdateIssueDraftBody).not.toHaveBeenCalled();
   });
 });
@@ -221,16 +251,19 @@ describe('PATCH /api/issue-drafts/:id', () => {
 // ─── POST approve ───────────────────────────────────────────────
 
 describe('POST /api/issue-drafts/:id/approve', () => {
-  it('posts the body, records the comment id, and transitions POSTED', async () => {
-    mockGetIssueDraftById.mockResolvedValue(makeDraft());
+  /** Wire up the repo/installation/token mocks for a happy-path approve. */
+  function wireApprovePrereqs() {
     ownRepo7();
-    mockGetRepositoryById.mockResolvedValue({
-      id: 7,
-      fullName: 'acme/app',
-      installationId: 100,
-    });
+    mockGetRepositoryById.mockResolvedValue({ id: 7, fullName: 'acme/app', installationId: 100 });
     mockGetInstallationById.mockResolvedValue({ id: 100, githubInstallationId: 555000 });
     mockGetInstallationToken.mockResolvedValue('tok');
+  }
+
+  it('claims, posts the body, records the comment id, and transitions POSTED', async () => {
+    mockGetIssueDraftById.mockResolvedValue(makeDraft());
+    wireApprovePrereqs();
+    // CAS claim DRAFT→APPROVED wins, returning the (claimed) row to post.
+    mockClaimIssueDraftForPosting.mockResolvedValue(makeDraft({ status: 'APPROVED' }));
     mockPostComment.mockResolvedValue({ id: 987654321 });
     mockMarkIssueDraftPosted.mockResolvedValue(
       makeDraft({ status: 'POSTED', postedCommentId: 987654321 }),
@@ -241,17 +274,20 @@ describe('POST /api/issue-drafts/:id/approve', () => {
     const json = (await res.json()) as { data: { status: string; postedCommentId: number } };
 
     expect(res.status).toBe(200);
+    // claim happened BEFORE the post
+    expect(mockClaimIssueDraftForPosting).toHaveBeenCalledWith(mockDb, 9);
     // posted to the issue comments endpoint with the (edited) body + repo token
     expect(mockPostComment).toHaveBeenCalledWith('acme', 'app', 42, 'analysis body', 'tok');
     // token resolved for the GITHUB installation id, not the internal row id
     expect(mockGetInstallationToken).toHaveBeenCalledWith(555000, 'app-id', 'pk');
-    // POSTED transition recorded the github comment id
+    // POSTED transition recorded the github comment id; no claim was released
     expect(mockMarkIssueDraftPosted).toHaveBeenCalledWith(mockDb, 9, 987654321);
+    expect(mockReleaseIssueDraftClaim).not.toHaveBeenCalled();
     expect(json.data.status).toBe('POSTED');
     expect(json.data.postedCommentId).toBe(987654321);
   });
 
-  it('is idempotent: a POSTED draft does NOT re-post (409, no postComment)', async () => {
+  it('is idempotent: a POSTED draft does NOT re-post (409, no claim, no postComment)', async () => {
     mockGetIssueDraftById.mockResolvedValue(makeDraft({ status: 'POSTED', postedCommentId: 1 }));
     ownRepo7();
     const app = createApp();
@@ -259,29 +295,88 @@ describe('POST /api/issue-drafts/:id/approve', () => {
     const res = await app.request('/api/issue-drafts/9/approve', { method: 'POST' });
 
     expect(res.status).toBe(409);
+    expect(mockClaimIssueDraftForPosting).not.toHaveBeenCalled();
     expect(mockPostComment).not.toHaveBeenCalled();
     expect(mockMarkIssueDraftPosted).not.toHaveBeenCalled();
   });
 
-  it('does NOT post a draft for a repo the caller does not own (403)', async () => {
+  it('returns 404 (NOT 403) for a foreign draft + never posts', async () => {
     mockGetIssueDraftById.mockResolvedValue(makeDraft({ repositoryId: 999 }));
     mockGetReposByInstallationId.mockResolvedValue([{ id: 7 }]);
     const app = createApp();
 
     const res = await app.request('/api/issue-drafts/9/approve', { method: 'POST' });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
+    expect(mockClaimIssueDraftForPosting).not.toHaveBeenCalled();
     expect(mockPostComment).not.toHaveBeenCalled();
   });
 
-  it('loses the race gracefully: markPosted returns undefined → 409', async () => {
+  it('EXACTLY-ONCE under concurrency: two approves → postComment once, one 200 + one 409', async () => {
     mockGetIssueDraftById.mockResolvedValue(makeDraft());
-    ownRepo7();
-    mockGetRepositoryById.mockResolvedValue({ id: 7, fullName: 'acme/app', installationId: 100 });
-    mockGetInstallationById.mockResolvedValue({ id: 100, githubInstallationId: 555000 });
-    mockGetInstallationToken.mockResolvedValue('tok');
+    wireApprovePrereqs();
     mockPostComment.mockResolvedValue({ id: 1 });
-    mockMarkIssueDraftPosted.mockResolvedValue(undefined); // concurrent approve won
+    mockMarkIssueDraftPosted.mockResolvedValue(makeDraft({ status: 'POSTED', postedCommentId: 1 }));
+
+    // The CAS claim is the race winner-selector: of the two concurrent approvers
+    // ONLY the first call gets the row (DRAFT→APPROVED); the second matches ZERO
+    // rows (undefined) and must 409 BEFORE postComment.
+    mockClaimIssueDraftForPosting
+      .mockResolvedValueOnce(makeDraft({ status: 'APPROVED' })) // winner
+      .mockResolvedValueOnce(undefined); // loser
+
+    const app = createApp();
+    const [resA, resB] = await Promise.all([
+      app.request('/api/issue-drafts/9/approve', { method: 'POST' }),
+      app.request('/api/issue-drafts/9/approve', { method: 'POST' }),
+    ]);
+
+    const statuses = [resA.status, resB.status].sort();
+    expect(statuses).toEqual([200, 409]);
+    // THE KEY ASSERTION: GitHub was hit exactly once, not twice.
+    expect(mockPostComment).toHaveBeenCalledTimes(1);
+    expect(mockClaimIssueDraftForPosting).toHaveBeenCalledTimes(2);
+  });
+
+  it('post FAILURE reverts the claim (APPROVED→DRAFT) and returns 502; retry posts once', async () => {
+    mockGetIssueDraftById.mockResolvedValue(makeDraft());
+    wireApprovePrereqs();
+    mockClaimIssueDraftForPosting.mockResolvedValue(makeDraft({ status: 'APPROVED' }));
+    mockReleaseIssueDraftClaim.mockResolvedValue(makeDraft({ status: 'DRAFT' }));
+    mockPostComment.mockRejectedValueOnce(new Error('GitHub 503'));
+    const app = createApp();
+
+    const res = await app.request('/api/issue-drafts/9/approve', { method: 'POST' });
+
+    expect(res.status).toBe(502);
+    // claim was released so the draft is retryable; POSTED never recorded
+    expect(mockReleaseIssueDraftClaim).toHaveBeenCalledWith(mockDb, 9);
+    expect(mockMarkIssueDraftPosted).not.toHaveBeenCalled();
+
+    // ── A subsequent approve can retry and post exactly once ──
+    vi.clearAllMocks();
+    process.env.GITHUB_APP_ID = 'app-id';
+    process.env.GITHUB_PRIVATE_KEY = 'pk';
+    mockGetIssueDraftById.mockResolvedValue(makeDraft()); // back to DRAFT
+    wireApprovePrereqs();
+    mockClaimIssueDraftForPosting.mockResolvedValue(makeDraft({ status: 'APPROVED' }));
+    mockPostComment.mockResolvedValue({ id: 42 });
+    mockMarkIssueDraftPosted.mockResolvedValue(
+      makeDraft({ status: 'POSTED', postedCommentId: 42 }),
+    );
+
+    const retry = await app.request('/api/issue-drafts/9/approve', { method: 'POST' });
+    expect(retry.status).toBe(200);
+    expect(mockPostComment).toHaveBeenCalledTimes(1);
+    expect(mockReleaseIssueDraftClaim).not.toHaveBeenCalled();
+  });
+
+  it('loses the race at the POSTED transition: markPosted returns undefined → 409', async () => {
+    mockGetIssueDraftById.mockResolvedValue(makeDraft());
+    wireApprovePrereqs();
+    mockClaimIssueDraftForPosting.mockResolvedValue(makeDraft({ status: 'APPROVED' }));
+    mockPostComment.mockResolvedValue({ id: 1 });
+    mockMarkIssueDraftPosted.mockResolvedValue(undefined); // row moved out of APPROVED
     const app = createApp();
 
     const res = await app.request('/api/issue-drafts/9/approve', { method: 'POST' });
@@ -307,14 +402,14 @@ describe('POST /api/issue-drafts/:id/reject', () => {
     expect(mockPostComment).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when not owned (cannot reject foreign draft)', async () => {
+  it('returns 404 (NOT 403) for a foreign draft — cannot reject + no oracle', async () => {
     mockGetIssueDraftById.mockResolvedValue(makeDraft({ repositoryId: 999 }));
     mockGetReposByInstallationId.mockResolvedValue([{ id: 7 }]);
     const app = createApp();
 
     const res = await app.request('/api/issue-drafts/9/reject', { method: 'POST' });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(mockRejectIssueDraft).not.toHaveBeenCalled();
   });
 

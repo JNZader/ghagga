@@ -56,6 +56,7 @@ function createMockDb(terminalValue: unknown = []): MockDB & { _resolve: (v: unk
 // itself only has side-effect-free function declarations.
 import {
   buildTsQuery,
+  claimIssueDraftForPosting,
   clearAllMemoryObservations,
   clearEmptyMemorySessions,
   clearMemoryObservationsByProject,
@@ -94,6 +95,7 @@ import {
   listMemoryObservations,
   markIssueDraftPosted,
   rejectIssueDraft,
+  releaseIssueDraftClaim,
   removeRepoApiKey,
   saveObservation,
   saveRepoApiKey,
@@ -2112,8 +2114,48 @@ describe('updateIssueDraftBody', () => {
   });
 });
 
+describe('claimIssueDraftForPosting', () => {
+  it('claims a DRAFT (CAS DRAFT→APPROVED) and returns the row', async () => {
+    const claimed = { id: 9, repositoryId: 7, status: 'APPROVED', body: 'analysis' };
+    const db = createMockDb([claimed]) as unknown as Database;
+
+    const result = await claimIssueDraftForPosting(db, 9);
+
+    expect(result).toEqual(claimed);
+  });
+
+  it('returns undefined when the draft is not DRAFT (lost the posting claim)', async () => {
+    // Of N concurrent approvers only ONE matches the DRAFT row; the losers match
+    // ZERO rows here and get undefined → the route returns 409 BEFORE postComment.
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await claimIssueDraftForPosting(db, 9);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('releaseIssueDraftClaim', () => {
+  it('reverts an APPROVED claim back to DRAFT (post failed → retryable)', async () => {
+    const reverted = { id: 9, repositoryId: 7, status: 'DRAFT' };
+    const db = createMockDb([reverted]) as unknown as Database;
+
+    const result = await releaseIssueDraftClaim(db, 9);
+
+    expect(result).toEqual(reverted);
+  });
+
+  it('returns undefined when the row was not APPROVED (nothing to release)', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await releaseIssueDraftClaim(db, 9);
+
+    expect(result).toBeUndefined();
+  });
+});
+
 describe('markIssueDraftPosted', () => {
-  it('transitions a DRAFT to POSTED and records the comment id', async () => {
+  it('transitions an APPROVED claim to POSTED and records the comment id', async () => {
     const posted = { id: 9, repositoryId: 7, status: 'POSTED', postedCommentId: 555 };
     const db = createMockDb([posted]) as unknown as Database;
 
@@ -2122,9 +2164,10 @@ describe('markIssueDraftPosted', () => {
     expect(result).toEqual(posted);
   });
 
-  it('returns undefined on a non-DRAFT row (idempotency guard — no double post)', async () => {
-    // A second/duplicate approve matches ZERO rows because the WHERE pins
-    // status='DRAFT'; the caller treats undefined as "already decided, do not post".
+  it('returns undefined on a non-APPROVED row (exactly-once guard — no double post)', async () => {
+    // Only the approver that WON the claim (status APPROVED) matches; a row that
+    // is no longer APPROVED matches ZERO rows. Caller treats undefined as
+    // "already decided, do not pretend we re-posted".
     const db = createMockDb([]) as unknown as Database;
 
     const result = await markIssueDraftPosted(db, 9, 555);
