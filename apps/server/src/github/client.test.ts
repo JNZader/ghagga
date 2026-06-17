@@ -5,6 +5,7 @@ import {
   fetchGraphMetadata,
   getPRCommitMessages,
   getPRFileList,
+  listIssueComments,
   verifyWebhookSignature,
 } from './client.js';
 
@@ -411,5 +412,84 @@ describe('fetchGraphMetadata', () => {
 
     const result = await fetchGraphMetadata('owner', 'repo', 'token');
     expect(result).toBeNull();
+  });
+});
+
+describe('listIssueComments — newest-first fetch', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  /** Build a mock fetch Response with a `Link` header and a JSON comment array. */
+  function res(comments: Array<{ author: string; body: string }>, link?: string) {
+    return {
+      ok: true,
+      headers: { get: (h: string) => (h.toLowerCase() === 'link' ? (link ?? null) : null) },
+      json: () =>
+        Promise.resolve(comments.map((c) => ({ user: { login: c.author }, body: c.body }))),
+    };
+  }
+
+  it('returns 0 fetches and empty array for maxCount <= 0', async () => {
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 0);
+    expect(result).toEqual([]);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('single page (no Link): keeps the most-recent maxCount', async () => {
+    // 5 comments oldest→newest; ask for 3 → keep c2,c3,c4 (the newest).
+    const comments = Array.from({ length: 5 }, (_, i) => ({ author: `u${i}`, body: `c${i}` }));
+    mockFetch.mockResolvedValueOnce(res(comments));
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 3);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.map((c) => c.body)).toEqual(['c2', 'c3', 'c4']);
+  });
+
+  it('caps per_page to ~maxCount (does not request 100 when few are wanted)', async () => {
+    mockFetch.mockResolvedValueOnce(res([{ author: 'a', body: 'x' }]));
+    await listIssueComments('owner', 'repo', 1, 'token', 20);
+    expect(mockFetch.mock.calls[0][0]).toContain('per_page=20');
+  });
+
+  it('many pages: jumps straight to the LAST page (newest) — 2 fetches total', async () => {
+    // First page (oldest) advertises rel="last" page=9. The fix must NOT page
+    // 1..9; it reads page 1 (for the Link header) then jumps to page 9.
+    const oldest = Array.from({ length: 20 }, (_, i) => ({ author: `o${i}`, body: `old${i}` }));
+    const newestPage = Array.from({ length: 20 }, (_, i) => ({ author: `n${i}`, body: `new${i}` }));
+    const link =
+      '<https://api.github.com/repositories/1/issues/1/comments?per_page=20&page=9>; rel="last"';
+    mockFetch
+      .mockResolvedValueOnce(res(oldest, link)) // page 1
+      .mockResolvedValueOnce(res(newestPage)); // page 9
+
+    const result = await listIssueComments('owner', 'repo', 1, 'token', 5);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0][0]).toContain('page=1');
+    expect(mockFetch.mock.calls[1][0]).toContain('page=9');
+    // Returns the trailing 5 of the NEWEST page, not the tail of the oldest.
+    expect(result.map((c) => c.body)).toEqual(['new15', 'new16', 'new17', 'new18', 'new19']);
+  });
+
+  it('THROWS on a failed page (caller distinguishes fetch-fail from no-comments)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: () => null },
+    });
+    await expect(listIssueComments('owner', 'repo', 1, 'token', 5)).rejects.toThrow(
+      'GitHub API error listing issue comments: 403 Forbidden',
+    );
   });
 });

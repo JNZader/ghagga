@@ -163,18 +163,34 @@ export async function getIssue(
 }
 
 /**
- * Fetch issue comments (author + body), most-recent-first, capped at `maxCount`.
+ * Fetch the `maxCount` MOST-RECENT issue comments (author + body).
  *
  * SECURITY/DoS: this is the fetch boundary for untrusted issue-comment bodies
- * that end up in a Redis job payload. GitHub returns comments oldest-first; we
- * page (bounded by MAX_PAGES) only as far as needed, then keep the `maxCount`
- * MOST RECENT comments. The CALLER additionally enforces a total-payload byte
- * budget (per-comment + body truncation) before enqueue — `maxCount` alone does
- * not bound total bytes because a single comment body can be arbitrarily large.
+ * that end up in a Redis job payload. The triage agent wants the most RECENT
+ * comments as context.
  *
- * Returns `{ author, body }` pairs. A comment with a missing/null author falls
- * back to the literal `'unknown'`. Degrades to an empty list on the first failed
- * page rather than throwing (triage proceeds with title+body only).
+ * GitHub's per-issue comments endpoint (GET …/issues/{n}/comments) is ordered
+ * oldest-first by ascending comment id and does NOT accept `sort`/`direction`
+ * (only `since`/`page`/`per_page` — verified against the REST docs). To return
+ * the NEWEST comments we therefore:
+ *   1. read the FIRST page with the SMALLEST page size that satisfies the cap
+ *      (`per_page = min(maxCount, 100)`) plus the `Link` header to learn the
+ *      LAST page number,
+ *   2. fetch that LAST page,
+ *   3. keep the trailing `maxCount` of the combined newest data.
+ * This bounds the fetch to ~`maxCount` rows (at most 2 pages) instead of paging
+ * the oldest 500 and slicing the tail — the old behavior, which on a >500-comment
+ * issue returned the OLDEST 500's tail, not the newest.
+ *
+ * The CALLER additionally enforces a total-payload byte budget (per-comment +
+ * body truncation) before enqueue — `maxCount` alone does not bound total bytes
+ * because a single comment body can be arbitrarily large.
+ *
+ * Returns `{ author, body }` pairs, OLDEST→NEWEST within the kept window. A
+ * comment with a missing/null author falls back to the literal `'unknown'`.
+ *
+ * THROWS on a failed page so the caller can distinguish "no comments" from
+ * "fetch failed" and log accordingly (the caller degrades to `[]` + a warn).
  */
 export async function listIssueComments(
   owner: string,
@@ -185,48 +201,55 @@ export async function listIssueComments(
 ): Promise<Array<{ author: string; body: string }>> {
   if (maxCount <= 0) return [];
   const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`;
-  const MAX_PAGES = 5;
+  // Cap the fetch to ~maxCount rows so we never pull 500 when a few are wanted.
+  const perPage = Math.min(Math.max(maxCount, 1), 100);
 
-  try {
-    return await githubCircuitBreaker.execute(async () => {
-      const all: Array<{ author: string; body: string }> = [];
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.v3+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
 
-      for (let page = 1; page <= MAX_PAGES; page++) {
-        const url = `${baseUrl}?per_page=100&page=${page}`;
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github.v3+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-          signal: AbortSignal.timeout(10_000),
-        });
+  const parse = (raw: unknown): Array<{ author: string; body: string }> =>
+    (raw as Array<{ body: string | null; user: { login: string } | null }>).map((c) => ({
+      author: c.user?.login ?? 'unknown',
+      body: c.body ?? '',
+    }));
 
-        if (!response.ok) {
-          throw new Error(
-            `GitHub API error listing issue comments: ${response.status} ${response.statusText}`,
-          );
-        }
+  // GitHub exposes the last page via rel="last" in the Link header.
+  const lastPageFrom = (link: string | null): number | null => {
+    if (!link) return null;
+    const m = link.match(/[?&]page=(\d+)[^>]*>;\s*rel="last"/);
+    return m?.[1] ? Number.parseInt(m[1], 10) : null;
+  };
 
-        const comments = (await response.json()) as Array<{
-          body: string | null;
-          user: { login: string } | null;
-        }>;
+  return githubCircuitBreaker.execute(async () => {
+    const firstUrl = `${baseUrl}?per_page=${perPage}&page=1`;
+    const firstRes = await fetch(firstUrl, { headers, signal: AbortSignal.timeout(10_000) });
+    if (!firstRes.ok) {
+      throw new Error(
+        `GitHub API error listing issue comments: ${firstRes.status} ${firstRes.statusText}`,
+      );
+    }
+    const firstPage = parse(await firstRes.json());
+    const lastPage = lastPageFrom(firstRes.headers.get('link'));
 
-        for (const c of comments) {
-          all.push({ author: c.user?.login ?? 'unknown', body: c.body ?? '' });
-        }
+    // Single page of results: it already holds every comment — keep the newest.
+    if (lastPage === null || lastPage <= 1) {
+      return firstPage.slice(-maxCount);
+    }
 
-        if (comments.length < 100) break;
-      }
-
-      // Keep the most recent `maxCount` (GitHub returns oldest-first).
-      return all.slice(-maxCount);
-    });
-  } catch {
-    // Non-fatal: triage can proceed with title+body only.
-    return [];
-  }
+    // Otherwise jump straight to the last page (the newest comments) and keep
+    // the trailing `maxCount`. At most 2 HTTP calls regardless of comment count.
+    const lastUrl = `${baseUrl}?per_page=${perPage}&page=${lastPage}`;
+    const lastRes = await fetch(lastUrl, { headers, signal: AbortSignal.timeout(10_000) });
+    if (!lastRes.ok) {
+      throw new Error(
+        `GitHub API error listing issue comments: ${lastRes.status} ${lastRes.statusText}`,
+      );
+    }
+    return parse(await lastRes.json()).slice(-maxCount);
+  });
 }
 
 /**

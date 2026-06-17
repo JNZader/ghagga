@@ -13,6 +13,7 @@ import {
   MAX_TRIAGE_BODY_BYTES,
   MAX_TRIAGE_COMMENT_BYTES,
   MAX_TRIAGE_COMMENTS,
+  MAX_TRIAGE_LABELS,
   MAX_TRIAGE_TOTAL_BYTES,
   parseCommentCommand,
 } from './webhook.js';
@@ -852,6 +853,8 @@ describe('issue triage command (/ghagga triage)', () => {
     expect(json.message).toContain('Bot comment ignored');
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
     expect(mockGetIssue).not.toHaveBeenCalled();
+    // A bot must trigger ZERO fetches on the triage path — comments too.
+    expect(mockListIssueComments).not.toHaveBeenCalled();
   });
 
   it('does not route /ghagga triage on a PR to the issue-analysis queue', async () => {
@@ -884,6 +887,145 @@ describe('issue triage command (/ghagga triage)', () => {
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
   });
 
+  it('STRICT GATE: rejects /ghagga triage from a CONTRIBUTOR (review-allowed, triage-denied)', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const body = JSON.stringify({
+      ...triagePayload,
+      comment: { ...triagePayload.comment, author_association: 'CONTRIBUTOR' },
+    });
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.message).toContain('Insufficient permissions to trigger triage');
+    // No fetch, no enqueue — rejected before any GitHub read or token spend.
+    expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
+    expect(mockGetIssue).not.toHaveBeenCalled();
+    expect(mockListIssueComments).not.toHaveBeenCalled();
+    expect(mockGetInstallationToken).not.toHaveBeenCalled();
+  });
+
+  it('STRICT GATE: rejects /ghagga triage from FIRST_TIMER and FIRST_TIME_CONTRIBUTOR', async () => {
+    for (const association of ['FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR']) {
+      vi.clearAllMocks();
+      mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+      const body = JSON.stringify({
+        ...triagePayload,
+        comment: { ...triagePayload.comment, author_association: association },
+      });
+      const req = makeRequest(body, 'issue_comment');
+      const res = await router.fetch(req);
+
+      expect(res.status).toBe(200);
+      expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
+      expect(mockGetIssue).not.toHaveBeenCalled();
+      expect(mockListIssueComments).not.toHaveBeenCalled();
+    }
+  });
+
+  it('STRICT GATE: allows COLLABORATOR and MEMBER (write associations) for triage', async () => {
+    for (const association of ['COLLABORATOR', 'MEMBER']) {
+      vi.clearAllMocks();
+      mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+      mockGetInstallationToken.mockResolvedValue('fake-installation-token');
+      mockGetIssue.mockResolvedValue({ title: 'T', body: 'B', labels: [] });
+      mockListIssueComments.mockResolvedValue([]);
+      const body = JSON.stringify({
+        ...triagePayload,
+        comment: { ...triagePayload.comment, author_association: association },
+      });
+      const req = makeRequest(body, 'issue_comment');
+      const res = await router.fetch(req);
+
+      expect(res.status).toBe(202);
+      expect(mockEnqueueIssueAnalysis).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('REVIEW UNCHANGED: a CONTRIBUTOR /ghagga review on a PR is STILL allowed', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    // A CONTRIBUTOR asking for a review on a PR — the shared lenient gate must
+    // keep working byte-for-byte (the stricter gate is triage-only).
+    const body = JSON.stringify({
+      action: 'created',
+      comment: {
+        id: 777,
+        body: '/ghagga review',
+        user: { login: 'contributor-user', type: 'User' },
+        author_association: 'CONTRIBUTOR',
+      },
+      issue: {
+        number: 42,
+        pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/42' },
+      },
+      repository: { id: 12345, full_name: 'owner/repo' },
+      installation: { id: 999 },
+    });
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(202);
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
+    expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('ABORTS triage (no enqueue) when the ISSUE fetch fails', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    mockGetIssue.mockRejectedValue(new Error('GitHub API error fetching issue: 404 Not Found'));
+    const req = makeRequest(JSON.stringify(triagePayload), 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.message).toContain('failed to fetch issue');
+    // No useless empty-issue job; comments fetch never even reached.
+    expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
+    expect(mockListIssueComments).not.toHaveBeenCalled();
+  });
+
+  it('DEGRADES (still enqueues) when ONLY the comments fetch fails', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    mockGetIssue.mockResolvedValue({ title: 'Login fails', body: 'desc', labels: ['bug'] });
+    mockListIssueComments.mockRejectedValue(new Error('GitHub API error listing issue comments'));
+    const req = makeRequest(JSON.stringify(triagePayload), 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(202);
+    expect(mockEnqueueIssueAnalysis).toHaveBeenCalledOnce();
+    const jobData = mockEnqueueIssueAnalysis.mock.calls[0]?.[0];
+    // Issue data present; comments degraded to [].
+    expect(jobData.issueTitle).toBe('Login fails');
+    expect(jobData.comments).toEqual([]);
+  });
+
+  it('ABORTS triage (no enqueue) when GitHub App credentials are not configured', async () => {
+    delete process.env.GITHUB_APP_ID;
+    delete process.env.GITHUB_PRIVATE_KEY;
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const req = makeRequest(JSON.stringify(triagePayload), 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.message).toContain('GitHub App not configured');
+    expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
+    expect(mockGetIssue).not.toHaveBeenCalled();
+  });
+
+  it('bounds labels on a label-stuffed issue (count + total budget)', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const manyLabels = Array.from({ length: 200 }, (_, i) => `label-${i}`);
+    mockGetIssue.mockResolvedValue({ title: 'T', body: 'B', labels: manyLabels });
+    mockListIssueComments.mockResolvedValue([]);
+    const req = makeRequest(JSON.stringify(triagePayload), 'issue_comment');
+    const res = await router.fetch(req);
+
+    expect(res.status).toBe(202);
+    const jobData = mockEnqueueIssueAnalysis.mock.calls[0]?.[0];
+    expect(jobData.labels.length).toBeLessThanOrEqual(MAX_TRIAGE_LABELS);
+  });
+
   it('bounds a giant issue (huge body + hundreds of comments) into a capped payload', async () => {
     mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
     // 1 MB body + 300 comments of 10 KB each — a deliberate DoS-shaped issue.
@@ -900,26 +1042,25 @@ describe('issue triage command (/ghagga triage)', () => {
     expect(res.status).toBe(202);
 
     const jobData = mockEnqueueIssueAnalysis.mock.calls[0]?.[0];
-    // Title capped to 500 chars (issue_drafts.issueTitle is varchar(500)).
-    expect(jobData.issueTitle.length).toBeLessThanOrEqual(501); // +1 for ellipsis
-    // Body byte-bounded.
-    expect(Buffer.byteLength(jobData.issueBody, 'utf8')).toBeLessThanOrEqual(
-      MAX_TRIAGE_BODY_BYTES + 4,
-    );
+    // Title byte-capped to EXACTLY 500 (issue_drafts.issueTitle is varchar(500));
+    // the ellipsis is reserved INSIDE the budget so no +1 slack is needed.
+    expect(Buffer.byteLength(jobData.issueTitle, 'utf8')).toBeLessThanOrEqual(500);
+    // Body byte-bounded EXACTLY (ellipsis-inclusive — see truncateToBytes).
+    expect(Buffer.byteLength(jobData.issueBody, 'utf8')).toBeLessThanOrEqual(MAX_TRIAGE_BODY_BYTES);
     // Comment count bounded.
     expect(jobData.comments.length).toBeLessThanOrEqual(MAX_TRIAGE_COMMENTS);
-    // Each comment body byte-bounded.
+    // Each comment body byte-bounded EXACTLY.
     for (const cmt of jobData.comments) {
-      expect(Buffer.byteLength(cmt.body, 'utf8')).toBeLessThanOrEqual(MAX_TRIAGE_COMMENT_BYTES + 4);
+      expect(Buffer.byteLength(cmt.body, 'utf8')).toBeLessThanOrEqual(MAX_TRIAGE_COMMENT_BYTES);
     }
-    // Total untrusted bytes (body + comment bodies) within the global budget.
+    // Total untrusted bytes (body + comment bodies) within the global budget EXACTLY.
     const totalBytes =
       Buffer.byteLength(jobData.issueBody, 'utf8') +
       jobData.comments.reduce(
         (sum: number, cmt: { body: string }) => sum + Buffer.byteLength(cmt.body, 'utf8'),
         0,
       );
-    expect(totalBytes).toBeLessThanOrEqual(MAX_TRIAGE_TOTAL_BYTES + 8);
+    expect(totalBytes).toBeLessThanOrEqual(MAX_TRIAGE_TOTAL_BYTES);
   });
 });
 
@@ -930,20 +1071,24 @@ describe('buildBoundedTriagePayload', () => {
     const out = buildBoundedTriagePayload({
       issueTitle: 'short title',
       issueBody: 'short body',
+      labels: ['bug'],
       comments: [{ author: 'a', body: 'hi' }],
     });
     expect(out.issueTitle).toBe('short title');
     expect(out.issueBody).toBe('short body');
+    expect(out.labels).toEqual(['bug']);
     expect(out.comments).toEqual([{ author: 'a', body: 'hi' }]);
   });
 
-  it('truncates an oversize body to the byte budget', () => {
+  it('truncates an oversize body to EXACTLY the byte budget (ellipsis-inclusive)', () => {
     const out = buildBoundedTriagePayload({
       issueTitle: 't',
       issueBody: 'A'.repeat(MAX_TRIAGE_BODY_BYTES * 2),
+      labels: [],
       comments: [],
     });
-    expect(Buffer.byteLength(out.issueBody, 'utf8')).toBeLessThanOrEqual(MAX_TRIAGE_BODY_BYTES + 4);
+    // Contract is ≤ budget exactly — the ellipsis is reserved INSIDE the budget.
+    expect(Buffer.byteLength(out.issueBody, 'utf8')).toBeLessThanOrEqual(MAX_TRIAGE_BODY_BYTES);
   });
 
   it('drops comments past MAX_TRIAGE_COMMENTS', () => {
@@ -951,11 +1096,30 @@ describe('buildBoundedTriagePayload', () => {
       author: `u${i}`,
       body: 'x',
     }));
-    const out = buildBoundedTriagePayload({ issueTitle: 't', issueBody: 'b', comments });
+    const out = buildBoundedTriagePayload({
+      issueTitle: 't',
+      issueBody: 'b',
+      labels: [],
+      comments,
+    });
     expect(out.comments.length).toBe(MAX_TRIAGE_COMMENTS);
   });
 
-  it('enforces the total byte budget across body + comments', () => {
+  it('caps the label COUNT at MAX_TRIAGE_LABELS', () => {
+    const labels = Array.from({ length: MAX_TRIAGE_LABELS + 100 }, (_, i) => `label-${i}`);
+    const out = buildBoundedTriagePayload({
+      issueTitle: 't',
+      issueBody: 'b',
+      labels,
+      comments: [],
+    });
+    expect(out.labels.length).toBe(MAX_TRIAGE_LABELS);
+  });
+
+  it('charges labels to the TOTAL byte budget (label-stuffed issue stays bounded)', () => {
+    // Each label near the per-label cap; the total (body + labels + comments)
+    // must still honor the global ceiling EXACTLY (no slack).
+    const labels = Array.from({ length: MAX_TRIAGE_LABELS }, () => 'L'.repeat(256));
     const comments = Array.from({ length: MAX_TRIAGE_COMMENTS }, (_, i) => ({
       author: `u${i}`,
       body: 'B'.repeat(MAX_TRIAGE_COMMENT_BYTES),
@@ -963,12 +1127,31 @@ describe('buildBoundedTriagePayload', () => {
     const out = buildBoundedTriagePayload({
       issueTitle: 't',
       issueBody: 'A'.repeat(MAX_TRIAGE_BODY_BYTES),
+      labels,
+      comments,
+    });
+    const total =
+      Buffer.byteLength(out.issueBody, 'utf8') +
+      out.labels.reduce((s, l) => s + Buffer.byteLength(l, 'utf8'), 0) +
+      out.comments.reduce((s, cmt) => s + Buffer.byteLength(cmt.body, 'utf8'), 0);
+    expect(total).toBeLessThanOrEqual(MAX_TRIAGE_TOTAL_BYTES);
+  });
+
+  it('enforces the total byte budget across body + comments EXACTLY', () => {
+    const comments = Array.from({ length: MAX_TRIAGE_COMMENTS }, (_, i) => ({
+      author: `u${i}`,
+      body: 'B'.repeat(MAX_TRIAGE_COMMENT_BYTES),
+    }));
+    const out = buildBoundedTriagePayload({
+      issueTitle: 't',
+      issueBody: 'A'.repeat(MAX_TRIAGE_BODY_BYTES),
+      labels: [],
       comments,
     });
     const total =
       Buffer.byteLength(out.issueBody, 'utf8') +
       out.comments.reduce((s, cmt) => s + Buffer.byteLength(cmt.body, 'utf8'), 0);
-    expect(total).toBeLessThanOrEqual(MAX_TRIAGE_TOTAL_BYTES + 8);
+    expect(total).toBeLessThanOrEqual(MAX_TRIAGE_TOTAL_BYTES);
   });
 });
 
