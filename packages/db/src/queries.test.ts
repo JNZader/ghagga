@@ -78,6 +78,7 @@ import {
   getInstallationSettings,
   getInstallationsByAccountLogin,
   getInstallationsByUserId,
+  getIssueDraftById,
   getMemoryObservation,
   getMemoryStats,
   getObservationsBySession,
@@ -89,12 +90,16 @@ import {
   getReviewsByInstallationIds,
   getReviewsByRepoId,
   getSessionsByProject,
+  listIssueDrafts,
   listMemoryObservations,
+  markIssueDraftPosted,
+  rejectIssueDraft,
   removeRepoApiKey,
   saveObservation,
   saveRepoApiKey,
   saveReview,
   searchObservations,
+  updateIssueDraftBody,
   updateRepoSettings,
   upsertInstallation,
   upsertInstallationSettings,
@@ -2038,5 +2043,111 @@ describe('clearEmptyMemorySessions', () => {
     await clearEmptyMemorySessions(db, 100);
 
     expect(mockSelect).toHaveBeenCalled();
+  });
+});
+
+// ─── Issue Drafts: approval lifecycle ──────────────────────────
+
+describe('listIssueDrafts', () => {
+  it('returns an empty array WITHOUT querying when repositoryIds is empty', async () => {
+    const mockSelect = vi.fn();
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await listIssueDrafts(db, []);
+
+    expect(result).toEqual([]);
+    // SCOPING INVARIANT: a user with no repos must never reach the DB and so can
+    // never see another tenant's drafts.
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it('queries and returns rows when repositoryIds is non-empty', async () => {
+    const rows = [
+      { id: 1, repositoryId: 7, status: 'DRAFT' },
+      { id: 2, repositoryId: 7, status: 'POSTED' },
+    ];
+    const db = createMockDb(rows) as unknown as Database;
+
+    const result = await listIssueDrafts(db, [7], { status: 'DRAFT' });
+
+    expect(result).toEqual(rows);
+  });
+});
+
+describe('getIssueDraftById', () => {
+  it('returns the row when found', async () => {
+    const row = { id: 9, repositoryId: 7, status: 'DRAFT', body: 'x' };
+    const db = createMockDb([row]) as unknown as Database;
+
+    const result = await getIssueDraftById(db, 9);
+
+    expect(result).toEqual(row);
+  });
+
+  it('returns undefined when not found', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await getIssueDraftById(db, 999);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('updateIssueDraftBody', () => {
+  it('returns the updated row (DRAFT-only update)', async () => {
+    const updated = { id: 9, repositoryId: 7, status: 'DRAFT', body: 'edited' };
+    const db = createMockDb([updated]) as unknown as Database;
+
+    const result = await updateIssueDraftBody(db, 9, 'edited');
+
+    expect(result).toEqual(updated);
+  });
+
+  it('returns undefined when the row is not in DRAFT (no row matched the predicate)', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await updateIssueDraftBody(db, 9, 'edited');
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('markIssueDraftPosted', () => {
+  it('transitions a DRAFT to POSTED and records the comment id', async () => {
+    const posted = { id: 9, repositoryId: 7, status: 'POSTED', postedCommentId: 555 };
+    const db = createMockDb([posted]) as unknown as Database;
+
+    const result = await markIssueDraftPosted(db, 9, 555);
+
+    expect(result).toEqual(posted);
+  });
+
+  it('returns undefined on a non-DRAFT row (idempotency guard — no double post)', async () => {
+    // A second/duplicate approve matches ZERO rows because the WHERE pins
+    // status='DRAFT'; the caller treats undefined as "already decided, do not post".
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await markIssueDraftPosted(db, 9, 555);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('rejectIssueDraft', () => {
+  it('transitions a DRAFT to REJECTED', async () => {
+    const rejected = { id: 9, repositoryId: 7, status: 'REJECTED' };
+    const db = createMockDb([rejected]) as unknown as Database;
+
+    const result = await rejectIssueDraft(db, 9);
+
+    expect(result).toEqual(rejected);
+  });
+
+  it('returns undefined on a non-DRAFT row', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await rejectIssueDraft(db, 9);
+
+    expect(result).toBeUndefined();
   });
 });

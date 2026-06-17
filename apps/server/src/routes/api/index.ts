@@ -11,6 +11,7 @@
 import type { Database } from 'ghagga-db';
 import { Hono } from 'hono';
 import { createInstallationsRouter } from './installations.js';
+import { createIssueDraftsRouter } from './issue-drafts.js';
 import { createMemoryRouter } from './memory.js';
 import { createRepositoriesRouter } from './repositories.js';
 import { createReviewsRouter } from './reviews.js';
@@ -24,6 +25,7 @@ export function createApiRouter(db: Database) {
   const router = new Hono();
 
   router.route('/', createReviewsRouter(db));
+  router.route('/', createIssueDraftsRouter(db));
   router.route('/', createRepositoriesRouter(db));
   router.route('/', createInstallationsRouter(db));
   router.route('/', createSettingsRouter(db));

@@ -424,6 +424,106 @@ export async function getOpenIssueDraft(
   return row;
 }
 
+/**
+ * List issue drafts visible to a set of repositories, newest-first.
+ *
+ * SCOPING: the caller MUST pass `repositoryIds` already restricted to the
+ * authenticated user's repos (see the approval API — it resolves these from
+ * `user.installationIds`). This query NEVER widens scope on its own: an empty
+ * `repositoryIds` returns an empty list (no rows), so a user with no repos can
+ * never see another tenant's drafts. `status` is an optional additional filter.
+ */
+export async function listIssueDrafts(
+  db: Database,
+  repositoryIds: number[],
+  options?: { status?: IssueDraftStatus; limit?: number; offset?: number },
+): Promise<(typeof issueDrafts.$inferSelect)[]> {
+  if (repositoryIds.length === 0) return [];
+  const limit = Math.min(options?.limit ?? 50, 100);
+  const offset = options?.offset ?? 0;
+  const conditions = [inArray(issueDrafts.repositoryId, repositoryIds)];
+  if (options?.status) {
+    conditions.push(eq(issueDrafts.status, options.status));
+  }
+  return db
+    .select()
+    .from(issueDrafts)
+    .where(and(...conditions))
+    .orderBy(desc(issueDrafts.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+/**
+ * Fetch a single issue draft by its primary key. No scoping is applied here —
+ * the caller MUST verify the row's `repositoryId` belongs to the authenticated
+ * user BEFORE returning it or acting on it (the approval API does this).
+ */
+export async function getIssueDraftById(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db.select().from(issueDrafts).where(eq(issueDrafts.id, id)).limit(1);
+  return row;
+}
+
+/**
+ * Edit a draft's body (the human sanitizes/edits before posting). Only a row
+ * still in DRAFT status is editable — editing an APPROVED/POSTED/REJECTED row is
+ * a no-op (returns `undefined`), so a decided draft cannot be silently mutated.
+ */
+export async function updateIssueDraftBody(
+  db: Database,
+  id: number,
+  body: string,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ body, updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .returning();
+  return row;
+}
+
+/**
+ * Atomically transition a DRAFT to POSTED, recording the GitHub comment id.
+ *
+ * IDEMPOTENCY/LIFECYCLE: the WHERE clause pins `status = 'DRAFT'`, so a second
+ * concurrent/duplicate approve (double-click, BullMQ-style redelivery) matches
+ * ZERO rows and returns `undefined` — the post is never repeated. The caller
+ * MUST treat `undefined` as "already decided, do not post". Only a DRAFT can be
+ * posted; an APPROVED/POSTED/REJECTED row is excluded by the predicate.
+ */
+export async function markIssueDraftPosted(
+  db: Database,
+  id: number,
+  postedCommentId: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ status: 'POSTED', postedCommentId, updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .returning();
+  return row;
+}
+
+/**
+ * Transition a DRAFT to REJECTED — no comment is ever posted. Same DRAFT-only
+ * guard as the post transition: a decided row is not re-rejected (returns
+ * `undefined`).
+ */
+export async function rejectIssueDraft(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ status: 'REJECTED', updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .returning();
+  return row;
+}
+
 export async function getReviewsByRepoId(
   db: Database,
   repositoryId: number,
