@@ -11,7 +11,7 @@
 #   SERVICE_TYPE=server|worker - Controls startup mode
 
 # ── Stage 1: Install + Build ───────────────────────────────────
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
@@ -44,7 +44,7 @@ RUN pnpm --filter ghagga-db build && \
 RUN pnpm prune --prod
 
 # ── Stage 2: Production Runtime ────────────────────────────────
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 
 # Minimal system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
