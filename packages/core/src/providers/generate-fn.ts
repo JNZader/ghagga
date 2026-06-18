@@ -66,6 +66,7 @@ export function createCLIBridgeGenerateFn(options: {
 export function createGatewayGenerateFn(options: {
   gatewayUrl: string;
   gatewayToken: string;
+  provider?: string;
   model?: string;
   project?: string;
 }): GenerateTextFn {

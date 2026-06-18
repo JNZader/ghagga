@@ -17,7 +17,14 @@ import type {
   ReviewMode,
   StaticAnalysisResult,
 } from 'ghagga-core';
-import { formatReviewComment, PreloadedGraphLoader, reviewPipeline } from 'ghagga-core';
+import {
+  fetchGatewayModels,
+  fetchGatewayProviders,
+  formatReviewComment,
+  PreloadedGraphLoader,
+  reviewPipeline,
+  validateProviderChain,
+} from 'ghagga-core';
 import type { Database, DbProviderChainEntry } from 'ghagga-db';
 import {
   createDatabaseFromEnv,
@@ -91,6 +98,56 @@ export async function revalidateGatewayChain<T extends { provider: string; gatew
     out.push(entry);
   }
   return out;
+}
+
+/**
+ * Validate a runtime provider chain against the bridge's live /v1/models and
+ * /v1/providers, dropping entries the bridge can't serve (unknown/unavailable
+ * provider, or a model that provider doesn't advertise).
+ *
+ * SSRF: the gatewayUrl used here came from a chain already run through
+ * revalidateGatewayChain (validateOutboundUrl), so the discovery fetch targets
+ * a re-validated host — same posture as the generation fetch that follows.
+ *
+ * Fails OPEN: a discovery fetch error (bridge down / transient) leaves the
+ * chain untouched rather than disabling AI review on a blip — mirrors the
+ * empty-discovery semantics inside validateProviderChain.
+ */
+export async function validateChainAgainstBridge(
+  chain: ProviderChainEntry[],
+  log: { warn: (obj: object, msg: string) => void } = logger,
+): Promise<ProviderChainEntry[]> {
+  const gatewayEntry = chain.find((e) => e.provider === 'gateway' && e.gatewayUrl);
+  if (!gatewayEntry?.gatewayUrl) {
+    return chain; // no gateway entry to validate against
+  }
+
+  try {
+    const [models, providers] = await Promise.all([
+      fetchGatewayModels(gatewayEntry.gatewayUrl, gatewayEntry.apiKey),
+      fetchGatewayProviders(gatewayEntry.gatewayUrl, gatewayEntry.apiKey),
+    ]);
+    const { valid, invalid } = validateProviderChain(chain, models, providers);
+    for (const { entry, reason } of invalid) {
+      // Never log the gatewayUrl (SSRF target) or apiKey.
+      log.warn(
+        {
+          provider: entry.provider,
+          targetProvider: entry.targetProvider,
+          model: entry.model,
+          reason,
+        },
+        'Dropping provider chain entry: failed bridge discovery validation',
+      );
+    }
+    return valid;
+  } catch (error) {
+    log.warn(
+      { error: String(error) },
+      'Bridge discovery validation skipped (discovery fetch failed) — provider chain sent unvalidated',
+    );
+    return chain;
+  }
 }
 
 // ─── Redis Connection ───────────────────────────────────────────
@@ -634,6 +691,7 @@ async function processReview(
           apiKey,
         };
         if (entry.cliModel) mapped.cliModel = entry.cliModel;
+        if (entry.targetProvider) mapped.targetProvider = entry.targetProvider;
         // SSRF: safe to assign — `dbChain` was produced by revalidateGatewayChain
         // above, which re-validates the gatewayUrl of EVERY entry that carries one
         // (not just provider === 'gateway') against validateOutboundUrl. Any entry
@@ -643,7 +701,12 @@ async function processReview(
         mappedChain.push(mapped);
       }
 
-      providerChain = mappedChain.length > 0 ? mappedChain : undefined;
+      // F10: validate gateway entries against what the bridge actually exposes,
+      // so we never send a voice (provider/model) the bridge can't serve. Runs
+      // on the already-SSRF-revalidated gatewayUrl (mappedChain derives from
+      // dbChain = revalidateGatewayChain output). Fails open on discovery error.
+      const validated = await validateChainAgainstBridge(mappedChain, log);
+      providerChain = validated.length > 0 ? validated : undefined;
     }
 
     // Fallback: legacy single provider

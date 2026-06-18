@@ -76,6 +76,14 @@ export interface DbProviderChainEntry {
 
   /** Gateway base URL. Only meaningful when provider === 'gateway'. */
   gatewayUrl?: string;
+
+  /**
+   * Bridge-side provider id to route to (e.g. 'codex-cli'). Forwarded to the
+   * gateway so the bridge selects this provider directly, skipping model-based
+   * routing. Only meaningful when provider === 'gateway'.
+   * Stored in the schemaless `provider_chain` jsonb column — no migration.
+   */
+  targetProvider?: string;
 }
 
 // ─── Installation Settings ──────────────────────────────────────

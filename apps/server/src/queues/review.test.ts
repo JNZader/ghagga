@@ -65,12 +65,22 @@ vi.mock('../lib/logger.js', () => ({
 
 const mockReviewPipeline = vi.fn();
 const mockFormatReviewComment = vi.fn();
+const mockFetchGatewayModels = vi.fn();
+const mockFetchGatewayProviders = vi.fn();
 
-vi.mock('ghagga-core', () => ({
-  reviewPipeline: (...args: unknown[]) => mockReviewPipeline(...args),
-  formatReviewComment: (...args: unknown[]) => mockFormatReviewComment(...args),
-  REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
-}));
+vi.mock('ghagga-core', async (importOriginal) => {
+  // Keep the REAL validateProviderChain (pure) so the wiring is tested for
+  // real; stub the network fetchers so tests control discovery results.
+  const actual = await importOriginal<typeof import('ghagga-core')>();
+  return {
+    reviewPipeline: (...args: unknown[]) => mockReviewPipeline(...args),
+    formatReviewComment: (...args: unknown[]) => mockFormatReviewComment(...args),
+    REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
+    validateProviderChain: actual.validateProviderChain,
+    fetchGatewayModels: (...args: unknown[]) => mockFetchGatewayModels(...args),
+    fetchGatewayProviders: (...args: unknown[]) => mockFetchGatewayProviders(...args),
+  };
+});
 
 const mockDecrypt = vi.fn((v: string) => `decrypted-${v}`);
 const mockSaveReview = vi.fn().mockResolvedValue(undefined);
@@ -121,7 +131,12 @@ vi.mock('../memory/postgres.js', () => ({
 
 // ─── Import module & trigger Worker constructor to capture processor ──
 
-import { createReviewWorker, type ReviewJobData, revalidateGatewayChain } from './review.js';
+import {
+  createReviewWorker,
+  type ReviewJobData,
+  revalidateGatewayChain,
+  validateChainAgainstBridge,
+} from './review.js';
 
 // Call createReviewWorker so the Worker constructor mock captures the processor
 createReviewWorker(1);
@@ -794,5 +809,67 @@ describe('revalidateGatewayChain', () => {
       expect(p).not.toContain(attackerHost);
       expect(p).not.toContain('10.0.0.7');
     }
+  });
+});
+
+describe('validateChainAgainstBridge', () => {
+  const log = { warn: vi.fn() };
+  const GW = 'https://gw.example.com';
+
+  beforeEach(() => {
+    log.warn.mockClear();
+    mockFetchGatewayModels.mockReset();
+    mockFetchGatewayProviders.mockReset();
+  });
+
+  it('drops entries the bridge cannot serve and keeps the valid ones', async () => {
+    mockFetchGatewayModels.mockResolvedValue([{ id: 'gpt-5.5', provider: 'codex-cli' }]);
+    mockFetchGatewayProviders.mockResolvedValue([
+      { id: 'codex-cli', name: 'Codex', type: 'cli', available: true },
+    ]);
+    const result = await validateChainAgainstBridge(
+      [
+        {
+          provider: 'gateway',
+          model: 'gpt-5.5',
+          apiKey: 'tok',
+          gatewayUrl: GW,
+          targetProvider: 'codex-cli',
+        },
+        {
+          provider: 'gateway',
+          model: 'ghost-model',
+          apiKey: 'tok',
+          gatewayUrl: GW,
+          targetProvider: 'codex-cli',
+        },
+      ],
+      log,
+    );
+    expect(result.map((e) => e.model)).toEqual(['gpt-5.5']);
+    expect(log.warn).toHaveBeenCalledOnce();
+  });
+
+  it('fails OPEN when discovery throws (chain untouched)', async () => {
+    mockFetchGatewayModels.mockRejectedValue(new Error('bridge down'));
+    mockFetchGatewayProviders.mockResolvedValue([]);
+    const chain = [
+      {
+        provider: 'gateway' as const,
+        model: 'gpt-5.5',
+        apiKey: 'tok',
+        gatewayUrl: GW,
+        targetProvider: 'codex-cli',
+      },
+    ];
+    const result = await validateChainAgainstBridge(chain, log);
+    expect(result).toEqual(chain);
+  });
+
+  it('returns the chain unchanged when there is no gateway entry (no discovery)', async () => {
+    const chain = [{ provider: 'cli-bridge' as const, model: 'x', apiKey: '' }];
+    const result = await validateChainAgainstBridge(chain, log);
+    expect(result).toEqual(chain);
+    expect(mockFetchGatewayModels).not.toHaveBeenCalled();
   });
 });
