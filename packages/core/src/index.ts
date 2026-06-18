@@ -149,6 +149,16 @@ export {
 } from './providers/cli-bridge.js';
 export type { GatewayOptions, GatewayResponse } from './providers/gateway.js';
 export { generateViaGateway } from './providers/gateway.js';
+export type {
+  ChainValidationResult,
+  GatewayModelEntry,
+  GatewayProviderStatus,
+} from './providers/gateway-discovery.js';
+export {
+  fetchGatewayModels,
+  fetchGatewayProviders,
+  validateProviderChain,
+} from './providers/gateway-discovery.js';
 export type { GenerateResult, GenerateTextFn } from './providers/generate-fn.js';
 export {
   createCLIBridgeGenerateFn,

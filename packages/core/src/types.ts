@@ -51,6 +51,14 @@ export interface ProviderChainEntry {
 
   /** Gateway base URL. Only meaningful when provider === 'gateway'. */
   gatewayUrl?: string;
+
+  /**
+   * Bridge-side provider id to route to (e.g. 'codex-cli', 'cli-claude').
+   * Forwarded to the gateway as `provider`, which short-circuits the bridge's
+   * model-based routing and selects this provider directly regardless of model.
+   * Only meaningful when provider === 'gateway'.
+   */
+  targetProvider?: string;
 }
 
 /**

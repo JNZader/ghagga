@@ -53,7 +53,7 @@ describe('generateViaGateway', () => {
     expect(result).toEqual(mockResponse);
     expect(fetchSpy).toHaveBeenCalledOnce();
 
-    const [url, options] = fetchSpy.mock.calls[0]!;
+    const [url, options] = fetchSpy.mock.calls[0] ?? [];
     expect(url).toBe('https://llm-gateway.example.com/v1/generate');
     expect(options?.method).toBe('POST');
     expect(options?.headers).toEqual(
@@ -68,6 +68,44 @@ describe('generateViaGateway', () => {
     expect(body.system).toBe('you are a reviewer');
     expect(body.model).toBe('auto');
     expect(body.project).toBe('ghagga');
+  });
+
+  it('forwards provider when set (bridge short-circuits model routing)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ text: 'ok', provider: 'codex-cli', model: 'gpt-5.5' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await generateViaGateway('prompt', undefined, {
+      gatewayUrl: 'https://llm-gateway.example.com',
+      gatewayToken: 'test-token-123',
+      provider: 'codex-cli',
+      model: 'gpt-5.5',
+    });
+
+    const body = JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string);
+    expect(body.provider).toBe('codex-cli');
+    expect(body.model).toBe('gpt-5.5');
+  });
+
+  it('omits provider from the body when unset (backward compat)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ text: 'ok', provider: 'gateway', model: 'auto' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await generateViaGateway('prompt', undefined, {
+      gatewayUrl: 'https://llm-gateway.example.com',
+      gatewayToken: 'test-token-123',
+    });
+
+    const body = JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string);
+    expect(body.provider).toBeUndefined();
+    expect('provider' in body).toBe(false);
   });
 
   it('throws on non-ok response', async () => {
@@ -94,7 +132,7 @@ describe('generateViaGateway', () => {
       gatewayToken: 'token',
     });
 
-    const [, options] = fetchSpy.mock.calls[0]!;
+    const [, options] = fetchSpy.mock.calls[0] ?? [];
     expect(options?.redirect).toBe('manual');
   });
 
