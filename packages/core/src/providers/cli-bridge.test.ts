@@ -16,6 +16,7 @@ vi.mock('node:child_process', () => ({
 import { execSync } from 'node:child_process';
 import {
   _getAdapters,
+  _setAvailabilityOverride,
   buildSubprocessEnv,
   CLIConfigurationError,
   generateViaCLI,
@@ -643,6 +644,127 @@ describe('cli-bridge', () => {
             delete process.env[key];
           }
         }
+      }
+    });
+  });
+
+  // ─── OAuth-capable CLIs (no env credential required) ─────────────
+  // Regression tests for the bug where gemini/copilot hard-failed with
+  // CLIConfigurationError when no API key was set — even though they
+  // authenticate via Google/GitHub OAuth login, not an env var.
+  describe('OAuth-capable CLI credential handling', () => {
+    afterEach(() => {
+      // Always clear the testing override so it can't leak between tests
+      _setAvailabilityOverride(undefined);
+    });
+
+    it('gemini does NOT throw CLIConfigurationError when GEMINI_API_KEY is unset', () => {
+      // Force gemini available regardless of the host CLI install state.
+      _setAvailabilityOverride({ opencode: false, copilot: false, gemini: true });
+
+      const original = process.env.GEMINI_API_KEY;
+      delete process.env.GEMINI_API_KEY;
+      try {
+        mockExecSync.mockReturnValue('gemini OAuth review output');
+        const result = generateViaCLI('test prompt', undefined, { preferredCLI: 'gemini' });
+        // It proceeds to attempt the CLI rather than hard-failing on the missing key.
+        expect(result.cli).toBe('gemini');
+        expect(result.provider).toBe('cli-bridge');
+      } finally {
+        if (original !== undefined) process.env.GEMINI_API_KEY = original;
+        else delete process.env.GEMINI_API_KEY;
+      }
+    });
+
+    it('copilot does NOT throw CLIConfigurationError when COPILOT_GITHUB_TOKEN is unset', () => {
+      _setAvailabilityOverride({ opencode: false, copilot: true, gemini: false });
+
+      const original = process.env.COPILOT_GITHUB_TOKEN;
+      delete process.env.COPILOT_GITHUB_TOKEN;
+      try {
+        mockExecSync.mockReturnValue('copilot login review output');
+        const result = generateViaCLI('test prompt', undefined, { preferredCLI: 'copilot' });
+        expect(result.cli).toBe('copilot');
+        expect(result.provider).toBe('cli-bridge');
+      } finally {
+        if (original !== undefined) process.env.COPILOT_GITHUB_TOKEN = original;
+        else delete process.env.COPILOT_GITHUB_TOKEN;
+      }
+    });
+
+    it('gemini OAuth (no key) restricts the subprocess env to the allowlist, NOT the full parent env', () => {
+      // Force gemini available regardless of host CLI install state.
+      _setAvailabilityOverride({ opencode: false, copilot: false, gemini: true });
+
+      const originalKey = process.env.GEMINI_API_KEY;
+      delete process.env.GEMINI_API_KEY;
+      // A non-allowlisted server secret that must NOT leak to the subprocess.
+      process.env.SOME_OTHER_SECRET = 'leak-me';
+      try {
+        mockExecSync.mockReturnValue('gemini OAuth review output');
+        generateViaCLI('test prompt', undefined, { preferredCLI: 'gemini' });
+
+        // gemini.generate calls execSync(cmd, options) — inspect the options.env it received.
+        expect(mockExecSync).toHaveBeenCalled();
+        const lastCall = mockExecSync.mock.calls.at(-1)!;
+        const passedEnv = (lastCall[1] as { env?: NodeJS.ProcessEnv }).env;
+
+        // env must be defined (allowlist), never undefined (which would inherit full parent env).
+        expect(passedEnv).toBeDefined();
+        // The non-allowlisted secret must be excluded.
+        expect(passedEnv).not.toHaveProperty('SOME_OTHER_SECRET');
+        // An allowlisted var (PATH) present in the parent env should pass through.
+        if (process.env.PATH !== undefined) {
+          expect(passedEnv).toHaveProperty('PATH');
+        }
+      } finally {
+        if (originalKey !== undefined) process.env.GEMINI_API_KEY = originalKey;
+        else delete process.env.GEMINI_API_KEY;
+        delete process.env.SOME_OTHER_SECRET;
+      }
+    });
+
+    it('auto-mode (no preferredCLI) does NOT crash and leaves the subprocess env unrestricted', () => {
+      // Auto/fallback mode: preferredCLI undefined → credentialEnvName undefined.
+      // This path is intentionally UNCHANGED by the OAuth scoping — the subprocess
+      // env stays undefined so the adapter inherits the full parent env (ambient
+      // ambient-key pickup, e.g. OPENAI_API_KEY). Closing that path is parked in the
+      // PRE-LAUNCH backlog (fail-closed vs degradation); we must NOT assert allowlist
+      // restriction here (that would lock in the regression we just reverted).
+      _setAvailabilityOverride({ opencode: true, copilot: false, gemini: false });
+
+      try {
+        mockExecSync.mockReturnValue(
+          JSON.stringify({ type: 'text', part: { text: 'opencode auto output' } }),
+        );
+        const result = generateViaCLI('test prompt', undefined, {});
+
+        expect(result.cli).toBe('opencode');
+        // env passed to execSync is undefined → adapter inherits the full parent env.
+        const lastCall = mockExecSync.mock.calls.at(-1)!;
+        const passedEnv = (lastCall[1] as { env?: NodeJS.ProcessEnv }).env;
+        expect(passedEnv).toBeUndefined();
+      } finally {
+        _setAvailabilityOverride(undefined);
+      }
+    });
+
+    it('opencode STILL hard-fails with CLIConfigurationError when its key is missing', () => {
+      // Non-OAuth adapter: missing credential must remain a hard configuration error.
+      _setAvailabilityOverride({ opencode: true, copilot: false, gemini: false });
+
+      const original = process.env.ANTHROPIC_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
+      try {
+        expect(() =>
+          generateViaCLI('test prompt', undefined, {
+            preferredCLI: 'opencode',
+            cliModel: 'anthropic/claude-sonnet-4-5',
+          }),
+        ).toThrow(CLIConfigurationError);
+      } finally {
+        if (original !== undefined) process.env.ANTHROPIC_API_KEY = original;
+        else delete process.env.ANTHROPIC_API_KEY;
       }
     });
   });

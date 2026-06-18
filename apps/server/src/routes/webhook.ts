@@ -108,29 +108,73 @@ const COMMAND_MODE_MAP: Record<CommentCommand, string | null> = {
 const VALID_COMMANDS = new Set<string>(Object.keys(COMMAND_MODE_MAP));
 
 /**
- * Regex to detect "/ghagga <command>" or "ghagga <command>" in a comment body.
- * Case-insensitive. The leading slash is optional for backward compatibility.
- * Captures the command word in group 1.
+ * Per-line regex to detect a "/ghagga <command>" trigger.
+ *
+ * NON-multiline (`^` is the start of the single line passed to it — the scanner in
+ * parseCommentCommand feeds it one real line at a time). `^[^\S\r\n]*` allows leading
+ * horizontal indentation (spaces/tabs) but NOT a markdown quote marker (`> ` is not
+ * whitespace) and NOT a leading carriage return — so quoted (`> /ghagga review`) and
+ * `\r`-prefixed commands are ignored. `[^\S\r\n]+` between the keyword and the
+ * subcommand forces them onto the SAME line. Case-insensitive; the leading slash is
+ * optional for backward compatibility.
+ *
+ * The capture uses `[\w-]+` so hyphenated commands like `fan-out` are captured
+ * correctly (a plain `\w+` cannot match the hyphen) and an unrecognized leading
+ * command still captures a word — letting the caller distinguish "unknown command"
+ * from "no trigger at all". `[\w-]+` stops at a trailing `\r` (e.g. CRLF line ending),
+ * so a `\r` at the end of the line does not break the match.
  */
-const COMMAND_REGEX = /\/?ghagga\s+(\w+)/i;
+const COMMAND_REGEX = /^[^\S\r\n]*\/?ghagga[^\S\r\n]+([\w-]+)/i;
+
+/** Per-line regex matching a triple-backtick fence (possibly indented). Toggles fence state. */
+const FENCE_LINE_REGEX = /^[^\S\r\n]*```/;
 
 /**
  * Parse a PR comment body for a ghagga command.
  *
- * @returns ParsedCommand if a valid command is found, 'unknown' if ghagga was
- *          mentioned with an unrecognized command, or null if no trigger at all.
+ * The command must LEAD a real line. We split on `\n` ONLY — so a bare `\r` or a
+ * unicode line separator (U+2028 / U+2029) stays mid-line and cannot fake a
+ * line-start. Lines inside ``` fenced code blocks (TERMINATED or not) are skipped.
+ * Each remaining line is matched with the non-multiline, `^`-anchored COMMAND_REGEX.
+ *
+ * This blocks: markdown reply-quotes (`> /ghagga ...`), mid-sentence/inline commands,
+ * fenced code blocks (terminated AND unterminated), and pseudo-line-breaks (a bare
+ * `\r` or U+2028/U+2029 that renders as a break but is not a `\n`).
+ *
+ * Known limitations: the scanner only recognizes triple-backtick (```` ``` ````) fenced
+ * blocks. It does NOT recognize `~~~` tilde fences, 4-space / tab-indented code blocks,
+ * or variable-length / nested fences — so a command placed inside one of THOSE markdown
+ * code constructs can still trigger. This is a deliberate limitation: faithfully
+ * replicating CommonMark code-block detection would require a real markdown parser, which
+ * is out of scope. The trigger regex is a SHAPE filter, NOT the authorization boundary —
+ * the real gate is the author-association authz check (OWNER/MEMBER/COLLABORATOR) applied
+ * to the parsed command downstream, which bounds the impact to maintainer-authored comments.
+ *
+ * Returns on the FIRST ghagga-leading line: a ParsedCommand for a valid command,
+ * 'unknown' for a ghagga mention with an unrecognized command, or null if no line
+ * ever triggers.
  */
 export function parseCommentCommand(body: string): ParsedCommand | 'unknown' | null {
-  const match = COMMAND_REGEX.exec(body);
-  if (!match?.[1]) return null;
+  let inFence = false;
+  for (const line of body.split('\n')) {
+    if (FENCE_LINE_REGEX.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
 
-  const command = match[1].toLowerCase();
-  if (!VALID_COMMANDS.has(command)) return 'unknown';
+    const match = COMMAND_REGEX.exec(line);
+    if (!match?.[1]) continue;
 
-  return {
-    command: command as CommentCommand,
-    reviewMode: COMMAND_MODE_MAP[command as CommentCommand],
-  };
+    const command = match[1].toLowerCase();
+    if (!VALID_COMMANDS.has(command)) return 'unknown';
+
+    return {
+      command: command as CommentCommand,
+      reviewMode: COMMAND_MODE_MAP[command as CommentCommand],
+    };
+  }
+  return null;
 }
 
 interface InstallationEvent {
