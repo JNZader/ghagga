@@ -262,7 +262,7 @@ describe('integration: webhook -> review dispatch', () => {
       action: 'created',
       comment: {
         id: 555,
-        body: 'Please ghagga review this PR',
+        body: 'ghagga review',
         user: { login: 'dev-user', type: 'User' },
         author_association: 'CONTRIBUTOR',
       },

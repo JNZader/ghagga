@@ -544,9 +544,10 @@ describe('issue_comment event handling', () => {
 
   it('triggers on case-insensitive "GHAGGA REVIEW"', async () => {
     mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    // Leading-line form (command must lead the line); case-insensitivity preserved.
     const body = JSON.stringify({
       ...commentPayload,
-      comment: { ...commentPayload.comment, body: 'Please GHAGGA REVIEW this PR' },
+      comment: { ...commentPayload.comment, body: 'GHAGGA REVIEW' },
     });
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
@@ -554,7 +555,9 @@ describe('issue_comment event handling', () => {
     expect(mockEnqueueReview).toHaveBeenCalledOnce();
   });
 
-  it('triggers when keyword is embedded in longer text', async () => {
+  it('does NOT trigger when keyword is embedded mid-sentence (anchored to line start)', async () => {
+    // BEHAVIOR CHANGE: the trigger is now anchored to the line start to prevent
+    // quoting-injection, so a command buried in prose no longer fires.
     mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
     const body = JSON.stringify({
       ...commentPayload,
@@ -565,8 +568,8 @@ describe('issue_comment event handling', () => {
     });
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
-    expect(res.status).toBe(202);
-    expect(mockEnqueueReview).toHaveBeenCalledOnce();
+    expect(res.status).toBe(200);
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
 
   it('ignores comments without the trigger keyword', async () => {
@@ -764,9 +767,84 @@ describe('parseCommentCommand', () => {
     expect(parseCommentCommand('Ghagga Review')).toEqual({ command: 'review', reviewMode: null });
   });
 
-  it('extracts command embedded in longer text', () => {
-    const result = parseCommentCommand('Please /ghagga review this PR, thanks!');
-    expect(result).toEqual({ command: 'review', reviewMode: null });
+  it('does NOT trigger mid-sentence (command must lead the line)', () => {
+    // BEHAVIOR CHANGE: previously this matched. The trigger is now anchored to
+    // the line start to prevent quoting-injection, so a command embedded in
+    // prose no longer fires.
+    expect(parseCommentCommand('Please /ghagga review this PR, thanks!')).toBeNull();
+  });
+
+  it('parses a command on a clean line within a multi-line body', () => {
+    const body = 'Some context paragraph.\n/ghagga review\nThanks!';
+    expect(parseCommentCommand(body)).toEqual({ command: 'review', reviewMode: null });
+  });
+
+  it('allows leading indentation but not a markdown quote', () => {
+    expect(parseCommentCommand('  /ghagga security')).toEqual({
+      command: 'security',
+      reviewMode: 'workflow',
+    });
+  });
+
+  it('captures the hyphenated fan-out command', () => {
+    expect(parseCommentCommand('/ghagga fan-out')).toEqual({
+      command: 'fan-out',
+      reviewMode: 'fan-out',
+    });
+  });
+
+  it('does NOT trigger on quoted, inline, or code-fenced commands (quoting-injection)', () => {
+    expect(parseCommentCommand('> /ghagga review')).toBeNull();
+    expect(parseCommentCommand('> ghagga review')).toBeNull();
+    expect(parseCommentCommand('lorem /ghagga review ipsum')).toBeNull();
+    expect(parseCommentCommand('```/ghagga review```')).toBeNull();
+  });
+
+  it('does NOT trigger on a command on its own line inside a multi-line fenced block', () => {
+    // The command line is a clean line-start, so the anchor alone would match it.
+    // Stripping fenced blocks before matching is what neutralizes this.
+    const body = 'Here is an example:\n```\n/ghagga review\n```\nDo not run it.';
+    expect(parseCommentCommand(body)).toBeNull();
+  });
+
+  it('does NOT trigger when keyword and subcommand are on different lines', () => {
+    expect(parseCommentCommand('/ghagga\nreview')).toBeNull();
+  });
+
+  it('does NOT trigger on a pseudo-line-break with a bare carriage return (Q8)', () => {
+    // A bare \r renders as a line break in some viewers but is NOT a \n: the
+    // scanner splits on \n only, so this stays one logical line and the command
+    // is not at a real line-start.
+    expect(parseCommentCommand('blah\r/ghagga review')).toBeNull();
+  });
+
+  it('does NOT trigger on a pseudo-line-break with a unicode line separator (Q8)', () => {
+    expect(parseCommentCommand('blah /ghagga review')).toBeNull();
+    expect(parseCommentCommand('blah /ghagga review')).toBeNull();
+  });
+
+  it('does NOT trigger inside an UNTERMINATED fenced block (Q7)', () => {
+    // The opening fence is never closed; everything after it stays in-fence.
+    expect(parseCommentCommand('```\n/ghagga review')).toBeNull();
+  });
+
+  it('does NOT trigger inside a terminated fenced block on its own line', () => {
+    const body = 'Example:\n```\n/ghagga review\n```\nDo not run.';
+    expect(parseCommentCommand(body)).toBeNull();
+  });
+
+  it('triggers on a clean (non-fenced) command line within a multi-line body', () => {
+    const body = 'Some context.\n```\nfenced noise\n```\n/ghagga review\nthanks';
+    expect(parseCommentCommand(body)).toEqual({ command: 'review', reviewMode: null });
+  });
+
+  it('handles CRLF line endings (trailing \\r does not break the match)', () => {
+    // The line passed to COMMAND_REGEX is "/ghagga review\r"; [\w-]+ stops before
+    // the \r, so the command captures cleanly as "review".
+    expect(parseCommentCommand('/ghagga review\r\n')).toEqual({
+      command: 'review',
+      reviewMode: null,
+    });
   });
 
   it('returns "unknown" for unrecognized command', () => {
