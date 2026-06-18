@@ -31,8 +31,16 @@ for (const [src, dest] of ASSETS) {
     process.exitCode = 1;
     continue;
   }
-  mkdirSync(dirname(destPath), { recursive: true });
-  copyFileSync(srcPath, destPath);
+  try {
+    mkdirSync(dirname(destPath), { recursive: true });
+    copyFileSync(srcPath, destPath);
+  } catch (err) {
+    console.error(
+      `[copy-assets] FAILED to copy ${src} -> ${dest}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exitCode = 1;
+    continue;
+  }
   console.log(`[copy-assets] ${src} -> ${dest}`);
   copied++;
 }
