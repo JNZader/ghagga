@@ -32,4 +32,27 @@ paths = [
   '''.*/tests?/.*''',
   '''.*/fixtures?/.*''',
   '''.*/testdata/.*''',
+  # Generated GitHub Action bundle (ncc output). Committed so the Action can run
+  # without a build step, but it inlines third-party deps that ship fake/example
+  # credentials (e.g. JSDoc samples, the public Azure devstorage emulator key).
+  # Not human-authored source — never a place a real secret should originate.
+  '''apps/action/dist/.*''',
+]
+
+# Specific placeholder/example secret values that appear in documentation and CI.
+# These are NOT real credentials: they are deterministic dummies or truncated
+# samples used to illustrate env-var setup. Matched against the secret value so
+# a genuine secret in the same file would still be flagged.
+regexes = [
+  # Deterministic all-hex dummy ENCRYPTION_KEY used in CI test env + setup docs
+  # (.github/workflows/ci.yml, CONTRIBUTING.md).
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  # a1b2c3... placeholder secrets in docs/self-hosted.md examples — both the
+  # full repeated ENCRYPTION_KEY/STATE_SECRET form and the truncated
+  # "a1b2c3d4e5f6..." webhook-secret sample.
+  '''(?:a1b2c3d4e5f6)+(?:\.\.\.)?''',
+  # Truncated/ellipsis example secrets in docs (e.g. "LS0tLS1...", "Ov23li...",
+  # "MIIEpAIBAAKCAQEA...") and Spanish placeholder text in deploy guides.
+  '''(?:LS0tLS1CRUdJTi|Ov23li|MIIEpAIBAAKCAQEA)\.\.\.''',
+  '''los_64_caracteres_hex_aqui''',
 ]
