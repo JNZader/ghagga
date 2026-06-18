@@ -145,6 +145,7 @@ export class CLIConfigurationError extends Error {
  */
 function detectCLI(command: string): boolean {
   try {
+    // nosemgrep: command-injection-node -- `command` is only ever the hardcoded literals 'opencode'/'copilot'/'gemini' (see adapters[].command); no external input.
     execSync(`which ${command}`, { timeout: 3000, stdio: 'pipe' });
     return true;
   } catch {
@@ -415,6 +416,7 @@ const adapters: CLIAdapter[] = [
           : `opencode ${cmdArgs} ${JSON.stringify(fullPrompt)}`;
 
       try {
+        // nosemgrep: command-injection-node -- `cmd` is built from JSON.stringify-quoted args + config-derived cliModel validated against CLI_MODEL_REGEX; the prompt is passed via stdin, never interpolated into the shell command.
         raw = execSync(cmd, {
           ...execOptions,
           ...(fullPrompt.length > STDIN_THRESHOLD ? { input: fullPrompt } : {}),
@@ -454,6 +456,7 @@ const adapters: CLIAdapter[] = [
       const tmpFile = join(tmpdir(), `ghagga-prompt-${process.pid}-${Date.now()}.txt`);
       try {
         writeFileSync(tmpFile, prompt, 'utf8');
+        // nosemgrep: command-injection-node -- `tmpFile` is a server-constructed path (join(tmpdir(), `ghagga-prompt-${pid}-${Date.now()}.txt`)); the user prompt is written to that file, never interpolated into the shell command.
         return execSync(
           `copilot -p "Read and analyze the file at ${tmpFile} and provide a code review"`,
           { ...CLI_EXEC_OPTIONS, ...(env ? { env } : {}) },
@@ -474,6 +477,7 @@ const adapters: CLIAdapter[] = [
     generate(prompt, systemPrompt, _cliModel, env) {
       // Gemini auto-detects non-TTY stdin and reads from it
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+      // nosemgrep: command-injection-node -- literal constant command string; the user prompt is passed via stdin (input), never interpolated into the shell command.
       return execSync('gemini -p - --output-format text', {
         ...CLI_EXEC_OPTIONS,
         ...(env ? { env } : {}),
