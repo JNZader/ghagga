@@ -67,8 +67,11 @@ RUN curl -fsSL -o /tmp/opencode.tar.gz \
     chmod +x /usr/local/bin/opencode && \
     rm -f /tmp/opencode.tar.gz && \
     echo "OpenCode installed: $(opencode --version)"
-# Gemini CLI + Copilot CLI via npm
-RUN npm install -g @google/gemini-cli @github/copilot 2>/dev/null || true && \
+# Gemini CLI + Copilot CLI via npm — OPTIONAL providers.
+# `--loglevel=error` surfaces real install failures in the build log (the root cause)
+# while dropping benign npm warnings/notices. `|| true` keeps the build green: these are
+# optional, and the presence checks below print a non-enforcing WARNING if a CLI is absent.
+RUN npm install -g @google/gemini-cli @github/copilot --loglevel=error || true && \
     (which opencode && opencode --version || echo "WARNING: opencode not installed") && \
     (which gemini || echo "WARNING: gemini-cli not installed") && \
     (which copilot || echo "WARNING: copilot not installed")
