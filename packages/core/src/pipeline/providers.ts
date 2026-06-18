@@ -152,6 +152,7 @@ export function resolveGenerateTextFns(
         return createGatewayGenerateFn({
           gatewayUrl,
           gatewayToken,
+          provider: entry.targetProvider,
           model,
           project: 'ghagga',
         });

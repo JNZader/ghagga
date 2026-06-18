@@ -9,6 +9,9 @@
  *   Request:  { prompt, system, provider?, model?, project? }
  *   Response: { text, provider, model, tokensUsed }
  *
+ * When `provider` is set, the bridge short-circuits its model-based routing
+ * and selects that provider directly (the model is passed through verbatim).
+ *
  * This provider bypasses the AI SDK entirely — the gateway handles model
  * selection, provider routing, and token management internally.
  */
@@ -20,6 +23,11 @@ export interface GatewayOptions {
   gatewayUrl: string;
   /** Bearer token for gateway authentication */
   gatewayToken: string;
+  /**
+   * Bridge-side provider id to route to (e.g. 'codex-cli'). When set, the
+   * bridge selects this provider directly and skips model-based routing.
+   */
+  provider?: string;
   /** Model to request (optional — gateway can auto-select) */
   model?: string;
   /** Project identifier for gateway tracking/routing */
@@ -48,7 +56,7 @@ export async function generateViaGateway(
   systemPrompt?: string,
   options?: GatewayOptions,
 ): Promise<GatewayResponse> {
-  const { gatewayUrl, gatewayToken, model, project } = options ?? {};
+  const { gatewayUrl, gatewayToken, provider, model, project } = options ?? {};
 
   if (!gatewayUrl) {
     throw new Error('Gateway URL not configured — set it in the dashboard provider chain settings');
@@ -68,6 +76,7 @@ export async function generateViaGateway(
     body: JSON.stringify({
       prompt,
       system: systemPrompt,
+      provider,
       model,
       project,
     }),
