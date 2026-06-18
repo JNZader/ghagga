@@ -46,12 +46,16 @@
 > Publishing bloqueado (pnpm no soporta OIDC, pnpm#9812). Repo público = Actions gratis.
 > Las PRs post-3.0.0 NO tienen changeset → agregar para el próximo bump.
 >
-> **Follow-ups nuevos (sin fecha urgente):** command-injection taint precision (FP en
-> `exec` propio); copy-assets try/catch; gitleaks-secrets-no-exentos-del-scope; Trusted
-> Publishing cuando pnpm cierre #9812; **del audit de CI**: server Dockerfile node 20→22
-> (build-verify); política del `security` audit (¿fallar en CRITICAL?); `apps/action/
-> Dockerfile` (--filter names equivocados + dockerignore, dormido); cleanup de los ~250
-> biome warnings.
+> **Follow-ups nuevos (sin fecha urgente):**
+> - ~~command-injection taint precision (FP en `exec` propio)~~ ✅ **RESUELTO 2026-06-18, PR #259**: 4 supresiones `// nosemgrep: command-injection-node` justificadas en `cli-bridge.ts` (which/opencode/copilot/gemini, todos verificados seguros). semgrep 4→0 findings, nada más silenciado.
+> - ~~copy-assets try/catch~~ ✅ **RESUELTO 2026-06-18, PR #258**: `copy-assets.mjs` falla fuerte (nombra asset+error, `exitCode=1`) → aborta el build layer del Docker.
+> - ~~gitleaks-secrets-no-exentos-del-scope~~ ✅ **RESUELTO 2026-06-18, PR #259**: premisa corregida — gitleaks YA pasa por el verdict-scoping (`results.ts:42-49`), no bypassea el gate. Allowlist de 13 FP concretos (dummy keys CI/docs + Azurite key del bundle). NO re-scoping (sería regresión: secret scanning debe ser repo-wide).
+> - ~~server Dockerfile node 20→22~~ ✅ **RESUELTO 2026-06-18, PR #258**: `apps/server/Dockerfile` builder+runner a `node:22-slim`, `docker build` completo verificado. `engines.node >=20` se dejó a propósito (libs publicadas siguen soportando node 20).
+> - Trusted Publishing cuando pnpm cierre #9812 — **BLOQUEADO upstream**.
+> - ~~política del `security` audit (¿fallar en CRITICAL?)~~ ✅ **DECIDIDO 2026-06-18 — queda advisory**: el job corre `pnpm audit --prod --audit-level=high` con `continue-on-error: true` (`ci.yml:67-74`). Se evaluó flipear a blocking (3vr) y se DESCARTÓ: (1) `openspec/specs/tooling/spec.md:222-247` lo manda advisory **a propósito** — tiene un scenario explícito para "pnpm audit network error", o sea ya razonó que la DB de advisories viva no debe romper CI; (2) sin `pnpm.auditConfig.ignoreCves` un CVE transitivo sin fix congelaría todos los merges; (3) `main` no tiene branch protection → "blocking" sería un badge rojo, no enforcement real. El árbol de prod está limpio hoy (4 `pnpm.overrides`: undici/esbuild/hono/fast-xml-parser). Si algún día se quiere blocking de verdad: agregar `ignoreCves` + branch protection + actualizar el spec.
+> - `apps/action/Dockerfile` (--filter names equivocados + dockerignore, dormido).
+> - cleanup de los ~250 biome warnings.
+> - advisory: `npm install -g ... 2>/dev/null || true` en `apps/server/Dockerfile` enmascara fallos del install global (descubierto en el 3vr de #258).
 >
 > **PRÓXIMA FEATURE → 3.1.0:** issue-triage agent (webhook `issues` + label-gate →
 > diagnostic + memory dedup + cola de aprobación en dashboard + GH Projects). Diseño
