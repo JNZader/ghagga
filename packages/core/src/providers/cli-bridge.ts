@@ -31,6 +31,18 @@ const STDIN_THRESHOLD = 10_000;
 /** Regex for validating OpenCode cliModel format: `provider/model`. */
 const CLI_MODEL_REGEX = /^[^/]+\/.+$/;
 
+/**
+ * CLIs that can authenticate WITHOUT an env-var credential because they use
+ * an interactive OAuth login instead:
+ * - gemini: Google account OAuth (falls back to GEMINI_API_KEY if present)
+ * - copilot: GitHub login (falls back to COPILOT_GITHUB_TOKEN/GH_TOKEN if present)
+ *
+ * For these, a missing credential env var is NOT a configuration error — the CLI
+ * can still authenticate via its own login. opencode is NOT in this set: its
+ * provider models genuinely require the API key.
+ */
+const OAUTH_CAPABLE_CLIS = new Set<string>(['gemini', 'copilot']);
+
 // ─── Env-Var Mapping ────────────────────────────────────────────
 
 /**
@@ -471,6 +483,34 @@ const adapters: CLIAdapter[] = [
   },
 ];
 
+// ─── Availability Override (testing) ────────────────────────────
+
+/**
+ * Optional override for adapter availability, keyed by adapter name.
+ * `available` is frozen at module load via detectCLI(), so this seam lets tests
+ * deterministically exercise code paths (e.g. the gemini OAuth path) without a
+ * real CLI installed. Production code never sets this.
+ *
+ * @internal testing-only
+ */
+let availabilityOverride: Record<string, boolean> | undefined;
+
+/**
+ * Set (or clear with undefined) the availability override.
+ * @internal Exported for testing only.
+ */
+export function _setAvailabilityOverride(override: Record<string, boolean> | undefined): void {
+  availabilityOverride = override;
+}
+
+/** Resolve whether an adapter is available, honoring the testing override. */
+function isAdapterAvailable(adapter: CLIAdapter): boolean {
+  if (availabilityOverride && adapter.name in availabilityOverride) {
+    return availabilityOverride[adapter.name]!;
+  }
+  return adapter.available;
+}
+
 // ─── Public API ─────────────────────────────────────────────────
 
 /**
@@ -478,7 +518,7 @@ const adapters: CLIAdapter[] = [
  * Returns names from the adapter list (opencode, copilot, gemini).
  */
 export function getAvailableCLIs(): string[] {
-  return adapters.filter((a) => a.available).map((a) => a.name);
+  return adapters.filter(isAdapterAvailable).map((a) => a.name);
 }
 
 /**
@@ -524,18 +564,38 @@ export function generateViaCLI(
   const credentialEnvName = resolveCredentialEnvVar(resolvedCLI, cliModel);
 
   // ── Validate credentials (configuration error = hard fail) ──
-  if (resolvedCLI && credentialEnvName) {
+  // OAuth-capable CLIs (gemini, copilot) skip the hard-fail: they can
+  // authenticate via Google/GitHub login when no env credential is present.
+  // The credential is still injected below when available.
+  if (resolvedCLI && credentialEnvName && !OAUTH_CAPABLE_CLIS.has(resolvedCLI)) {
     validateCredentials(credentialEnvName, credentials);
   }
 
   // ── Build subprocess environment ──
+  // When a credential is available, restrict the subprocess to the SAFE_ENV_VARS
+  // allowlist plus that one credential (never the full parent env).
   let subprocessEnv: NodeJS.ProcessEnv | undefined;
   if (credentials && credentialEnvName) {
-    const credentialValue = credentials[credentialEnvName];
-    subprocessEnv = buildSubprocessEnv(credentialEnvName, credentialValue);
+    subprocessEnv = buildSubprocessEnv(credentialEnvName, credentials[credentialEnvName]);
+  } else if (resolvedCLI && OAUTH_CAPABLE_CLIS.has(resolvedCLI)) {
+    // OAuth-capable CLI (gemini/copilot) selected explicitly with NO injected key:
+    // still restrict to the allowlist so the CLI can read its own login state
+    // (HOME/XDG) WITHOUT inheriting the full parent env, which would leak unrelated
+    // server secrets. (This path is newly reachable because the OAuth-skip above no
+    // longer hard-fails on a missing key.)
+    // Known limitation: this restricted (allowlist-only) env also applies to any
+    // FALLBACK adapter tried later in the loop below, so a fallback that relies on
+    // ambient (non-allowlisted) keys will not see them on this path. Acceptable:
+    // choosing an OAuth CLI explicitly is a deliberate restriction, and before this
+    // change the no-key path hard-failed before reaching the loop at all. Per-adapter
+    // env resolution would be a larger refactor, tracked separately.
+    subprocessEnv = buildSubprocessEnv();
   }
+  // else: subprocessEnv stays undefined → preserves the PRE-EXISTING behavior for
+  // opencode / auto-mode (ambient-env inheritance). Closing that pre-existing path is
+  // tracked separately (PRE-LAUNCH backlog: fail-closed vs degradation) — out of scope here.
 
-  const available = adapters.filter((a) => a.available);
+  const available = adapters.filter(isAdapterAvailable);
 
   if (available.length === 0) {
     throw new Error('No CLI providers available. Install one of: opencode, copilot, gemini');
