@@ -54,8 +54,8 @@
 > biome warnings.
 >
 > **Follow-ups del issue-triage (2026-06-16/17, fix-between-SDDs):**
-> - 🐛 **cli-bridge `gemini` exige `GEMINI_API_KEY` aunque usa Google OAuth** (`packages/core/src/providers/cli-bridge.ts:163-181`): `validateCredentials` hace hard-fail con `CLIConfigurationError` antes de invocar el CLI, aunque `gemini` autentica por OAuth sin key. Hacer el credential opcional con OAuth fallback (aplica también a `copilot`). Descubierto en el smoke test REAL del agente — ningún unit test lo vio (todos inyectan generateFn).
-> - **`COMMAND_REGEX` no anclado a línea** (quoting-injection): un maintainer citando `/ghagga triage` de un attacker dispara. Compartido con el review trigger → hardening per-path (no tocar el shared, separar regexes).
+> - ~~🐛 **cli-bridge `gemini` exige `GEMINI_API_KEY` aunque usa Google OAuth**~~ ✅ **RESUELTO 2026-06-18, PR #256** (`53e0aba`, 3vr+2 fix-forward cross-engine): `OAUTH_CAPABLE_CLIS=Set(['gemini','copilot'])` saltea el hard-fail de `validateCredentials`; opencode sigue estricto. El review cerró además un **env-leak** que el fix exponía (el path OAuth ya no hereda el `process.env` completo — scoped a los adapters OAuth; full-env de opencode/auto-mode preservado, decisión parqueada en PRE-LAUNCH). Lo cazó el smoke test REAL — ningún unit test lo vio (inyectan generateFn / seteaban la key a propósito).
+> - ~~**`COMMAND_REGEX` no anclado a línea** (quoting-injection)~~ ✅ **RESUELTO 2026-06-18, PR #256** (`f4372ee`). NOTA: en `main` triage NO existe → se resolvió como **un solo regex anclado** (line-scanner fence-aware), NO con el split triage/review que pedía este ticket (ese split aplica a esta rama, donde triage SÍ existe). Cuando `feat/issue-triage-agent` mergee a main tras #256, su regex propio (`webhook.ts:156`, todavía sin anclar + con `triage`) debe **heredar el anclado** — resolver el conflicto preservando el line-scanner y agregando `triage` al set de comandos. Residuales LOW documentados (`~~~`/indent-4/fences-variables — boundary real = authz gate).
 >
 > **3.1.0 issue-triage agent — IMPLEMENTACIÓN COMPLETA 7/7 FASES (sesión 2026-06-16), branch `feat/issue-triage-agent` (17 commits sobre main, SIN pushear, release-blocked):**
 > Planning + las 7 fases, cada una con review multi-voz (3vr/4vr/5vr) + fix-forward. Todo en engram `sdd/issue-triage-agent/*`.
@@ -69,7 +69,7 @@
 > - ✅ **Phase 7** permiso `issues:write` (docs, no manifest) + changeset minor (core+db, lockstep arrastra cli) + docs/issue-triage.md
 > **Carry-forwards RESUELTOS:** save bajo `ISSUE_TRIAGE_OBSERVATION_TYPE` ✓, DI generateFn ✓, confidence fail-safe ✓, comment-count+payload caps ✓. Suites finales: core 3440 + server 656 + db 186 + dashboard 562 verde.
 > **Blocker de release (sigue vivo):** NO shippea hasta (1) deployar server + (2) cerrar PRE-LAUNCH 🔐 + (3) re-consent del permiso `issues` en las instalaciones. Código buildeable/testeable local YA. NO pusheado → no gateó canary/CI todavía. Diseño ref: claude.ai/share/9e6b1461.
-> **Pendiente menor (follow-up LOW):** COMMAND_REGEX no anclado a línea (quoting-injection, compartido con review) — hardening per-path después.
+> **Pendiente menor (follow-up LOW):** ~~COMMAND_REGEX no anclado a línea~~ ✅ RESUELTO en main (PR #256, `f4372ee`). Pendiente al mergear esta rama: el `webhook.ts` de acá (con `triage`) debe heredar el anclado de main — ver nota en "Follow-ups del issue-triage" arriba.
 >
 > **PRE-LAUNCH 🔐 sigue PARQUEADO** (server no deployado) — vuelve a importar el día que
 > deployees el server para el issue-triage. Ver sección abajo.
