@@ -3,6 +3,25 @@
  *
  * Uses native fetch for all HTTP calls and Node.js crypto for
  * JWT creation and webhook signature verification. No extra deps.
+ *
+ * ─── FORGE-ADAPTER BOUNDARY (SDD forge-agnostic 1.5/1.6) ─────────
+ *
+ * The 11 forge-adapter functions in this module are INTERNAL. They are tagged
+ * `@internal` individually and MUST be consumed via `GitHubForgeAdapter`, built
+ * through the composition root at
+ * `apps/server/src/github/forge-adapter-factory.ts` (`makeGitHubAdapter`). Do
+ * NOT import these directly anywhere in `apps/server` outside that factory — the
+ * forge-boundary lint (`noRestrictedImports` in biome.json) enforces this.
+ *
+ * The 11 forge-adapter fns:
+ *   fetchPRDiff, fetchPRDetails, getPRFileList, getPRCommitMessages,
+ *   postComment, findExistingComment, deleteComment, updateComment,
+ *   addCommentReaction, fetchGraphFromBranch, fetchGraphMetadata.
+ *
+ * NOT forge-adapter fns (remain directly importable everywhere):
+ *   - getInstallationToken — the auth/token-mint seam
+ *   - verifyWebhookSignature — webhook signature check
+ *   plus any shared constants/types exported from this module.
  */
 
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
@@ -78,6 +97,11 @@ function decodePrivateKey(key: string): string {
 /**
  * Fetch pull request details (head SHA, base branch, etc.).
  * Used by the issue_comment handler to enrich the BullMQ job.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchPRDetails(
   owner: string,
@@ -115,6 +139,11 @@ export async function fetchPRDetails(
 
 /**
  * Fetch the unified diff for a pull request.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchPRDiff(
   owner: string,
@@ -144,6 +173,11 @@ export async function fetchPRDiff(
 
 /**
  * Post a markdown comment to a pull request via the issues comments API.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function postComment(
   owner: string,
@@ -183,6 +217,11 @@ export async function postComment(
  * Returns the comment ID if found, or null if no previous review comment exists.
  *
  * Searches for the `<!-- ghagga-review -->` marker in issue comments.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function findExistingComment(
   owner: string,
@@ -238,6 +277,11 @@ export async function findExistingComment(
 
 /**
  * Delete a comment from a pull request.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function deleteComment(
   owner: string,
@@ -262,6 +306,11 @@ export async function deleteComment(
 
 /**
  * Update an existing comment on a pull request.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function updateComment(
   owner: string,
@@ -296,6 +345,11 @@ export async function updateComment(
 /**
  * Fetch commit messages for a pull request.
  * Paginates through all pages (max 5 pages / 500 commits).
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function getPRCommitMessages(
   owner: string,
@@ -341,6 +395,11 @@ export async function getPRCommitMessages(
 /**
  * Fetch the list of changed file paths for a pull request.
  * Paginates through all pages (max 10 pages / 1000 files).
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function getPRFileList(
   owner: string,
@@ -386,6 +445,11 @@ export async function getPRFileList(
 /**
  * Fetch the dependency graph from the ghagga/graph orphan branch.
  * Returns null if the branch or file doesn't exist.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchGraphFromBranch(
   owner: string,
@@ -423,6 +487,11 @@ export async function fetchGraphFromBranch(
 /**
  * Fetch the dependency graph metadata from the ghagga/graph orphan branch.
  * Returns null if the branch or file doesn't exist.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchGraphMetadata(
   owner: string,
@@ -483,6 +552,11 @@ function validateMetadataJson(json: unknown): import('ghagga-core').GraphMetadat
 /**
  * Add a reaction emoji to an issue comment.
  * Used for acknowledging "ghagga review" trigger comments.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function addCommentReaction(
   owner: string,
