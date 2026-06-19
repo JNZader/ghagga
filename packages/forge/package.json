@@ -1,0 +1,58 @@
+{
+  "name": "ghagga-forge",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Forge-agnostic ports and domain types for GHAGGA (GitHub / GitLab / Gitea)",
+  "author": "JNZader",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JNZader/ghagga.git",
+    "directory": "packages/forge"
+  },
+  "homepage": "https://github.com/JNZader/ghagga#readme",
+  "bugs": {
+    "url": "https://github.com/JNZader/ghagga/issues"
+  },
+  "keywords": [
+    "ghagga",
+    "forge",
+    "github",
+    "gitlab",
+    "gitea",
+    "code-review"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "ghagga-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
