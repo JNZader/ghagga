@@ -85,8 +85,10 @@ export type {
 } from './adapters/github/github-client-port.js';
 export type { GitHubForgeAdapterDeps } from './adapters/github/github-forge-adapter.js';
 export { GitHubForgeAdapter } from './adapters/github/github-forge-adapter.js';
-export type { TemporaryGitHubTokenSourceDeps } from './adapters/github/temporary-github-token-source.js';
-export { TemporaryGitHubTokenSource } from './adapters/github/temporary-github-token-source.js';
+// NOTE: TemporaryGitHubTokenSource is INTENTIONALLY NOT exported here. It is a
+// temporary P1-only credential provider and lives behind the non-public
+// `ghagga-forge/internal` entry point so the temporary auth path cannot ossify
+// into a second public surface. See src/internal.ts + the TODO(P2-REMOVE) marker.
 
 // ─── Identity helpers ───────────────────────────────────────────
 

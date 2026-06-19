@@ -2,6 +2,12 @@
  * TemporaryGitHubTokenSource — a MINIMAL {@link ForgeCredentialProvider}
  * implementation for P1.
  *
+ * @internal — NOT part of the package's public API. Importable only via the
+ * `ghagga-forge/internal` subpath entry, never from `ghagga-forge` root.
+ *
+ * TODO(P2-REMOVE): delete this class (and the `ghagga-forge/internal` export +
+ * src/internal.ts) when `GitHubAppCredentialProvider` lands in P2 task 2.3.
+ *
  * ⚠️ TEMPORARY — MUST BE REPLACED by `GitHubAppCredentialProvider` in P2 BEFORE
  * archive. Do NOT fossilize this as a second, parallel auth path. This exists
  * ONLY so P1's task 1.4 (review.ts rewire) can depend on the
@@ -39,6 +45,7 @@ export interface TemporaryGitHubTokenSourceDeps {
 /**
  * P1 credential provider that mints a fresh GitHub installation token per call.
  *
+ * @internal — TODO(P2-REMOVE): temporary; not public API.
  * @see {@link ForgeCredentialProvider} — the port it implements.
  */
 export class TemporaryGitHubTokenSource implements ForgeCredentialProvider {
