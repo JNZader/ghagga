@@ -147,7 +147,6 @@ function expectHistoricalFieldParity(
 ): void {
   expect(current, `${label} file count`).toHaveLength(baseline.length);
   current.forEach((file, i) => {
-    // biome-ignore lint/style/noNonNullAssertion: same length asserted above
     const ref = baseline[i]!;
     expect(file.path, `${label} file[${i}] path`).toBe(ref.path);
     expect(file.additions, `${label} file[${i}] additions`).toBe(ref.additions);
@@ -194,7 +193,6 @@ describe('C3/M6 quoted paths — documented delta vs baseline (changelog: minor)
     // (the section is the ENTIRE c03 fixture — preamble is empty).
     const files = parseDiffFiles(fixture('c03'));
     expect(files).toHaveLength(1);
-    // biome-ignore lint/style/noNonNullAssertion: length asserted above
     const quoted = files[0]!;
     expect(quoted.path).toBe('café.ts');
     expect(quoted.additions).toBe(1);
@@ -220,11 +218,9 @@ describe('C3/M6 quoted paths — documented delta vs baseline (changelog: minor)
 
     // Files untouched by the delta keep full historical-field parity.
     for (const i of [0, 1] as const) {
-      // biome-ignore lint/style/noNonNullAssertion: lengths asserted above
       expectHistoricalFieldParity([current[i]!], [baseline[i]!], `composite file[${i}]`);
     }
 
-    // biome-ignore lint/style/noNonNullAssertion: lengths asserted above
     const [gammaBaseline, gammaCurrent, quoted] = [baseline[2]!, current[2]!, current[3]!];
 
     // Gamma no longer carries the quoted section…
@@ -251,7 +247,6 @@ describe('C3/M6 quoted paths — documented delta vs baseline (changelog: minor)
     const baseline = baselineParseDiffFiles(raw);
     expect(baseline.map((f) => f.path)).toEqual(['src/normal.ts']);
     expect(baseline[0]).toMatchObject({ additions: 3, deletions: 3 });
-    // biome-ignore lint/style/noNonNullAssertion: length asserted above
     expectByteEqual(baseline[0]!.content, raw, 'glued baseline content (entire fixture)');
 
     // New behavior: 3 clean files, unescaped paths, +1/-1 each.
@@ -264,7 +259,6 @@ describe('C3/M6 quoted paths — documented delta vs baseline (changelog: minor)
     // Bytes are EXACTLY redistributed, none lost, none invented:
     // glued baseline === the 3 clean sections re-joined.
     expectByteEqual(
-      // biome-ignore lint/style/noNonNullAssertion: length asserted above
       baseline[0]!.content,
       current.map((f) => f.content).join('\n'),
       'consecutive-quoted byte redistribution',
@@ -315,7 +309,6 @@ describe('adversarial: genuine empty line mid-hunk (stripped blank-context prefi
     const raw = fixture('adv-empty-line-mid-hunk');
     const { files } = parseUnifiedDiff(raw);
     expect(files).toHaveLength(1);
-    // biome-ignore lint/style/noNonNullAssertion: length asserted above
     const file = files[0]!;
 
     // The empty line does NOT kill the section: both @@ headers form hunks.
@@ -324,7 +317,6 @@ describe('adversarial: genuine empty line mid-hunk (stripped blank-context prefi
     // Hunk 1 contains ONLY the body lines BEFORE the empty line. The empty
     // line has no valid prefix, so it closes the hunk, and the +/-/context
     // lines AFTER it are NOT attributed to any hunk (orphaned tail).
-    // biome-ignore lint/style/noNonNullAssertion: hunk count asserted above
     expect(file.hunks[0]!.lines.map((l) => l.raw)).toEqual([' antes', '-viejo', '+nuevo']);
 
     // The empty line AND the orphaned tail are preserved verbatim in
@@ -334,7 +326,6 @@ describe('adversarial: genuine empty line mid-hunk (stripped blank-context prefi
     expect(file.rawLines.slice(gap, gap + 4)).toEqual(['', ' despues', '-viejo2', '+nuevo2']);
 
     // A subsequent @@ header RE-OPENS hunk parsing: hunk 2 is fully captured.
-    // biome-ignore lint/style/noNonNullAssertion: hunk count asserted above
     expect(file.hunks[1]!.lines.map((l) => l.raw)).toEqual([' ctx', '-old', '+new']);
 
     // Spec R2 still holds: byte-exact reconstruction from rawLines.
@@ -358,7 +349,6 @@ describe('malformed-only divergence: `diff --git ... b/X` disagrees with `+++ b/
     expect(current.map((f) => f.path)).toEqual(['PLUS.ts']);
 
     // Everything EXCEPT the path stays byte-identical.
-    // biome-ignore lint/style/noNonNullAssertion: lengths asserted above
     const [b, c] = [baseline[0]!, current[0]!];
     expect(c.additions).toBe(b.additions);
     expect(c.deletions).toBe(b.deletions);

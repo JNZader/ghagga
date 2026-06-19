@@ -129,7 +129,7 @@ describe('buildSarif', () => {
 
   it('finding with line number → region with startLine', () => {
     const sarif = buildSarif(mockResult([semgrepFinding]), '1.0.0');
-    const location = sarif.runs[0]?.results[0]?.locations[0]!;
+    const location = sarif.runs[0].results[0].locations[0];
 
     expect(location.physicalLocation.region).toBeDefined();
     expect(location.physicalLocation.region?.startLine).toBe(42);
@@ -137,7 +137,7 @@ describe('buildSarif', () => {
 
   it('finding without line → no region property on physicalLocation', () => {
     const sarif = buildSarif(mockResult([trivyFinding]), '1.0.0');
-    const location = sarif.runs[0]?.results[0]?.locations[0]!;
+    const location = sarif.runs[0].results[0].locations[0];
 
     expect(location.physicalLocation.artifactLocation.uri).toBe('package.json');
     expect(location.physicalLocation.region).toBeUndefined();
@@ -201,7 +201,7 @@ describe('buildSarif', () => {
     };
 
     const sarif = buildSarif(mockResult([finding]), '1.0.0');
-    const result = sarif.runs[0]?.results[0]!;
+    const result = sarif.runs[0].results[0];
 
     expect(result.message.text).toBe('Unescaped 日本語 string with émojis 🚀 and «special» chars');
 

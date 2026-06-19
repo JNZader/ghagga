@@ -657,7 +657,7 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   // Build lens summary
   const lensSummaryParts = resolvedLenses.map((lens, i) => {
     const result = results[i];
-    if (!result || result.status !== 'fulfilled') return `${lens.label}: failed`;
+    if (result?.status !== 'fulfilled') return `${lens.label}: failed`;
     const lensStatus = lensStatuses[i] ?? 'unknown';
     return `${lens.label}: ${lensStatus}`;
   });

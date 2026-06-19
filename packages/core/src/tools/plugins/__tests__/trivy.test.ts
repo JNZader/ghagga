@@ -107,7 +107,6 @@ describe('parseTrivyOutput (vulnerabilities)', () => {
 
   it('constructs message with CVE, package, version, and fix info', () => {
     const findings = parseTrivyOutput(makeRaw(FIXTURE_JSON), '/workspace');
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known fixture data
     const finding = findings[0]!;
     expect(finding.message).toContain('CVE-2024-48930');
     expect(finding.message).toContain('express@4.18.2');

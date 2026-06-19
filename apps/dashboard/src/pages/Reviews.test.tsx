@@ -574,7 +574,6 @@ describe('Reviews — pagination', () => {
 
     // The page state drives the page param sent to useReviews → refetch
     const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     expect(lastCall![1]).toBe(2);
   });
 
@@ -614,7 +613,6 @@ describe('Reviews — pagination', () => {
     // The component calls useReviews(selectedRepo || undefined, page)
     // After clicking Next, the page state becomes 2
     const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     expect(lastCall![1]).toBe(2);
   });
 
@@ -638,7 +636,6 @@ describe('Reviews — pagination', () => {
     fireEvent.click(screen.getByText('Previous'));
 
     const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     expect(lastCall![1]).toBe(1);
   });
 });

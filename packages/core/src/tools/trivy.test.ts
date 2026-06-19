@@ -308,7 +308,6 @@ describe('runTrivy', () => {
 
     await runTrivy('/my/project');
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const scanCall = mockExecFile.mock.calls[1]!;
     expect(scanCall[0]).toBe('trivy');
     expect(scanCall[1]).toEqual([

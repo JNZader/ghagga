@@ -413,7 +413,7 @@ function sanitizeForMarker(content: string, marker: string, hasInnerCodeFence: b
  * @returns The fenced block, or '' if content is empty/whitespace.
  */
 export function wrapUntrusted(label: string, content: string): string {
-  if (!content || !content.trim()) return '';
+  if (!content?.trim()) return '';
   const safeLabel = label.replace(/["\n<>]/g, ' ').trim();
   const safeContent = sanitizeUntrusted(content);
   return `<UNTRUSTED label="${safeLabel}">\n${safeContent}\n</UNTRUSTED>`;

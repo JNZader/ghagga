@@ -104,7 +104,6 @@ describe('parseCpdOutput', () => {
 
   it('handles duplication with more than 2 files', () => {
     const findings = parseCpdOutput(makeRaw(FIXTURE_XML), '/workspace');
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known fixture data
     const second = findings[1]!;
     expect(second.message).toContain('src/api/users.ts:45');
     expect(second.message).toContain('src/api/teams.ts:30');

@@ -399,9 +399,7 @@ describe('Settings — AI review toggle', () => {
 
     // Navigate from the "AI Review" heading up to the Card container, then find the toggle
     const aiReviewHeading = screen.getByText('AI Review');
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const aiReviewCard = aiReviewHeading.closest('.rounded-lg')!;
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const aiToggle = aiReviewCard.querySelector('input[type="checkbox"]')!;
 
     expect(screen.getByTestId('provider-chain-editor')).toBeInTheDocument();
@@ -530,7 +528,6 @@ describe('Settings — global/custom toggle', () => {
 
     // Find the Global/Custom toggle checkbox
     const globalLabel = screen.getByText('Global');
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const globalToggle = globalLabel.closest('label')!.querySelector('input[type="checkbox"]')!;
 
     fireEvent.click(globalToggle);
@@ -593,7 +590,6 @@ describe('Settings — save', () => {
 
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledTimes(1);
-      // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
       const payload = mockMutateAsync.mock.calls[0]![0];
       expect(payload.repoFullName).toBe('acme/app');
       expect(payload.useGlobalSettings).toBe(false);
@@ -725,7 +721,6 @@ describe('Settings — advanced fields', () => {
     fireEvent.click(screen.getByText('Save Settings'));
 
     await waitFor(() => {
-      // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
       const payload = mockMutateAsync.mock.calls[0]![0];
       expect(payload.ignorePatterns).toEqual(['*.log', 'vendor/**']);
     });
@@ -787,7 +782,6 @@ describe('Settings — save with provider chain', () => {
     fireEvent.click(screen.getByText('Save Settings'));
 
     await waitFor(() => {
-      // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
       const payload = mockMutateAsync.mock.calls[0]![0];
       expect(payload.providerChain).toHaveLength(2);
       // The first provider has no apiKey (existing key), so no apiKey field
@@ -853,7 +847,6 @@ describe('Settings — tool grid', () => {
     fireEvent.click(screen.getByText('Save Settings'));
 
     await waitFor(() => {
-      // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
       const payload = mockMutateAsync.mock.calls[0]![0];
       expect(payload.disabledTools).toBeDefined();
       expect(payload.disabledTools).toContain('gitleaks');

@@ -198,7 +198,6 @@ describe('integration: webhook -> review dispatch', () => {
     expect(mockEnqueueReview).toHaveBeenCalledOnce();
 
     // Verify enqueueReview job data shape
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const jobData = mockEnqueueReview.mock.calls[0]![0];
     expect(jobData).toMatchObject({
       installationId: 777,
@@ -295,7 +294,6 @@ describe('integration: webhook -> review dispatch', () => {
 
     // Verify enqueueReview job includes comment metadata
     expect(mockEnqueueReview).toHaveBeenCalledOnce();
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const jobData = mockEnqueueReview.mock.calls[0]![0];
     expect(jobData.triggerCommentId).toBe(555);
     expect(jobData.headSha).toBe('abc123def');

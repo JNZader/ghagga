@@ -129,7 +129,6 @@ describe('parseLizardOutput', () => {
 
   it('includes function name and CCN in message', () => {
     const findings = parseLizardOutput(makeRaw(FIXTURE_JSON), '/workspace');
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known fixture data
     const finding = findings[0]!;
     expect(finding.message).toContain('parseComplexConfig');
     expect(finding.message).toContain('22');

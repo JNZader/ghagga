@@ -89,7 +89,6 @@ describe('runCpd', () => {
     await runCpd('/project');
 
     // The scan call should use 'cpd' (not 'pmd')
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const scanCall = mockExecFile.mock.calls[1]!;
     expect(scanCall[0]).toBe('cpd');
     expect(scanCall[1]).not.toContain('cpd'); // no 'cpd' in args (it's the command itself)
@@ -110,7 +109,6 @@ describe('runCpd', () => {
 
     await runCpd('/project');
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const scanCall = mockExecFile.mock.calls[3]!;
     expect(scanCall[0]).toBe('pmd');
     expect((scanCall[1] as string[])[0]).toBe('cpd');
@@ -169,7 +167,6 @@ describe('runCpd', () => {
 
     await runCpd('/project');
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const scanCall = mockExecFile.mock.calls[1]!;
     const args = scanCall[1] as string[];
     const tokenIdx = args.indexOf('--minimum-tokens');
@@ -185,7 +182,6 @@ describe('runCpd', () => {
 
     await runCpd('/project', { minimumTokens: 50 });
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const scanCall = mockExecFile.mock.calls[1]!;
     const args = scanCall[1] as string[];
     const tokenIdx = args.indexOf('--minimum-tokens');
@@ -310,7 +306,6 @@ describe('runCpd', () => {
 
     await runCpd('/my/project', { minimumTokens: 75 });
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const scanCall = mockExecFile.mock.calls[1]!;
     const args = scanCall[1] as string[];
     expect(args).toContain('--format');

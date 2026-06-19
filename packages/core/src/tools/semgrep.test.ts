@@ -227,7 +227,6 @@ describe('runSemgrep', () => {
     await runSemgrep(new Map([['file.ts', 'code']]), '/path/to/custom-rules.yml');
 
     // The second execFile call (scan) should include custom rules
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const scanCall = mockExecFile.mock.calls[1]!;
     const args = scanCall[1] as string[];
     expect(args).toContain('--config');
