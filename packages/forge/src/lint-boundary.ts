@@ -36,4 +36,8 @@
 // `lint-boundary.impl.d.mts` supplies the precise types, so callers/tests get the
 // full `BoundaryViolation[]` signature without enabling `allowJs` for the package.
 export type { BoundaryViolation } from './lint-boundary.impl.mjs';
-export { checkForgeBoundary } from './lint-boundary.impl.mjs';
+export {
+  BANNED_CLIENT_FORGE_FNS,
+  checkForgeBoundary,
+  checkServerForgeClientBoundary,
+} from './lint-boundary.impl.mjs';

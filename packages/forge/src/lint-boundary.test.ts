@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkForgeBoundary } from './lint-boundary.js';
+import { checkForgeBoundary, checkServerForgeClientBoundary } from './lint-boundary.js';
 
 describe('forge-boundary checker (R-AGNOSTIC)', () => {
   it('PASSES a type-only forge→core import', () => {
@@ -135,5 +135,116 @@ describe('forge-boundary checker (R-AGNOSTIC)', () => {
 
     expect(violations).toHaveLength(1);
     expect(violations[0]?.module).toBe('ghagga-core');
+  });
+});
+
+describe('server→client.ts forge-adapter boundary (R-AGNOSTIC 1.6)', () => {
+  const FILE = 'apps/server/src/queues/review.ts';
+
+  it('CATCHES the namespace-import bypass (alias.fetchPRDiff)', () => {
+    const src = [
+      "import * as gh from '../github/client.js';",
+      'const diff = await gh.fetchPRDiff(token, owner, repo, n);',
+    ].join('\n');
+
+    const violations = checkServerForgeClientBoundary(FILE, src);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toMatch(/NAMESPACE BYPASS/i);
+    expect(violations[0]?.module).toMatch(/gh\.fetchPRDiff/);
+  });
+
+  it('CATCHES every banned fn via namespace member access', () => {
+    const banned = [
+      'fetchPRDiff',
+      'fetchPRDetails',
+      'getPRFileList',
+      'getPRCommitMessages',
+      'postComment',
+      'findExistingComment',
+      'deleteComment',
+      'updateComment',
+      'addCommentReaction',
+      'fetchGraphFromBranch',
+      'fetchGraphMetadata',
+    ];
+    const src = [
+      "import * as gh from '../github/client.js';",
+      ...banned.map((fn) => `gh.${fn}();`),
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toHaveLength(banned.length);
+  });
+
+  it('ALLOWS getInstallationToken via namespace member access', () => {
+    const src = [
+      "import * as gh from '../github/client.js';",
+      'const t = await gh.getInstallationToken(id);',
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  it('ALLOWS verifyWebhookSignature via namespace member access', () => {
+    const src = [
+      "import * as gh from '../github/client.js';",
+      'const ok = gh.verifyWebhookSignature(body, sig);',
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  it('CATCHES a named import of a banned fn (defense-in-depth with Biome)', () => {
+    const src = "import { fetchPRDiff } from '../github/client.js';";
+
+    const violations = checkServerForgeClientBoundary(FILE, src);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toMatch(/named import is forbidden/i);
+  });
+
+  it('ALLOWS a named import of getInstallationToken/verifyWebhookSignature', () => {
+    const src =
+      "import { getInstallationToken, verifyWebhookSignature } from '../github/client.js';";
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  it('does NOT flag member access on an alias of a DIFFERENT module', () => {
+    const src = [
+      "import * as octokit from '@octokit/rest';",
+      'octokit.fetchPRDiff();', // not client.ts — out of scope
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  it('resolves the client.ts path across relative depths (./, ../, ../../)', () => {
+    for (const spec of ['./client.js', '../github/client.js', '../../github/client.js']) {
+      const src = `import * as gh from '${spec}';\ngh.postComment();`;
+      expect(checkServerForgeClientBoundary(FILE, src)).toHaveLength(1);
+    }
+  });
+
+  it('IGNORES a clean file (only allowed fns + unrelated imports)', () => {
+    const src = [
+      "import * as gh from '../github/client.js';",
+      "import { z } from 'zod';",
+      'const t = await gh.getInstallationToken(id);',
+      'const ad = makeGitHubAdapter({ owner, repo, token: t });',
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  it('ignores banned fn names inside comments (stripComments)', () => {
+    const src = [
+      "import * as gh from '../github/client.js';",
+      '// gh.fetchPRDiff() would be illegal here',
+      '/* gh.postComment() also illegal */',
+      'gh.getInstallationToken(id);',
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
   });
 });

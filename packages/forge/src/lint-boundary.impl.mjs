@@ -125,3 +125,151 @@ export function checkForgeBoundary(rawSource) {
 
   return violations;
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Server → client.ts forge-adapter surface boundary (SDD forge-agnostic 1.6+).
+//
+// WHY THIS EXISTS (P1 4vr Codex contrarian finding): Biome's
+// `noRestrictedImports` only blocks NAMED imports of the 11 @internal
+// forge-adapter fns. A namespace bypass —
+//   `import * as gh from '../github/client.js'; gh.fetchPRDiff(...)`
+// — is INVISIBLE to Biome, so the factory's "sole sanctioned consumer"
+// guarantee was theater. review.ts ALREADY namespace-imports client.ts (for the
+// allowed getInstallationToken), so the escape hatch was wide open. This checker
+// closes it for real by ALSO catching namespace-alias + member-access of any of
+// the 11 banned fns. Same dependency-free regex/string-scanning spirit as
+// checkForgeBoundary above. The factory (composition root) and test files are
+// the only sanctioned consumers and are excluded by the RUNNER (by path), not
+// here — this function is pure over (filePath, source).
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * The 11 @internal forge-adapter functions exported by apps/server's
+ * `github/client.ts`. These MUST be consumed only via the GitHubForgeAdapter
+ * built through forge-adapter-factory.ts (makeGitHubAdapter). Direct use
+ * anywhere else in apps/server is a boundary violation.
+ *
+ * NOT banned (allowed direct): getInstallationToken, verifyWebhookSignature,
+ * plus any constants/types.
+ */
+export const BANNED_CLIENT_FORGE_FNS = [
+  'fetchPRDiff',
+  'fetchPRDetails',
+  'getPRFileList',
+  'getPRCommitMessages',
+  'postComment',
+  'findExistingComment',
+  'deleteComment',
+  'updateComment',
+  'addCommentReaction',
+  'fetchGraphFromBranch',
+  'fetchGraphMetadata',
+];
+
+const BANNED_FNS_SET = new Set(BANNED_CLIENT_FORGE_FNS);
+
+/**
+ * True if an import specifier points at apps/server's `github/client.ts`.
+ * Handles every relative form the server uses to reach the SAME module:
+ * `./client.js`, `../github/client.js`, `../../github/client.js`, etc. We match
+ * on the trailing `client.js` segment of a RELATIVE specifier (leading `.`),
+ * which is the canonical compiled-ESM spelling of `github/client.ts`. Bare
+ * package specifiers and non-`client` modules never match.
+ */
+function isServerForgeClientImport(source) {
+  if (!source.startsWith('.')) {
+    return false;
+  }
+  return /(^|\/)client\.(js|ts|mjs|cjs)$/.test(source) || /(^|\/)client$/.test(source);
+}
+
+const NAMED_BANNED_REASON =
+  'FORGE BOUNDARY (R-AGNOSTIC 1.6): the 11 client.ts forge-adapter fns are @internal — ' +
+  'consume them via GitHubForgeAdapter built through forge-adapter-factory.ts (makeGitHubAdapter). ' +
+  'Direct named import is forbidden.';
+const NAMESPACE_BANNED_REASON =
+  'FORGE BOUNDARY (R-AGNOSTIC 1.6) — NAMESPACE BYPASS: this file namespace-imports client.ts ' +
+  'and accesses a banned forge-adapter fn via member access (e.g. `alias.fetchPRDiff`). ' +
+  "This bypasses Biome's named-import ban. Consume the fn via the GitHubForgeAdapter from " +
+  'forge-adapter-factory.ts (makeGitHubAdapter). getInstallationToken/verifyWebhookSignature stay allowed.';
+
+/** Extract the bare names from a named-import clause `{ a, b as c, type d }`. */
+function namedSpecifiers(clause) {
+  const braceMatch = clause.match(/\{([^}]*)\}/);
+  if (braceMatch === null) {
+    return [];
+  }
+  return (braceMatch[1] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => s.replace(/^type\s+/, '')) // drop inline `type ` modifier
+    .map((s) => s.split(/\s+as\s+/)[0].trim()); // imported name (before `as`)
+}
+
+/**
+ * Scan a single apps/server source file for direct use of the 11 @internal
+ * client.ts forge-adapter fns. Catches BOTH escape routes:
+ *
+ *   1. NAMED import:    `import { fetchPRDiff } from '../github/client.js'`
+ *      (defense-in-depth with the Biome `noRestrictedImports` ban)
+ *   2. NAMESPACE bypass: `import * as gh from '../github/client.js'`
+ *      followed by `gh.fetchPRDiff` member access (INVISIBLE to Biome)
+ *
+ * Allowed: `getInstallationToken`/`verifyWebhookSignature` (named OR member
+ * access), constants, and types. The factory and test files are excluded by the
+ * RUNNER (by path); this function does not special-case them.
+ *
+ * @param {string} filePath the file path (for the violation message only).
+ * @param {string} rawSource the file contents to scan.
+ * @returns {BoundaryViolation[]} the list of violations (empty when clean).
+ */
+export function checkServerForgeClientBoundary(filePath, rawSource) {
+  const violations = [];
+  const source = stripComments(rawSource);
+  const namespaceAliases = [];
+
+  // ── Pass 1: static imports of client.ts (named + namespace) ──
+  STATIC_RE.lastIndex = 0;
+  for (let match = STATIC_RE.exec(source); match !== null; match = STATIC_RE.exec(source)) {
+    const clause = match[3] ?? '';
+    const moduleSource = match[4] ?? '';
+    if (!isServerForgeClientImport(moduleSource)) {
+      continue;
+    }
+
+    // `import * as alias from '...client.js'` → record alias for member-access scan.
+    const nsMatch = clause.match(/\*\s+as\s+([A-Za-z_$][\w$]*)/);
+    if (nsMatch !== null) {
+      namespaceAliases.push(nsMatch[1]);
+    }
+
+    // Named imports: flag any banned fn (regardless of `type` — a value import
+    // of a function is a value escape; `type`-only is harmless but these are
+    // runtime fns so we flag named occurrences of banned names outright).
+    for (const name of namedSpecifiers(clause)) {
+      if (BANNED_FNS_SET.has(name)) {
+        violations.push({ module: `${filePath} → ${moduleSource}`, reason: NAMED_BANNED_REASON });
+      }
+    }
+  }
+
+  // ── Pass 2: namespace member access `alias.<bannedFn>` ──
+  for (const alias of namespaceAliases) {
+    const memberRe = new RegExp(
+      `\\b${alias.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\s*\\.\\s*([A-Za-z_$][\\w$]*)`,
+      'g',
+    );
+    for (let m = memberRe.exec(source); m !== null; m = memberRe.exec(source)) {
+      const member = m[1];
+      if (BANNED_FNS_SET.has(member)) {
+        violations.push({
+          module: `${filePath} → ${alias}.${member}`,
+          reason: NAMESPACE_BANNED_REASON,
+        });
+      }
+    }
+  }
+
+  return violations;
+}
