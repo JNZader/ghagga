@@ -73,8 +73,12 @@ export type { ForgeWebhookCodec } from './ports/webhook-codec.js';
 
 // ─── Registry ───────────────────────────────────────────────────
 
-export type { ForgeRegistry } from './registry.js';
+export type { ForgeRegistry, UnknownForgeErrorContext } from './registry.js';
 export { MapForgeRegistry, UnknownForgeError } from './registry.js';
+
+// ─── Identity helpers ───────────────────────────────────────────
+
+export { repoRefEquals } from './ref.js';
 
 // ─── Projection helpers ─────────────────────────────────────────
 
