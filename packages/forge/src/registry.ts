@@ -11,6 +11,21 @@ import type { ForgeAdapter } from './ports/forge-adapter.js';
 import type { ForgeKind, RepoRef } from './types.js';
 
 /**
+ * Optional diagnostic context attached to an {@link UnknownForgeError}.
+ *
+ * Purely additive — the error remains constructible with just a `kind`. When the
+ * registry raises it, it fills in the kinds it DOES know about (and the repo, if
+ * available) so the failure message is self-diagnosing instead of just naming
+ * the missing kind.
+ */
+export interface UnknownForgeErrorContext {
+  /** Forge kinds that DO have a registered adapter at throw time. */
+  registeredKinds?: readonly ForgeKind[];
+  /** The repo whose resolution failed, when available. */
+  repo?: RepoRef;
+}
+
+/**
  * Thrown when the registry has no adapter registered for a repo's forge kind.
  *
  * R-RESOLVE: a typed, named error — callers can `instanceof`-narrow it instead
@@ -19,11 +34,28 @@ import type { ForgeKind, RepoRef } from './types.js';
 export class UnknownForgeError extends Error {
   /** The forge kind that had no registered adapter. */
   readonly kind: ForgeKind;
+  /** Forge kinds that DID have a registered adapter at throw time, if known. */
+  readonly registeredKinds?: readonly ForgeKind[];
+  /** The repo whose resolution failed, if available. */
+  readonly repo?: RepoRef;
 
-  constructor(kind: ForgeKind) {
-    super(`No forge adapter registered for kind "${kind}"`);
+  constructor(kind: ForgeKind, context?: UnknownForgeErrorContext) {
+    const known = context?.registeredKinds;
+    const knownSuffix =
+      known === undefined
+        ? ''
+        : known.length === 0
+          ? ' (no adapters are registered)'
+          : ` (registered: ${known.map((k) => `"${k}"`).join(', ')})`;
+    super(`No forge adapter registered for kind "${kind}"${knownSuffix}`);
     this.name = 'UnknownForgeError';
     this.kind = kind;
+    if (context?.registeredKinds !== undefined) {
+      this.registeredKinds = context.registeredKinds;
+    }
+    if (context?.repo !== undefined) {
+      this.repo = context.repo;
+    }
     // Preserve prototype chain across down-level transpilation targets.
     Object.setPrototypeOf(this, UnknownForgeError.prototype);
   }
@@ -69,7 +101,10 @@ export class MapForgeRegistry implements ForgeRegistry {
   resolve(repo: RepoRef): ForgeAdapter {
     const adapter = this.adapters.get(repo.kind);
     if (adapter === undefined) {
-      throw new UnknownForgeError(repo.kind);
+      throw new UnknownForgeError(repo.kind, {
+        registeredKinds: [...this.adapters.keys()],
+        repo,
+      });
     }
     return adapter;
   }

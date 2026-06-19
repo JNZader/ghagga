@@ -119,7 +119,8 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "ghagga-forge": "ghagga-core MUST NOT import ghagga-forge — core stays forge-agnostic (R-AGNOSTIC)."
+                  "ghagga-forge": "ghagga-core MUST NOT import ghagga-forge — core stays forge-agnostic (R-AGNOSTIC).",
+                  "@ghagga/forge": "ghagga-core MUST NOT import @ghagga/forge — core stays forge-agnostic (R-AGNOSTIC)."
                 },
                 "patterns": [
                   {

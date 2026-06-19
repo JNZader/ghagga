@@ -229,11 +229,11 @@ export interface PublishFailure {
  */
 export interface ForgeCapabilities {
   /** Adapter can add reactions to comments. */
-  reactions: boolean;
+  readonly reactions: boolean;
   /** Adapter can publish inline (line-anchored) comments. */
-  inlineComments: boolean;
+  readonly inlineComments: boolean;
   /** Adapter can read a dependency graph for the repo. */
-  graphRead: boolean;
+  readonly graphRead: boolean;
 }
 
 /**

@@ -47,6 +47,27 @@ describe('MapForgeRegistry (R-RESOLVE)', () => {
     }
   });
 
+  it('the error carries diagnostic context (registered kinds + repo)', () => {
+    const registry = new MapForgeRegistry();
+    registry.register(FORGE_KIND.GITHUB, stubAdapter());
+    registry.register(FORGE_KIND.GITLAB, stubAdapter());
+    const repo: RepoRef = { kind: FORGE_KIND.GITEA, nativeId: '42' };
+
+    try {
+      registry.resolve(repo);
+      expect.unreachable('resolve should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(UnknownForgeError);
+      if (error instanceof UnknownForgeError) {
+        expect(error.kind).toBe(FORGE_KIND.GITEA);
+        expect(error.repo).toBe(repo);
+        expect(error.registeredKinds).toEqual([FORGE_KIND.GITHUB, FORGE_KIND.GITLAB]);
+        // Message is self-diagnosing: lists what IS registered.
+        expect(error.message).toMatch(/registered: "github", "gitlab"/);
+      }
+    }
+  });
+
   it('never returns undefined — a miss never reaches undefined.fetchDiff(...)', () => {
     const registry = new MapForgeRegistry();
     const repo: RepoRef = { kind: FORGE_KIND.GITHUB, nativeId: '1' };
