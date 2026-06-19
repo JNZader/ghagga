@@ -1,0 +1,41 @@
+# Build context ignore for the Action's Docker variant.
+# BuildKit prefers <dockerfile>.dockerignore over the root .dockerignore,
+# so this file scopes the context for `docker build -f apps/action/Dockerfile .`
+# WITHOUT the root rule that excludes `apps/action` (needed by the server build).
+
+# Dependencies (installed fresh in the builder stage)
+node_modules
+**/node_modules
+
+# Build outputs (built fresh in the builder stage)
+dist
+**/dist
+
+# Git / CI
+.git
+.github
+.turbo
+**/.turbo
+
+# Testing artifacts
+.stryker-tmp
+coverage
+reports
+
+# Apps not needed for the action build
+apps/dashboard
+apps/cli
+apps/server
+
+# Static sites
+landing
+docs
+
+# Env files
+.env
+.env.*
+
+# Misc
+*.log
+.DS_Store
+DEPLOY-GUIDE.md
