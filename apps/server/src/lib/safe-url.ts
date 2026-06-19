@@ -113,7 +113,7 @@ function expandIPv6(ip: string): number[] | null {
   }
 
   const full = toHextets(addr);
-  if (!full || full.length !== 8) return null;
+  if (full?.length !== 8) return null;
   return full;
 }
 

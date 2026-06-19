@@ -140,8 +140,7 @@ export function parseHypotheses(text: string): Hypothesis[] {
  * @returns Parsed ReviewResult with hypotheses attached
  */
 export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise<ReviewResult> {
-  const { diff, provider, model, apiKey, staticContext, memoryContext, stackHints, reviewLevel } =
-    input;
+  const { diff, provider, model, staticContext, memoryContext, stackHints, reviewLevel } = input;
   const emit = input.onProgress ?? (() => {});
 
   const startTime = Date.now();

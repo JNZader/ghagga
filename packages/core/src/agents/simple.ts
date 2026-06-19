@@ -166,8 +166,7 @@ function parseFindingsBlock(text: string): ReviewFinding[] {
  * @returns Parsed ReviewResult
  */
 export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewResult> {
-  const { diff, provider, model, apiKey, staticContext, memoryContext, stackHints, reviewLevel } =
-    input;
+  const { diff, provider, model, staticContext, memoryContext, stackHints, reviewLevel } = input;
   const emit = input.onProgress ?? (() => {});
 
   // Resolve the generation function (required — must be injected by pipeline)

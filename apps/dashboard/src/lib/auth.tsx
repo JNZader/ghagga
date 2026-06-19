@@ -64,7 +64,7 @@ export function safeInternalPath(path: string | null | undefined): string {
   const cleaned = path.replace(/[\x00-\x1F\x7F]/g, '');
   // '//evil.com' (protocol-relative) and '/\evil.com' (browser-normalized to
   // '//') both escape the origin — reject any second leading slash/backslash.
-  if (!cleaned || cleaned[0] !== '/' || cleaned[1] === '/' || cleaned[1] === '\\') return '/';
+  if (cleaned?.[0] !== '/' || cleaned[1] === '/' || cleaned[1] === '\\') return '/';
   return cleaned;
 }
 

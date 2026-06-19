@@ -32,7 +32,7 @@ function emptyStaticAnalysis(): StaticAnalysisResult {
  * @returns Parsed AuditResult
  */
 export async function runAuditReport(input: AuditInput): Promise<AuditResult> {
-  const { staticContext, provider, model, apiKey } = input;
+  const { staticContext, provider, model } = input;
   const emit = input.onProgress ?? (() => {});
 
   const timestamp = new Date().toISOString();
