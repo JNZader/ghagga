@@ -4,6 +4,21 @@ export default defineConfig({
   test: {
     globals: false,
     exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    // Type-level testing gate (P0 fix F1). Without this, the `@ts-expect-error`
+    // directives in capability.test.ts — which prove the graph co-presence union
+    // rejects an adapter with exactly one graph method — were enforced by NO
+    // gate: tsconfig.json EXCLUDES test files from `tsc --noEmit`, and runtime
+    // vitest does not typecheck. Enabling `typecheck` makes `vitest run` execute
+    // tsc over the test files via tsconfig.test.json (which INCLUDES them), so an
+    // unused `@ts-expect-error` (i.e. the union silently weakened back to a form
+    // that accepts one-method adapters) fails the test run with TS2578.
+    typecheck: {
+      enabled: true,
+      tsconfig: './tsconfig.test.json',
+      // The default typecheck glob only matches `*.test-d.ts`. Our type-level
+      // assertions live in regular `*.test.ts` files, so widen the include.
+      include: ['src/**/*.test.ts'],
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json-summary'],

@@ -1,0 +1,15 @@
+{
+  // Typecheck config for vitest's type-testing pass (test.typecheck in
+  // vitest.config.ts). The package's main tsconfig.json EXCLUDES `**/*.test.ts`
+  // (it only emits src/), so the load-bearing `@ts-expect-error` directives in
+  // capability.test.ts were never typechecked by `tsc --noEmit`. This config
+  // INCLUDES the test files so vitest's typecheck pass runs `tsc` over them,
+  // turning those directives into an enforced gate (P0 fix F1).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
