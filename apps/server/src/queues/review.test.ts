@@ -102,7 +102,11 @@ const mockGetInstallationToken = vi.fn().mockResolvedValue('ghp_mock-token');
 const mockFetchPRDiff = vi.fn().mockResolvedValue('diff content');
 const mockGetPRCommitMessages = vi.fn().mockResolvedValue(['commit 1']);
 const mockGetPRFileList = vi.fn().mockResolvedValue(['file1.ts']);
-const mockPostComment = vi.fn().mockResolvedValue(undefined);
+// Returns the realistic GitHub-native shape `{ id }` (matches client.postComment's
+// declared `Promise<{ id: number }>` contract). The forge adapter consumes
+// `posted.id` to build its UpsertSummaryResult, so an `undefined` return — a
+// mock-fidelity gap, not a behavior change — would crash the adapter.
+const mockPostComment = vi.fn().mockResolvedValue({ id: 2002 });
 const mockAddCommentReaction = vi.fn().mockResolvedValue(undefined);
 const mockFindExistingComment = vi.fn().mockResolvedValue(null);
 const mockUpdateComment = vi.fn().mockResolvedValue(undefined);

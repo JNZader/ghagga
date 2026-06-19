@@ -22,6 +22,7 @@ import {
   fetchGatewayProviders,
   formatReviewComment,
   PreloadedGraphLoader,
+  REVIEW_COMMENT_MARKER,
   reviewPipeline,
   validateProviderChain,
 } from 'ghagga-core';
@@ -35,18 +36,17 @@ import {
   repositories,
   saveReview,
 } from 'ghagga-db';
+import type { CommentId, GitHubClientPort } from 'ghagga-forge';
+import { GitHubForgeAdapter, REACTION_KIND, toCommitMessages, toFileList } from 'ghagga-forge';
+import { TemporaryGitHubTokenSource } from 'ghagga-forge/internal';
 import Redis from 'ioredis';
-import {
-  addCommentReaction,
-  deleteComment,
-  fetchGraphFromBranch,
-  fetchPRDiff,
-  findExistingComment,
-  getInstallationToken,
-  getPRCommitMessages,
-  getPRFileList,
-  postComment,
-} from '../github/client.js';
+// Namespace import (NOT named imports): the GitHubClientPort is assembled from
+// these at runtime. A namespace import accesses members lazily at call time, so
+// members the EXISTING test mocks of '../github/client.js' don't export (e.g.
+// fetchPRDetails / fetchGraphMetadata, never called in the GitHub flow) stay
+// `undefined` instead of triggering vitest's named-import mock validation —
+// keeping review.test.ts / review.baseline.test.ts passing UNMODIFIED (task 1.7).
+import * as githubClient from '../github/client.js';
 import { deriveCallbackSecret, dispatchWorkflow, injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
 import { callbackResultKey, redis } from '../lib/redis.js';
@@ -54,6 +54,73 @@ import { validateOutboundUrl } from '../lib/safe-url.js';
 import { PostgresMemoryStorage } from '../memory/postgres.js';
 
 const logger = rootLogger.child({ module: 'review-queue' });
+
+// ─── Forge adapter wiring (forge-agnostic seam) ─────────────────
+//
+// The review worker no longer calls the GitHub HTTP client directly. It routes
+// forge calls through GitHubForgeAdapter (packages/forge), injecting the real
+// apps/server client.ts functions as the GitHubClientPort. This keeps the
+// boundary clean (forge MUST NOT import apps/server) while preserving the
+// EXACT observable behavior pinned by review.baseline.test.ts.
+//
+// CRITICAL: these bindings come from `../github/client.js`, the SAME module the
+// existing tests mock — so the adapter ends up calling the mocked functions.
+//
+// Each member is a GETTER that reads the client export LAZILY (only when the
+// adapter actually invokes that method). This is load-bearing for task 1.7:
+// vitest's ESM mock proxy THROWS on access of any export the mock doesn't
+// declare. The GitHub review flow never calls fetchChangeRequest /
+// fetchGraphMetadata / updateComment, so those members are never accessed and
+// the un-mocked exports never trip the proxy — existing tests pass UNMODIFIED.
+const githubClientPort: GitHubClientPort = {
+  get fetchPRDiff() {
+    return githubClient.fetchPRDiff;
+  },
+  get fetchPRDetails() {
+    return githubClient.fetchPRDetails;
+  },
+  get getPRFileList() {
+    return githubClient.getPRFileList;
+  },
+  get getPRCommitMessages() {
+    return githubClient.getPRCommitMessages;
+  },
+  get postComment() {
+    return githubClient.postComment;
+  },
+  get findExistingComment() {
+    return githubClient.findExistingComment;
+  },
+  get deleteComment() {
+    return githubClient.deleteComment;
+  },
+  get updateComment() {
+    return githubClient.updateComment;
+  },
+  get addCommentReaction() {
+    return githubClient.addCommentReaction;
+  },
+  get fetchGraphFromBranch() {
+    return githubClient.fetchGraphFromBranch;
+  },
+  get fetchGraphMetadata() {
+    return githubClient.fetchGraphMetadata;
+  },
+};
+
+/** Canonical GHAGGA summary-comment marker (boundary-faithful: the adapter
+ * currently matches the FIXED marker hard-coded in client.findExistingComment). */
+const REVIEW_MARKER = { html: REVIEW_COMMENT_MARKER } as const;
+
+/**
+ * BOX a GitHub-native numeric comment id into the canonical {@link CommentId}
+ * (R-COMMENTID). review.ts call-sites MUST use boxed CommentIds, never a bare
+ * number — the `kind` tag prevents a GitHub id from being cross-assigned as a
+ * GitLab note id (and the same numeric value across forges never collides).
+ */
+export function boxGitHubCommentId(raw: number): CommentId {
+  return { kind: 'github', raw: String(raw) };
+}
 
 // ─── SSRF re-validation (DNS-rebinding TOCTOU defense) ──────────
 //
@@ -495,13 +562,38 @@ async function processReview(
     throw new Error('GITHUB_APP_ID and GITHUB_PRIVATE_KEY must be set');
   }
 
-  const token = await getInstallationToken(installationId, appId, privateKey);
+  // Forge credential seam (P1): TemporaryGitHubTokenSource mints a FRESH token
+  // per getToken() (no cache) — preserving the current "mint each phase"
+  // behavior. P2's task 2.3 swaps this class for GitHubAppCredentialProvider in
+  // a single line, with zero call-site changes.
+  const tokenSource = new TemporaryGitHubTokenSource({
+    mint: githubClient.getInstallationToken,
+    installationId,
+    appId,
+    privateKey,
+  });
 
-  const [diff, commitMessages, fileList] = await Promise.all([
-    fetchPRDiff(owner, repo, prNumber, token),
-    getPRCommitMessages(owner, repo, prNumber, token),
-    getPRFileList(owner, repo, prNumber, token),
+  // Canonical refs for adapter calls (forge-agnostic shape).
+  const repoRef = { kind: 'github' as const, nativeId: `${owner}/${repo}`, path: repoFullName };
+  const changeRef = { repo: repoRef, iid: prNumber };
+
+  // PHASE 1 mint (was getInstallationToken ~498): one token reused across
+  // fetch + dispatch + poll. Kept as a raw token because dispatchWorkflow /
+  // runner.ts (CiRunner not wired this cycle) still consume it directly.
+  const token = await tokenSource.getToken();
+
+  // Fetch context via the adapter (adapter1) instead of the client directly.
+  const adapter1 = new GitHubForgeAdapter({ client: githubClientPort, token, owner, repo });
+
+  const [diffResult, commits, files] = await Promise.all([
+    adapter1.fetchDiff(changeRef),
+    adapter1.fetchCommits(changeRef),
+    adapter1.fetchFileList(changeRef),
   ]);
+  const diff = diffResult.text;
+  // R-PROJECTION: project via the sanctioned helpers — NEVER hand-rolled .map().
+  const commitMessages = toCommitMessages(commits);
+  const fileList = toFileList(files);
 
   log.info(
     { metrics: { step: 'fetch-context', fileCount: fileList.length } },
@@ -765,7 +857,8 @@ async function processReview(
     log.info({ enableBlastRadius: settings.enableBlastRadius ?? false }, 'Blast-radius check');
     if (settings.enableBlastRadius) {
       try {
-        const graph = await fetchGraphFromBranch(owner, repo, token);
+        // R-CAPABILITY: guard by method-presence, never the capabilities flag.
+        const graph = 'fetchGraph' in adapter1 ? await adapter1.fetchGraph(repoRef) : null;
         if (graph) {
           graphLoader = new PreloadedGraphLoader(graph);
           log.info('Dependency graph loaded for blast-radius analysis');
@@ -852,7 +945,16 @@ async function processReview(
   await job.updateProgress(80);
 
   // Step 6: Post or update comment on GitHub PR (idempotent)
-  const freshToken = await getInstallationToken(installationId, appId, privateKey);
+  // PHASE 2 mint (was getInstallationToken ~855): a FRESH token before postback.
+  // tokenSource.getToken() mints anew (no cache) → this is a SECOND, distinct
+  // mint, preserving the baseline 2-mint count + order.
+  const freshToken = await tokenSource.getToken();
+  const adapter2 = new GitHubForgeAdapter({
+    client: githubClientPort,
+    token: freshToken,
+    owner,
+    repo,
+  });
   let commentBody = formatReviewComment(reviewResult, {
     fileStats:
       reviewResult.metadata.totalAdditions !== undefined
@@ -871,29 +973,25 @@ async function processReview(
   // Strategy: delete all existing GHAGGA review comments, then post a fresh one at the bottom.
   // This ensures the review always appears at the most recent position in the PR thread,
   // which is better UX than editing in place (GitHub keeps edited comments at their original position).
-  const existing = await findExistingComment(owner, repo, prNumber, freshToken);
-  if (existing) {
-    // Delete ALL previous GHAGGA comments (latest + any stale duplicates)
-    const allIds = [existing.latestId, ...existing.staleIds];
-    for (const commentId of allIds) {
-      try {
-        await deleteComment(owner, repo, commentId, freshToken);
-        log.info({ commentId }, 'Deleted previous GHAGGA review comment');
-      } catch (error) {
-        log.warn({ commentId, error: String(error) }, 'Failed to delete previous comment');
-      }
-    }
-  }
-
-  // Always post a fresh comment at the bottom of the PR thread
-  const postedComment = await postComment(owner, repo, prNumber, commentBody, freshToken);
-  log.info({ commentId: postedComment?.id }, 'Review comment posted');
+  //
+  // upsertSummaryComment folds find → delete-ALL([latestId, ...staleIds]) → post
+  // into one adapter call, preserving the EXACT baseline ordering + best-effort
+  // delete semantics. The marker passed MUST equal REVIEW_COMMENT_MARKER (the
+  // GitHub adapter matches that fixed marker inside client.findExistingComment).
+  const upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
+  // BOX the GitHub-native numeric id review.ts-LOCAL (R-COMMENTID).
+  const postedCommentId = boxGitHubCommentId(upsertResult.created);
+  log.info({ commentId: postedCommentId.raw }, 'Review comment posted');
   await job.updateProgress(90);
 
   // Step 7: React with rocket to the trigger comment
   if (triggerCommentId) {
     try {
-      await addCommentReaction(owner, repo, triggerCommentId, 'rocket', freshToken);
+      // Box the trigger-comment id review.ts-LOCAL before crossing the adapter
+      // seam (R-COMMENTID). Guard by method-presence (R-CAPABILITY).
+      if ('addReaction' in adapter2) {
+        await adapter2.addReaction(boxGitHubCommentId(triggerCommentId), REACTION_KIND.ROCKET);
+      }
     } catch (error) {
       log.warn({ error: String(error) }, 'Failed to add completion reaction');
     }

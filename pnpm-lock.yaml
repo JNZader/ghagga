@@ -203,6 +203,9 @@ importers:
       ghagga-db:
         specifier: workspace:*
         version: link:../../packages/db
+      ghagga-forge:
+        specifier: workspace:*
+        version: link:../../packages/forge
       hono:
         specifier: ^4.12.25
         version: 4.12.25

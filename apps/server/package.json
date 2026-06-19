@@ -22,6 +22,7 @@
     "dotenv": "^17.4.2",
     "ghagga-core": "workspace:*",
     "ghagga-db": "workspace:*",
+    "ghagga-forge": "workspace:*",
     "hono": "^4.12.25",
     "hono-rate-limiter": "^0.5.3",
     "ioredis": "^5.11.1",

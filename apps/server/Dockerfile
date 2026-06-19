@@ -22,6 +22,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/db/package.json packages/db/tsconfig.json ./packages/db/
 COPY packages/core/package.json packages/core/tsconfig.json ./packages/core/
 COPY packages/types/package.json packages/types/tsconfig.json ./packages/types/
+COPY packages/forge/package.json packages/forge/tsconfig.json ./packages/forge/
 COPY apps/server/package.json apps/server/tsconfig.json ./apps/server/
 
 # Install all dependencies (including dev for building)
@@ -31,13 +32,16 @@ RUN pnpm install --frozen-lockfile
 COPY packages/db/ ./packages/db/
 COPY packages/core/ ./packages/core/
 COPY packages/types/ ./packages/types/
+COPY packages/forge/ ./packages/forge/
 COPY apps/server/ ./apps/server/
 COPY templates/ ./templates/
 
-# Build all packages in dependency order (types re-exports from core; server uses types)
+# Build all packages in dependency order (types re-exports from core; forge imports
+# core in type-position only; server uses types + forge).
 RUN pnpm --filter ghagga-db build && \
     pnpm --filter ghagga-core build && \
     pnpm --filter @ghagga/types build && \
+    pnpm --filter ghagga-forge build && \
     pnpm --filter @ghagga/server build
 
 # Prune dev dependencies for production image
@@ -98,6 +102,13 @@ COPY --from=builder /app/packages/core/node_modules ./packages/core/node_modules
 # Types package (dist only — server imports it type-only; keeps the workspace symlink valid)
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/types/package.json ./packages/types/
+
+# Forge package (dist + package.json — server imports ghagga-forge AND
+# ghagga-forge/internal at runtime; the exports map resolves to ./dist, so the
+# built dist MUST ship. node_modules carries forge's own deps for the symlink.)
+COPY --from=builder /app/packages/forge/dist ./packages/forge/dist
+COPY --from=builder /app/packages/forge/package.json ./packages/forge/
+COPY --from=builder /app/packages/forge/node_modules ./packages/forge/node_modules
 
 # Server package (dist only)
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
