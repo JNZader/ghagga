@@ -37,8 +37,8 @@ COPY packages/ ./packages/
 COPY apps/action/ ./apps/action/
 
 # Build packages (action depends on core, core depends on db types)
-RUN pnpm --filter @ghagga/db build && \
-    pnpm --filter @ghagga/core build && \
+RUN pnpm --filter ghagga-db build && \
+    pnpm --filter ghagga-core build && \
     pnpm --filter @ghagga/action build
 
 # Prune dev dependencies
