@@ -36,23 +36,17 @@ import {
   repositories,
   saveReview,
 } from 'ghagga-db';
-import type { GitHubClientPort } from 'ghagga-forge';
-import {
-  GitHubForgeAdapter,
-  githubCommentId,
-  REACTION_KIND,
-  toCommitMessages,
-  toFileList,
-} from 'ghagga-forge';
+import { githubCommentId, REACTION_KIND, toCommitMessages, toFileList } from 'ghagga-forge';
 import { TemporaryGitHubTokenSource } from 'ghagga-forge/internal';
 import Redis from 'ioredis';
-// Namespace import (NOT named imports): the GitHubClientPort is assembled from
-// these at runtime. A namespace import accesses members lazily at call time, so
-// members the EXISTING test mocks of '../github/client.js' don't export (e.g.
-// fetchPRDetails / fetchGraphMetadata, never called in the GitHub flow) stay
-// `undefined` instead of triggering vitest's named-import mock validation —
-// keeping review.test.ts / review.baseline.test.ts passing UNMODIFIED (task 1.7).
+// Namespace import (NOT named imports): getInstallationToken is read lazily at
+// call time (token mint), so a partial test mock of '../github/client.js' that
+// omits other exports doesn't trip vitest's named-import validation.
+// NOTE: the forge-adapter wiring (GitHubClientPort) no longer lives here — it was
+// extracted to the composition-root factory (makeGitHubAdapter), now the SOLE
+// consumer of the client.ts forge-adapter fns.
 import * as githubClient from '../github/client.js';
+import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
 import { deriveCallbackSecret, dispatchWorkflow, injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
 import { callbackResultKey, redis } from '../lib/redis.js';
@@ -64,55 +58,13 @@ const logger = rootLogger.child({ module: 'review-queue' });
 // ─── Forge adapter wiring (forge-agnostic seam) ─────────────────
 //
 // The review worker no longer calls the GitHub HTTP client directly. It routes
-// forge calls through GitHubForgeAdapter (packages/forge), injecting the real
-// apps/server client.ts functions as the GitHubClientPort. This keeps the
-// boundary clean (forge MUST NOT import apps/server) while preserving the
-// EXACT observable behavior pinned by review.baseline.test.ts.
-//
-// CRITICAL: these bindings come from `../github/client.js`, the SAME module the
-// existing tests mock — so the adapter ends up calling the mocked functions.
-//
-// Each member is a GETTER that reads the client export LAZILY (only when the
-// adapter actually invokes that method). This is load-bearing for task 1.7:
-// vitest's ESM mock proxy THROWS on access of any export the mock doesn't
-// declare. The GitHub review flow never calls fetchChangeRequest /
-// fetchGraphMetadata / updateComment, so those members are never accessed and
-// the un-mocked exports never trip the proxy — existing tests pass UNMODIFIED.
-const githubClientPort: GitHubClientPort = {
-  get fetchPRDiff() {
-    return githubClient.fetchPRDiff;
-  },
-  get fetchPRDetails() {
-    return githubClient.fetchPRDetails;
-  },
-  get getPRFileList() {
-    return githubClient.getPRFileList;
-  },
-  get getPRCommitMessages() {
-    return githubClient.getPRCommitMessages;
-  },
-  get postComment() {
-    return githubClient.postComment;
-  },
-  get findExistingComment() {
-    return githubClient.findExistingComment;
-  },
-  get deleteComment() {
-    return githubClient.deleteComment;
-  },
-  get updateComment() {
-    return githubClient.updateComment;
-  },
-  get addCommentReaction() {
-    return githubClient.addCommentReaction;
-  },
-  get fetchGraphFromBranch() {
-    return githubClient.fetchGraphFromBranch;
-  },
-  get fetchGraphMetadata() {
-    return githubClient.fetchGraphMetadata;
-  },
-};
+// forge calls through GitHubForgeAdapter (packages/forge), built by the shared
+// composition-root factory `makeGitHubAdapter` (../github/forge-adapter-factory),
+// which injects the real apps/server client.ts functions as the GitHubClientPort.
+// That factory is the SOLE consumer of the client.ts forge-adapter fns; this
+// worker only asks it for a per-token adapter. The EXACT observable behavior
+// pinned by review.baseline.test.ts is preserved (the factory keeps the same
+// lazy-getter port wiring this module used to hold inline).
 
 /** Canonical GHAGGA summary-comment marker (boundary-faithful: the adapter
  * currently matches the FIXED marker hard-coded in client.findExistingComment). */
@@ -596,7 +548,7 @@ async function processReview(
   const token = await tokenSource.getToken();
 
   // Fetch context via the adapter (adapter1) instead of the client directly.
-  const adapter1 = new GitHubForgeAdapter({ client: githubClientPort, token, owner, repo });
+  const adapter1 = makeGitHubAdapter({ owner, repo, token });
 
   const [diffResult, commits, files] = await Promise.all([
     adapter1.fetchDiff(changeRef),
@@ -962,12 +914,7 @@ async function processReview(
   // tokenSource.getToken() mints anew (no cache) → this is a SECOND, distinct
   // mint, preserving the baseline 2-mint count + order.
   const freshToken = await tokenSource.getToken();
-  const adapter2 = new GitHubForgeAdapter({
-    client: githubClientPort,
-    token: freshToken,
-    owner,
-    repo,
-  });
+  const adapter2 = makeGitHubAdapter({ owner, repo, token: freshToken });
   let commentBody = formatReviewComment(reviewResult, {
     fileStats:
       reviewResult.metadata.totalAdditions !== undefined
