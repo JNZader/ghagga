@@ -55,7 +55,7 @@
 > - ~~política del `security` audit (¿fallar en CRITICAL?)~~ ✅ **DECIDIDO 2026-06-18 — queda advisory**: el job corre `pnpm audit --prod --audit-level=high` con `continue-on-error: true` (`ci.yml:67-74`). Se evaluó flipear a blocking (3vr) y se DESCARTÓ: (1) `openspec/specs/tooling/spec.md:222-247` lo manda advisory **a propósito** — tiene un scenario explícito para "pnpm audit network error", o sea ya razonó que la DB de advisories viva no debe romper CI; (2) sin `pnpm.auditConfig.ignoreCves` un CVE transitivo sin fix congelaría todos los merges; (3) `main` no tiene branch protection → "blocking" sería un badge rojo, no enforcement real. El árbol de prod está limpio hoy (4 `pnpm.overrides`: undici/esbuild/hono/fast-xml-parser). Si algún día se quiere blocking de verdad: agregar `ignoreCves` + branch protection + actualizar el spec.
 > - `apps/action/Dockerfile` (--filter names equivocados + dockerignore, dormido).
 > - cleanup de los ~250 biome warnings.
-> - advisory: `npm install -g ... 2>/dev/null || true` en `apps/server/Dockerfile` enmascara fallos del install global (descubierto en el 3vr de #258).
+> - ~~advisory: `npm install -g ... 2>/dev/null || true` en `apps/server/Dockerfile` enmascara fallos del install global~~ ✅ **RESUELTO 2026-06-18, PR #263**: `--loglevel=error` en vez de `2>/dev/null` → los fallos reales del install se ven en el build log; `|| true` se mantiene (providers opcionales). docker build verificado, 3vr CLEAN.
 >
 > **PRÓXIMA FEATURE → 3.1.0:** issue-triage agent (webhook `issues` + label-gate →
 > diagnostic + memory dedup + cola de aprobación en dashboard + GH Projects). Diseño
