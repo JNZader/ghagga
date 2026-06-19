@@ -110,6 +110,15 @@ const mockPostComment = vi.fn().mockResolvedValue({ id: 2002 });
 const mockAddCommentReaction = vi.fn().mockResolvedValue(undefined);
 const mockFindExistingComment = vi.fn().mockResolvedValue(null);
 const mockUpdateComment = vi.fn().mockResolvedValue(undefined);
+// deleteComment is invoked by the adapter's upsertSummaryComment ONLY when
+// findExistingComment returns a non-null result. mockFindExistingComment returns
+// null here, so the delete loop never runs today — but omitting the mock would
+// crash any future test that returns a non-null existing comment with
+// `githubClient.deleteComment is not a function`. Mirror the baseline mock's
+// completeness so the client port is fully satisfied. (Same rationale for
+// fetchGraphFromBranch, reached only when blast-radius is enabled.)
+const mockDeleteComment = vi.fn().mockResolvedValue(undefined);
+const mockFetchGraphFromBranch = vi.fn().mockResolvedValue(null);
 
 vi.mock('../github/client.js', () => ({
   getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
@@ -119,7 +128,9 @@ vi.mock('../github/client.js', () => ({
   postComment: (...args: unknown[]) => mockPostComment(...args),
   addCommentReaction: (...args: unknown[]) => mockAddCommentReaction(...args),
   findExistingComment: (...args: unknown[]) => mockFindExistingComment(...args),
+  deleteComment: (...args: unknown[]) => mockDeleteComment(...args),
   updateComment: (...args: unknown[]) => mockUpdateComment(...args),
+  fetchGraphFromBranch: (...args: unknown[]) => mockFetchGraphFromBranch(...args),
 }));
 
 vi.mock('../github/runner.js', () => ({
