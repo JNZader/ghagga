@@ -54,8 +54,14 @@ describe('capability guarding (R-CAPABILITY)', () => {
     // Adapter advertises reactions=true but has NO addReaction method. If a
     // caller (wrongly) trusted the flag, this would TypeError. The presence
     // guard protects us regardless of the flag's value.
-    const adapter = baseOnly();
-    (adapter as { capabilities: { reactions: boolean } }).capabilities.reactions = true;
+    const adapter = {
+      capabilities: { reactions: true, inlineComments: false, graphRead: false },
+      fetchDiff: vi.fn(),
+      fetchChangeRequest: vi.fn(),
+      fetchFileList: vi.fn(),
+      fetchCommits: vi.fn(),
+      upsertSummaryComment: vi.fn(),
+    } as unknown as ForgeAdapter;
 
     let threw = false;
     try {
@@ -67,6 +73,35 @@ describe('capability guarding (R-CAPABILITY)', () => {
     }
 
     expect(threw).toBe(false);
+  });
+
+  it('graph-read co-presence is enforced at the TYPE level', () => {
+    const base = {
+      capabilities: { reactions: false, inlineComments: false, graphRead: true },
+      fetchDiff: vi.fn(),
+      fetchChangeRequest: vi.fn(),
+      fetchFileList: vi.fn(),
+      fetchCommits: vi.fn(),
+      upsertSummaryComment: vi.fn(),
+    };
+
+    // Exactly ONE graph method is NOT assignable to ForgeAdapter (co-presence).
+    // @ts-expect-error — fetchGraph without fetchGraphMetadata is forbidden.
+    const onlyOne: ForgeAdapter = { ...base, fetchGraph: vi.fn() };
+
+    // BOTH graph methods IS assignable.
+    const both: ForgeAdapter = {
+      ...base,
+      fetchGraph: vi.fn(),
+      fetchGraphMetadata: vi.fn(),
+    };
+
+    // NEITHER graph method IS assignable.
+    const neither: ForgeAdapter = { ...base };
+
+    expect(onlyOne).toBeDefined();
+    expect(both.fetchGraph).toBeDefined();
+    expect(neither.capabilities).toBeDefined();
   });
 
   it('graph-read co-presence: both methods guarded together', async () => {

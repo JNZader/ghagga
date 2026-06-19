@@ -16,6 +16,12 @@
  *   gives you the full co-present method set of that capability (e.g. narrowing
  *   on `fetchGraph` co-presence is expressed by the {@link GraphReadCapable}
  *   interface owning BOTH graph methods).
+ * - Co-presence of the TWO graph methods is enforced AT THE TYPE LEVEL by the
+ *   union `GraphReadCapable | { fetchGraph?: never; fetchGraphMetadata?: never }`
+ *   in {@link ForgeAdapter}: an object may have BOTH graph methods or NEITHER,
+ *   but never exactly one. (`Partial<GraphReadCapable>` would NOT enforce this —
+ *   it would permit `fetchGraph` without `fetchGraphMetadata`.) Single-method
+ *   capabilities stay `Partial<>` because co-presence is trivial for one method.
  */
 
 // Type-position import from core. This is the SANCTIONED forge→core import:
@@ -106,8 +112,10 @@ export interface ReactionCapable {
 /**
  * Optional: adapter can READ a dependency graph for a repo.
  *
- * R-GRAPH: this is the typed graph-READ seam. Both methods co-present (TS
- * enforces it by grouping them in one interface). Graph WRITE is GitHub-only and
+ * R-GRAPH: this is the typed graph-READ seam. The two methods are co-present:
+ * {@link ForgeAdapter} composes this interface as an all-or-nothing union, so an
+ * adapter has BOTH methods or NEITHER — never exactly one. Graph WRITE is
+ * GitHub-only and
  * is deliberately NOT part of the adapter surface (deferred to P5). Returns of
  * `null` mean "no graph available" — distinct from "graph read unsupported"
  * (which is method absence).
@@ -137,13 +145,15 @@ export interface MarkerExtractable {
 /**
  * The full adapter type the engine consumes.
  *
- * Base is mandatory; every capability is `Partial<>`-composed so an adapter can
- * implement any subset. Consumers MUST narrow optional capabilities via
- * method-presence (`'fetchGraph' in adapter`) before calling — see
- * R-CAPABILITY at the top of this file.
+ * Base is mandatory; single-method capabilities are `Partial<>`-composed so an
+ * adapter can implement any subset. The graph capability is composed as an
+ * all-or-nothing union so an adapter cannot have exactly one of the two graph
+ * methods (type-level co-presence; see R-GRAPH and the header note). Consumers
+ * MUST narrow optional capabilities via method-presence (`'fetchGraph' in
+ * adapter`) before calling — see R-CAPABILITY at the top of this file.
  */
 export type ForgeAdapter = ForgeAdapterBase &
   Partial<ReactionCapable> &
-  Partial<GraphReadCapable> &
+  (GraphReadCapable | { fetchGraph?: never; fetchGraphMetadata?: never }) &
   Partial<InlineCapable> &
   Partial<MarkerExtractable>;
