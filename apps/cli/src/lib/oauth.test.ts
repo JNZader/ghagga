@@ -76,7 +76,6 @@ describe('requestDeviceCode', () => {
     );
 
     // Verify client_id is in the body
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const callArgs = mockFetch.mock.calls[0]!;
     const body = JSON.parse(callArgs[1].body);
     expect(body.client_id).toBe(GITHUB_CLIENT_ID);

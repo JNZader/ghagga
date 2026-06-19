@@ -188,7 +188,6 @@ describe('ProviderChainEditor', () => {
     renderWithQuery(<Harness />);
 
     const removeButtons = screen.getAllByTitle('Remove provider');
-    // biome-ignore lint/style/noNonNullAssertion: two entries → two remove buttons
     fireEvent.click(removeButtons[0]!);
 
     const finalChain = chains[chains.length - 1];

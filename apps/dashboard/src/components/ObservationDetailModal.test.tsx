@@ -160,7 +160,6 @@ describe('ObservationDetailModal — close behavior', () => {
   it('calls onClose when Escape key is pressed', () => {
     render(<ObservationDetailModal observation={baseObservation} onClose={onClose} />);
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known DOM structure
     fireEvent.keyDown(screen.getByRole('dialog').parentElement!, {
       key: 'Escape',
     });
@@ -177,7 +176,6 @@ describe('ObservationDetailModal — close behavior', () => {
   it('does not call onClose for non-Escape keys', () => {
     render(<ObservationDetailModal observation={baseObservation} onClose={onClose} />);
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known DOM structure
     fireEvent.keyDown(screen.getByRole('dialog').parentElement!, {
       key: 'Enter',
     });

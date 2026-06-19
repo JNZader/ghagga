@@ -255,7 +255,6 @@ describe('truncateDiff', () => {
     const result = truncateDiff(diff, 5);
     expect(result.wasTruncated).toBe(true);
     // Should use maxChars (20) as the cutoff point
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const mainContent = result.truncated.split('\n\n[...')[0]!;
     expect(mainContent.length).toBe(20);
   });

@@ -215,12 +215,10 @@ describe('integration: core review pipeline', () => {
 
     const aiFinding = result.findings.find((f) => f.source === 'ai');
     expect(aiFinding).toBeDefined();
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     expect(aiFinding!.message).toContain('rate limiting');
 
     const semgrepFinding = result.findings.find((f) => f.source === 'semgrep');
     expect(semgrepFinding).toBeDefined();
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     expect(semgrepFinding!.message).toContain('timing attack');
 
     // Metadata reflects the full pipeline
@@ -240,7 +238,6 @@ describe('integration: core review pipeline', () => {
     );
 
     // Verify the diff was parsed and truncated (agent received non-empty diff)
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const agentArgs = (runSimpleReview as MockedFunction<typeof runSimpleReview>).mock.calls[0]![0];
     expect(agentArgs.diff.length).toBeGreaterThan(0);
     expect(agentArgs.diff).toContain('auth.ts');

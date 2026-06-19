@@ -56,7 +56,6 @@ describe('crypto', () => {
     const encrypted = encrypt('secret');
     const buf = Buffer.from(encrypted, 'base64');
     // Flip a byte in the ciphertext portion
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known data
     buf[15] = buf[15]! ^ 0xff;
     const tampered = buf.toString('base64');
 

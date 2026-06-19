@@ -271,7 +271,6 @@ describe('Memory page — Tier 1 (delete observation)', () => {
     fireEvent.click(deleteButtons[0]); // index 0 = Race condition (id 43)
 
     // Click the "Delete" button in the dialog
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const confirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     fireEvent.click(confirmBtn);
 
@@ -312,7 +311,6 @@ describe('Memory page — Tier 1 (delete observation)', () => {
     const deleteButtons = screen.getAllByTitle('Delete observation');
     fireEvent.click(deleteButtons[0]);
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const confirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     fireEvent.click(confirmBtn);
 
@@ -368,7 +366,6 @@ describe('Memory page — Tier 2 (clear repo memory)', () => {
     fireEvent.click(screen.getByText('Clear Memory'));
 
     // "Clear Memory" appears as both the trigger button and the dialog confirm label
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const dialogConfirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     expect(dialogConfirmBtn).toBeDisabled();
 
@@ -394,7 +391,6 @@ describe('Memory page — Tier 2 (clear repo memory)', () => {
       target: { value: 'acme/widgets' },
     });
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const dialogConfirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     fireEvent.click(dialogConfirmBtn);
 
@@ -422,7 +418,6 @@ describe('Memory page — Tier 2 (clear repo memory)', () => {
       target: { value: 'acme/widgets' },
     });
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const dialogConfirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     fireEvent.click(dialogConfirmBtn);
 
@@ -474,7 +469,6 @@ describe('Memory page — Tier 3 (purge all memory)', () => {
 
     fireEvent.click(screen.getByText('Purge All Memory'));
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const dialogConfirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
 
     // Type correct text, but countdown still active
@@ -500,7 +494,6 @@ describe('Memory page — Tier 3 (purge all memory)', () => {
 
     act(() => vi.advanceTimersByTime(5000));
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const dialogConfirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     fireEvent.click(dialogConfirmBtn);
 
@@ -530,7 +523,6 @@ describe('Memory page — Tier 3 (purge all memory)', () => {
 
     act(() => vi.advanceTimersByTime(5000));
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const dialogConfirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     fireEvent.click(dialogConfirmBtn);
 
@@ -625,7 +617,6 @@ describe('Memory page — error handling', () => {
     const deleteButtons = screen.getAllByTitle('Delete observation');
     fireEvent.click(deleteButtons[0]);
 
-    // biome-ignore lint/style/noNonNullAssertion: test assertion on known mock data
     const confirmBtn = screen.getByRole('dialog').querySelector('button:last-child')!;
     fireEvent.click(confirmBtn);
 
