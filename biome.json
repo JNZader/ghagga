@@ -133,6 +133,103 @@
           }
         }
       }
+    },
+    {
+      "includes": ["apps/server/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "./client.js": {
+                    "message": "FORGE BOUNDARY (R-AGNOSTIC 1.6): the client.ts forge-adapter fns are @internal — consume them via GitHubForgeAdapter built through apps/server/src/github/forge-adapter-factory.ts (makeGitHubAdapter). getInstallationToken/verifyWebhookSignature stay importable.",
+                    "importNames": [
+                      "fetchPRDiff",
+                      "fetchPRDetails",
+                      "getPRFileList",
+                      "getPRCommitMessages",
+                      "postComment",
+                      "findExistingComment",
+                      "deleteComment",
+                      "updateComment",
+                      "addCommentReaction",
+                      "fetchGraphFromBranch",
+                      "fetchGraphMetadata"
+                    ]
+                  },
+                  "./github/client.js": {
+                    "message": "FORGE BOUNDARY (R-AGNOSTIC 1.6): the client.ts forge-adapter fns are @internal — consume them via GitHubForgeAdapter built through apps/server/src/github/forge-adapter-factory.ts (makeGitHubAdapter). getInstallationToken/verifyWebhookSignature stay importable.",
+                    "importNames": [
+                      "fetchPRDiff",
+                      "fetchPRDetails",
+                      "getPRFileList",
+                      "getPRCommitMessages",
+                      "postComment",
+                      "findExistingComment",
+                      "deleteComment",
+                      "updateComment",
+                      "addCommentReaction",
+                      "fetchGraphFromBranch",
+                      "fetchGraphMetadata"
+                    ]
+                  },
+                  "../github/client.js": {
+                    "message": "FORGE BOUNDARY (R-AGNOSTIC 1.6): the client.ts forge-adapter fns are @internal — consume them via GitHubForgeAdapter built through apps/server/src/github/forge-adapter-factory.ts (makeGitHubAdapter). getInstallationToken/verifyWebhookSignature stay importable.",
+                    "importNames": [
+                      "fetchPRDiff",
+                      "fetchPRDetails",
+                      "getPRFileList",
+                      "getPRCommitMessages",
+                      "postComment",
+                      "findExistingComment",
+                      "deleteComment",
+                      "updateComment",
+                      "addCommentReaction",
+                      "fetchGraphFromBranch",
+                      "fetchGraphMetadata"
+                    ]
+                  },
+                  "../../github/client.js": {
+                    "message": "FORGE BOUNDARY (R-AGNOSTIC 1.6): the client.ts forge-adapter fns are @internal — consume them via GitHubForgeAdapter built through apps/server/src/github/forge-adapter-factory.ts (makeGitHubAdapter). getInstallationToken/verifyWebhookSignature stay importable.",
+                    "importNames": [
+                      "fetchPRDiff",
+                      "fetchPRDetails",
+                      "getPRFileList",
+                      "getPRCommitMessages",
+                      "postComment",
+                      "findExistingComment",
+                      "deleteComment",
+                      "updateComment",
+                      "addCommentReaction",
+                      "fetchGraphFromBranch",
+                      "fetchGraphMetadata"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/server/src/github/forge-adapter-factory.ts",
+        "apps/server/**/*.test.ts",
+        "apps/server/**/*.test.tsx",
+        "apps/server/**/*.spec.ts",
+        "apps/server/**/__tests__/**",
+        "apps/server/**/__integration__/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
     }
   ]
 }
