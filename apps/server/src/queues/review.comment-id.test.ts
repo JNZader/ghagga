@@ -8,27 +8,29 @@
  *   - the SAME numeric value, boxed for two different forges, never collides
  *     (the `kind` tag is what disambiguates a GitHub id from a GitLab note id).
  *
- * This is the unit-level guard the SDD asks for; it imports the extracted
- * boxing helper directly so it does not depend on the BullMQ worker harness.
+ * The boxing helper now lives in the side-effect-free `ghagga-forge` package
+ * (`githubCommentId`) so it is reusable by both this worker AND the P3 CLI
+ * without importing the BullMQ worker harness. This unit imports it from there
+ * directly (it no longer lives review.ts-local).
  */
 
 import type { CommentId } from 'ghagga-forge';
+import { githubCommentId } from 'ghagga-forge';
 import { describe, expect, it } from 'vitest';
-import { boxGitHubCommentId } from './review.js';
 
-describe('boxGitHubCommentId (R-COMMENTID boxing at the review.ts seam)', () => {
+describe('githubCommentId (R-COMMENTID boxing at the review.ts seam)', () => {
   it('boxes a GitHub-native numeric id into { kind: "github", raw: String(n) }', () => {
-    expect(boxGitHubCommentId(2002)).toEqual({ kind: 'github', raw: '2002' });
-    expect(boxGitHubCommentId(555)).toEqual({ kind: 'github', raw: '555' });
+    expect(githubCommentId(2002)).toEqual({ kind: 'github', raw: '2002' });
+    expect(githubCommentId(555)).toEqual({ kind: 'github', raw: '555' });
   });
 
   it('round-trips back to the original GitHub-native number', () => {
-    const boxed = boxGitHubCommentId(1001);
+    const boxed = githubCommentId(1001);
     expect(Number(boxed.raw)).toBe(1001);
   });
 
   it('does NOT collide cross-forge: same numeric value, different kind', () => {
-    const github = boxGitHubCommentId(42);
+    const github = githubCommentId(42);
     // A hypothetical GitLab note id with the SAME raw number is a DISTINCT id —
     // the `kind` tag is what prevents cross-forge mis-assignment.
     const gitlab: CommentId = { kind: 'gitlab', raw: '42' };

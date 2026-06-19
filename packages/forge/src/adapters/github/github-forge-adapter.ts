@@ -227,6 +227,17 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
       this.#token,
     );
 
+    // Robustness guard: the real client.postComment returns `{ id }` or throws,
+    // so a missing id is a contract violation (e.g. a mis-shaped test double),
+    // never a live path. Fail loudly here rather than silently boxing
+    // `undefined` → the meaningless CommentId `{ kind:'github', raw:'undefined' }`
+    // downstream.
+    if (posted?.id == null) {
+      throw new TypeError(
+        'GitHubForgeAdapter.upsertSummaryComment: postComment returned no id (expected { id: number })',
+      );
+    }
+
     return { created: posted.id, deleted };
   }
 

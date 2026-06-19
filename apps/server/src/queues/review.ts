@@ -36,8 +36,14 @@ import {
   repositories,
   saveReview,
 } from 'ghagga-db';
-import type { CommentId, GitHubClientPort } from 'ghagga-forge';
-import { GitHubForgeAdapter, REACTION_KIND, toCommitMessages, toFileList } from 'ghagga-forge';
+import type { GitHubClientPort } from 'ghagga-forge';
+import {
+  GitHubForgeAdapter,
+  githubCommentId,
+  REACTION_KIND,
+  toCommitMessages,
+  toFileList,
+} from 'ghagga-forge';
 import { TemporaryGitHubTokenSource } from 'ghagga-forge/internal';
 import Redis from 'ioredis';
 // Namespace import (NOT named imports): the GitHubClientPort is assembled from
@@ -112,15 +118,13 @@ const githubClientPort: GitHubClientPort = {
  * currently matches the FIXED marker hard-coded in client.findExistingComment). */
 const REVIEW_MARKER = { html: REVIEW_COMMENT_MARKER } as const;
 
-/**
- * BOX a GitHub-native numeric comment id into the canonical {@link CommentId}
- * (R-COMMENTID). review.ts call-sites MUST use boxed CommentIds, never a bare
- * number — the `kind` tag prevents a GitHub id from being cross-assigned as a
- * GitLab note id (and the same numeric value across forges never collides).
- */
-export function boxGitHubCommentId(raw: number): CommentId {
-  return { kind: 'github', raw: String(raw) };
-}
+// COMMENT-ID BOXING (R-COMMENTID): the boxing helper now lives in the
+// side-effect-free `ghagga-forge` package (githubCommentId) so it is reusable by
+// both this worker AND the P3 CLI without dragging Redis/BullMQ init into the
+// helper's test. review.ts call-sites box every native numeric id BEFORE it
+// crosses the adapter seam — the `kind` tag prevents a GitHub id from being
+// cross-assigned as a GitLab note id (same numeric value, different forge, never
+// collides).
 
 // ─── SSRF re-validation (DNS-rebinding TOCTOU defense) ──────────
 //
@@ -574,6 +578,15 @@ async function processReview(
   });
 
   // Canonical refs for adapter calls (forge-agnostic shape).
+  // TODO(forge): nativeId should be the IMMUTABLE numeric GitHub repo id
+  // (repositories.githubRepoId). It is NOT readily in scope here — the worker
+  // does not load the repo record in this scope (resolveEncryptedCredentials
+  // skips the DB round-trip on the in-flight-tolerance path), and FIX 4 says do
+  // NOT add a DB lookup just for this. The GitHub adapter ignores nativeId today
+  // (it keys on owner/repo), so using the path-shaped owner/repo as a temporary
+  // fallback is observably inert. Move the value into `path` (the mutable display
+  // label) and leave nativeId on the same fallback until the numeric id is
+  // threaded through the job payload.
   const repoRef = { kind: 'github' as const, nativeId: `${owner}/${repo}`, path: repoFullName };
   const changeRef = { repo: repoRef, iid: prNumber };
 
@@ -980,7 +993,7 @@ async function processReview(
   // GitHub adapter matches that fixed marker inside client.findExistingComment).
   const upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
   // BOX the GitHub-native numeric id review.ts-LOCAL (R-COMMENTID).
-  const postedCommentId = boxGitHubCommentId(upsertResult.created);
+  const postedCommentId = githubCommentId(upsertResult.created);
   log.info({ commentId: postedCommentId.raw }, 'Review comment posted');
   await job.updateProgress(90);
 
@@ -990,7 +1003,7 @@ async function processReview(
       // Box the trigger-comment id review.ts-LOCAL before crossing the adapter
       // seam (R-COMMENTID). Guard by method-presence (R-CAPABILITY).
       if ('addReaction' in adapter2) {
-        await adapter2.addReaction(boxGitHubCommentId(triggerCommentId), REACTION_KIND.ROCKET);
+        await adapter2.addReaction(githubCommentId(triggerCommentId), REACTION_KIND.ROCKET);
       }
     } catch (error) {
       log.warn({ error: String(error) }, 'Failed to add completion reaction');

@@ -85,6 +85,7 @@ export type {
 } from './adapters/github/github-client-port.js';
 export type { GitHubForgeAdapterDeps } from './adapters/github/github-forge-adapter.js';
 export { GitHubForgeAdapter } from './adapters/github/github-forge-adapter.js';
+
 // NOTE: TemporaryGitHubTokenSource is INTENTIONALLY NOT exported here. It is a
 // temporary P1-only credential provider and lives behind the non-public
 // `ghagga-forge/internal` entry point so the temporary auth path cannot ossify
@@ -92,6 +93,11 @@ export { GitHubForgeAdapter } from './adapters/github/github-forge-adapter.js';
 
 // ─── Identity helpers ───────────────────────────────────────────
 
+// ─── Comment-id boxing (R-COMMENTID) ────────────────────────────
+// Sanctioned, side-effect-free boxing helper reusable by both the server
+// worker and the P3 CLI (the adapter still RETURNS native numbers; this is the
+// caller-local boxing step, NOT a branding of the adapter return type).
+export { githubCommentId } from './comment-id.js';
 export { repoRefEquals } from './ref.js';
 
 // ─── Projection helpers ─────────────────────────────────────────
