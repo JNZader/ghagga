@@ -39,7 +39,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-impl-assets.mjs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint-boundary.mjs",

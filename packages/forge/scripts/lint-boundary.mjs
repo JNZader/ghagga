@@ -14,9 +14,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-// Import the TS source directly — Node 23+ strips types at runtime, so no build
-// step is required for the gate to run (keeps lint:boundary build-independent).
-import { checkForgeBoundary } from '../src/lint-boundary.ts';
+// Import the PLAIN-JS implementation directly (NOT the `.ts`). This makes the
+// gate build-independent AND Node-version-robust: it does not rely on Node's
+// experimental TS type-stripping (Node >= 22.18 / unflagged), so it can never
+// crash with ERR_UNKNOWN_FILE_EXTENSION on an older or strip-disabled Node. The
+// `.ts` surface re-exports this same function for the typed tests.
+import { checkForgeBoundary } from '../src/lint-boundary.impl.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = resolve(__dirname, '..', 'src');
