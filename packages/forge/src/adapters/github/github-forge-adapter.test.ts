@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ForgeAdapter, GraphReadCapable, ReactionCapable } from '../../ports/forge-adapter.js';
 import { REACTION_KIND } from '../../ports/forge-adapter.js';
 import type { ChangeRequestRef, CommentId, CommentMarker, RepoRef } from '../../types.js';
-import { ACTOR_KIND, CHANGE_KIND, FORGE_KIND } from '../../types.js';
+import { ACTOR_KIND, FORGE_KIND } from '../../types.js';
 import type { GitHubClientPort } from './github-client-port.js';
 import { GitHubForgeAdapter } from './github-forge-adapter.js';
 
@@ -61,23 +61,28 @@ describe('GitHubForgeAdapter — read mappings (task 1.2)', () => {
     expect(client.fetchPRDetails).toHaveBeenCalledWith(OWNER, REPO, PR, TOKEN);
   });
 
-  it('fetchFileList maps bare paths to canonical ChangedFile[]', async () => {
+  it('fetchFileList maps bare paths to canonical ChangedFile[] (omits unpopulatable fields)', async () => {
     const client = makeClient();
     const adapter = makeAdapter(client);
     const files = await adapter.fetchFileList(ref);
-    expect(files).toEqual([
-      { path: 'src/a.ts', changeKind: CHANGE_KIND.MODIFIED, additions: 0, deletions: 0 },
-      { path: 'src/b.ts', changeKind: CHANGE_KIND.MODIFIED, additions: 0, deletions: 0 },
-    ]);
+    // HONEST ABSENCE: the GitHub file-list endpoint wrapper exposes only paths,
+    // so changeKind/additions/deletions are OMITTED (undefined), not faked as 0.
+    expect(files).toEqual([{ path: 'src/a.ts' }, { path: 'src/b.ts' }]);
+    expect(files[0]?.changeKind).toBeUndefined();
+    expect(files[0]?.additions).toBeUndefined();
+    expect(files[0]?.deletions).toBeUndefined();
     expect(client.getPRFileList).toHaveBeenCalledWith(OWNER, REPO, PR, TOKEN);
   });
 
-  it('fetchCommits maps messages to canonical Commit[]', async () => {
+  it('fetchCommits maps messages to canonical Commit[] (omits unpopulatable fields)', async () => {
     const client = makeClient();
     const adapter = makeAdapter(client);
     const commits = await adapter.fetchCommits(ref);
     expect(commits.map((c) => c.message)).toEqual(['feat: x', 'fix: y']);
-    expect(commits[0]?.author.kind).toBe(ACTOR_KIND.USER);
+    // HONEST ABSENCE: the commit-list endpoint wrapper returns only messages, so
+    // sha/author are OMITTED (undefined), not faked as '' / empty Actor.
+    expect(commits[0]?.sha).toBeUndefined();
+    expect(commits[0]?.author).toBeUndefined();
     expect(client.getPRCommitMessages).toHaveBeenCalledWith(OWNER, REPO, PR, TOKEN);
   });
 });
@@ -96,6 +101,18 @@ describe('GitHubForgeAdapter — addReaction (R-5, task 1.2)', () => {
     const adapter = makeAdapter(client);
     await adapter.addReaction({ kind: 'github:issue-comment', raw: '888' }, REACTION_KIND.EYES);
     expect(client.addCommentReaction).toHaveBeenCalledWith(OWNER, REPO, 888, 'eyes', TOKEN);
+  });
+
+  it('throws TypeError for a malformed (non-numeric) raw id instead of producing NaN', async () => {
+    const client = makeClient();
+    const adapter = makeAdapter(client);
+    await expect(
+      adapter.addReaction(
+        { kind: 'github:issue-comment', raw: 'not-a-number' },
+        REACTION_KIND.EYES,
+      ),
+    ).rejects.toThrow(TypeError);
+    expect(client.addCommentReaction).not.toHaveBeenCalled();
   });
 });
 

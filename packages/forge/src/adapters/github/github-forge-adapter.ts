@@ -43,7 +43,7 @@ import type {
   UnifiedDiff,
   UpsertSummaryResult,
 } from '../../types.js';
-import { ACTOR_KIND, CHANGE_KIND } from '../../types.js';
+import { ACTOR_KIND } from '../../types.js';
 import type { GitHubClientPort, GitHubReactionContent } from './github-client-port.js';
 
 /** Construction options for {@link GitHubForgeAdapter}. */
@@ -68,10 +68,20 @@ function toGitHubReaction(reaction: ReactionKind): GitHubReactionContent {
 /**
  * Extract the GitHub-native numeric comment id from a boxed {@link CommentId}.
  * `raw` is `string | number`; GitHub comment ids are numeric.
+ *
+ * Guards against a malformed/non-GitHub id silently coercing to `NaN` (which
+ * would produce a `…/comments/NaN` URL). Throws a clear {@link TypeError} unless
+ * the result is a safe integer.
  */
 function toNativeCommentId(commentId: CommentId): number {
   const { raw } = commentId;
-  return typeof raw === 'number' ? raw : Number(raw);
+  const native = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isSafeInteger(native)) {
+    throw new TypeError(
+      `GitHubForgeAdapter: comment id is not a safe integer (kind=${commentId.kind}, raw=${String(raw)})`,
+    );
+  }
+  return native;
 }
 
 /**
@@ -126,33 +136,27 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
   }
 
   async fetchFileList(ref: ChangeRequestRef): Promise<ChangedFile[]> {
-    // client.getPRFileList returns bare paths (additions/deletions not exposed
-    // by that endpoint wrapper). Project to canonical ChangedFile[]; the caller
-    // flattens via project.ts (toFileList) which only consumes `path`.
+    // client.getPRFileList returns bare paths; the GitHub PR file-list endpoint
+    // wrapper does NOT expose changeKind/additions/deletions, so those optional
+    // ChangedFile fields are OMITTED (honest absence) rather than fabricated as
+    // zeros. The caller flattens via project.ts (toFileList) which only consumes
+    // `path`.
     const paths = await this.#client.getPRFileList(this.#owner, this.#repo, ref.iid, this.#token);
-    return paths.map((path) => ({
-      path,
-      changeKind: CHANGE_KIND.MODIFIED,
-      additions: 0,
-      deletions: 0,
-    }));
+    return paths.map((path) => ({ path }));
   }
 
   async fetchCommits(ref: ChangeRequestRef): Promise<Commit[]> {
-    // client.getPRCommitMessages returns only messages (no sha/author). Project
-    // to canonical Commit[]; the caller flattens via toCommitMessages which only
-    // consumes `message`.
+    // client.getPRCommitMessages returns only messages; the GitHub PR commit-list
+    // endpoint wrapper does NOT expose sha/author, so those optional Commit fields
+    // are OMITTED (honest absence) rather than fabricated as empty strings. The
+    // caller flattens via toCommitMessages which only consumes `message`.
     const messages = await this.#client.getPRCommitMessages(
       this.#owner,
       this.#repo,
       ref.iid,
       this.#token,
     );
-    return messages.map((message) => ({
-      sha: '',
-      message,
-      author: { login: '', kind: ACTOR_KIND.USER },
-    }));
+    return messages.map((message) => ({ message }));
   }
 
   // ─── Base: upsert summary comment (fold post/find/delete → 1) ──
@@ -171,11 +175,14 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
    *
    * Returns GitHub-native numeric ids (boxing happens caller-local).
    *
-   * NOTE: `marker` is accepted for the port contract. The underlying
-   * client.findExistingComment matches the hard-coded `<!-- ghagga-review -->`
-   * marker internally (a "stale ghagga comment" = bot-authored AND body
-   * contains the marker); this adapter preserves that existing behavior rather
-   * than re-implementing marker matching client-side.
+   * NOTE: `marker` is accepted for the port contract but is NOT threaded into
+   * the client. The GitHub adapter currently matches the FIXED
+   * `REVIEW_COMMENT_MARKER` (`<!-- ghagga-review -->`) hard-coded inside
+   * client.findExistingComment (a "stale ghagga comment" = bot-authored AND body
+   * contains that marker). This is baseline-faithful: threading `marker` into
+   * GitHubClientPort.findExistingComment is DEFERRED (would change the port
+   * signature). Consequently, if review.ts (1.4) passes a `marker`, it MUST equal
+   * the existing `REVIEW_COMMENT_MARKER` — any other value is silently ignored.
    */
   async upsertSummaryComment(
     ref: ChangeRequestRef,
@@ -200,6 +207,12 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
         } catch {
           // Best-effort: tolerate BOTH 404 and non-404 delete failures. A stale
           // comment that cannot be deleted must NOT block the fresh repost.
+          //
+          // REALITY NOTE: the real client.ts deleteComment is fire-and-forget
+          // (it does NOT check response.ok and never throws), so in production
+          // this catch is defensive belt-and-suspenders and `deleted[]` reflects
+          // attempted-and-not-thrown deletes. The catch only triggers under a
+          // test double / future client that does throw.
         }
       }
     }

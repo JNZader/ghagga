@@ -106,24 +106,40 @@ export interface Actor {
 
 /** One file changed within a change request. */
 export interface ChangedFile {
-  /** Current path of the file. */
+  /** Current path of the file. Always available. */
   path: string;
-  /** How the file changed. */
-  changeKind: ChangeKind;
-  /** Lines added. */
-  additions: number;
-  /** Lines removed. */
-  deletions: number;
+  /**
+   * How the file changed. Optional because the GitHub PR file-list endpoint
+   * wrapper does not expose it; populated only when a richer source is available.
+   */
+  changeKind?: ChangeKind;
+  /**
+   * Lines added. Optional because the GitHub PR file-list endpoint wrapper does
+   * not expose it; populated only when a richer source is available.
+   */
+  additions?: number;
+  /**
+   * Lines removed. Optional because the GitHub PR file-list endpoint wrapper
+   * does not expose it; populated only when a richer source is available.
+   */
+  deletions?: number;
 }
 
 /** A single commit in a change request. */
 export interface Commit {
-  /** Commit SHA. */
-  sha: string;
-  /** Full commit message. */
+  /**
+   * Commit SHA. Optional because the GitHub PR commit-list endpoint wrapper only
+   * returns messages; populated only when a richer source is available.
+   */
+  sha?: string;
+  /** Full commit message. Always available. */
   message: string;
-  /** Commit author. */
-  author: Actor;
+  /**
+   * Commit author. Optional because the GitHub PR commit-list endpoint wrapper
+   * does not expose author identity; populated only when a richer source is
+   * available.
+   */
+  author?: Actor;
 }
 
 /**
