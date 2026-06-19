@@ -81,6 +81,57 @@
         "**/test/**"
       ],
       "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+    },
+    {
+      "includes": ["packages/forge/**"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noBarrelFile": "off"
+          },
+          "style": {
+            "useImportType": "error",
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@ghagga/server": "packages/forge MUST NOT import the server app (R-AGNOSTIC).",
+                  "ghagga-server": "packages/forge MUST NOT import the server app (R-AGNOSTIC)."
+                },
+                "patterns": [
+                  {
+                    "group": ["**/apps/server/**", "../**/apps/server/**"],
+                    "message": "packages/forge MUST NOT import apps/server (R-AGNOSTIC)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/core/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "ghagga-forge": "ghagga-core MUST NOT import ghagga-forge — core stays forge-agnostic (R-AGNOSTIC)."
+                },
+                "patterns": [
+                  {
+                    "group": ["**/packages/forge/**", "../forge/**", "../**/packages/forge/**"],
+                    "message": "ghagga-core MUST NOT import packages/forge (R-AGNOSTIC)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }
