@@ -13,7 +13,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "biome check .",
+    "lint": "biome check . && turbo run lint",
     "lint:fix": "biome check --write .",
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",

@@ -42,6 +42,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "lint": "node scripts/lint-boundary.mjs",
+    "lint:boundary": "node scripts/lint-boundary.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
