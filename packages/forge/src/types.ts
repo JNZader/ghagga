@@ -188,14 +188,21 @@ export interface CommentId {
 /**
  * Result of upserting the single summary comment.
  *
- * `created` is the surviving summary comment; `deleted` lists any stale prior
- * summary comments that were removed during the upsert (idempotency cleanup).
+ * `created` is the surviving summary comment id; `deleted` lists any stale prior
+ * summary comment ids that were removed during the upsert (idempotency cleanup).
+ *
+ * BOUNDARY DECISION (forge-agnostic P1): ids here are PLAIN FORGE-NATIVE
+ * primitives (e.g. GitHub numeric comment ids), NOT boxed {@link CommentId}.
+ * The {@link CommentId} boxing ({kind, raw}) happens caller-LOCAL (review.ts)
+ * after the adapter returns — it is NOT part of the adapter↔caller wire shape.
+ * `CommentId` remains the canonical boxed type for cross-forge comment
+ * identity elsewhere; only THIS result intentionally stays native.
  */
 export interface UpsertSummaryResult {
-  /** The summary comment that now exists. */
-  created: CommentId;
-  /** Stale summary comments removed during upsert. */
-  deleted: CommentId[];
+  /** The forge-native id of the summary comment that now exists. */
+  created: number;
+  /** Forge-native ids of stale summary comments removed during upsert. */
+  deleted: number[];
 }
 
 /**

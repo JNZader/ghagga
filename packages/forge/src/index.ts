@@ -76,6 +76,18 @@ export type { ForgeWebhookCodec } from './ports/webhook-codec.js';
 export type { ForgeRegistry, UnknownForgeErrorContext } from './registry.js';
 export { MapForgeRegistry, UnknownForgeError } from './registry.js';
 
+// ─── Adapters: GitHub ───────────────────────────────────────────
+
+export type {
+  GitHubClientPort,
+  GitHubInstallationTokenMint,
+  GitHubReactionContent,
+} from './adapters/github/github-client-port.js';
+export type { GitHubForgeAdapterDeps } from './adapters/github/github-forge-adapter.js';
+export { GitHubForgeAdapter } from './adapters/github/github-forge-adapter.js';
+export type { TemporaryGitHubTokenSourceDeps } from './adapters/github/temporary-github-token-source.js';
+export { TemporaryGitHubTokenSource } from './adapters/github/temporary-github-token-source.js';
+
 // ─── Identity helpers ───────────────────────────────────────────
 
 export { repoRefEquals } from './ref.js';

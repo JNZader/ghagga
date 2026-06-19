@@ -1,0 +1,262 @@
+/**
+ * GitHubForgeAdapter — wraps the GitHub HTTP client behind the forge-agnostic
+ * {@link ForgeAdapterBase} + {@link ReactionCapable} + {@link GraphReadCapable}
+ * surfaces.
+ *
+ * DEPENDENCY INVERSION (boundary rule R-AGNOSTIC):
+ * `packages/forge` MUST NOT import `apps/server`. The concrete GitHub client
+ * lives in `apps/server/src/github/client.ts`. So this adapter NEVER imports
+ * that client directly — it depends on the injected {@link GitHubClientPort}
+ * (declared inside the forge package). Task 1.4 (review.ts) constructs the
+ * adapter passing the real `client.ts` functions as the port implementation:
+ *
+ *   new GitHubForgeAdapter({ client, token, owner, repo })
+ *
+ * CAPABILITIES: reactions ✅, graphRead ✅ (both methods co-present),
+ * inlineComments ❌ (GitHub inline review is deferred — no `publishInline`).
+ * The `capabilities` field is a HINT only (R-CAPABILITY): callers guard optional
+ * methods by method-presence, never by these flags.
+ *
+ * COMMENT IDs: this adapter returns PLAIN GitHub-native numeric ids (number /
+ * number[]). Boxing into {@link CommentId} happens caller-LOCAL in review.ts.
+ * The adapter accepts a boxed {@link CommentId} in `addReaction` (port contract)
+ * and unwraps `raw` to the GitHub-native number internally.
+ */
+
+import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
+import type {
+  ForgeAdapterBase,
+  GraphReadCapable,
+  ReactionCapable,
+  ReactionKind,
+} from '../../ports/forge-adapter.js';
+import { REACTION_KIND } from '../../ports/forge-adapter.js';
+import type {
+  ChangedFile,
+  ChangeRequest,
+  ChangeRequestRef,
+  CommentId,
+  CommentMarker,
+  Commit,
+  ForgeCapabilities,
+  RepoRef,
+  UnifiedDiff,
+  UpsertSummaryResult,
+} from '../../types.js';
+import { ACTOR_KIND, CHANGE_KIND } from '../../types.js';
+import type { GitHubClientPort, GitHubReactionContent } from './github-client-port.js';
+
+/** Construction options for {@link GitHubForgeAdapter}. */
+export interface GitHubForgeAdapterDeps {
+  /** Injected GitHub client function-set (real impl = apps/server client.ts). */
+  client: GitHubClientPort;
+  /** Installation access token used for all calls. */
+  token: string;
+  /** Repository owner (login). */
+  owner: string;
+  /** Repository name. */
+  repo: string;
+}
+
+/** Maps a canonical {@link ReactionKind} to the GitHub reaction content string. */
+function toGitHubReaction(reaction: ReactionKind): GitHubReactionContent {
+  // ReactionKind values are already GitHub-native strings ('+1','-1','eyes',
+  // 'rocket','confused'); this cast is the single sanctioned bridge point.
+  return reaction as GitHubReactionContent;
+}
+
+/**
+ * Extract the GitHub-native numeric comment id from a boxed {@link CommentId}.
+ * `raw` is `string | number`; GitHub comment ids are numeric.
+ */
+function toNativeCommentId(commentId: CommentId): number {
+  const { raw } = commentId;
+  return typeof raw === 'number' ? raw : Number(raw);
+}
+
+/**
+ * GitHub implementation of the forge adapter.
+ *
+ * Implements the mandatory base plus the reaction and graph-read capabilities.
+ * Deliberately does NOT implement {@link InlineCapable} (GitHub inline review
+ * deferred), so `publishInline` is ABSENT — callers guarding by method-presence
+ * will skip inline publishing cleanly.
+ */
+export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, GraphReadCapable {
+  readonly capabilities: ForgeCapabilities = {
+    reactions: true,
+    inlineComments: false,
+    graphRead: true,
+  };
+
+  readonly #client: GitHubClientPort;
+  readonly #token: string;
+  readonly #owner: string;
+  readonly #repo: string;
+
+  constructor(deps: GitHubForgeAdapterDeps) {
+    this.#client = deps.client;
+    this.#token = deps.token;
+    this.#owner = deps.owner;
+    this.#repo = deps.repo;
+  }
+
+  // ─── Base: reads ───────────────────────────────────────────────
+
+  async fetchDiff(ref: ChangeRequestRef): Promise<UnifiedDiff> {
+    const text = await this.#client.fetchPRDiff(this.#owner, this.#repo, ref.iid, this.#token);
+    return { text };
+  }
+
+  async fetchChangeRequest(ref: ChangeRequestRef): Promise<ChangeRequest> {
+    const details = await this.#client.fetchPRDetails(
+      this.#owner,
+      this.#repo,
+      ref.iid,
+      this.#token,
+    );
+    return {
+      ref,
+      headSha: details.headSha,
+      baseBranch: details.baseBranch,
+      // GitHub PR author kind is not exposed by fetchPRDetails; default USER.
+      // (Bot detection, when needed, is the caller's concern via login suffix.)
+      author: { login: details.prAuthor, kind: ACTOR_KIND.USER },
+    };
+  }
+
+  async fetchFileList(ref: ChangeRequestRef): Promise<ChangedFile[]> {
+    // client.getPRFileList returns bare paths (additions/deletions not exposed
+    // by that endpoint wrapper). Project to canonical ChangedFile[]; the caller
+    // flattens via project.ts (toFileList) which only consumes `path`.
+    const paths = await this.#client.getPRFileList(this.#owner, this.#repo, ref.iid, this.#token);
+    return paths.map((path) => ({
+      path,
+      changeKind: CHANGE_KIND.MODIFIED,
+      additions: 0,
+      deletions: 0,
+    }));
+  }
+
+  async fetchCommits(ref: ChangeRequestRef): Promise<Commit[]> {
+    // client.getPRCommitMessages returns only messages (no sha/author). Project
+    // to canonical Commit[]; the caller flattens via toCommitMessages which only
+    // consumes `message`.
+    const messages = await this.#client.getPRCommitMessages(
+      this.#owner,
+      this.#repo,
+      ref.iid,
+      this.#token,
+    );
+    return messages.map((message) => ({
+      sha: '',
+      message,
+      author: { login: '', kind: ACTOR_KIND.USER },
+    }));
+  }
+
+  // ─── Base: upsert summary comment (fold post/find/delete → 1) ──
+
+  /**
+   * Idempotently upsert the single GHAGGA summary comment.
+   *
+   * Behavior (preserves the review.ts baseline exactly):
+   * 1. find existing GHAGGA comments (latest + stale).
+   * 2. delete ALL of them in the order `[latestId, ...staleIds]` — BEST-EFFORT:
+   *    each delete is wrapped in try/catch so BOTH 404 (already gone) AND any
+   *    non-404 failure are tolerated and do NOT block the repost. Only ids that
+   *    actually deleted (no throw) are reported in `deleted`.
+   * 3. post a FRESH comment at the bottom — this is the ONLY failure that
+   *    propagates (a failed post means no summary exists, which is fatal).
+   *
+   * Returns GitHub-native numeric ids (boxing happens caller-local).
+   *
+   * NOTE: `marker` is accepted for the port contract. The underlying
+   * client.findExistingComment matches the hard-coded `<!-- ghagga-review -->`
+   * marker internally (a "stale ghagga comment" = bot-authored AND body
+   * contains the marker); this adapter preserves that existing behavior rather
+   * than re-implementing marker matching client-side.
+   */
+  async upsertSummaryComment(
+    ref: ChangeRequestRef,
+    body: string,
+    _marker: CommentMarker,
+  ): Promise<UpsertSummaryResult> {
+    const existing = await this.#client.findExistingComment(
+      this.#owner,
+      this.#repo,
+      ref.iid,
+      this.#token,
+    );
+
+    const deleted: number[] = [];
+    if (existing) {
+      // Preserve baseline delete-order: latest FIRST, then stale duplicates.
+      const allIds = [existing.latestId, ...existing.staleIds];
+      for (const commentId of allIds) {
+        try {
+          await this.#client.deleteComment(this.#owner, this.#repo, commentId, this.#token);
+          deleted.push(commentId);
+        } catch {
+          // Best-effort: tolerate BOTH 404 and non-404 delete failures. A stale
+          // comment that cannot be deleted must NOT block the fresh repost.
+        }
+      }
+    }
+
+    // Always post a fresh comment at the bottom. This is the ONLY error that
+    // propagates — without it there would be no summary at all.
+    const posted = await this.#client.postComment(
+      this.#owner,
+      this.#repo,
+      ref.iid,
+      body,
+      this.#token,
+    );
+
+    return { created: posted.id, deleted };
+  }
+
+  // ─── ReactionCapable ───────────────────────────────────────────
+
+  /**
+   * Add a reaction to a comment (R-5).
+   *
+   * CRITICAL: the trigger-comment reaction MUST live in the adapter — it was
+   * accidentally dropped once before. It is preserved here, wrapping
+   * client.addCommentReaction (which is itself best-effort / non-throwing).
+   */
+  async addReaction(commentId: CommentId, reaction: ReactionKind): Promise<void> {
+    await this.#client.addCommentReaction(
+      this.#owner,
+      this.#repo,
+      toNativeCommentId(commentId),
+      toGitHubReaction(reaction),
+      this.#token,
+    );
+  }
+
+  // ─── GraphReadCapable (both methods co-present) ─────────────────
+
+  /**
+   * Read the dependency graph from the `ghagga/graph` orphan branch.
+   *
+   * The orphan-branch ref (`?ref=ghagga/graph`), the 404→null behavior, and the
+   * typed JSON validation all live INSIDE client.fetchGraphFromBranch — this
+   * adapter preserves them by delegating, returning `null` for "no graph".
+   */
+  async fetchGraph(_repo: RepoRef): Promise<DependencyGraph | null> {
+    return this.#client.fetchGraphFromBranch(this.#owner, this.#repo, this.#token);
+  }
+
+  /**
+   * Read graph metadata from the `ghagga/graph` orphan branch (orphan-ref +
+   * 404→null + validation handled inside client.fetchGraphMetadata).
+   */
+  async fetchGraphMetadata(_repo: RepoRef): Promise<GraphMetadata | null> {
+    return this.#client.fetchGraphMetadata(this.#owner, this.#repo, this.#token);
+  }
+}
+
+// Re-export so test files and 1.4 can reference the reaction-kind set succinctly.
+export { REACTION_KIND };
