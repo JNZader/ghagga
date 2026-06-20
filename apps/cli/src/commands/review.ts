@@ -497,12 +497,15 @@ function githubPostbackConfig(): ForgePostbackConfig {
         owner,
         repo,
       });
-      // Resolve the IMMUTABLE numeric repo id for RepoRef.nativeId (a rename
-      // changes owner/repo but not the id). Mirrors the GitLab `--mr` flow's
-      // resolveGitLabProjectId — ONE GET /repos/{owner}/{repo} → .id before the
-      // post. The adapter's wire calls still key on owner/repo from its ctor, so
-      // nativeId is identity metadata only (no wire-behavior change). If the
-      // resolution fails (network/404), fall back to the path so an identity
+      // Resolve the numeric repo id for RepoRef.nativeId (the opaque forge-native
+      // identity — see packages/forge/src/types.ts). Normally the IMMUTABLE
+      // numeric id (a rename changes owner/repo but not the id). Mirrors the
+      // GitLab `--mr` flow's resolveGitLabProjectId — ONE GET /repos/{owner}/{repo}
+      // → .id before the post. The adapter's wire calls still key on owner/repo
+      // from its ctor, so nativeId is identity metadata only (no wire-behavior
+      // change). If the resolution fails (network/404), degrade to the
+      // path-shaped owner/repo — an OPAQUE-string fallback, honest per the
+      // RepoRef.nativeId contract (opaque, may be path-shaped) — so an identity
       // field never crashes the post-back, and warn.
       let nativeId = `${owner}/${repo}`;
       try {

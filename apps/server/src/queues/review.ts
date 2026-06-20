@@ -558,16 +558,19 @@ async function processReview(
   });
 
   // Canonical refs for adapter calls (forge-agnostic shape).
-  // nativeId = the IMMUTABLE numeric GitHub repo id (a rename changes owner/repo
-  // but NOT the id), threaded for FREE through the job payload from the webhook's
-  // `repository.id` — NO DB lookup, NO API call on the worker hot path. `path` is
-  // the MUTABLE display label. Stringified to match RepoRef.nativeId's string type
-  // (consistent with GitLab's String(id)).
+  // nativeId = the OPAQUE forge-native identity (see RepoRef.nativeId in
+  // packages/forge/src/types.ts). Normally the IMMUTABLE numeric GitHub repo id
+  // (a rename changes owner/repo but NOT the id), threaded for FREE through the
+  // job payload from the webhook's `repository.id` — NO DB lookup, NO API call on
+  // the worker hot path. `path` is the MUTABLE display label. Stringified to match
+  // RepoRef.nativeId's string type (consistent with GitLab's String(id)).
   //
   // TOLERANCE FALLBACK: in-flight jobs enqueued BEFORE this field existed carry no
-  // githubRepoId — for those we keep the path-shaped owner/repo. It is observably
-  // inert (the adapter keys on owner/repo from its ctor, not nativeId), and the
-  // fallback disappears once the queue drains post-deploy.
+  // githubRepoId — for those nativeId degrades to a path-shaped OPAQUE string
+  // (owner/repo), NOT a number. This is honest per the RepoRef.nativeId contract
+  // (opaque, may be path-shaped). It is observably inert (the adapter keys on
+  // owner/repo from its ctor, not nativeId), and the fallback disappears once the
+  // queue drains post-deploy.
   const repoRef = {
     kind: 'github' as const,
     nativeId: githubRepoId != null ? String(githubRepoId) : `${owner}/${repo}`,

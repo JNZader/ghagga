@@ -74,7 +74,18 @@ export type AuthorAssociation = (typeof AUTHOR_ASSOCIATION)[keyof typeof AUTHOR_
 export interface RepoRef {
   /** Which forge this repo lives on. */
   kind: ForgeKind;
-  /** Forge-native immutable id (GitHub repo node id, GitLab project id, …). */
+  /**
+   * OPAQUE forge-native identity string. It is the numeric repo/project id WHEN
+   * resolvable (GitHub repo id, GitLab project id) — immutable across
+   * rename/transfer — but it MAY be a path-shaped legacy/fallback value
+   * (e.g. `owner/repo`) when the numeric id could not be resolved (an old
+   * in-flight job, or a network/404 failure during CLI resolution; both are
+   * intentional safe degradations, not bugs).
+   *
+   * Consumers MUST treat this as an opaque identity token: compare it for
+   * equality, key on it, persist it — but MUST NOT assume it parses as a number.
+   * `Number(ref.nativeId)` is NOT safe (a path-shaped fallback yields NaN).
+   */
   nativeId: string;
   /** Human-friendly "owner/name" path. Mutable — NOT part of identity. */
   path?: string;
