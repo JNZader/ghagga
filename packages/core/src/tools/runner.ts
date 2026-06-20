@@ -53,7 +53,8 @@ async function runStaticAnalysisWithRegistry(
     'enableSemgrep' | 'enableTrivy' | 'enableCpd' | 'enabledTools' | 'disabledTools'
   >,
 ): Promise<StaticAnalysisResult> {
-  console.log('[ghagga:tools] Running static analysis with registry-driven orchestrator');
+  // Diagnostic/progress → stderr; stdout is reserved for machine output (SARIF/JSON).
+  console.error('[ghagga:tools] Running static analysis with registry-driven orchestrator');
 
   // Ensure plugins are registered
   initializeDefaultTools();

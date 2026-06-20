@@ -37,7 +37,7 @@ import {
   GitLabForgeAdapter,
   StaticTokenProvider,
 } from 'ghagga-forge';
-import { createCliGitHubClientPort } from '../lib/cli-github-client-port.js';
+import { createCliGitHubClientPort, resolveGitHubRepoId } from '../lib/cli-github-client-port.js';
 import {
   createCliGitLabClientPort,
   resolveGitLabApiBase,
@@ -497,8 +497,28 @@ function githubPostbackConfig(): ForgePostbackConfig {
         owner,
         repo,
       });
+      // Resolve the numeric repo id for RepoRef.nativeId (the opaque forge-native
+      // identity — see packages/forge/src/types.ts). Normally the IMMUTABLE
+      // numeric id (a rename changes owner/repo but not the id). Mirrors the
+      // GitLab `--mr` flow's resolveGitLabProjectId — ONE GET /repos/{owner}/{repo}
+      // → .id before the post. The adapter's wire calls still key on owner/repo
+      // from its ctor, so nativeId is identity metadata only (no wire-behavior
+      // change). If the resolution fails (network/404), degrade to the
+      // path-shaped owner/repo — an OPAQUE-string fallback, honest per the
+      // RepoRef.nativeId contract (opaque, may be path-shaped) — so an identity
+      // field never crashes the post-back, and warn.
+      let nativeId = `${owner}/${repo}`;
+      try {
+        nativeId = await resolveGitHubRepoId(owner, repo, resolvedToken);
+      } catch (error) {
+        console.warn(
+          `[ghagga] Could not resolve numeric GitHub repo id for ${owner}/${repo} ` +
+            `(${error instanceof Error ? error.message : String(error)}); ` +
+            'falling back to the owner/repo path for RepoRef.nativeId.',
+        );
+      }
       const ref: ChangeRequestRef = {
-        repo: { kind: 'github', nativeId: `${owner}/${repo}`, path: `${owner}/${repo}` },
+        repo: { kind: 'github', nativeId, path: `${owner}/${repo}` },
         iid: prNumber,
       };
       return { adapter, ref };

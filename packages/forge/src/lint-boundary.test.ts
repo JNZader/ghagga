@@ -247,4 +247,103 @@ describe('server→client.ts forge-adapter boundary (R-AGNOSTIC 1.6)', () => {
 
     expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
   });
+
+  // ── DYNAMIC-IMPORT BYPASS (Biome's import linter is static-only) ──
+  it('CATCHES a dynamic import() bound to an alias then member access', () => {
+    const src = [
+      "const gh = await import('../github/client.js');",
+      'const diff = await gh.fetchPRDiff(token, owner, repo, n);',
+    ].join('\n');
+
+    const violations = checkServerForgeClientBoundary(FILE, src);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toMatch(/DYNAMIC-IMPORT BYPASS/i);
+    expect(violations[0]?.module).toMatch(/gh\.fetchPRDiff/);
+  });
+
+  it('CATCHES a require() bound to an alias then member access', () => {
+    const src = ["const gh = require('../github/client.js');", 'gh.postComment();'].join('\n');
+
+    const violations = checkServerForgeClientBoundary(FILE, src);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toMatch(/DYNAMIC-IMPORT BYPASS/i);
+  });
+
+  it('CATCHES a destructure STRAIGHT off a dynamic import()/require()', () => {
+    for (const load of ["await import('../github/client.js')", "require('../github/client.js')"]) {
+      const src = `const { fetchPRDiff } = ${load};`;
+      const violations = checkServerForgeClientBoundary(FILE, src);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.reason).toMatch(/DYNAMIC-IMPORT BYPASS/i);
+    }
+  });
+
+  it('ALLOWS getInstallationToken via dynamic import (member + destructure)', () => {
+    const src = [
+      "const gh = await import('../github/client.js');",
+      'await gh.getInstallationToken(id);',
+      "const { verifyWebhookSignature } = require('../github/client.js');",
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  // ── RE-EXPORT LAUNDERING (republishes an @internal fn as a public binding) ──
+  it('CATCHES a named re-export of a banned fn from client.ts', () => {
+    const src = "export { fetchPRDiff } from '../github/client.js';";
+
+    const violations = checkServerForgeClientBoundary(FILE, src);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toMatch(/RE-EXPORT LAUNDERING/i);
+  });
+
+  it('CATCHES a wildcard re-export (export * from client.ts)', () => {
+    const src = "export * from '../github/client.js';";
+
+    const violations = checkServerForgeClientBoundary(FILE, src);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toMatch(/RE-EXPORT LAUNDERING/i);
+  });
+
+  it('ALLOWS re-exporting only allowed fns (no banned fn in the clause)', () => {
+    const src =
+      "export { getInstallationToken, verifyWebhookSignature } from '../github/client.js';";
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  // ── DESTRUCTURING BYPASS (off a namespace alias) ──
+  it('CATCHES a destructure off a namespace-import alias', () => {
+    const src = [
+      "import * as gh from '../github/client.js';",
+      'const { fetchPRDiff, postComment } = gh;',
+    ].join('\n');
+
+    const violations = checkServerForgeClientBoundary(FILE, src);
+
+    expect(violations).toHaveLength(2);
+    expect(violations.every((v) => /DESTRUCTURING BYPASS/i.test(v.reason))).toBe(true);
+  });
+
+  it('ALLOWS destructuring only allowed fns off a namespace alias', () => {
+    const src = [
+      "import * as gh from '../github/client.js';",
+      'const { getInstallationToken } = gh;',
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
+
+  it('does NOT flag a destructure off an alias of a DIFFERENT module', () => {
+    const src = [
+      "import * as octokit from '@octokit/rest';",
+      'const { fetchPRDiff } = octokit;', // not client.ts — out of scope
+    ].join('\n');
+
+    expect(checkServerForgeClientBoundary(FILE, src)).toEqual([]);
+  });
 });

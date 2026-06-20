@@ -242,6 +242,35 @@ describe('--output flag routing', () => {
     expect(output).not.toMatch(/\x1b\[/);
   });
 
+  it('--output sarif keeps stdout pure JSON (no interleaved tool diagnostics)', async () => {
+    // BL-SARIF-STDOUT: core static-analysis tools used to write progress to
+    // stdout (console.log), corrupting machine output for CI consumers. They
+    // must now write to stderr. Simulate a tool emitting a diagnostic during
+    // the pipeline and assert it never lands on stdout.
+    const diff = 'diff --git a/file.ts b/file.ts\n+hello';
+    mockExecSync.mockReturnValue(diff as never);
+    mockReviewPipeline.mockImplementation(async () => {
+      // A core tool diagnostic — now correctly routed to stderr.
+      console.error('[ghagga:tools] Running static analysis with registry-driven orchestrator');
+      return makeReviewResult();
+    });
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ outputFormat: 'sarif', version: '2.5.0' }));
+
+    // EVERY console.log (stdout) call must be parseable JSON — zero diagnostics.
+    const stdoutCalls = logSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(stdoutCalls.length).toBeGreaterThan(0);
+    for (const line of stdoutCalls) {
+      expect(() => JSON.parse(line)).not.toThrow();
+    }
+
+    // The tool diagnostic landed on stderr, not stdout.
+    const stderrCalls = errorSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(stderrCalls.some((s: string) => s.includes('[ghagga:tools]'))).toBe(true);
+    expect(stdoutCalls.some((s: string) => s.includes('[ghagga:tools]'))).toBe(false);
+  });
+
   it('when --output is set, tui.intro() and tui.outro() are NOT called', async () => {
     const diff = 'diff --git a/file.ts b/file.ts\n+hello';
     mockExecSync.mockReturnValue(diff as never);

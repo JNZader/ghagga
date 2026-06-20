@@ -171,10 +171,16 @@ program
     // Only applies to STORED CONFIG values — explicit --provider flags and
     // env vars still fail loudly below so the user fixes their invocation.
     if (providerFromStoredConfig && isLegacyProvider(options.provider)) {
-      tui.log.warn(
+      const migrationWarning =
         `⚠️  Stored provider '${options.provider}' is no longer supported — using 'gateway' instead.\n` +
-          `   Run "ghagga login" again to refresh your saved config.`,
-      );
+        `   Run "ghagga login" again to refresh your saved config.`;
+      // When machine output (--output) is requested, stdout is reserved for
+      // SARIF/JSON — route this diagnostic to stderr to keep stdout clean.
+      if (options.output) {
+        console.error(migrationWarning);
+      } else {
+        tui.log.warn(migrationWarning);
+      }
       options.provider = 'gateway';
       if (modelFromStoredConfig) {
         // Stored model (e.g. 'gpt-4o-mini') belongs to the legacy provider —

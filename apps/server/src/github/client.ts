@@ -262,12 +262,40 @@ export async function findExistingComment(
 ): Promise<{ latestId: number; staleIds: number[] } | null> {
   const MARKER = '<!-- ghagga-review -->';
   const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
-  const MAX_PAGES = 5;
+  // Paginate until exhausted (a page with < 100 items is the last page). The cap
+  // is a safety upper bound so a pathological PR can't loop forever: 50 pages ×
+  // 100/page = 5000 comments. If hit, we log rather than silently truncate — a
+  // stale marker beyond the bound could otherwise produce a DUPLICATE comment.
+  // (Was 5 pages / 500 items; raised to close that duplicate edge — backlog #6.)
+  const MAX_PAGES = 50;
+  // WALL-CLOCK BUDGET (server only): each page fetch can take up to 10s
+  // (AbortSignal.timeout(10_000)), so 50 pages worst-case ≈ 500s. The BullMQ
+  // review worker lock is `lockDuration: 300_000` (5 min) — see
+  // apps/server/src/queues/review.ts createReviewWorker. If pagination alone
+  // exceeded ~300s the job would lose its lock mid-run and look stalled →
+  // retried/duplicated. We therefore cap total paging at 90s, leaving ~210s of
+  // the 5-min lock for the rest of the job (fetch diff + dispatch + poll +
+  // postback). On budget exhaustion we stop, warn (non-silent), and proceed with
+  // what we found — a missed stale on a 5000-comment PR is acceptable vs. blowing
+  // the worker lock. MAX_PAGES stays as belt-and-suspenders.
+  // (CLI ports have NO worker lock and keep paging to MAX_PAGES.)
+  const PAGINATION_BUDGET_MS = 90_000;
+  const deadline = Date.now() + PAGINATION_BUDGET_MS;
 
   return githubCircuitBreaker.execute(async () => {
     const allMatchIds: number[] = [];
 
     for (let page = 1; page <= MAX_PAGES; page++) {
+      // Budget guard: only AFTER page 1 (the common single-page case always gets
+      // its one fetch, baseline byte-identical). If we've already spent the
+      // budget, stop paging rather than risk the worker lock.
+      if (page > 1 && Date.now() >= deadline) {
+        console.warn(
+          `[ghagga] findExistingComment hit the ${PAGINATION_BUDGET_MS}ms pagination budget for ${owner}/${repo}#${prNumber} at page ${page}; comment listing truncated to stay under the worker lock`,
+        );
+        break;
+      }
+
       const url = `${baseUrl}?per_page=100&page=${page}`;
       const response = await fetch(url, {
         headers: {
@@ -294,6 +322,15 @@ export async function findExistingComment(
       }
 
       if (comments.length < 100) break;
+
+      if (page === MAX_PAGES) {
+        // Reached the safety bound with a still-full last page: there may be
+        // more comments (and a stale marker) we did not scan. Surface it so a
+        // duplicate-comment outcome is at least observable, not silent.
+        console.warn(
+          `[ghagga] findExistingComment hit MAX_PAGES (${MAX_PAGES}) for ${owner}/${repo}#${prNumber}; comment listing may be truncated`,
+        );
+      }
     }
 
     if (allMatchIds.length === 0) return null;

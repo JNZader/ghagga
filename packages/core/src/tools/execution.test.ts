@@ -93,5 +93,32 @@ describe('createNodeExecutionContext', () => {
       ctx.log('error', 'error');
       expect(logger.error).toHaveBeenCalledWith('error');
     });
+
+    // BL-SARIF-STDOUT: the DEFAULT logger must route ALL diagnostic levels to
+    // stderr. console.info/console.log write to stdout, which would interleave
+    // with and corrupt machine output (SARIF/JSON) emitted by CLI consumers.
+    it('default logger routes info/warn/error to stderr (never stdout)', () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const ctx = createNodeExecutionContext(); // no logger → default
+
+      ctx.log('info', 'progress: running tools');
+      ctx.log('warn', 'budget low');
+      ctx.log('error', 'tool failed');
+
+      // Nothing on stdout.
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(infoSpy).not.toHaveBeenCalled();
+      // All three diagnostics on stderr.
+      expect(errorSpy).toHaveBeenCalledWith('progress: running tools');
+      expect(errorSpy).toHaveBeenCalledWith('budget low');
+      expect(errorSpy).toHaveBeenCalledWith('tool failed');
+
+      logSpy.mockRestore();
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
   });
 });

@@ -25,8 +25,11 @@ export const BANNED_CLIENT_FORGE_FNS: readonly string[];
 
 /**
  * Scan an apps/server source file for direct use of the 11 @internal client.ts
- * forge-adapter fns — both NAMED imports and the NAMESPACE-alias member-access
- * bypass that Biome's `noRestrictedImports` cannot see.
+ * forge-adapter fns. Catches NAMED imports, the NAMESPACE-alias member-access
+ * bypass, dynamic `import()`/`require()` member access, re-export laundering
+ * (`export { ... } from` / `export * from`), and destructuring off a namespace
+ * or dynamic-import alias — all the forms Biome's `noRestrictedImports` cannot
+ * see.
  *
  * @param filePath the file path (used only in the violation message).
  * @param rawSource the file contents to scan.

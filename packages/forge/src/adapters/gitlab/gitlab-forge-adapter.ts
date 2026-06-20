@@ -40,7 +40,7 @@
  */
 
 import { gitlabCommentId } from '../../comment-id.js';
-import { ForgeAuthError, getErrorStatus } from '../../errors.js';
+import { ForgeAuthError, getErrorStatus, isForgeAuthError } from '../../errors.js';
 import type { ForgeAdapterBase, InlineCapable, InlineComment } from '../../ports/forge-adapter.js';
 import type {
   ChangedFile,
@@ -221,10 +221,13 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
    * Publish a batch of inline comments as N INDEPENDENT posts (R-LEAK-PUBLISH).
    *
    * PARTIAL FAILURE IS FIRST-CLASS: GitLab posts each comment independently, so
-   * each create is wrapped in its own try/catch. A failure records `{index, error}`
-   * into `failed` and the loop CONTINUES — failures are NEVER swallowed and never
-   * abort the remaining posts. Successes are boxed into `CommentId` (kind:'gitlab')
-   * and collected into `posted`.
+   * each create is wrapped in its own try/catch. A failure records
+   * `{index, error, status?, authFailure?}` into `failed` and the loop CONTINUES
+   * — failures are NEVER swallowed and never abort the remaining posts. The
+   * `status`/`authFailure` tags let a caller tell an AUTH failure (401/403, a
+   * static PAT cannot recover) from a transient one without string-parsing the
+   * message. Successes are boxed into `CommentId` (kind:'gitlab') and collected
+   * into `posted`.
    *
    * POSITION HANDLING (v1):
    * - When a comment carries `position` AND the injected client implements
@@ -256,9 +259,20 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
         // First-class partial failure: record and CONTINUE (never swallow, never
         // abort the rest). No #mapAuth reclassification here — a per-note failure
         // is reported, not thrown, so the batch outcome is observable.
+        //
+        // TAG the failure so a caller can distinguish an AUTH failure (401/403 —
+        // a static PAT cannot recover, surface "fix your token") from a transient
+        // one WITHOUT string-parsing `error`. `#postInline` does not run through
+        // `#mapAuth`, so the raw client error still carries its numeric `status`;
+        // `isForgeAuthError` ALSO catches an already-reclassified ForgeAuthError
+        // for robustness.
+        const status = getErrorStatus(error);
+        const authFailure = isForgeAuthError(error) || status === 401 || status === 403;
         failed.push({
           index,
           error: error instanceof Error ? error.message : String(error),
+          ...(status != null ? { status } : {}),
+          ...(authFailure ? { authFailure: true } : {}),
         });
       }
     }

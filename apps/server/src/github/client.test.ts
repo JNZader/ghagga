@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchGraphFromBranch,
   fetchGraphMetadata,
+  findExistingComment,
   getPRCommitMessages,
   getPRFileList,
   verifyWebhookSignature,
@@ -411,5 +412,130 @@ describe('fetchGraphMetadata', () => {
 
     const result = await fetchGraphMetadata('owner', 'repo', 'token');
     expect(result).toBeNull();
+  });
+});
+
+// ─── findExistingComment — pagination (backlog #6) ──────────────
+
+const MARKER = '<!-- ghagga-review -->';
+
+/**
+ * Create N fake issue-comment objects. `markerAt` (optional) is an index that
+ * carries the ghagga-review MARKER; all others are unrelated bodies.
+ */
+function makeFakeComments(
+  count: number,
+  startId = 0,
+  markerAt?: number,
+): Array<{ id: number; body: string }> {
+  return Array.from({ length: count }, (_, i) => ({
+    id: startId + i,
+    body: i === markerAt ? `summary ${startId + i}\n${MARKER}` : `noise ${startId + i}`,
+  }));
+}
+
+describe('findExistingComment — pagination', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('single page (< 100 comments) — exactly one list call, no extra fetch', async () => {
+    const page1 = makeFakeComments(30, 0, 5); // marker on this single page
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page1) });
+
+    const result = await findExistingComment('owner', 'repo', 1, 'token');
+
+    expect(result).toEqual({ latestId: 5, staleIds: [] });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toContain('page=1');
+  });
+
+  it('multi-page — full page 1 (no marker), stale marker on page 2 IS found', async () => {
+    const page1 = makeFakeComments(100, 0); // 100 items, NO marker → must fetch page 2
+    const page2 = makeFakeComments(20, 100, 7); // marker at index 7 → id 107
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page1) })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page2) });
+
+    const result = await findExistingComment('owner', 'repo', 1, 'token');
+
+    // The (only) marker found on page 2 is the latest; no stale duplicates.
+    expect(result).toEqual({ latestId: 107, staleIds: [] });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0][0]).toContain('page=1');
+    expect(mockFetch.mock.calls[1][0]).toContain('page=2');
+  });
+
+  it('multi-page — markers on BOTH pages → newest kept, older flagged stale', async () => {
+    const page1 = makeFakeComments(100, 0, 3); // stale marker id 3
+    const page2 = makeFakeComments(20, 100, 9); // latest marker id 109
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page1) })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page2) });
+
+    const result = await findExistingComment('owner', 'repo', 1, 'token');
+
+    expect(result).toEqual({ latestId: 109, staleIds: [3] });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('safety bound — stops at MAX_PAGES (50) and warns instead of looping forever', async () => {
+    // Every page is full (100 items) → would loop forever without the bound.
+    for (let page = 0; page < 50; page++) {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(makeFakeComments(100, page * 100)),
+      });
+    }
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await findExistingComment('owner', 'repo', 1, 'token');
+
+    expect(result).toBeNull(); // no marker anywhere in the scanned range
+    expect(mockFetch).toHaveBeenCalledTimes(50);
+    expect(mockFetch.mock.calls[49][0]).toContain('page=50');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MAX_PAGES (50)'));
+  });
+
+  it('time budget — truncates paging once the wall-clock budget is exhausted, warns, returns what was found', async () => {
+    // Page 1 is full (no marker) → loop wants to fetch page 2. We advance the
+    // mocked clock past the 90s budget so the page-2 guard trips: the loop must
+    // STOP (not blow the 5-min worker lock) and proceed with page-1 results.
+    const page1 = makeFakeComments(100, 0, 4); // marker at id 4 on the first page
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page1) });
+    // Any later page (should never be fetched once truncated).
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeFakeComments(100, 100)),
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Clock: deadline is captured as `Date.now() + 90_000` BEFORE the loop.
+    // 1st call (deadline capture) = 0; page-1 guard is skipped (page === 1);
+    // 2nd call (page-2 guard) = past the deadline → truncate.
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValueOnce(0); // deadline = 90_000
+    nowSpy.mockReturnValue(90_001); // every subsequent Date.now() is past it
+
+    const result = await findExistingComment('owner', 'repo', 1, 'token');
+
+    // Only page 1 was fetched; the budget guard stopped before page 2.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toContain('page=1');
+    // We still return what we found on page 1.
+    expect(result).toEqual({ latestId: 4, staleIds: [] });
+    // Non-silent truncation, distinct from the MAX_PAGES warn.
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('pagination budget'));
+
+    nowSpy.mockRestore();
   });
 });

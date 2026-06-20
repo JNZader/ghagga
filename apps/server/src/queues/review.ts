@@ -201,6 +201,17 @@ export interface ReviewJobData {
   prNumber: number;
   /** Internal repository ID in our database */
   repositoryId: number;
+  /**
+   * IMMUTABLE numeric GitHub repo id (the forge-native canonical identity used
+   * for {@link RepoRef.nativeId}). A rename/transfer changes owner/repo but NOT
+   * this id. Populated for FREE at enqueue time from the webhook payload's
+   * `repository.id` — the worker does NOT need a DB lookup or an API call.
+   *
+   * OPTIONAL only for backward tolerance: in-flight jobs already in Redis at
+   * deploy time carry the old shape. When absent, the worker falls back to the
+   * path-shaped owner/repo for nativeId (inert — the adapter keys on owner/repo).
+   */
+  githubRepoId?: number;
   /** HEAD commit SHA for the PR */
   headSha?: string;
   /** Base branch name */
@@ -480,6 +491,7 @@ async function processReview(
     repoFullName,
     prNumber,
     repositoryId,
+    githubRepoId,
     headSha: eventHeadSha,
     baseBranch: eventBaseBranch,
     triggerCommentId,
@@ -546,16 +558,24 @@ async function processReview(
   });
 
   // Canonical refs for adapter calls (forge-agnostic shape).
-  // TODO(forge): nativeId should be the IMMUTABLE numeric GitHub repo id
-  // (repositories.githubRepoId). It is NOT readily in scope here — the worker
-  // does not load the repo record in this scope (resolveEncryptedCredentials
-  // skips the DB round-trip on the in-flight-tolerance path), and FIX 4 says do
-  // NOT add a DB lookup just for this. The GitHub adapter ignores nativeId today
-  // (it keys on owner/repo), so using the path-shaped owner/repo as a temporary
-  // fallback is observably inert. Move the value into `path` (the mutable display
-  // label) and leave nativeId on the same fallback until the numeric id is
-  // threaded through the job payload.
-  const repoRef = { kind: 'github' as const, nativeId: `${owner}/${repo}`, path: repoFullName };
+  // nativeId = the OPAQUE forge-native identity (see RepoRef.nativeId in
+  // packages/forge/src/types.ts). Normally the IMMUTABLE numeric GitHub repo id
+  // (a rename changes owner/repo but NOT the id), threaded for FREE through the
+  // job payload from the webhook's `repository.id` — NO DB lookup, NO API call on
+  // the worker hot path. `path` is the MUTABLE display label. Stringified to match
+  // RepoRef.nativeId's string type (consistent with GitLab's String(id)).
+  //
+  // TOLERANCE FALLBACK: in-flight jobs enqueued BEFORE this field existed carry no
+  // githubRepoId — for those nativeId degrades to a path-shaped OPAQUE string
+  // (owner/repo), NOT a number. This is honest per the RepoRef.nativeId contract
+  // (opaque, may be path-shaped). It is observably inert (the adapter keys on
+  // owner/repo from its ctor, not nativeId), and the fallback disappears once the
+  // queue drains post-deploy.
+  const repoRef = {
+    kind: 'github' as const,
+    nativeId: githubRepoId != null ? String(githubRepoId) : `${owner}/${repo}`,
+    path: repoFullName,
+  };
   const changeRef = { repo: repoRef, iid: prNumber };
 
   // PHASE 1 mint (was getInstallationToken ~498): one token reused across

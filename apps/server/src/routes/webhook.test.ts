@@ -272,6 +272,9 @@ describe('pull_request event handling', () => {
     expect(jobData.installationId).toBe(999);
     expect(jobData.repoFullName).toBe('owner/repo');
     expect(jobData.prNumber).toBe(42);
+    // IMMUTABLE numeric GitHub repo id threaded for FREE from the webhook payload
+    // (payload.repository.id) → worker uses it for RepoRef.nativeId, no DB/API call.
+    expect(jobData.githubRepoId).toBe(12345);
     // reviewId propagated to BullMQ job
     expect(jobData.reviewId).toBe(json.reviewId);
   });
@@ -494,6 +497,8 @@ describe('issue_comment event handling', () => {
     expect(jobData.triggerCommentId).toBe(777);
     expect(jobData.headSha).toBe('pr-head-sha-abc');
     expect(jobData.baseBranch).toBe('main');
+    // IMMUTABLE numeric GitHub repo id threaded for FREE from payload.repository.id.
+    expect(jobData.githubRepoId).toBe(12345);
     // reviewId propagated to BullMQ job
     expect(jobData.reviewId).toBe(json.reviewId);
   });
@@ -728,6 +733,32 @@ describe('issue_comment event handling', () => {
     // Should still dispatch the review despite reaction failure
     expect(res.status).toBe(202);
     expect(mockEnqueueReview).toHaveBeenCalledOnce();
+  });
+
+  it('handles a forge 401 on a freshly-minted token gracefully (BL-WEBHOOK-401-RETRY)', async () => {
+    // A 401/403 on the just-minted installation token is surfaced as a clear,
+    // diagnosable auth error (not retried — the webhook mints fresh per request,
+    // so a re-mint would fail identically) and MUST NOT crash the webhook. Both
+    // forge calls (ack reaction + fetch PR details) reject with a status:401 the
+    // adapter reclassifies to ForgeAuthError. The review still dispatches (202).
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const authError = Object.assign(new Error('GitHub API error: 401 Unauthorized'), {
+      status: 401,
+    });
+    mockAddCommentReaction.mockRejectedValue(authError);
+    mockFetchPRDetails.mockRejectedValue(authError);
+
+    const body = JSON.stringify(commentPayload);
+    const req = makeRequest(body, 'issue_comment');
+    const res = await router.fetch(req);
+
+    // Webhook survives the auth failure (best-effort calls stay non-critical)
+    // and still dispatches the review without headSha/baseBranch.
+    expect(res.status).toBe(202);
+    expect(mockEnqueueReview).toHaveBeenCalledOnce();
+    const jobData = mockEnqueueReview.mock.calls[0]?.[0];
+    expect(jobData.headSha).toBeUndefined();
+    expect(jobData.baseBranch).toBeUndefined();
   });
 });
 

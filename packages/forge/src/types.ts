@@ -74,7 +74,18 @@ export type AuthorAssociation = (typeof AUTHOR_ASSOCIATION)[keyof typeof AUTHOR_
 export interface RepoRef {
   /** Which forge this repo lives on. */
   kind: ForgeKind;
-  /** Forge-native immutable id (GitHub repo node id, GitLab project id, …). */
+  /**
+   * OPAQUE forge-native identity string. It is the numeric repo/project id WHEN
+   * resolvable (GitHub repo id, GitLab project id) — immutable across
+   * rename/transfer — but it MAY be a path-shaped legacy/fallback value
+   * (e.g. `owner/repo`) when the numeric id could not be resolved (an old
+   * in-flight job, or a network/404 failure during CLI resolution; both are
+   * intentional safe degradations, not bugs).
+   *
+   * Consumers MUST treat this as an opaque identity token: compare it for
+   * equality, key on it, persist it — but MUST NOT assume it parses as a number.
+   * `Number(ref.nativeId)` is NOT safe (a path-shaped fallback yields NaN).
+   */
   nativeId: string;
   /** Human-friendly "owner/name" path. Mutable — NOT part of identity. */
   path?: string;
@@ -240,6 +251,23 @@ export interface PublishFailure {
   index: number;
   /** Human-readable error. */
   error: string;
+  /**
+   * The HTTP status of the underlying forge failure, when one was carried on the
+   * thrown error (e.g. `401`, `403`, `422`, `500`). Absent when the failure had
+   * no usable numeric status (e.g. a network error or a non-HTTP throw). Lets a
+   * caller distinguish an auth failure from a transient/server one WITHOUT
+   * string-parsing {@link PublishFailure.error}. Additive + optional, so older
+   * consumers are unaffected.
+   */
+  status?: number;
+  /**
+   * `true` when the failure was an AUTHENTICATION/authorization failure (HTTP
+   * 401/403). A static-token forge cannot recover from this (nothing to re-mint),
+   * so a caller can surface "fix your token" guidance instead of treating it as a
+   * retry-able transient. Absent/`false` for non-auth failures. Additive +
+   * optional.
+   */
+  authFailure?: boolean;
 }
 
 /**
