@@ -27,21 +27,27 @@ FIX: before the next Action release, run `pnpm --filter @ghagga/action build`
 `apps/action/dist/`. (Deferred here per the no-build rule.) Optionally, codify a
 release step that rebuilds + commits `dist` so it can't drift again.
 
+## RESOLVED
+
 ### BL-SARIF-STDOUT — static-analysis tools write to stdout, corrupting `--output sarif`
 
-The core static-analysis tools (`packages/core/src/tools/{runner,semgrep,cpd}.ts`)
-write progress/diagnostic output to stdout. When the CLI is run with
-`--quick --output sarif`, that tool stdout INTERLEAVES with the SARIF JSON the
-command emits on stdout, so a CI consumer can receive MIXED/corrupt SARIF.
+**Status: RESOLVED** by commit `fa934d8` — core static-analysis tool
+diagnostics (`execution.ts` default logger + `runner`/`semgrep`/`cpd`) routed
+stdout→stderr so `--output sarif` stdout is clean. Verified real-usage
+(jq-clean before/after). Server unaffected (uses `pino`, not core's default
+logger).
 
-PRE-EXISTING and ORTHOGONAL to the forge work (Fix-Between-SDDs) — it predates
-the `--pr` post-back and is not introduced by it. Surfaced during the P3 4vr
-review. NOTE: it makes the `--pr` + SARIF CI scenario's MACHINE output (the SARIF
+The core static-analysis tools (`packages/core/src/tools/{runner,semgrep,cpd}.ts`)
+wrote progress/diagnostic output to stdout. When the CLI is run with
+`--quick --output sarif`, that tool stdout INTERLEAVED with the SARIF JSON the
+command emits on stdout, so a CI consumer could receive MIXED/corrupt SARIF.
+
+PRE-EXISTING and ORTHOGONAL to the forge work (Fix-Between-SDDs) — it predated
+the `--pr` post-back and was not introduced by it. Surfaced during the P3 4vr
+review. NOTE: it made the `--pr` + SARIF CI scenario's MACHINE output (the SARIF
 artifact) unreliable until fixed, even though the human-readable post-back is
 fine. Fix = route tool stdout to stderr (or a buffer) so stdout carries ONLY the
-chosen `--output` payload. Do NOT fix inside a forge diff.
-
-## RESOLVED
+chosen `--output` payload.
 
 ### BL-WEBHOOK-401-RETRY — webhook forge calls have no in-request 401 retry
 
