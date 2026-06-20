@@ -18,17 +18,6 @@ artifact) unreliable until fixed, even though the human-readable post-back is
 fine. Fix = route tool stdout to stderr (or a buffer) so stdout carries ONLY the
 chosen `--output` payload. Do NOT fix inside a forge diff.
 
-### BL-CLI-FORGE-COMPOSITION — extract a generic forge post-back helper for P4
-
-`resolvePrToken` / `handlePrPostback` (apps/cli) are GitHub-shaped: token
-resolution, remote parsing (`parseGitHubRemote`), adapter construction
-(`GitHubForgeAdapter`), and ref building all assume GitHub. P4's `--mr` (GitLab)
-should NOT duplicate this. Extract a generic
-`resolve-token → parse-remote → build-adapter → make-ref → post` helper
-parameterized by forge kind, so `--pr` and `--mr` are thin wrappers. The neutral
-seam (`postSummaryComment`) is already forge-agnostic (P3 FIX 2); this is the
-COMMAND-GLUE layer above it. Defer to P4.
-
 ### BL-WEBHOOK-401-RETRY — webhook forge calls have no in-request 401 retry
 
 The review worker (`apps/server/src/queues/review.ts`) wires an in-job bounded
@@ -48,3 +37,26 @@ If the webhook ever adopts a cached `ForgeCredentialProvider` (e.g. shares the
 review worker's `GitHubAppCredentialProvider`), mirror the postback's
 `invalidate → re-mint → retry-once` block on its forge calls so the same
 recovery applies. Until then this is a documented no-op, not a bug.
+
+## RESOLVED
+
+### BL-CLI-FORGE-COMPOSITION — extract a generic forge post-back helper for P4
+
+**Status: RESOLVED** by P4 (commit `558c21e`, "feat(cli): add ghagga review
+--mr (GitLab) via shared composition helper (P4)").
+
+`resolvePrToken` / `handlePrPostback` (apps/cli) were GitHub-shaped: token
+resolution, remote parsing (`parseGitHubRemote`), adapter construction
+(`GitHubForgeAdapter`), and ref building all assumed GitHub. P4's `--mr` (GitLab)
+should NOT duplicate this. The fix extracted a generic
+`resolve-token → build-adapter+ref → post` helper parameterized by forge kind,
+so `--pr` and `--mr` are thin wrappers.
+
+Resolved by `composeForgePostback` in `apps/cli/src/lib/forge-postback.ts`: it
+captures the SHARED pipeline once (`resolveToken → buildComposition → post`
+via the forge-neutral `postSummaryComment`), with the forge-specific steps
+(token env vars, remote→`RepoRef` parsing, adapter construction, project-id
+resolution) injected through a `ForgeCompositionBuilder`. Both the `--pr`
+(GitHub) and `--mr` (GitLab) command glue now route through it instead of each
+hand-rolling the composition. Adding a third forge (Gitea) is a new builder, not
+a new branch.
