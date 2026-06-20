@@ -4,6 +4,29 @@ Tracked-but-deferred work. OPEN items at the top.
 
 ## OPEN
 
+### BL-ACTION-BUNDLE-REBUILD — rebuild `apps/action/dist` to pick up the SARIF-stdout fix (#4)
+
+The GitHub Action consumes a **manually-committed** pre-built bundle:
+`action.yml` (`runs.main: 'apps/action/dist/index.js'`) points at the committed
+`apps/action/dist/index.js`, and `apps/action/.gitignore` deliberately
+un-ignores `dist/` ("GitHub Actions requires dist/ to be committed"). The bundle
+inlines `ghagga-core` via `ncc`, so it still carries the OLD core static-analysis
+diagnostics (`console.log`) that the #4 fix (BL-SARIF-STDOUT, commit `fa934d8`)
+moved to stderr. **The Action consumer therefore still pollutes stdout** despite
+the source fix.
+
+This is the manually-committed-stale-artifact case, NOT auto-rebuilt:
+`publish.yml` (`on: release`) runs `pnpm turbo build` (which DOES regenerate
+`dist` via the action's `ncc build` script) but ONLY to publish the npm packages
+— it does **not commit the rebuilt `dist` back to the repo**, and no other
+workflow re-commits it. So the bundle the Action runs (`JNZader/ghagga@v…` →
+committed `dist`) stays stale until someone rebuilds and commits it.
+
+FIX: before the next Action release, run `pnpm --filter @ghagga/action build`
+(`ncc build src/index.ts -o dist …`) and commit the regenerated
+`apps/action/dist/`. (Deferred here per the no-build rule.) Optionally, codify a
+release step that rebuilds + commits `dist` so it can't drift again.
+
 ### BL-SARIF-STDOUT — static-analysis tools write to stdout, corrupting `--output sarif`
 
 The core static-analysis tools (`packages/core/src/tools/{runner,semgrep,cpd}.ts`)
