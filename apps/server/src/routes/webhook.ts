@@ -454,6 +454,17 @@ async function handleIssueComment(
   let prAuthor: string | undefined;
 
   if (appId && privateKey) {
+    // 401-RECOVERY SEAM (P2): intentionally NOT wired here. Unlike review.ts, the
+    // webhook mints a FRESH installation token per request (getInstallationToken,
+    // no caching/TTL provider) and uses it within the SAME short-lived request —
+    // there is no long-running phase during which the token could be revoked
+    // BEFORE these calls, so the caching-recovery concern (a stale CACHED token
+    // failing mid-job) simply does not apply. Both forge calls below are already
+    // wrapped in try/catch as non-critical (a failed ack reaction / PR-details
+    // fetch never fails the review). Adding invalidate→re-mint→retry here would be
+    // pure scope with no window to protect. Tracked in docs/BACKLOG.md
+    // (BL-WEBHOOK-401-RETRY) in case the webhook ever adopts a cached provider.
+    //
     // Mint the installation token (NOT a forge-adapter fn — stays a direct call),
     // then route BOTH forge calls through the shared composition-root factory so
     // the GitHub client.ts forge fns have exactly ONE sanctioned consumer.

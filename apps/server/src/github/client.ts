@@ -27,6 +27,32 @@
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 
+// ─── Errors ─────────────────────────────────────────────────────
+
+/**
+ * An error from a GitHub REST call, carrying the HTTP `status`.
+ *
+ * The forge boundary (GitHubForgeAdapter) inspects this `status` to reclassify
+ * 401/403 failures as a `ForgeAuthError` so the worker can drive the in-job
+ * token re-mint + retry (P2 401-recovery seam). Non-2xx errors that are NOT
+ * 401/403 stay plain failures — the status is still attached for logging.
+ *
+ * The message is preserved byte-for-byte from the previous plain-Error throws
+ * (`GitHub API error <op>: <status> <statusText>`) so existing message-based
+ * assertions and logs are unaffected.
+ */
+export class GitHubApiError extends Error {
+  /** The HTTP status of the failed GitHub response. */
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'GitHubApiError';
+    this.status = status;
+    Object.setPrototypeOf(this, GitHubApiError.prototype);
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────
 
 /**
@@ -122,7 +148,8 @@ export async function fetchPRDetails(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error fetching PR details: ${response.status} ${response.statusText}`,
       );
     }
@@ -164,7 +191,10 @@ export async function fetchPRDiff(
     });
 
     if (!response.ok) {
-      throw new Error(`GitHub API error fetching diff: ${response.status} ${response.statusText}`);
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error fetching diff: ${response.status} ${response.statusText}`,
+      );
     }
 
     return response.text();
@@ -202,7 +232,8 @@ export async function postComment(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error posting comment: ${response.status} ${response.statusText}`,
       );
     }
@@ -248,7 +279,8 @@ export async function findExistingComment(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new GitHubApiError(
+          response.status,
           `GitHub API error listing comments: ${response.status} ${response.statusText}`,
         );
       }
@@ -335,7 +367,8 @@ export async function updateComment(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error updating comment: ${response.status} ${response.statusText}`,
       );
     }
@@ -375,7 +408,8 @@ export async function getPRCommitMessages(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new GitHubApiError(
+          response.status,
           `GitHub API error fetching commits: ${response.status} ${response.statusText}`,
         );
       }
@@ -425,7 +459,8 @@ export async function getPRFileList(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new GitHubApiError(
+          response.status,
           `GitHub API error fetching files: ${response.status} ${response.statusText}`,
         );
       }

@@ -39,6 +39,7 @@ import {
 import {
   GitHubAppCredentialProvider,
   githubCommentId,
+  isForgeAuthError,
   REACTION_KIND,
   toCommitMessages,
   toFileList,
@@ -563,6 +564,15 @@ async function processReview(
   const token = await tokenSource.getToken();
 
   // Fetch context via the adapter (adapter1) instead of the client directly.
+  //
+  // FETCH-PHASE 401-RETRY (assessed, deliberately NOT wrapped): the fetch phase
+  // runs IMMEDIATELY after the single mint above, so token1 is brand-new here —
+  // there is no long-poll window in which it could be revoked BEFORE these calls
+  // (unlike the postback, which runs AFTER the poll loop and is the actual P2
+  // regression). Wrapping the fetch in the same bounded retry would add code +
+  // test surface for a window that does not exist in this ordering, so the retry
+  // is intentionally scoped to the postback only. If fetch ordering ever moves
+  // after a long wait, mirror the postback's invalidate→re-mint→retry-once block.
   const adapter1 = makeGitHubAdapter({ owner, repo, token });
 
   const [diffResult, commits, files] = await Promise.all([
@@ -931,7 +941,7 @@ async function processReview(
   // guarantees this token outlives the postback (BUDGET_SECONDS), or re-mints
   // PROACTIVELY if the cache has aged out during a long poll loop.
   const freshToken = await tokenSource.getToken();
-  const adapter2 = makeGitHubAdapter({ owner, repo, token: freshToken });
+  let adapter2 = makeGitHubAdapter({ owner, repo, token: freshToken });
   let commentBody = formatReviewComment(reviewResult, {
     fileStats:
       reviewResult.metadata.totalAdditions !== undefined
@@ -955,7 +965,34 @@ async function processReview(
   // into one adapter call, preserving the EXACT baseline ordering + best-effort
   // delete semantics. The marker passed MUST equal REVIEW_COMMENT_MARKER (the
   // GitHub adapter matches that fixed marker inside client.findExistingComment).
-  const upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
+  //
+  // P2 401-RECOVERY (in-job, bounded to exactly ONE retry): with P2 caching the
+  // postback reuses the cached phase-1 token. If that token was REVOKED mid-job
+  // (server-side, before its advertised expiry), the postback fails with a typed
+  // ForgeAuthError (401/403). We then invalidate() the credential cache, re-mint
+  // a fresh token, rebuild the adapter, and retry the postback ONCE. If the retry
+  // ALSO 401s, we propagate (fail the job) — NO infinite loop. This restores P1's
+  // in-job recovery cheaply (re-mint + retry the POSTBACK only, not the review).
+  //
+  // HAPPY PATH IS UNCHANGED: with no 401, the try-body runs exactly once with the
+  // same single mint and same call sequence as before (the catch never fires).
+  let upsertResult: Awaited<ReturnType<typeof adapter2.upsertSummaryComment>>;
+  try {
+    upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
+  } catch (error) {
+    if (!isForgeAuthError(error)) throw error;
+    // Token was rejected (revoked/rotated) — drop the cache, re-mint, retry ONCE.
+    log.warn(
+      { status: error.status },
+      'Postback hit a forge auth failure (401/403) — invalidating credential cache and retrying once with a fresh token',
+    );
+    tokenSource.invalidate();
+    const retryToken = await tokenSource.getToken();
+    adapter2 = makeGitHubAdapter({ owner, repo, token: retryToken });
+    // The retry is UNGUARDED: if it ALSO throws (auth or otherwise) it propagates
+    // and fails the job. This is the bound — exactly one retry, never a loop.
+    upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
+  }
   // BOX the GitHub-native numeric id review.ts-LOCAL (R-COMMENTID).
   const postedCommentId = githubCommentId(upsertResult.created);
   log.info({ commentId: postedCommentId.raw }, 'Review comment posted');
