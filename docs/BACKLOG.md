@@ -18,27 +18,43 @@ artifact) unreliable until fixed, even though the human-readable post-back is
 fine. Fix = route tool stdout to stderr (or a buffer) so stdout carries ONLY the
 chosen `--output` payload. Do NOT fix inside a forge diff.
 
+## RESOLVED
+
 ### BL-WEBHOOK-401-RETRY — webhook forge calls have no in-request 401 retry
 
+**Status: RESOLVED (by-design / won't-fix) — a bounded 401-retry adds no real
+value for the webhook; closed with a diagnostic-logging improvement instead.**
+
 The review worker (`apps/server/src/queues/review.ts`) wires an in-job bounded
-401-retry on its postback: on a `ForgeAuthError` (HTTP 401/403) it
-`invalidate()`s the credential provider, re-mints a fresh token, rebuilds the
-adapter, and retries the postback ONCE (P2 401-recovery — restores P1's in-job
-recovery after the P2 token-caching optimization).
+401-retry on its postback BECAUSE it CACHES the installation token across a
+long-running poll: a cached token can go stale mid-job, so on a `ForgeAuthError`
+(HTTP 401/403) it `invalidate()`s the provider, re-mints, and retries ONCE.
 
-The webhook handler (`apps/server/src/routes/webhook.ts`) does NOT do this, by
-design: it mints a FRESH installation token per request (`getInstallationToken`,
-no caching/TTL provider) and uses it within the SAME short-lived request, so
-there is no mid-job window in which a CACHED token could be revoked before its
-forge calls. Both webhook forge calls (`addReaction` ack + `fetchChangeRequest`)
-are already wrapped in non-critical try/catch.
+The webhook handler (`apps/server/src/routes/webhook.ts` issue_comment) is
+structurally different: it mints a FRESH installation token PER REQUEST
+(`getInstallationToken`, no caching/TTL provider) and uses it within the SAME
+short-lived request. A 401/403 on a token minted milliseconds ago is therefore a
+GENUINE revocation/suspension/permission change — re-minting another fresh token
+and retrying would MOSTLY fail the SAME way. The only window an in-request
+re-mint could recover is a permission/token change racing BETWEEN the two forge
+calls of a single request (astronomically rare). So a bounded re-mint+retry here
+is pure scope with effectively no window to protect — NOT worth the code.
 
-If the webhook ever adopts a cached `ForgeCredentialProvider` (e.g. shares the
-review worker's `GitHubAppCredentialProvider`), mirror the postback's
-`invalidate → re-mint → retry-once` block on its forge calls so the same
-recovery applies. Until then this is a documented no-op, not a bug.
+The proportionate fix shipped instead (commit on `feat/forge-backlog-cleanup`):
+both webhook forge calls (`addReaction` ack + `fetchChangeRequest`) stay
+NON-CRITICAL (a failure never fails the review), AND a `ForgeAuthError` (401/403)
+is now SURFACED as a CLEAR, diagnosable `logger.error` ("installation token
+rejected; check the GitHub App installation/permissions for this repo") via an
+`isForgeAuthError(error)` branch — instead of being lumped into a generic
+"failed" warn. A test (`handles a forge 401 on a freshly-minted token
+gracefully`) confirms a 401 on both calls does not crash the webhook and the
+review still dispatches (202).
 
-## RESOLVED
+RE-OPEN ONLY IF the webhook ever adopts a cached `ForgeCredentialProvider`
+(e.g. shares the review worker's `GitHubAppCredentialProvider`). Then a CACHED
+token COULD go stale mid-request and the worker's `invalidate → re-mint →
+retry-once` block would have a real window to protect — mirror it on the webhook
+forge calls at that point.
 
 ### BL-CLI-FORGE-COMPOSITION — extract a generic forge post-back helper for P4
 

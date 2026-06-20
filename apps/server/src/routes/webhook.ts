@@ -20,7 +20,7 @@ import {
   upsertInstallation,
   upsertRepository,
 } from 'ghagga-db';
-import { githubCommentId, REACTION_KIND } from 'ghagga-forge';
+import { githubCommentId, isForgeAuthError, REACTION_KIND } from 'ghagga-forge';
 import { Hono } from 'hono';
 import { getInstallationToken, verifyWebhookSignature } from '../github/client.js';
 import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
@@ -457,16 +457,21 @@ async function handleIssueComment(
   let prAuthor: string | undefined;
 
   if (appId && privateKey) {
-    // 401-RECOVERY SEAM (P2): intentionally NOT wired here. Unlike review.ts, the
-    // webhook mints a FRESH installation token per request (getInstallationToken,
-    // no caching/TTL provider) and uses it within the SAME short-lived request —
-    // there is no long-running phase during which the token could be revoked
-    // BEFORE these calls, so the caching-recovery concern (a stale CACHED token
-    // failing mid-job) simply does not apply. Both forge calls below are already
-    // wrapped in try/catch as non-critical (a failed ack reaction / PR-details
-    // fetch never fails the review). Adding invalidate→re-mint→retry here would be
-    // pure scope with no window to protect. Tracked in docs/BACKLOG.md
-    // (BL-WEBHOOK-401-RETRY) in case the webhook ever adopts a cached provider.
+    // 401-RECOVERY SEAM (P2): intentionally NOT wired here (BL-WEBHOOK-401-RETRY,
+    // closed as by-design). Unlike review.ts, the webhook mints a FRESH
+    // installation token per request (getInstallationToken, no caching/TTL
+    // provider) and uses it within the SAME short-lived request — there is no
+    // long-running phase during which the token could be revoked BEFORE these
+    // calls, so the caching-recovery concern (a stale CACHED token failing
+    // mid-job) simply does not apply. A 401 on a token minted MILLISECONDS ago is
+    // a genuine revocation/suspension/permission change, so an invalidate→re-mint
+    // →retry would re-mint another fresh token that fails the SAME way — pure
+    // scope with no window to protect. The proportionate guarantee instead: both
+    // forge calls below stay non-critical (a failed ack reaction / PR-details
+    // fetch never fails the review) AND a 401/403 is SURFACED as a clear,
+    // diagnosable error log (isForgeAuthError branch) rather than silently lumped
+    // into a generic "failed" warn. Re-open only if the webhook ever adopts a
+    // cached ForgeCredentialProvider (then mirror review.ts's re-mint+retry).
     //
     // Mint the installation token (NOT a forge-adapter fn — stays a direct call),
     // then route BOTH forge calls through the shared composition-root factory so
@@ -494,11 +499,21 @@ async function handleIssueComment(
         await adapter.addReaction(githubCommentId(payload.comment.id), REACTION_KIND.EYES);
       }
     } catch (error) {
-      // Non-critical — don't fail the review
-      logger.warn(
-        { repo: payload.repository.full_name, error: String(error) },
-        'Failed to add acknowledgment reaction',
-      );
+      // Non-critical — don't fail the review. A 401/403 (ForgeAuthError) on a
+      // freshly-minted token means the installation token was rejected outright
+      // (revoked/suspended/permission change) — surface it as a CLEAR,
+      // diagnosable signal instead of a generic "failed" warn.
+      if (isForgeAuthError(error)) {
+        logger.error(
+          { repo: payload.repository.full_name, status: error.status, error: String(error) },
+          'Webhook forge call (ack reaction) rejected with auth failure — installation token rejected; check the GitHub App installation/permissions for this repo',
+        );
+      } else {
+        logger.warn(
+          { repo: payload.repository.full_name, error: String(error) },
+          'Failed to add acknowledgment reaction',
+        );
+      }
     }
 
     // Fetch PR details to get headSha and baseBranch
@@ -514,11 +529,25 @@ async function handleIssueComment(
         baseBranch = changeRequest.baseBranch;
         prAuthor = changeRequest.author.login;
       } catch (error) {
-        // Non-critical — review will proceed without headSha/baseBranch
-        logger.warn(
-          { repo: payload.repository.full_name, pr: prNumber, error: String(error) },
-          'Failed to fetch PR details for comment trigger',
-        );
+        // Non-critical — review will proceed without headSha/baseBranch. A
+        // 401/403 (ForgeAuthError) here means the freshly-minted installation
+        // token was rejected — surface it as a CLEAR, diagnosable signal.
+        if (isForgeAuthError(error)) {
+          logger.error(
+            {
+              repo: payload.repository.full_name,
+              pr: prNumber,
+              status: error.status,
+              error: String(error),
+            },
+            'Webhook forge call (fetch PR details) rejected with auth failure — installation token rejected; check the GitHub App installation/permissions for this repo',
+          );
+        } else {
+          logger.warn(
+            { repo: payload.repository.full_name, pr: prNumber, error: String(error) },
+            'Failed to fetch PR details for comment trigger',
+          );
+        }
       }
     }
   }
