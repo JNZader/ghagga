@@ -103,13 +103,26 @@ export type { GitHubForgeAdapterDeps } from './adapters/github/github-forge-adap
 export { GitHubForgeAdapter } from './adapters/github/github-forge-adapter.js';
 export { StaticTokenProvider } from './adapters/github/static-token-provider.js';
 
+// ─── Adapters: GitLab (P4 — CLI-invoked summary-comment + inline notes) ──
+// GitLabForgeAdapter: forge-neutral MR summary post-back (find-by-marker →
+// delete-stale → repost) + InlineCapable publishInline (N independent notes,
+// partial-failure first-class). Reaches the SAME ForgeAdapterBase seam the CLI
+// post-back routes through, so `--mr` reuses the P3 plumbing unchanged.
+export type {
+  GitLabClientPort,
+  GitLabDiffPosition,
+  GitLabNote,
+} from './adapters/gitlab/gitlab-client-port.js';
+export type { GitLabForgeAdapterDeps } from './adapters/gitlab/gitlab-forge-adapter.js';
+export { GitLabForgeAdapter } from './adapters/gitlab/gitlab-forge-adapter.js';
+
 // ─── Identity helpers ───────────────────────────────────────────
 
 // ─── Comment-id boxing (R-COMMENTID) ────────────────────────────
 // Sanctioned, side-effect-free boxing helper reusable by both the server
 // worker and the P3 CLI (the adapter still RETURNS native numbers; this is the
 // caller-local boxing step, NOT a branding of the adapter return type).
-export { githubCommentId } from './comment-id.js';
+export { githubCommentId, gitlabCommentId } from './comment-id.js';
 export { repoRefEquals } from './ref.js';
 
 // ─── Projection helpers ─────────────────────────────────────────

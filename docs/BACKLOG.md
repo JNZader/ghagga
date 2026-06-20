@@ -4,6 +4,31 @@ Tracked-but-deferred work. OPEN items at the top.
 
 ## OPEN
 
+### BL-SARIF-STDOUT — static-analysis tools write to stdout, corrupting `--output sarif`
+
+The core static-analysis tools (`packages/core/src/tools/{runner,semgrep,cpd}.ts`)
+write progress/diagnostic output to stdout. When the CLI is run with
+`--quick --output sarif`, that tool stdout INTERLEAVES with the SARIF JSON the
+command emits on stdout, so a CI consumer can receive MIXED/corrupt SARIF.
+
+PRE-EXISTING and ORTHOGONAL to the forge work (Fix-Between-SDDs) — it predates
+the `--pr` post-back and is not introduced by it. Surfaced during the P3 4vr
+review. NOTE: it makes the `--pr` + SARIF CI scenario's MACHINE output (the SARIF
+artifact) unreliable until fixed, even though the human-readable post-back is
+fine. Fix = route tool stdout to stderr (or a buffer) so stdout carries ONLY the
+chosen `--output` payload. Do NOT fix inside a forge diff.
+
+### BL-CLI-FORGE-COMPOSITION — extract a generic forge post-back helper for P4
+
+`resolvePrToken` / `handlePrPostback` (apps/cli) are GitHub-shaped: token
+resolution, remote parsing (`parseGitHubRemote`), adapter construction
+(`GitHubForgeAdapter`), and ref building all assume GitHub. P4's `--mr` (GitLab)
+should NOT duplicate this. Extract a generic
+`resolve-token → parse-remote → build-adapter → make-ref → post` helper
+parameterized by forge kind, so `--pr` and `--mr` are thin wrappers. The neutral
+seam (`postSummaryComment`) is already forge-agnostic (P3 FIX 2); this is the
+COMMAND-GLUE layer above it. Defer to P4.
+
 ### BL-WEBHOOK-401-RETRY — webhook forge calls have no in-request 401 retry
 
 The review worker (`apps/server/src/queues/review.ts`) wires an in-job bounded

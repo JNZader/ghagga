@@ -54,12 +54,62 @@ export const REACTION_KIND = {
 
 export type ReactionKind = (typeof REACTION_KIND)[keyof typeof REACTION_KIND];
 
-/** A single line-anchored inline comment to publish. */
+/**
+ * A single line-anchored inline comment to publish.
+ *
+ * PUBLIC API (R-LEAK-PUBLISH). This shape is intentionally ANCHORABLE so the
+ * GitLab discussion API (and a future GitHub inline-review impl) can be satisfied
+ * WITHOUT a breaking change:
+ * - `path` + `line` + `side` cover the common single-revision anchor (GitHub maps
+ *   `side` → LEFT/RIGHT; GitLab maps `side` → old_line/new_line).
+ * - `position` carries the GitLab diff-thread anchor (base/head/start SHAs +
+ *   old/new line). When present, the GitLab v1 adapter USES it toward the
+ *   discussions API for a true diff-thread; when absent it degrades to a
+ *   `path:line` body-prefixed plain note.
+ * - `oldPath`/`newPath` make RENAMES representable (GitLab requires BOTH
+ *   `position[old_path]` and `position[new_path]` for text diff notes). When
+ *   unset the adapter falls back to `path` for both — correct for non-renamed
+ *   files.
+ */
 export interface InlineComment {
-  /** File the comment anchors to. */
+  /** File the comment anchors to (the post-change path for a renamed file). */
   path: string;
-  /** Line number (in the diff's head revision). */
+  /** Line number (in the diff's head/new revision unless `side` says otherwise). */
   line: number;
+  /**
+   * Which side of the diff the line is on. `'new'` (default) → added/context
+   * line on the head revision; `'old'` → a line on the base revision.
+   */
+  side?: 'old' | 'new';
+  /**
+   * Pre-change path, for a RENAMED file. GitLab text diff notes require both the
+   * old and new path; when set, the adapter sends `position[old_path]`. Defaults
+   * to `path` when unset.
+   */
+  oldPath?: string;
+  /**
+   * Post-change path, for a RENAMED file. Defaults to `path` when unset. Carried
+   * so a future impl never needs an API change to support renames.
+   */
+  newPath?: string;
+  /**
+   * Full GitLab-style diff-thread anchor. When present, the GitLab v1 adapter
+   * uses it toward the discussions API (`position[position_type]=text`, the three
+   * SHAs, plus `old_line`/`new_line`). When absent, the adapter degrades to a
+   * plain note carrying the `path:line` prefix in the body.
+   */
+  position?: {
+    /** Merge-base / comparison base SHA (GitLab `position[base_sha]`). */
+    baseSha: string;
+    /** Head SHA of the change request (GitLab `position[head_sha]`). */
+    headSha: string;
+    /** Start SHA (GitLab `position[start_sha]`). */
+    startSha: string;
+    /** Line on the base revision (GitLab `position[old_line]`). */
+    oldLine?: number;
+    /** Line on the head revision (GitLab `position[new_line]`). */
+    newLine?: number;
+  };
   /** Comment body (markdown). */
   body: string;
 }

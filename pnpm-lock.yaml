@@ -90,6 +90,9 @@ importers:
       ghagga-core:
         specifier: workspace:*
         version: link:../../packages/core
+      ghagga-forge:
+        specifier: workspace:*
+        version: link:../../packages/forge
     devDependencies:
       '@types/node':
         specifier: ^25.9.1

@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { githubCommentId } from './comment-id.js';
+import { githubCommentId, gitlabCommentId } from './comment-id.js';
 import type { CommentId } from './types.js';
 
 describe('githubCommentId (R-COMMENTID boxing helper)', () => {
@@ -29,5 +29,31 @@ describe('githubCommentId (R-COMMENTID boxing helper)', () => {
     expect(github.kind).not.toBe(gitlab.kind);
     expect(github.raw).toBe(gitlab.raw); // same opaque value...
     // ...yet the boxed identities differ, so they can never be cross-used.
+  });
+});
+
+describe('gitlabCommentId (R-COMMENTID boxing helper)', () => {
+  it('boxes a GitLab-native numeric note id into { kind: "gitlab", raw: String(n) }', () => {
+    expect(gitlabCommentId(2002)).toEqual({ kind: 'gitlab', raw: '2002' });
+    expect(gitlabCommentId(555)).toEqual({ kind: 'gitlab', raw: '555' });
+  });
+
+  it('round-trips back to the original GitLab-native number', () => {
+    const boxed = gitlabCommentId(1001);
+    expect(Number(boxed.raw)).toBe(1001);
+  });
+
+  it('does NOT collide cross-forge with a GitHub id of the same numeric value', () => {
+    // R-COMMENTID cross-forge no-collision PROOF: a GitLab note id and a GitHub
+    // comment id with the SAME numeric value box to distinct CommentIds because
+    // the `kind` discriminator differs.
+    const gitlab = gitlabCommentId(42);
+    const github = githubCommentId(42);
+
+    expect(gitlab).not.toEqual(github);
+    expect(gitlab.kind).toBe('gitlab');
+    expect(github.kind).toBe('github');
+    expect(gitlab.raw).toBe(github.raw); // same opaque value (42 → '42')...
+    // ...yet the boxed identities differ → never cross-usable across forges.
   });
 });

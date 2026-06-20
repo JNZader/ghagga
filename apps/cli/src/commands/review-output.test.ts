@@ -36,6 +36,9 @@ const { mockBuildSarif } = vi.hoisted(() => ({
 vi.mock('ghagga-core', () => ({
   reviewPipeline: vi.fn(),
   buildSarif: mockBuildSarif,
+  formatReviewComment: vi.fn().mockReturnValue('<!-- ghagga-review -->\nbody'),
+  formatBoxSummary: vi.fn().mockReturnValue([]),
+  REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
   SqliteMemoryStorage: {
     create: vi.fn().mockResolvedValue({
       searchObservations: vi.fn().mockResolvedValue([]),

@@ -33,3 +33,19 @@ import type { CommentId } from './types.js';
 export function githubCommentId(raw: number): CommentId {
   return { kind: 'github', raw: String(raw) };
 }
+
+/**
+ * BOX a GitLab-native numeric note id into the canonical {@link CommentId}.
+ *
+ * GitLab note ids are NUMERIC but MR-scoped — the `kind: 'gitlab'` tag is what
+ * disambiguates them from a GitHub comment id (R-COMMENTID). The SAME numeric
+ * value boxed as `'github'` vs `'gitlab'` never collides because the
+ * discriminator differs, so a GitHub comment id can never be cross-assigned as a
+ * GitLab note id (and vice-versa).
+ *
+ * @param raw the GitLab-native numeric note id.
+ * @returns the boxed `{ kind: 'gitlab', raw: String(raw) }`.
+ */
+export function gitlabCommentId(raw: number): CommentId {
+  return { kind: 'gitlab', raw: String(raw) };
+}

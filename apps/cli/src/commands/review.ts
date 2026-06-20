@@ -24,12 +24,27 @@ import {
   buildSarif,
   DEFAULT_SETTINGS,
   EngramMemoryStorage,
+  formatReviewComment,
   initializeDefaultTools,
+  REVIEW_COMMENT_MARKER,
   reviewPipeline,
   SqliteMemoryStorage,
   toolRegistry,
 } from 'ghagga-core';
+import {
+  type ChangeRequestRef,
+  GitHubForgeAdapter,
+  GitLabForgeAdapter,
+  StaticTokenProvider,
+} from 'ghagga-forge';
+import { createCliGitHubClientPort } from '../lib/cli-github-client-port.js';
+import {
+  createCliGitLabClientPort,
+  resolveGitLabApiBase,
+  resolveGitLabProjectId,
+} from '../lib/cli-gitlab-client-port.js';
 import { getConfigDir, getStoredToken } from '../lib/config.js';
+import { composeForgePostback, type ForgeComposition } from '../lib/forge-postback.js';
 import { getStagedDiff, resolveProjectId } from '../lib/git.js';
 import {
   createComment,
@@ -38,6 +53,9 @@ import {
   formatIssueBody,
   parseGitHubRemote,
 } from '../lib/github-api.js';
+import { parseGitLabRemote } from '../lib/gitlab-api.js';
+import { resolveMrToken } from '../lib/gitlab-token.js';
+import { resolvePrToken } from '../lib/pr-token.js';
 import { formatBoxSummary, formatMarkdownResult } from '../ui/format.js';
 import { resolveStepIcon } from '../ui/theme.js';
 import * as tui from '../ui/tui.js';
@@ -71,6 +89,18 @@ export interface ReviewOptions {
   enhance?: boolean;
   /** Create/update a GitHub issue: "new" or an issue number. */
   issue?: string;
+  /** Post the review summary back to a GitHub PR (PR number). */
+  pr?: number;
+  /** Post the review summary back to a GitLab MR (MR iid). */
+  mr?: number;
+  /**
+   * Make an explicitly-requested `--pr`/`--mr` post-back NON-blocking: a failed
+   * post-back (or missing token) is warned and the process still exits on the
+   * review's own status. Default false — `--pr`/`--mr` is a requested
+   * side-effect, so a failure to perform it is a job failure (non-zero exit) in
+   * CI.
+   */
+  prSoftFail?: boolean;
   // Extensible tool system flags (Phase 7)
   /** Tools to force-disable (repeatable --disable-tool) */
   disableTools: string[];
@@ -128,6 +158,15 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     // ── Mutual exclusivity check: --staged and --commit-msg ──
     if (options.staged && options.commitMsg) {
       tui.log.error('❌ --staged and --commit-msg are mutually exclusive. Use one or the other.');
+      process.exit(1);
+    }
+
+    // ── Mutual exclusivity check: --pr (GitHub) and --mr (GitLab) ──
+    // Defensive guard at the command layer: the CLI index.ts also blocks this, but
+    // reviewCommand() must not silently run GitLab and DROP --pr if a caller (or a
+    // future entrypoint) reaches it with both set.
+    if (options.pr != null && options.mr != null) {
+      tui.log.error('❌ --pr and --mr are mutually exclusive. Use one or the other.');
       process.exit(1);
     }
 
@@ -305,8 +344,27 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
       await handleIssueExport(result, options);
     }
 
-    // Step 7: Exit code — --exit-on-issues overrides default behavior
-    const exitCode = resolveExitCode(result, options.exitOnIssues ?? false);
+    // Step 6.6: Post the summary back to a GitHub PR (--pr) or GitLab MR (--mr).
+    // Composes WITH --issue and --output: all are independent outputs. Both route
+    // through the SHARED composeForgePostback helper (BL-CLI-FORGE-COMPOSITION).
+    // Returns false when an explicitly-requested post-back FAILED and soft-fail
+    // is OFF — that turns into a non-zero exit below (the requested job failed).
+    let prPostbackFailed = false;
+    if (options.pr != null) {
+      const ok = await handleForgePostback(result, options, 'github', options.pr);
+      prPostbackFailed = !ok && !(options.prSoftFail ?? false);
+    } else if (options.mr != null) {
+      const ok = await handleForgePostback(result, options, 'gitlab', options.mr);
+      prPostbackFailed = !ok && !(options.prSoftFail ?? false);
+    }
+
+    // Step 7: Exit code — pick the WORST (most-failing) of:
+    //   - the review's own exit code (--exit-on-issues / status-based), and
+    //   - the post-back outcome (non-zero when a required post-back failed).
+    // Worst = any non-zero wins; we never mask a review-found-issues code with 0,
+    // nor mask a post-back failure with a review PASS.
+    const reviewExitCode = resolveExitCode(result, options.exitOnIssues ?? false);
+    const exitCode = reviewExitCode !== 0 ? reviewExitCode : prPostbackFailed ? 1 : 0;
     if (!options.outputFormat) {
       tui.outro('Review complete');
     }
@@ -387,6 +445,209 @@ async function handleIssueExport(result: ReviewResult, options: ReviewOptions): 
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     tui.log.warn(`⚠️  Issue export failed: ${msg}`);
+  }
+}
+
+// ─── PR Post-Back ───────────────────────────────────────────────
+
+/** Per-forge label + token guidance + composition builder for the post-back. */
+interface ForgePostbackConfig {
+  /** Human label for the change request ("PR" / "MR"). */
+  label: string;
+  /** The flag that triggered this ("--pr" / "--mr"). */
+  flag: string;
+  /** The forge display name ("GitHub" / "GitLab"). */
+  forgeName: string;
+  /** Resolve the forge token (env-first, stored fallback). */
+  resolveToken: () => string | null;
+  /** The "set X / run ghagga login" guidance when no token resolves. */
+  tokenHint: string;
+  /**
+   * Resolve the DESTINATION host the token will be sent to (for the pre-POST
+   * stderr disclosure). For GitLab this is the REAL resolved API host (derived
+   * from the git remote + GITLAB_HOST / GITLAB_API_BASE overrides), so a
+   * poisoned `origin` exfiltration target is visible BEFORE the token leaves.
+   */
+  resolveTargetHost: () => string;
+  /** Build the forge adapter + canonical ref from a resolved token + number. */
+  buildComposition: (token: string, changeRequestNumber: number) => Promise<ForgeComposition>;
+}
+
+/** GitHub `--pr` composition (P3): owner/repo from the remote, GitHub adapter. */
+function githubPostbackConfig(): ForgePostbackConfig {
+  return {
+    label: 'PR',
+    flag: '--pr',
+    forgeName: 'GitHub',
+    resolveToken: resolvePrToken,
+    tokenHint: 'Set GITHUB_TOKEN (or GH_TOKEN) in your environment, or run `ghagga login`.',
+    // The CLI GitHub client targets api.github.com (no GHE base override today);
+    // disclose what the client actually hits.
+    resolveTargetHost: () => 'api.github.com',
+    async buildComposition(token, prNumber): Promise<ForgeComposition> {
+      // Resolve owner/repo from the git remote (same source as issue-export).
+      const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+      const { owner, repo } = parseGitHubRemote(remoteUrl);
+      // StaticTokenProvider satisfies the SAME credential seam the server worker
+      // uses (construction-site choice — no mint/refresh for a static token).
+      const resolvedToken = await new StaticTokenProvider(token).getToken();
+      const adapter = new GitHubForgeAdapter({
+        client: createCliGitHubClientPort(),
+        token: resolvedToken,
+        owner,
+        repo,
+      });
+      const ref: ChangeRequestRef = {
+        repo: { kind: 'github', nativeId: `${owner}/${repo}`, path: `${owner}/${repo}` },
+        iid: prNumber,
+      };
+      return { adapter, ref };
+    },
+  };
+}
+
+/**
+ * GitLab `--mr` composition (P4): resolve the NUMERIC project id from the remote
+ * path (R-GITLAB — path is mutable, id is canonical), build the GitLab adapter.
+ */
+function gitlabPostbackConfig(): ForgePostbackConfig {
+  return {
+    label: 'MR',
+    flag: '--mr',
+    forgeName: 'GitLab',
+    resolveToken: resolveMrToken,
+    tokenHint: 'Set GITLAB_TOKEN (or GL_TOKEN) in your environment, or run `ghagga login`.',
+    // Disclose the REAL resolved API host (remote host + GITLAB_HOST /
+    // GITLAB_API_BASE overrides) — the ACTUAL host the GITLAB_TOKEN is sent to.
+    // A poisoned `origin` (or override) therefore surfaces BEFORE the post.
+    resolveTargetHost: () => {
+      const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+      const { host } = parseGitLabRemote(remoteUrl);
+      return gitlabApiBaseHost(resolveGitLabApiBase(host));
+    },
+    async buildComposition(token, mrIid): Promise<ForgeComposition> {
+      const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+      // Self-hosted GitLab: derive the API base from the REMOTE host (with a
+      // GITLAB_HOST / GITLAB_API_BASE env override) so a self-managed instance
+      // works, not just gitlab.com.
+      const { host, projectPath } = parseGitLabRemote(remoteUrl);
+      const apiBase = resolveGitLabApiBase(host);
+      const resolvedToken = await new StaticTokenProvider(token).getToken();
+      // R-GITLAB: nativeId MUST be the numeric project id (GET /projects/:path).
+      const projectId = await resolveGitLabProjectId(projectPath, resolvedToken, apiBase);
+      const adapter = new GitLabForgeAdapter({
+        client: createCliGitLabClientPort(apiBase),
+        token: resolvedToken,
+        projectId,
+      });
+      const ref: ChangeRequestRef = {
+        repo: { kind: 'gitlab', nativeId: projectId, path: projectPath },
+        iid: mrIid,
+      };
+      return { adapter, ref };
+    },
+  };
+}
+
+/**
+ * Extract the bare host from a resolved GitLab API base (`https://<host>/api/v4`
+ * or a verbatim `GITLAB_API_BASE`). Used ONLY for the human-readable pre-POST
+ * disclosure line — falls back to the raw base if it cannot be URL-parsed (e.g. a
+ * malformed override) so the user still sees SOMETHING about the destination.
+ */
+function gitlabApiBaseHost(apiBase: string): string {
+  try {
+    return new URL(apiBase).host;
+  } catch {
+    return apiBase;
+  }
+}
+
+/**
+ * Handle `--pr` (GitHub) / `--mr` (GitLab): post (idempotently upsert) the review
+ * summary as a comment on the change request, routed through the SHARED
+ * {@link composeForgePostback} pipeline (BL-CLI-FORGE-COMPOSITION). The
+ * forge-specific glue (token resolver, remote parse, adapter, ref identity) is
+ * supplied by the per-forge {@link ForgePostbackConfig}; the find-stale→delete→
+ * repost idempotency lives inside the adapter + the forge-neutral
+ * {@link postSummaryComment}.
+ *
+ * Token resolution is env-first (CI/Jenkins) with stored-login fallback. Missing
+ * token is a hard, actionable error (unlike issue-export's soft-skip) because the
+ * flag is an explicit post-back request. A 401 with a static token is fatal —
+ * there is nothing to re-mint, so NO invalidate-retry is attempted.
+ *
+ * BLOCKING by default: the flag is an explicitly-requested side-effect, so
+ * failing to perform it (thrown error OR missing token) is a JOB failure. The
+ * review output is already emitted; we only signal the failure via the RETURN
+ * value so the caller folds it into the worst exit code. `--pr-soft-fail` flips
+ * this to the non-blocking behavior (warn + keep exit 0).
+ *
+ * @returns true when the summary was posted (or soft-fail-skipped), false when an
+ *          explicitly-requested post-back FAILED (token missing or error thrown).
+ */
+async function handleForgePostback(
+  result: ReviewResult,
+  options: ReviewOptions,
+  forge: 'github' | 'gitlab',
+  changeRequestNumber: number,
+): Promise<boolean> {
+  const softFail = options.prSoftFail ?? false;
+  const config = forge === 'github' ? githubPostbackConfig() : gitlabPostbackConfig();
+
+  // Render the body via core's formatter (PARITY with the server PR comment).
+  const body = formatReviewComment(result, { fileList: result.metadata.fileList });
+  const marker = { html: REVIEW_COMMENT_MARKER };
+
+  try {
+    // SECURITY HYGIENE: disclose the DESTINATION HOST on stderr BEFORE the POST
+    // fires, so the user sees where their token is going even if the post then
+    // fails/hangs. For GitLab the host is the REAL resolved API host (derived
+    // from the git remote + env overrides) — a poisoned `origin` that would
+    // exfiltrate the token is therefore visible. stderr ONLY (never stdout /
+    // SARIF): console.error regardless of --output, one line per post.
+    const targetHost = config.resolveTargetHost();
+    console.error(`→ Posting ${config.label} #${changeRequestNumber} review to ${targetHost}`);
+
+    const outcome = await composeForgePostback({
+      changeRequestNumber,
+      resolveToken: config.resolveToken,
+      buildComposition: config.buildComposition,
+      body,
+      marker,
+    });
+
+    if (outcome.kind === 'missing-token') {
+      const errMsg = `❌ ${config.flag} requires a ${config.forgeName} token. ${config.tokenHint}`;
+      if (softFail) {
+        if (options.outputFormat) console.error(errMsg);
+        else tui.log.warn(errMsg);
+        return true;
+      }
+      if (options.outputFormat) console.error(errMsg);
+      else tui.log.error(errMsg);
+      return false;
+    }
+
+    const { createdNativeId, deletedNativeIds } = outcome.result;
+    const stale = deletedNativeIds.length > 0 ? ` (replaced ${deletedNativeIds.length} stale)` : '';
+    issueLog(
+      options,
+      `✅ ${config.label} #${changeRequestNumber} summary posted (comment ${createdNativeId})${stale}`,
+    );
+    return true;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (softFail) {
+      issueLog(options, `⚠️  ${config.label} post-back failed (soft-fail, ignoring): ${msg}`);
+      return true;
+    }
+    // BLOCKING: surface the failure so the caller exits non-zero. The review
+    // output itself is already printed and is unaffected.
+    const failMsg = `❌ ${config.label} post-back failed: ${msg}`;
+    if (options.outputFormat) console.error(failMsg);
+    else tui.log.error(failMsg);
+    return false;
   }
 }
 

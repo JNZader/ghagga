@@ -124,6 +124,18 @@ program
   .option('--quick', 'Static analysis only — skip LLM review')
   .option('--enhance', 'Enable AI-powered post-analysis enhancement')
   .option(
+    '--pr <number>',
+    'Post (idempotently upsert) the review summary as a comment on a GitHub PR',
+  )
+  .option(
+    '--mr <number>',
+    'Post (idempotently upsert) the review summary as a comment on a GitLab MR',
+  )
+  .option(
+    '--pr-soft-fail',
+    'Make a failed --pr/--mr post-back non-blocking (warn + keep exit 0 instead of failing the job)',
+  )
+  .option(
     '--issue <target>',
     'Create/update a GitHub issue with review results (use "new" or issue number)',
   )
@@ -251,6 +263,32 @@ program
       options.apiKey = 'ollama';
     }
 
+    // ── Validate --pr / --mr (mutually exclusive positive ints) ──
+    if (options.pr != null && options.mr != null) {
+      tui.log.error('❌ --pr and --mr are mutually exclusive. Use one or the other.');
+      process.exit(1);
+    }
+
+    let prNumber: number | undefined;
+    if (options.pr != null) {
+      const parsed = Number.parseInt(options.pr, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        tui.log.error(`❌ Invalid --pr "${options.pr}". Provide a positive PR number.`);
+        process.exit(1);
+      }
+      prNumber = parsed;
+    }
+
+    let mrNumber: number | undefined;
+    if (options.mr != null) {
+      const parsed = Number.parseInt(options.mr, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        tui.log.error(`❌ Invalid --mr "${options.mr}". Provide a positive MR number.`);
+        process.exit(1);
+      }
+      mrNumber = parsed;
+    }
+
     // ── Resolve model default ─────────────────────────────────
     const provider = options.provider as LLMProvider;
     const model = options.model ?? DEFAULT_MODELS[provider];
@@ -275,6 +313,9 @@ program
       quick: options.quick ?? false,
       enhance: options.enhance ?? false,
       issue: options.issue,
+      pr: prNumber,
+      mr: mrNumber,
+      prSoftFail: options.prSoftFail ?? false,
       disableTools: options.disableTool ?? [],
       enableTools: options.enableTool ?? [],
       listTools: options.listTools ?? false,
@@ -368,6 +409,10 @@ interface ReviewCommandOptions {
   enhance?: boolean;
   // Issue export (Phase 6)
   issue?: string;
+  // PR/MR post-back (Phase 3/4: forge-agnostic)
+  pr?: string;
+  mr?: string;
+  prSoftFail?: boolean;
   // Extensible tool system flags (Phase 7)
   disableTool: string[];
   enableTool: string[];
