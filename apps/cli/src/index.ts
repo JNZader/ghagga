@@ -124,6 +124,10 @@ program
   .option('--quick', 'Static analysis only — skip LLM review')
   .option('--enhance', 'Enable AI-powered post-analysis enhancement')
   .option(
+    '--pr <number>',
+    'Post (idempotently upsert) the review summary as a comment on a GitHub PR',
+  )
+  .option(
     '--issue <target>',
     'Create/update a GitHub issue with review results (use "new" or issue number)',
   )
@@ -251,6 +255,17 @@ program
       options.apiKey = 'ollama';
     }
 
+    // ── Validate --pr (must be a positive integer) ────────────
+    let prNumber: number | undefined;
+    if (options.pr != null) {
+      const parsed = Number.parseInt(options.pr, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        tui.log.error(`❌ Invalid --pr "${options.pr}". Provide a positive PR number.`);
+        process.exit(1);
+      }
+      prNumber = parsed;
+    }
+
     // ── Resolve model default ─────────────────────────────────
     const provider = options.provider as LLMProvider;
     const model = options.model ?? DEFAULT_MODELS[provider];
@@ -275,6 +290,7 @@ program
       quick: options.quick ?? false,
       enhance: options.enhance ?? false,
       issue: options.issue,
+      pr: prNumber,
       disableTools: options.disableTool ?? [],
       enableTools: options.enableTool ?? [],
       listTools: options.listTools ?? false,
@@ -368,6 +384,8 @@ interface ReviewCommandOptions {
   enhance?: boolean;
   // Issue export (Phase 6)
   issue?: string;
+  // PR post-back (Phase 3: forge-agnostic)
+  pr?: string;
   // Extensible tool system flags (Phase 7)
   disableTool: string[];
   enableTool: string[];

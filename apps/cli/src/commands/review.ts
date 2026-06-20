@@ -24,11 +24,15 @@ import {
   buildSarif,
   DEFAULT_SETTINGS,
   EngramMemoryStorage,
+  formatReviewComment,
   initializeDefaultTools,
+  REVIEW_COMMENT_MARKER,
   reviewPipeline,
   SqliteMemoryStorage,
   toolRegistry,
 } from 'ghagga-core';
+import { GitHubForgeAdapter, StaticTokenProvider } from 'ghagga-forge';
+import { createCliGitHubClientPort } from '../lib/cli-github-client-port.js';
 import { getConfigDir, getStoredToken } from '../lib/config.js';
 import { getStagedDiff, resolveProjectId } from '../lib/git.js';
 import {
@@ -38,6 +42,8 @@ import {
   formatIssueBody,
   parseGitHubRemote,
 } from '../lib/github-api.js';
+import { postSummaryComment } from '../lib/pr-postback.js';
+import { resolvePrToken } from '../lib/pr-token.js';
 import { formatBoxSummary, formatMarkdownResult } from '../ui/format.js';
 import { resolveStepIcon } from '../ui/theme.js';
 import * as tui from '../ui/tui.js';
@@ -71,6 +77,8 @@ export interface ReviewOptions {
   enhance?: boolean;
   /** Create/update a GitHub issue: "new" or an issue number. */
   issue?: string;
+  /** Post the review summary back to a GitHub PR (PR number). */
+  pr?: number;
   // Extensible tool system flags (Phase 7)
   /** Tools to force-disable (repeatable --disable-tool) */
   disableTools: string[];
@@ -305,6 +313,12 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
       await handleIssueExport(result, options);
     }
 
+    // Step 6.6: Post the summary back to a GitHub PR (if --pr is set).
+    // Composes WITH --issue and --output: all three are independent outputs.
+    if (options.pr != null) {
+      await handlePrPostback(result, options);
+    }
+
     // Step 7: Exit code — --exit-on-issues overrides default behavior
     const exitCode = resolveExitCode(result, options.exitOnIssues ?? false);
     if (!options.outputFormat) {
@@ -387,6 +401,82 @@ async function handleIssueExport(result: ReviewResult, options: ReviewOptions): 
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     tui.log.warn(`⚠️  Issue export failed: ${msg}`);
+  }
+}
+
+// ─── PR Post-Back ───────────────────────────────────────────────
+
+/**
+ * Handle --pr flag: post (idempotently upsert) the review summary as a comment
+ * on a GitHub PR via the forge adapter.
+ *
+ * FORGE-NEUTRAL by construction: the GitHub specifics (client port, owner/repo,
+ * adapter type) are assembled HERE; the actual post-back is routed through the
+ * forge-agnostic {@link postSummaryComment} so P4 can add `--mr` by building a
+ * GitLab adapter + a `gitlab`-kind ref and calling the SAME function.
+ *
+ * Token resolution: env GITHUB_TOKEN > GH_TOKEN > stored login. Missing token is
+ * a hard, actionable error here (unlike issue-export's soft-skip) because --pr is
+ * an explicit post-back request. A 401 with a static token is fatal/clear — there
+ * is nothing to re-mint, so NO invalidate-retry is attempted.
+ *
+ * Failures are non-blocking — the review result is already emitted; a post-back
+ * failure must not change the review's exit semantics.
+ */
+async function handlePrPostback(result: ReviewResult, options: ReviewOptions): Promise<void> {
+  const prNumber = options.pr;
+  if (prNumber == null) return;
+
+  // 1. Resolve token (env-first for CI/Jenkins, stored fallback for interactive).
+  const token = resolvePrToken();
+  if (!token) {
+    const errMsg =
+      '❌ --pr requires a GitHub token. Set GITHUB_TOKEN (or GH_TOKEN) in your ' +
+      'environment, or run `ghagga login`.';
+    if (options.outputFormat) console.error(errMsg);
+    else tui.log.error(errMsg);
+    return;
+  }
+
+  try {
+    // 2. Resolve owner/repo from the git remote (same source as issue-export).
+    const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+    const { owner, repo } = parseGitHubRemote(remoteUrl);
+
+    // 3. Build the forge adapter over the CLI's own GitHub client port + a
+    //    fixed-token credential source (StaticTokenProvider — no mint/refresh).
+    //    The adapter consumes the raw token; StaticTokenProvider satisfies the
+    //    SAME credential seam the server worker uses (construction-site choice).
+    const credentialProvider = new StaticTokenProvider(token);
+    const resolvedToken = await credentialProvider.getToken();
+    const adapter = new GitHubForgeAdapter({
+      client: createCliGitHubClientPort(),
+      token: resolvedToken,
+      owner,
+      repo,
+    });
+
+    // 4. Render the body via core's formatter (PARITY with the server PR comment).
+    const body = formatReviewComment(result, {
+      fileList: result.metadata.fileList,
+    });
+
+    // 5. Route through the forge-neutral post-back (find stale → delete → post).
+    const ref = {
+      repo: { kind: 'github' as const, nativeId: `${owner}/${repo}`, path: `${owner}/${repo}` },
+      iid: prNumber,
+    };
+    const marker = { html: REVIEW_COMMENT_MARKER };
+    const { commentId, deletedNativeIds } = await postSummaryComment(adapter, ref, body, marker);
+
+    const stale = deletedNativeIds.length > 0 ? ` (replaced ${deletedNativeIds.length} stale)` : '';
+    issueLog(
+      options,
+      `✅ PR #${prNumber} summary posted (comment ${String(commentId.raw)})${stale}`,
+    );
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    issueLog(options, `⚠️  PR post-back failed: ${msg}`);
   }
 }
 
