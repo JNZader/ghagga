@@ -33,6 +33,23 @@ export interface GitLabNote {
 }
 
 /**
+ * The GitLab text-diff position payload for a discussion (`position_type=text`).
+ *
+ * Mirrors the GitLab discussions API `position[...]` fields. `oldPath`/`newPath`
+ * are BOTH required by GitLab for a text diff note (they coincide for a
+ * non-renamed file). At least one of `oldLine`/`newLine` must be set.
+ */
+export interface GitLabDiffPosition {
+  baseSha: string;
+  headSha: string;
+  startSha: string;
+  oldPath: string;
+  newPath: string;
+  oldLine?: number;
+  newLine?: number;
+}
+
+/**
  * The set of GitLab REST functions the {@link GitLabForgeAdapter} depends on.
  *
  * Calls are project-id + MR-iid positional (the GitLab MR API path is
@@ -64,4 +81,21 @@ export interface GitLabClientPort {
     body: string,
     token: string,
   ): Promise<void>;
+
+  /**
+   * Create a diff-anchored MR DISCUSSION (`POST /merge_requests/:iid/discussions`
+   * with `position[position_type]=text`). Used by `publishInline` when the
+   * caller supplies a {@link GitLabDiffPosition}. Returns the GitLab-native
+   * numeric id of the discussion's FIRST note (so it boxes like a note id).
+   *
+   * OPTIONAL: an injected client MAY omit this (older CLI builds). When absent,
+   * `publishInline` degrades a positioned comment to a plain `path:line` note.
+   */
+  createMrDiscussion?(
+    projectId: string,
+    mrIid: number,
+    body: string,
+    position: GitLabDiffPosition,
+    token: string,
+  ): Promise<{ id: number }>;
 }

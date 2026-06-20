@@ -110,6 +110,7 @@ export { StaticTokenProvider } from './adapters/github/static-token-provider.js'
 // post-back routes through, so `--mr` reuses the P3 plumbing unchanged.
 export type {
   GitLabClientPort,
+  GitLabDiffPosition,
   GitLabNote,
 } from './adapters/gitlab/gitlab-client-port.js';
 export type { GitLabForgeAdapterDeps } from './adapters/gitlab/gitlab-forge-adapter.js';

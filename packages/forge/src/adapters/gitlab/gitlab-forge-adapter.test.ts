@@ -204,6 +204,102 @@ describe('GitLabForgeAdapter — publishInline partial failure (R-LEAK-PUBLISH /
     expect(report).toEqual({ posted: [], failed: [] });
     expect(client.createMrNote).not.toHaveBeenCalled();
   });
+
+  it('no position → degrades to a plain path:line note (createMrNote)', async () => {
+    const client = makeClient({ createMrNote: vi.fn().mockResolvedValue({ id: 42 }) });
+    const adapter = makeAdapter(client);
+    const report = await adapter.publishInline(ref, [{ path: 'a.ts', line: 9, body: 'hi' }]);
+    expect(report.posted).toEqual([{ kind: 'gitlab', raw: '42' }]);
+    // body carries the path:line anchor prefix; discussion API untouched.
+    const [, , body] = (client.createMrNote as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(body).toContain('`a.ts:9`');
+    expect(body).toContain('hi');
+  });
+});
+
+describe('GitLabForgeAdapter — publishInline positioned discussion (FIX C)', () => {
+  it('position present + client supports discussions → uses createMrDiscussion', async () => {
+    const createMrDiscussion = vi.fn().mockResolvedValue({ id: 777 });
+    const client = makeClient({ createMrDiscussion });
+    const adapter = makeAdapter(client);
+
+    const report = await adapter.publishInline(ref, [
+      {
+        path: 'src/new.ts',
+        line: 12,
+        side: 'new',
+        body: 'anchored',
+        position: { baseSha: 'b', headSha: 'h', startSha: 's', newLine: 12 },
+      },
+    ]);
+
+    expect(report.posted).toEqual([{ kind: 'gitlab', raw: '777' }]);
+    expect(client.createMrNote).not.toHaveBeenCalled();
+    expect(createMrDiscussion).toHaveBeenCalledWith(
+      PROJECT_ID,
+      MR_IID,
+      'anchored',
+      {
+        baseSha: 'b',
+        headSha: 'h',
+        startSha: 's',
+        // both paths default to `path` for a non-renamed file.
+        oldPath: 'src/new.ts',
+        newPath: 'src/new.ts',
+        newLine: 12,
+      },
+      TOKEN,
+    );
+  });
+
+  it('renamed file → forwards distinct oldPath/newPath to the discussion', async () => {
+    const createMrDiscussion = vi.fn().mockResolvedValue({ id: 888 });
+    const client = makeClient({ createMrDiscussion });
+    const adapter = makeAdapter(client);
+
+    await adapter.publishInline(ref, [
+      {
+        path: 'src/renamed.ts',
+        oldPath: 'src/old.ts',
+        newPath: 'src/renamed.ts',
+        line: 3,
+        body: 'rename note',
+        position: { baseSha: 'b', headSha: 'h', startSha: 's', oldLine: 2, newLine: 3 },
+      },
+    ]);
+
+    expect(createMrDiscussion).toHaveBeenCalledWith(
+      PROJECT_ID,
+      MR_IID,
+      'rename note',
+      {
+        baseSha: 'b',
+        headSha: 'h',
+        startSha: 's',
+        oldPath: 'src/old.ts',
+        newPath: 'src/renamed.ts',
+        oldLine: 2,
+        newLine: 3,
+      },
+      TOKEN,
+    );
+  });
+
+  it('position present but client LACKS discussion support → degrades to a note', async () => {
+    // makeClient() has no createMrDiscussion (optional) → degrade path.
+    const client = makeClient({ createMrNote: vi.fn().mockResolvedValue({ id: 5 }) });
+    const adapter = makeAdapter(client);
+    const report = await adapter.publishInline(ref, [
+      {
+        path: 'a.ts',
+        line: 1,
+        body: 'x',
+        position: { baseSha: 'b', headSha: 'h', startSha: 's', newLine: 1 },
+      },
+    ]);
+    expect(report.posted).toEqual([{ kind: 'gitlab', raw: '5' }]);
+    expect(client.createMrNote).toHaveBeenCalledOnce();
+  });
 });
 
 describe('GitLabForgeAdapter — auth-error surfacing (401/403 → ForgeAuthError)', () => {

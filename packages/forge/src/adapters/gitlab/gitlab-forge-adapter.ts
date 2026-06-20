@@ -23,14 +23,15 @@
  *
  * SCOPE — v1 deliverable is the SUMMARY COMMENT (upsertSummaryComment). The
  * adapter also implements {@link InlineCapable.publishInline} to satisfy
- * R-LEAK-PUBLISH: it posts N INDEPENDENT MR notes, returning a
+ * R-LEAK-PUBLISH: it posts N INDEPENDENT inline posts, returning a
  * {@link PublishReport} where partial failure is FIRST-CLASS (never swallowed).
- * V2-DEFERRED: full inline POSITIONING (anchoring each note to a diff line via
- * `position{base_sha, head_sha, start_sha, old_line, new_line}` — the GitLab
- * discussion API). v1 posts each inline comment as a plain MR note carrying its
- * `path:line` prefix in the body; the partial-failure SEMANTICS (report shape +
- * independent-post + never-swallow) are fully implemented now. `diffRefs` plumbing
- * for true anchoring lands in v2.
+ * INLINE POSITIONING: when an {@link InlineComment} carries `position` and the
+ * injected client supports `createMrDiscussion`, v1 posts a TRUE diff-anchored
+ * discussion (`position[position_type]=text` + the three SHAs + old/new line +
+ * old/new path). When `position` is absent (or the client lacks discussion
+ * support) it degrades to a plain MR note carrying the `path:line` prefix in the
+ * body. The public {@link InlineComment} type carries `position` + `oldPath`/
+ * `newPath` regardless, so broadening positioned coverage needs NO API change.
  *
  * COMMENT IDs: `upsertSummaryComment` returns PLAIN GitLab-native numeric ids
  * (boxing happens caller-LOCAL via {@link gitlabCommentId}). `publishInline`
@@ -183,10 +184,11 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
     const deleted: number[] = [];
     if (matchIds.length > 0) {
       // latest = last marker note; the rest are stale. Delete latest FIRST then
-      // stale, mirroring the GitHub adapter's baseline order.
+      // stale, mirroring the GitHub adapter's baseline order. (Guaranteed
+      // non-empty inside this `matchIds.length > 0` branch.)
       const latestId = matchIds[matchIds.length - 1];
       const staleIds = matchIds.slice(0, -1);
-      const ordered = latestId == null ? staleIds : [latestId, ...staleIds];
+      const ordered = [latestId, ...staleIds];
       for (const noteId of ordered) {
         try {
           await this.#client.deleteMrNote(this.#projectId, ref.iid, noteId, this.#token);
@@ -216,19 +218,26 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
   // ─── InlineCapable ─────────────────────────────────────────────
 
   /**
-   * Publish a batch of inline comments as N INDEPENDENT MR notes (R-LEAK-PUBLISH).
+   * Publish a batch of inline comments as N INDEPENDENT posts (R-LEAK-PUBLISH).
    *
-   * PARTIAL FAILURE IS FIRST-CLASS: GitLab posts each note independently, so each
-   * create is wrapped in its own try/catch. A failure records `{index, error}`
+   * PARTIAL FAILURE IS FIRST-CLASS: GitLab posts each comment independently, so
+   * each create is wrapped in its own try/catch. A failure records `{index, error}`
    * into `failed` and the loop CONTINUES — failures are NEVER swallowed and never
    * abort the remaining posts. Successes are boxed into `CommentId` (kind:'gitlab')
    * and collected into `posted`.
    *
-   * V2-DEFERRED: true line-anchoring via the GitLab discussion `position{}` API
-   * (base_sha/head_sha/start_sha/old_line/new_line from {@link UnifiedDiff.diffRefs}).
-   * v1 posts each comment as a plain MR note with a `path:line` body prefix so the
-   * information is not lost; the partial-failure REPORT SHAPE + independent-post
-   * semantics — the load-bearing R-LEAK-PUBLISH contract — are fully delivered now.
+   * POSITION HANDLING (v1):
+   * - When a comment carries `position` AND the injected client implements
+   *   `createMrDiscussion`, the adapter posts a TRUE diff-anchored discussion
+   *   (`position[position_type]=text` with the three SHAs + old/new line +
+   *   old/new path — renames are honored via `oldPath`/`newPath`, defaulting to
+   *   `path`). The boxed id is the discussion's first-note id.
+   * - Otherwise (no `position`, or a client without discussion support) it
+   *   degrades to a plain MR note carrying a `path:line` body prefix so the
+   *   anchor info is not lost. Either way the partial-failure REPORT SHAPE +
+   *   independent-post semantics — the load-bearing R-LEAK-PUBLISH contract —
+   *   hold. The public {@link InlineComment} type carries `position` regardless,
+   *   so no future API change is needed to broaden positioned coverage.
    */
   async publishInline(ref: ChangeRequestRef, comments: InlineComment[]): Promise<PublishReport> {
     const posted: PublishReport['posted'] = [];
@@ -237,17 +246,10 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
     for (let index = 0; index < comments.length; index++) {
       const comment = comments[index];
       if (comment == null) continue;
-      // v1: encode the anchor in the body (true position{} anchoring is v2).
-      const noteBody = `\`${comment.path}:${comment.line}\`\n\n${comment.body}`;
       try {
-        const created = await this.#client.createMrNote(
-          this.#projectId,
-          ref.iid,
-          noteBody,
-          this.#token,
-        );
+        const created = await this.#postInline(ref, comment);
         if (created?.id == null) {
-          throw new TypeError('createMrNote returned no id (expected { id: number })');
+          throw new TypeError('inline post returned no id (expected { id: number })');
         }
         posted.push(gitlabCommentId(created.id));
       } catch (error) {
@@ -262,5 +264,37 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
     }
 
     return { posted, failed };
+  }
+
+  /**
+   * Post a single inline comment: a TRUE diff-anchored discussion when the
+   * comment carries `position` AND the client supports it, else a degraded
+   * `path:line` plain note. Throws on a missing id (the caller records it as a
+   * per-comment failure).
+   */
+  #postInline(ref: ChangeRequestRef, comment: InlineComment): Promise<{ id: number }> {
+    const createDiscussion = this.#client.createMrDiscussion;
+    if (comment.position && typeof createDiscussion === 'function') {
+      return createDiscussion.call(
+        this.#client,
+        this.#projectId,
+        ref.iid,
+        comment.body,
+        {
+          baseSha: comment.position.baseSha,
+          headSha: comment.position.headSha,
+          startSha: comment.position.startSha,
+          // GitLab requires BOTH paths for a text diff note; default to `path`.
+          oldPath: comment.oldPath ?? comment.path,
+          newPath: comment.newPath ?? comment.path,
+          ...(comment.position.oldLine != null ? { oldLine: comment.position.oldLine } : {}),
+          ...(comment.position.newLine != null ? { newLine: comment.position.newLine } : {}),
+        },
+        this.#token,
+      );
+    }
+    // Degrade: encode the anchor in the body as a plain note.
+    const noteBody = `\`${comment.path}:${comment.line}\`\n\n${comment.body}`;
+    return this.#client.createMrNote(this.#projectId, ref.iid, noteBody, this.#token);
   }
 }
