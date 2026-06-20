@@ -132,6 +132,61 @@ describe('postSummaryComment via CLI port + GitHubForgeAdapter', () => {
   });
 });
 
+describe('CLI GitHub port — findExistingComment pagination (backlog #6)', () => {
+  beforeEach(() => mockFetch.mockReset());
+
+  function makeComments(count: number, startId = 0, markerAt?: number) {
+    return Array.from({ length: count }, (_, i) => ({
+      id: startId + i,
+      body:
+        i === markerAt ? `summary ${startId + i} ${REVIEW_COMMENT_MARKER}` : `noise ${startId + i}`,
+    }));
+  }
+
+  it('single page (< 100 comments) → exactly one list call, no extra fetch', async () => {
+    const port = createCliGitHubClientPort();
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, makeComments(20, 0)));
+    const result = await port.findExistingComment('acme', 'widgets', 42, 'tok');
+    expect(result).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0] as string).toContain('page=1');
+  });
+
+  it('multi-page → full page 1 forces page 2 fetch; stale-on-page-2 found + deleted (no duplicate)', async () => {
+    // page 1: 100 comments, NO marker → must fetch page 2; page 2 carries the stale marker.
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, makeComments(100, 0)));
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, makeComments(15, 100, 5))); // marker id 105
+    // adapter deletes the found stale (105) then reposts fresh.
+    mockFetch.mockResolvedValueOnce(jsonResponse(204, {})); // delete 105
+    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 777 })); // repost
+
+    const adapter = buildAdapter();
+    const result = await postSummaryComment(adapter, REF, 'body', MARKER);
+
+    expect(result.deletedNativeIds).toEqual([105]);
+    expect(result.createdNativeId).toBe(777);
+    expect(mockFetch.mock.calls[0][0] as string).toContain('page=1');
+    expect(mockFetch.mock.calls[1][0] as string).toContain('page=2');
+    const delCall = mockFetch.mock.calls[2] as [string, RequestInit];
+    expect(delCall[0]).toContain('/issues/comments/105');
+    expect(delCall[1].method).toBe('DELETE');
+  });
+
+  it('safety bound → stops at MAX_PAGES (50) and warns instead of looping forever', async () => {
+    for (let page = 0; page < 50; page++) {
+      mockFetch.mockResolvedValueOnce(jsonResponse(200, makeComments(100, page * 100)));
+    }
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const port = createCliGitHubClientPort();
+    const result = await port.findExistingComment('acme', 'widgets', 42, 'tok');
+    expect(result).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(50);
+    expect(mockFetch.mock.calls[49][0] as string).toContain('page=50');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MAX_PAGES (50)'));
+    warnSpy.mockRestore();
+  });
+});
+
 describe('CLI port stub safety (read members never hit in --pr flow)', () => {
   it('the --pr post-back never invokes any stubbed read member', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(200, []));

@@ -262,7 +262,12 @@ export async function findExistingComment(
 ): Promise<{ latestId: number; staleIds: number[] } | null> {
   const MARKER = '<!-- ghagga-review -->';
   const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
-  const MAX_PAGES = 5;
+  // Paginate until exhausted (a page with < 100 items is the last page). The cap
+  // is a safety upper bound so a pathological PR can't loop forever: 50 pages ×
+  // 100/page = 5000 comments. If hit, we log rather than silently truncate — a
+  // stale marker beyond the bound could otherwise produce a DUPLICATE comment.
+  // (Was 5 pages / 500 items; raised to close that duplicate edge — backlog #6.)
+  const MAX_PAGES = 50;
 
   return githubCircuitBreaker.execute(async () => {
     const allMatchIds: number[] = [];
@@ -294,6 +299,15 @@ export async function findExistingComment(
       }
 
       if (comments.length < 100) break;
+
+      if (page === MAX_PAGES) {
+        // Reached the safety bound with a still-full last page: there may be
+        // more comments (and a stale marker) we did not scan. Surface it so a
+        // duplicate-comment outcome is at least observable, not silent.
+        console.warn(
+          `[ghagga] findExistingComment hit MAX_PAGES (${MAX_PAGES}) for ${owner}/${repo}#${prNumber}; comment listing may be truncated`,
+        );
+      }
     }
 
     if (allMatchIds.length === 0) return null;

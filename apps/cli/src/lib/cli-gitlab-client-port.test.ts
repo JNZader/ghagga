@@ -252,6 +252,63 @@ describe('CLI GitLab port — self-hosted API base (FIX A)', () => {
   });
 });
 
+describe('CLI GitLab port — listMrNotes pagination (backlog #6)', () => {
+  beforeEach(() => mockFetch.mockReset());
+
+  function makeNotes(count: number, startId = 0, markerAt?: number) {
+    return Array.from({ length: count }, (_, i) => ({
+      id: startId + i,
+      body: i === markerAt ? `summary ${startId + i} ${MARKER.html}` : `noise ${startId + i}`,
+    }));
+  }
+
+  it('single page (< 100 notes) → exactly one list call, no extra fetch', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, makeNotes(20, 0)));
+    const port = createCliGitLabClientPort();
+    const notes = await port.listMrNotes('12345', 7, 'glpat');
+    expect(notes).toHaveLength(20);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('page=1');
+  });
+
+  it('multi-page → full page 1 forces page 2 fetch; stale-on-page-2 found + deleted (no duplicate)', async () => {
+    // page 1: 100 notes, NO marker → must fetch page 2; page 2 carries the stale marker.
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, makeNotes(100, 0)));
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, makeNotes(15, 100, 5))); // marker id 105
+    // adapter then deletes the found stale (id 105) and reposts fresh.
+    mockFetch.mockResolvedValueOnce(jsonResponse(204, {})); // delete 105
+    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 999 })); // repost
+
+    const adapter = buildAdapter();
+    const result = await postSummaryComment(adapter, REF, 'body', MARKER);
+
+    // Stale on page 2 WAS found and deleted — not duplicated.
+    expect(result.deletedNativeIds).toEqual([105]);
+    expect(result.createdNativeId).toBe(999);
+    // page 1 + page 2 list calls happened.
+    expect(mockFetch.mock.calls[0][0] as string).toContain('page=1');
+    expect(mockFetch.mock.calls[1][0] as string).toContain('page=2');
+    const delCall = mockFetch.mock.calls[2] as [string, RequestInit];
+    expect(delCall[0]).toContain('/notes/105');
+    expect(delCall[1].method).toBe('DELETE');
+  });
+
+  it('safety bound → stops at MAX_PAGES (50) and warns instead of looping forever', async () => {
+    for (let page = 0; page < 50; page++) {
+      mockFetch.mockResolvedValueOnce(jsonResponse(200, makeNotes(100, page * 100)));
+    }
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const port = createCliGitLabClientPort();
+    const notes = await port.listMrNotes('12345', 7, 'glpat');
+    expect(notes).toHaveLength(5000);
+    expect(mockFetch).toHaveBeenCalledTimes(50);
+    expect(mockFetch.mock.calls[49][0] as string).toContain('page=50');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MAX_PAGES (50)'));
+    warnSpy.mockRestore();
+  });
+});
+
 describe('CLI GitLab port — createMrDiscussion (FIX C true positioning)', () => {
   beforeEach(() => mockFetch.mockReset());
 

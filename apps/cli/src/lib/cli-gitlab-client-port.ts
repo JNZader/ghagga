@@ -125,9 +125,13 @@ export async function resolveGitLabProjectId(
 export function createCliGitLabClientPort(apiBase = 'https://gitlab.com/api/v4'): GitLabClientPort {
   return {
     async listMrNotes(projectId, mrIid, token): Promise<GitLabNote[]> {
-      // Paginate defensively (100/page, up to 5 pages) like the GitHub port.
+      // Paginate until exhausted (a page with < 100 items is the last page),
+      // like the GitHub port. MAX_PAGES is a safety upper bound (50 × 100 = 5000
+      // notes) so a pathological MR can't loop forever; if hit we log rather
+      // than silently truncate, since a stale marker beyond the bound would
+      // yield a DUPLICATE note. (Was 5 pages / 500 items — backlog #6.)
       const baseUrl = `${apiBase}/projects/${projectId}/merge_requests/${mrIid}/notes`;
-      const MAX_PAGES = 5;
+      const MAX_PAGES = 50;
       const out: GitLabNote[] = [];
       for (let page = 1; page <= MAX_PAGES; page++) {
         const url = `${baseUrl}?per_page=100&page=${page}&sort=asc&order_by=created_at`;
@@ -141,6 +145,11 @@ export function createCliGitLabClientPort(apiBase = 'https://gitlab.com/api/v4')
           out.push({ id: note.id, body: note.body });
         }
         if (notes.length < 100) break;
+        if (page === MAX_PAGES) {
+          console.warn(
+            `[ghagga] listMrNotes hit MAX_PAGES (${MAX_PAGES}) for project ${projectId} MR !${mrIid}; note listing may be truncated`,
+          );
+        }
       }
       return out;
     },

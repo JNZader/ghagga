@@ -102,7 +102,12 @@ export function createCliGitHubClientPort(): GitHubClientPort {
       token,
     ): Promise<{ latestId: number; staleIds: number[] } | null> {
       const baseUrl = `${API_BASE}/repos/${owner}/${repo}/issues/${prNumber}/comments`;
-      const MAX_PAGES = 5;
+      // Paginate until exhausted (a page with < 100 items is the last page).
+      // MAX_PAGES is a safety upper bound (50 × 100 = 5000 comments) so a
+      // pathological PR can't loop forever; if hit we log rather than silently
+      // truncate, since a stale marker beyond the bound would yield a DUPLICATE
+      // comment. (Was 5 pages / 500 items — backlog #6.)
+      const MAX_PAGES = 50;
       const allMatchIds: number[] = [];
 
       for (let page = 1; page <= MAX_PAGES; page++) {
@@ -120,6 +125,11 @@ export function createCliGitHubClientPort(): GitHubClientPort {
           }
         }
         if (comments.length < 100) break;
+        if (page === MAX_PAGES) {
+          console.warn(
+            `[ghagga] findExistingComment hit MAX_PAGES (${MAX_PAGES}) for ${owner}/${repo}#${prNumber}; comment listing may be truncated`,
+          );
+        }
       }
 
       if (allMatchIds.length === 0) return null;
