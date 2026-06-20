@@ -66,6 +66,42 @@ async function failOn(res: Response, action: string): Promise<never> {
   );
 }
 
+/**
+ * Resolve the GitHub NUMERIC repo id from an owner/name pair (forge identity).
+ *
+ * `GET /repos/{owner}/{repo}` → `.id`. owner/repo is the MUTABLE display path
+ * (a rename/transfer changes it but NOT the numeric id), so the numeric id is the
+ * canonical {@link RepoRef.nativeId}. This MIRRORS the GitLab `--mr` flow's
+ * {@link resolveGitLabProjectId} (one pre-construction call that turns the mutable
+ * path into the immutable id). It is NOT part of the {@link GitHubClientPort} — the
+ * adapter's actual API calls still key on owner/repo from its ctor; nativeId is
+ * identity metadata only.
+ *
+ * @returns the numeric repo id as a STRING (RepoRef.nativeId is a string,
+ *   consistent with GitLab's `String(id)`).
+ */
+export async function resolveGitHubRepoId(
+  owner: string,
+  repo: string,
+  token: string,
+): Promise<string> {
+  const url = `${API_BASE}/repos/${owner}/${repo}`;
+  const res = await fetch(url, {
+    headers: apiHeaders(token),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) await failOn(res, 'resolving repo id');
+  const data = (await res.json()) as { id: number };
+  if (typeof data.id !== 'number') {
+    throw new GitHubApiError(
+      `GitHub API error resolving repo id: response had no numeric "id" for "${owner}/${repo}"`,
+      res.status,
+      JSON.stringify(data),
+    );
+  }
+  return String(data.id);
+}
+
 /** Thrown by every stubbed port member so an accidental call is loud, not silent. */
 function unsupported(member: string): never {
   throw new Error(

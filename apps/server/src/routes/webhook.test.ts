@@ -272,6 +272,9 @@ describe('pull_request event handling', () => {
     expect(jobData.installationId).toBe(999);
     expect(jobData.repoFullName).toBe('owner/repo');
     expect(jobData.prNumber).toBe(42);
+    // IMMUTABLE numeric GitHub repo id threaded for FREE from the webhook payload
+    // (payload.repository.id) → worker uses it for RepoRef.nativeId, no DB/API call.
+    expect(jobData.githubRepoId).toBe(12345);
     // reviewId propagated to BullMQ job
     expect(jobData.reviewId).toBe(json.reviewId);
   });
@@ -494,6 +497,8 @@ describe('issue_comment event handling', () => {
     expect(jobData.triggerCommentId).toBe(777);
     expect(jobData.headSha).toBe('pr-head-sha-abc');
     expect(jobData.baseBranch).toBe('main');
+    // IMMUTABLE numeric GitHub repo id threaded for FREE from payload.repository.id.
+    expect(jobData.githubRepoId).toBe(12345);
     // reviewId propagated to BullMQ job
     expect(jobData.reviewId).toBe(json.reviewId);
   });

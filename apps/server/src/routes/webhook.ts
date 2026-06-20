@@ -341,6 +341,9 @@ async function handlePullRequest(
     repoFullName: payload.repository.full_name,
     prNumber: payload.number,
     repositoryId: repo.id,
+    // IMMUTABLE numeric GitHub repo id, free from the webhook payload — threaded
+    // to the worker for RepoRef.nativeId (no DB lookup / API call on the worker).
+    githubRepoId: payload.repository.id,
     headSha: payload.pull_request.head.sha,
     baseBranch: payload.pull_request.base.ref,
     prAuthor: payload.pull_request.user.login,
@@ -471,7 +474,11 @@ async function handleIssueComment(
     // Canonical forge-agnostic refs (mirror review.ts repoRef/changeRef shape).
     const repoRef = {
       kind: 'github' as const,
-      nativeId: `${owner}/${repoName}`,
+      // IMMUTABLE numeric GitHub repo id (a rename changes owner/repo but not the
+      // id). The webhook payload carries `repository.id` (numeric) for FREE — no
+      // API call. `path` is the MUTABLE display label. Stringified to match
+      // RepoRef.nativeId's string type (consistent with GitLab's String(id)).
+      nativeId: String(payload.repository.id),
       path: payload.repository.full_name,
     };
     const changeRef = { repo: repoRef, iid: prNumber };
@@ -525,6 +532,9 @@ async function handleIssueComment(
     repoFullName: payload.repository.full_name,
     prNumber,
     repositoryId: repo.id,
+    // IMMUTABLE numeric GitHub repo id, free from the webhook payload — threaded
+    // to the worker for RepoRef.nativeId (no DB lookup / API call on the worker).
+    githubRepoId: payload.repository.id,
     triggerCommentId: payload.comment.id,
     headSha,
     baseBranch,
