@@ -215,6 +215,49 @@ describe('GitLabForgeAdapter — publishInline partial failure (R-LEAK-PUBLISH /
     expect(body).toContain('`a.ts:9`');
     expect(body).toContain('hi');
   });
+
+  it('TAGS a 401 failure with {status:401, authFailure:true} (distinct from transient)', async () => {
+    // index 0 = 401 auth failure (status-tagged like the client throws);
+    // index 1 = transient 500 (status but NOT auth); index 2 = no-status throw.
+    let call = -1;
+    const client = makeClient({
+      createMrNote: vi.fn(async () => {
+        call++;
+        if (call === 0) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+        if (call === 1) throw Object.assign(new Error('server error'), { status: 500 });
+        throw new Error('network down');
+      }),
+    });
+    const adapter = makeAdapter(client);
+    const report = await adapter.publishInline(ref, [
+      { path: 'a.ts', line: 1, body: 'c0' },
+      { path: 'b.ts', line: 2, body: 'c1' },
+      { path: 'c.ts', line: 3, body: 'c2' },
+    ]);
+
+    expect(report.posted).toEqual([]);
+    expect(report.failed).toEqual([
+      { index: 0, error: 'Unauthorized', status: 401, authFailure: true },
+      { index: 1, error: 'server error', status: 500 },
+      { index: 2, error: 'network down' },
+    ]);
+    // partial-failure semantics intact: every note attempted independently.
+    expect(client.createMrNote).toHaveBeenCalledTimes(3);
+  });
+
+  it('TAGS a 403 failure as authFailure too', async () => {
+    const client = makeClient({
+      createMrNote: vi.fn(async () => {
+        throw Object.assign(new Error('Forbidden'), { status: 403 });
+      }),
+    });
+    const adapter = makeAdapter(client);
+    const report = await adapter.publishInline(ref, [{ path: 'a.ts', line: 1, body: 'c0' }]);
+
+    expect(report.failed).toEqual([
+      { index: 0, error: 'Forbidden', status: 403, authFailure: true },
+    ]);
+  });
 });
 
 describe('GitLabForgeAdapter — publishInline positioned discussion (FIX C)', () => {

@@ -240,6 +240,23 @@ export interface PublishFailure {
   index: number;
   /** Human-readable error. */
   error: string;
+  /**
+   * The HTTP status of the underlying forge failure, when one was carried on the
+   * thrown error (e.g. `401`, `403`, `422`, `500`). Absent when the failure had
+   * no usable numeric status (e.g. a network error or a non-HTTP throw). Lets a
+   * caller distinguish an auth failure from a transient/server one WITHOUT
+   * string-parsing {@link PublishFailure.error}. Additive + optional, so older
+   * consumers are unaffected.
+   */
+  status?: number;
+  /**
+   * `true` when the failure was an AUTHENTICATION/authorization failure (HTTP
+   * 401/403). A static-token forge cannot recover from this (nothing to re-mint),
+   * so a caller can surface "fix your token" guidance instead of treating it as a
+   * retry-able transient. Absent/`false` for non-auth failures. Additive +
+   * optional.
+   */
+  authFailure?: boolean;
 }
 
 /**
