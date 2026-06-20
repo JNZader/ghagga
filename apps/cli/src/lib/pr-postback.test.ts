@@ -7,7 +7,7 @@
  */
 
 import { REVIEW_COMMENT_MARKER } from 'ghagga-core';
-import { GitHubForgeAdapter, githubCommentId } from 'ghagga-forge';
+import { GitHubForgeAdapter } from 'ghagga-forge';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCliGitHubClientPort } from './cli-github-client-port.js';
 import { postSummaryComment } from './pr-postback.js';
@@ -53,7 +53,7 @@ describe('postSummaryComment via CLI port + GitHubForgeAdapter', () => {
     const body = `${REVIEW_COMMENT_MARKER}\n## body`;
     const result = await postSummaryComment(adapter, REF, body, MARKER);
 
-    expect(result.commentId).toEqual(githubCommentId(9001));
+    expect(result.createdNativeId).toBe(9001);
     expect(result.deletedNativeIds).toEqual([]);
 
     // 1 list call + 1 post call.
@@ -85,7 +85,7 @@ describe('postSummaryComment via CLI port + GitHubForgeAdapter', () => {
     const adapter = buildAdapter();
     const result = await postSummaryComment(adapter, REF, 'body', MARKER);
 
-    expect(result.commentId).toEqual(githubCommentId(400));
+    expect(result.createdNativeId).toBe(400);
     // delete order: latest first, then stale.
     expect(result.deletedNativeIds).toEqual([300, 100]);
 
@@ -106,6 +106,18 @@ describe('postSummaryComment via CLI port + GitHubForgeAdapter', () => {
     await expect(postSummaryComment(adapter, REF, 'body', MARKER)).rejects.toThrow();
     // exactly one call — no retry loop.
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes an AbortSignal (timeout) on every fetch so CI cannot hang', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, []));
+    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 1 }));
+    const adapter = buildAdapter();
+    await postSummaryComment(adapter, REF, 'body', MARKER);
+    // Both the list (find) and the post fetch carry an abort signal.
+    for (const call of mockFetch.mock.calls) {
+      const init = call[1] as RequestInit;
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
   });
 
   it('sends Bearer auth + version headers on the post', async () => {

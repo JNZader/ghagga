@@ -109,7 +109,7 @@ describe('3.3 Jenkins+GitHub: --pr post-back + SARIF coexist; issue-export CLI-l
       { html: REVIEW_COMMENT_MARKER },
     );
 
-    expect(postRes.commentId.raw).toBe('7777');
+    expect(postRes.createdNativeId).toBe(7777);
     // Body carries the marker (parity with server PR comment).
     const [, postInit] = mockFetch.mock.calls[1] as [string, RequestInit];
     expect(JSON.parse(postInit.body as string).body).toContain(REVIEW_COMMENT_MARKER);

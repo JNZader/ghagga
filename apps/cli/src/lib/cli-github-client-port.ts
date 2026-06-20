@@ -29,16 +29,23 @@
  * byte-compatible with the server post-back.
  */
 
+import { REVIEW_COMMENT_MARKER } from 'ghagga-core';
 import type { GitHubClientPort, GitHubReactionContent } from 'ghagga-forge';
 import { GitHubApiError } from './github-api.js';
 
-// The fixed marker the summary body carries (ghagga-core REVIEW_COMMENT_MARKER).
-// Re-stated here (not imported) to avoid a value import solely for a constant and
-// to keep this file's only forge/core coupling a type import. It MUST stay in
-// lockstep with ghagga-core's REVIEW_COMMENT_MARKER.
-const REVIEW_MARKER = '<!-- ghagga-review -->';
+// The fixed marker the summary body carries. SINGLE SOURCE OF TRUTH: imported
+// from ghagga-core (REVIEW_COMMENT_MARKER) so the stale-comment match here can
+// never drift from the marker the body actually carries.
+const REVIEW_MARKER = REVIEW_COMMENT_MARKER;
 
 const API_BASE = 'https://api.github.com';
+
+/**
+ * Per-request timeout for the CLI's GitHub fetch calls. Mirrors the server
+ * client's `AbortSignal.timeout(10_000)` so a slow/hung GitHub can never hang a
+ * CI job indefinitely — the fetch aborts and surfaces as a thrown error.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
 
 /** Shared auth/version headers — same shape as github-api.ts apiHeaders. */
 function apiHeaders(token: string): Record<string, string> {
@@ -81,6 +88,7 @@ export function createCliGitHubClientPort(): GitHubClientPort {
         method: 'POST',
         headers: apiHeaders(token),
         body: JSON.stringify({ body }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (!res.ok) await failOn(res, 'posting PR comment');
       const data = (await res.json()) as { id: number };
@@ -99,7 +107,10 @@ export function createCliGitHubClientPort(): GitHubClientPort {
 
       for (let page = 1; page <= MAX_PAGES; page++) {
         const url = `${baseUrl}?per_page=100&page=${page}`;
-        const res = await fetch(url, { headers: apiHeaders(token) });
+        const res = await fetch(url, {
+          headers: apiHeaders(token),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
         if (!res.ok) await failOn(res, 'listing PR comments');
 
         const comments = (await res.json()) as Array<{ id: number; body: string }>;
@@ -121,7 +132,11 @@ export function createCliGitHubClientPort(): GitHubClientPort {
 
     async deleteComment(owner, repo, commentId, token): Promise<void> {
       const url = `${API_BASE}/repos/${owner}/${repo}/issues/comments/${commentId}`;
-      const res = await fetch(url, { method: 'DELETE', headers: apiHeaders(token) });
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: apiHeaders(token),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       // The adapter's upsert tolerates delete failures (best-effort), but we still
       // surface a non-2xx so `deleted[]` only reflects genuinely-removed ids.
       if (!res.ok && res.status !== 404) await failOn(res, 'deleting PR comment');
@@ -133,6 +148,7 @@ export function createCliGitHubClientPort(): GitHubClientPort {
         method: 'PATCH',
         headers: apiHeaders(token),
         body: JSON.stringify({ body }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (!res.ok) await failOn(res, 'updating PR comment');
     },

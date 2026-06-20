@@ -10,28 +10,31 @@
  *   - a `CommentMarker`.
  *
  * It contains NO GitHub specifics: no owner/repo strings, no REST paths, no
- * github-native ids. All of that is encapsulated inside the adapter + its client
- * port. To add GitLab in P4, the command-level glue builds a GitLab adapter +
- * a `gitlab`-kind ref and calls THIS function unchanged.
+ * github-native ids, and no github-native boxing helper. All of that is
+ * encapsulated inside the adapter + its client port. To add GitLab in P4, the
+ * command-level glue builds a GitLab adapter + a `gitlab`-kind ref and calls
+ * THIS function UNCHANGED.
  *
  * Idempotency (find stale → delete all → post fresh) lives inside
- * `adapter.upsertSummaryComment`; this wrapper just boxes the returned native id
- * into the canonical `CommentId` (forge-agnostic boxing helper) and returns it.
+ * `adapter.upsertSummaryComment`; this wrapper just relays the adapter's RAW
+ * forge-native result. Boxing into a canonical `CommentId` (if ever needed) is
+ * the kind-specific HANDLER's concern, not this neutral seam's — the only
+ * consumer today logs the raw id, so we do not box at all.
  */
 
-import type { ChangeRequestRef, CommentId, CommentMarker, ForgeAdapterBase } from 'ghagga-forge';
-import { githubCommentId } from 'ghagga-forge';
+import type { ChangeRequestRef, CommentMarker, ForgeAdapterBase } from 'ghagga-forge';
 
 export interface PostBackResult {
-  /** The canonical id of the summary comment that now exists. */
-  commentId: CommentId;
+  /** The forge-native id of the summary comment that now exists. */
+  createdNativeId: number;
   /** Forge-native ids of stale summary comments removed during the upsert. */
   deletedNativeIds: number[];
 }
 
 /**
  * Upsert the single GHAGGA summary comment on a change request via any forge
- * adapter. Forge-neutral — usable for GitHub PRs (P3) and GitLab MRs (P4).
+ * adapter. Forge-neutral — usable for GitHub PRs (P3) and GitLab MRs (P4)
+ * UNCHANGED (zero GitHub coupling).
  *
  * @param adapter the forge adapter (built by the command glue per forge).
  * @param ref     the canonical change-request ref (PR/MR).
@@ -45,11 +48,11 @@ export async function postSummaryComment(
   marker: CommentMarker,
 ): Promise<PostBackResult> {
   const result = await adapter.upsertSummaryComment(ref, body, marker);
-  // Box the forge-native id into the canonical CommentId. The boxing helper is
-  // forge-specific (githubCommentId) only because P3 ships GitHub; P4 will box
-  // via the GitLab helper at this same seam (selected by ref.repo.kind).
+  // Relay the adapter's RAW forge-native result. No boxing here — this keeps
+  // the seam fully forge-agnostic so P4 reuses it unchanged. The kind-specific
+  // handler boxes/logs as it sees fit.
   return {
-    commentId: githubCommentId(result.created),
+    createdNativeId: result.created,
     deletedNativeIds: result.deleted,
   };
 }

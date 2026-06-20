@@ -79,6 +79,13 @@ export interface ReviewOptions {
   issue?: string;
   /** Post the review summary back to a GitHub PR (PR number). */
   pr?: number;
+  /**
+   * Make an explicitly-requested `--pr` post-back NON-blocking: a failed
+   * post-back (or missing token) is warned and the process still exits on the
+   * review's own status. Default false — `--pr` is a requested side-effect, so a
+   * failure to perform it is a job failure (non-zero exit) in CI.
+   */
+  prSoftFail?: boolean;
   // Extensible tool system flags (Phase 7)
   /** Tools to force-disable (repeatable --disable-tool) */
   disableTools: string[];
@@ -315,12 +322,21 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
 
     // Step 6.6: Post the summary back to a GitHub PR (if --pr is set).
     // Composes WITH --issue and --output: all three are independent outputs.
+    // Returns false when an explicitly-requested post-back FAILED and soft-fail
+    // is OFF — that turns into a non-zero exit below (the requested job failed).
+    let prPostbackFailed = false;
     if (options.pr != null) {
-      await handlePrPostback(result, options);
+      const ok = await handlePrPostback(result, options);
+      prPostbackFailed = !ok && !(options.prSoftFail ?? false);
     }
 
-    // Step 7: Exit code — --exit-on-issues overrides default behavior
-    const exitCode = resolveExitCode(result, options.exitOnIssues ?? false);
+    // Step 7: Exit code — pick the WORST (most-failing) of:
+    //   - the review's own exit code (--exit-on-issues / status-based), and
+    //   - the post-back outcome (non-zero when a required post-back failed).
+    // Worst = any non-zero wins; we never mask a review-found-issues code with 0,
+    // nor mask a post-back failure with a review PASS.
+    const reviewExitCode = resolveExitCode(result, options.exitOnIssues ?? false);
+    const exitCode = reviewExitCode !== 0 ? reviewExitCode : prPostbackFailed ? 1 : 0;
     if (!options.outputFormat) {
       tui.outro('Review complete');
     }
@@ -420,12 +436,20 @@ async function handleIssueExport(result: ReviewResult, options: ReviewOptions): 
  * an explicit post-back request. A 401 with a static token is fatal/clear — there
  * is nothing to re-mint, so NO invalidate-retry is attempted.
  *
- * Failures are non-blocking — the review result is already emitted; a post-back
- * failure must not change the review's exit semantics.
+ * BLOCKING by default: `--pr` is an explicitly-requested side-effect, so failing
+ * to perform it (thrown error OR missing token) is a JOB failure. The review
+ * output is already emitted; we only signal the failure via the RETURN value so
+ * the caller can fold it into the worst exit code. `--pr-soft-fail` flips this to
+ * the old non-blocking behavior (warn + keep exit 0).
+ *
+ * @returns true when the summary was posted (or skipped cleanly), false when an
+ *          explicitly-requested post-back FAILED (token missing or error thrown).
  */
-async function handlePrPostback(result: ReviewResult, options: ReviewOptions): Promise<void> {
+async function handlePrPostback(result: ReviewResult, options: ReviewOptions): Promise<boolean> {
   const prNumber = options.pr;
-  if (prNumber == null) return;
+  if (prNumber == null) return true;
+
+  const softFail = options.prSoftFail ?? false;
 
   // 1. Resolve token (env-first for CI/Jenkins, stored fallback for interactive).
   const token = resolvePrToken();
@@ -433,9 +457,15 @@ async function handlePrPostback(result: ReviewResult, options: ReviewOptions): P
     const errMsg =
       '❌ --pr requires a GitHub token. Set GITHUB_TOKEN (or GH_TOKEN) in your ' +
       'environment, or run `ghagga login`.';
+    if (softFail) {
+      // Soft-fail: warn and let the review's own exit code stand.
+      if (options.outputFormat) console.error(errMsg);
+      else tui.log.warn(errMsg);
+      return true;
+    }
     if (options.outputFormat) console.error(errMsg);
     else tui.log.error(errMsg);
-    return;
+    return false;
   }
 
   try {
@@ -467,16 +497,28 @@ async function handlePrPostback(result: ReviewResult, options: ReviewOptions): P
       iid: prNumber,
     };
     const marker = { html: REVIEW_COMMENT_MARKER };
-    const { commentId, deletedNativeIds } = await postSummaryComment(adapter, ref, body, marker);
+    const { createdNativeId, deletedNativeIds } = await postSummaryComment(
+      adapter,
+      ref,
+      body,
+      marker,
+    );
 
     const stale = deletedNativeIds.length > 0 ? ` (replaced ${deletedNativeIds.length} stale)` : '';
-    issueLog(
-      options,
-      `✅ PR #${prNumber} summary posted (comment ${String(commentId.raw)})${stale}`,
-    );
+    issueLog(options, `✅ PR #${prNumber} summary posted (comment ${createdNativeId})${stale}`);
+    return true;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    issueLog(options, `⚠️  PR post-back failed: ${msg}`);
+    if (softFail) {
+      issueLog(options, `⚠️  PR post-back failed (soft-fail, ignoring): ${msg}`);
+      return true;
+    }
+    // BLOCKING: surface the failure so the caller exits non-zero. The review
+    // output itself is already printed and is unaffected.
+    const failMsg = `❌ PR post-back failed: ${msg}`;
+    if (options.outputFormat) console.error(failMsg);
+    else tui.log.error(failMsg);
+    return false;
   }
 }
 

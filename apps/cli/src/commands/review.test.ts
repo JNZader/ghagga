@@ -122,6 +122,10 @@ vi.mock('ghagga-core', () => {
 
   return {
     reviewPipeline: vi.fn(),
+    formatReviewComment: vi.fn().mockReturnValue('<!-- ghagga-review -->\nbody'),
+    formatBoxSummary: vi.fn().mockReturnValue([]),
+    REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
+    EngramMemoryStorage: { create: vi.fn() },
     buildSarif: vi.fn().mockReturnValue({
       $schema:
         'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',

@@ -128,6 +128,10 @@ program
     'Post (idempotently upsert) the review summary as a comment on a GitHub PR',
   )
   .option(
+    '--pr-soft-fail',
+    'Make a failed --pr post-back non-blocking (warn + keep exit 0 instead of failing the job)',
+  )
+  .option(
     '--issue <target>',
     'Create/update a GitHub issue with review results (use "new" or issue number)',
   )
@@ -291,6 +295,7 @@ program
       enhance: options.enhance ?? false,
       issue: options.issue,
       pr: prNumber,
+      prSoftFail: options.prSoftFail ?? false,
       disableTools: options.disableTool ?? [],
       enableTools: options.enableTool ?? [],
       listTools: options.listTools ?? false,
@@ -386,6 +391,7 @@ interface ReviewCommandOptions {
   issue?: string;
   // PR post-back (Phase 3: forge-agnostic)
   pr?: string;
+  prSoftFail?: boolean;
   // Extensible tool system flags (Phase 7)
   disableTool: string[];
   enableTool: string[];

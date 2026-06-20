@@ -205,8 +205,9 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
    * NOTE: `marker` is accepted for the port contract but is NOT threaded into
    * the client. The GitHub adapter currently matches the FIXED
    * `REVIEW_COMMENT_MARKER` (`<!-- ghagga-review -->`) hard-coded inside
-   * client.findExistingComment (a "stale ghagga comment" = bot-authored AND body
-   * contains that marker). This is baseline-faithful: threading `marker` into
+   * client.findExistingComment (a "stale ghagga comment" = any comment whose body
+   * contains that marker; author/bot status is NOT inspected). This is
+   * baseline-faithful: threading `marker` into
    * GitHubClientPort.findExistingComment is DEFERRED (would change the port
    * signature). Consequently, if review.ts (1.4) passes a `marker`, it MUST equal
    * the existing `REVIEW_COMMENT_MARKER` — any other value is silently ignored.
