@@ -40,6 +40,7 @@ import {
 import { createCliGitHubClientPort } from '../lib/cli-github-client-port.js';
 import {
   createCliGitLabClientPort,
+  resolveGitLabApiBase,
   resolveGitLabProjectId,
 } from '../lib/cli-gitlab-client-port.js';
 import { getConfigDir, getStoredToken } from '../lib/config.js';
@@ -157,6 +158,15 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     // ── Mutual exclusivity check: --staged and --commit-msg ──
     if (options.staged && options.commitMsg) {
       tui.log.error('❌ --staged and --commit-msg are mutually exclusive. Use one or the other.');
+      process.exit(1);
+    }
+
+    // ── Mutual exclusivity check: --pr (GitHub) and --mr (GitLab) ──
+    // Defensive guard at the command layer: the CLI index.ts also blocks this, but
+    // reviewCommand() must not silently run GitLab and DROP --pr if a caller (or a
+    // future entrypoint) reaches it with both set.
+    if (options.pr != null && options.mr != null) {
+      tui.log.error('❌ --pr and --mr are mutually exclusive. Use one or the other.');
       process.exit(1);
     }
 
@@ -499,17 +509,21 @@ function gitlabPostbackConfig(): ForgePostbackConfig {
     tokenHint: 'Set GITLAB_TOKEN (or GL_TOKEN) in your environment, or run `ghagga login`.',
     async buildComposition(token, mrIid): Promise<ForgeComposition> {
       const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
-      const { path } = parseGitLabRemote(remoteUrl);
+      // Self-hosted GitLab: derive the API base from the REMOTE host (with a
+      // GITLAB_HOST / GITLAB_API_BASE env override) so a self-managed instance
+      // works, not just gitlab.com.
+      const { host, projectPath } = parseGitLabRemote(remoteUrl);
+      const apiBase = resolveGitLabApiBase(host);
       const resolvedToken = await new StaticTokenProvider(token).getToken();
       // R-GITLAB: nativeId MUST be the numeric project id (GET /projects/:path).
-      const projectId = await resolveGitLabProjectId(path, resolvedToken);
+      const projectId = await resolveGitLabProjectId(projectPath, resolvedToken, apiBase);
       const adapter = new GitLabForgeAdapter({
-        client: createCliGitLabClientPort(),
+        client: createCliGitLabClientPort(apiBase),
         token: resolvedToken,
         projectId,
       });
       const ref: ChangeRequestRef = {
-        repo: { kind: 'gitlab', nativeId: projectId, path },
+        repo: { kind: 'gitlab', nativeId: projectId, path: projectPath },
         iid: mrIid,
       };
       return { adapter, ref };

@@ -44,11 +44,12 @@ vi.mock('node:fs', () => ({ readFileSync: vi.fn(), existsSync: vi.fn().mockRetur
 vi.mock('../lib/gitlab-token.js', () => ({ resolveMrToken: vi.fn() }));
 vi.mock('../lib/pr-postback.js', () => ({ postSummaryComment: vi.fn() }));
 vi.mock('../lib/gitlab-api.js', () => ({
-  parseGitLabRemote: vi.fn().mockReturnValue({ path: 'acme/widgets' }),
+  parseGitLabRemote: vi.fn().mockReturnValue({ host: 'gitlab.com', projectPath: 'acme/widgets' }),
   GitLabApiError: class extends Error {},
 }));
 vi.mock('../lib/cli-gitlab-client-port.js', () => ({
   createCliGitLabClientPort: vi.fn(),
+  resolveGitLabApiBase: vi.fn().mockReturnValue('https://gitlab.com/api/v4'),
   resolveGitLabProjectId: vi.fn().mockResolvedValue('12345'),
 }));
 
@@ -158,7 +159,11 @@ describe('reviewCommand — --mr post-back (P4, shared composition helper)', () 
     expect(gitlabCtor).toHaveBeenCalledOnce();
     expect(githubCtor).not.toHaveBeenCalled();
     expect(gitlabCtor).toHaveBeenCalledWith(expect.objectContaining({ projectId: '12345' }));
-    expect(mockResolveProjectId).toHaveBeenCalledWith('acme/widgets', 'glpat');
+    expect(mockResolveProjectId).toHaveBeenCalledWith(
+      'acme/widgets',
+      'glpat',
+      'https://gitlab.com/api/v4',
+    );
     // Post routed through the shared forge-neutral postSummaryComment.
     expect(mockPostSummaryComment).toHaveBeenCalledOnce();
     expect(exitSpy).toHaveBeenCalledWith(0);
@@ -192,6 +197,18 @@ describe('reviewCommand — --mr post-back (P4, shared composition helper)', () 
     await reviewCommand('.', defaultOptions({ mr: 7, prSoftFail: true, outputFormat: 'sarif' }));
 
     expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('both --pr AND --mr → defensive guard exits 1 BEFORE the pipeline runs (FIX D)', async () => {
+    mockResolveMrToken.mockReturnValue('glpat');
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ pr: 3, mr: 7, outputFormat: 'sarif' }));
+
+    // The guard fires FIRST: the first recorded exit is the guard's non-zero exit
+    // (in production process.exit terminates here; the test mock lets it fall
+    // through, so we assert on the FIRST exit call specifically).
+    expect(exitSpy.mock.calls[0]?.[0]).toBe(1);
   });
 
   it('does NOT mask a review-found-issues exit: --mr success + FAILED review → exit 1', async () => {
