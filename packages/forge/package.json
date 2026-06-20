@@ -1,7 +1,10 @@
 {
   "name": "ghagga-forge",
   "version": "3.0.0",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "description": "Forge-agnostic ports and domain types for GHAGGA (GitHub / GitLab / Gitea)",
   "author": "JNZader",
