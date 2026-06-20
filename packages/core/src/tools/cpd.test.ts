@@ -77,6 +77,37 @@ describe('runCpd', () => {
     );
   });
 
+  // ── BL-SARIF-STDOUT: diagnostics must go to stderr, never stdout ──
+
+  it('writes binary-detection diagnostics to stderr (not stdout) so SARIF/JSON stays clean', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    mockExecFile
+      // Both standalone-cpd paths (`cpd`, `/usr/local/bin/cpd`) fail → fall
+      // through to pmd, so the "Found pmd at" diagnostic fires.
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockRejectedValueOnce(new Error('not found'))
+      // pmd cpd --help succeeds (this is the binary)
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      .mockResolvedValueOnce({ stdout: 'pmd version', stderr: '' } as any)
+      // pmd cpd scan
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      .mockResolvedValueOnce({ stdout: makeCpdXml([]), stderr: '' } as any);
+
+    await runCpd('/project');
+
+    // No diagnostic was written to stdout.
+    expect(logSpy).not.toHaveBeenCalled();
+    // Both binary-detection diagnostic lines went to stderr.
+    const stderrText = errorSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(stderrText).toContain('[ghagga:cpd] Found pmd at:');
+    expect(stderrText).toContain('[ghagga:cpd] Binary found:');
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
   it('uses standalone cpd when available', async () => {
     mockExecFile
       // cpd --help succeeds
