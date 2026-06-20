@@ -90,10 +90,17 @@ graph TB
 
 Every review follows the same pipeline, regardless of entry point:
 
-```
-diff → validate → parse & filter → detect stacks → token budget
-     → static analysis + memory search → agent execution
-     → merge findings → persist memory → ReviewResult
+```mermaid
+flowchart LR
+  DIFF["diff"] --> VAL["validate"]
+  VAL --> PARSE["parse & filter"]
+  PARSE --> STACKS["detect stacks"]
+  STACKS --> BUDGET["token budget"]
+  BUDGET --> SA["static analysis + memory search"]
+  SA --> AGENTS["agent execution"]
+  AGENTS --> MERGE["merge findings"]
+  MERGE --> MEM["persist memory"]
+  MEM --> RESULT["ReviewResult"]
 ```
 
 The pipeline degrades gracefully: missing tools, unreachable memory, or an unconfigured LLM never hard-fail a review.
@@ -153,6 +160,24 @@ Five strategies with explicit cost/confidence tradeoffs:
 | `fan-out` | 5 independent lenses (security, typing, performance, a11y, error handling) merged by severity | ~5x | Broad category coverage, custom lenses |
 | `workflow` | 5 specialists in parallel + synthesis step | ~6x | Thorough multi-angle reviews |
 | `diagnostic` | Hypothesis-driven analysis with adaptive follow-up queries | varies | Digging into suspicious changes |
+
+`fan-out` is the multi-agent workhorse: independent lenses review the same diff in parallel, then findings are merged by severity into one result.
+
+```mermaid
+flowchart TD
+  DIFF["PR diff + memory context"] --> FO["fan-out mode"]
+  FO --> SEC["Security lens"]
+  FO --> TYP["Typing lens"]
+  FO --> PERF["Performance lens"]
+  FO --> A11Y["a11y lens"]
+  FO --> ERR["Error-handling lens"]
+  SEC --> MERGE["Merge by severity"]
+  TYP --> MERGE
+  PERF --> MERGE
+  A11Y --> MERGE
+  ERR --> MERGE
+  MERGE --> RESULT["Unified ReviewResult + health score"]
+```
 
 ## Static Analysis — Layer 0
 
