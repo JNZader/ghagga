@@ -29,7 +29,7 @@ jobs:
 
       - run: pnpm turbo test
 
-      # Publish in dependency order: db → core → cli
+      # Publish in dependency order: db → core → forge → cli
       # pnpm publish resolves workspace:^ → ^2.0.0 automatically
       - name: Publish ghagga-db
         run: pnpm publish --access public --no-git-checks --provenance
@@ -41,6 +41,13 @@ jobs:
       - name: Publish ghagga-core
         run: pnpm publish --access public --no-git-checks --provenance
         working-directory: packages/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Publish ghagga-forge
+        run: pnpm publish --access public --no-git-checks --provenance
+        working-directory: packages/forge
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
