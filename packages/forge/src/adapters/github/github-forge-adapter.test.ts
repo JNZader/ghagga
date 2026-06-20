@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { type ForgeAuthError, isForgeAuthError } from '../../errors.js';
 import type { ForgeAdapter, GraphReadCapable, ReactionCapable } from '../../ports/forge-adapter.js';
 import { REACTION_KIND } from '../../ports/forge-adapter.js';
 import type { ChangeRequestRef, CommentId, CommentMarker, RepoRef } from '../../types.js';
@@ -245,5 +246,62 @@ describe('GitHubForgeAdapter — capability shape', () => {
   it('does NOT implement publishInline (inline deferred)', () => {
     const adapter = makeAdapter(makeClient());
     expect('publishInline' in adapter).toBe(false);
+  });
+});
+
+// ─── 401/403 → ForgeAuthError reclassification (P2 401-recovery FIX 2) ──
+describe('GitHubForgeAdapter — auth-error surfacing (P2 401-recovery)', () => {
+  /** A GitHub-client-shaped error carrying an HTTP status (like GitHubApiError). */
+  function statusError(status: number, message = `boom ${status}`): Error {
+    return Object.assign(new Error(message), { status });
+  }
+
+  it('reclassifies a 401 from postComment as a ForgeAuthError (status preserved)', async () => {
+    const client = makeClient({
+      postComment: vi.fn().mockRejectedValue(statusError(401, 'GitHub API error posting comment')),
+    });
+    const adapter = makeAdapter(client);
+    const err = await adapter.upsertSummaryComment(ref, 'body', marker).catch((e) => e);
+    expect(isForgeAuthError(err)).toBe(true);
+    expect((err as ForgeAuthError).status).toBe(401);
+    // The original error is preserved as the cause for logging.
+    expect((err as ForgeAuthError).cause).toBeInstanceOf(Error);
+  });
+
+  it('reclassifies a 403 from findExistingComment as a ForgeAuthError', async () => {
+    const client = makeClient({
+      findExistingComment: vi.fn().mockRejectedValue(statusError(403)),
+    });
+    const adapter = makeAdapter(client);
+    const err = await adapter.upsertSummaryComment(ref, 'body', marker).catch((e) => e);
+    expect(isForgeAuthError(err)).toBe(true);
+    expect((err as ForgeAuthError).status).toBe(403);
+  });
+
+  it('reclassifies a 401 from a read (fetchDiff) as a ForgeAuthError', async () => {
+    const client = makeClient({
+      fetchPRDiff: vi.fn().mockRejectedValue(statusError(401)),
+    });
+    const adapter = makeAdapter(client);
+    const err = await adapter.fetchDiff(ref).catch((e) => e);
+    expect(isForgeAuthError(err)).toBe(true);
+  });
+
+  it('does NOT reclassify a non-auth (500) error — passes through unchanged', async () => {
+    const original = statusError(500, 'server exploded');
+    const client = makeClient({ postComment: vi.fn().mockRejectedValue(original) });
+    const adapter = makeAdapter(client);
+    const err = await adapter.upsertSummaryComment(ref, 'body', marker).catch((e) => e);
+    expect(isForgeAuthError(err)).toBe(false);
+    expect(err).toBe(original); // same instance, untouched
+  });
+
+  it('does NOT reclassify a status-less error — passes through unchanged', async () => {
+    const original = new Error('network down (no status)');
+    const client = makeClient({ postComment: vi.fn().mockRejectedValue(original) });
+    const adapter = makeAdapter(client);
+    const err = await adapter.upsertSummaryComment(ref, 'body', marker).catch((e) => e);
+    expect(isForgeAuthError(err)).toBe(false);
+    expect(err).toBe(original);
   });
 });

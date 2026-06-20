@@ -100,6 +100,16 @@ export class GitHubAppCredentialProvider implements ForgeCredentialProvider {
    */
   #inFlight: Promise<MintedInstallationToken> | null = null;
 
+  /**
+   * Monotonic generation counter, bumped on every {@link invalidate}. FIX 4
+   * (in-flight fence): a mint that STARTED before an `invalidate()` must NOT
+   * repopulate the cache when it resolves afterwards — its token belongs to a
+   * pre-invalidation generation (it may be the very token that just got revoked).
+   * Each `getToken` snapshots the generation at mint-start; on resolution it
+   * caches ONLY if the snapshot still matches the current generation.
+   */
+  #generation = 0;
+
   constructor(deps: GitHubAppCredentialProviderDeps) {
     this.#mint = deps.mint;
     this.#installationId = deps.installationId;
@@ -130,6 +140,13 @@ export class GitHubAppCredentialProvider implements ForgeCredentialProvider {
       return minted.token;
     }
 
+    // FIX 4: snapshot the generation at mint-START. If invalidate() bumps the
+    // generation while this mint is in flight, the resolution below will see a
+    // mismatch and DISCARD the result (a token from a pre-invalidation generation
+    // must not be re-cached). The token is still RETURNED to this caller (it is a
+    // fresh acquisition for them); it just isn't promoted to the shared cache.
+    const startGeneration = this.#generation;
+
     const inFlight = this.#mint(
       this.#installationId,
       this.#appId,
@@ -145,7 +162,13 @@ export class GitHubAppCredentialProvider implements ForgeCredentialProvider {
       // HARD-FAIL safety: only cache on success. On rejection we fall through to
       // the finally + the throw below — the cache is NEVER populated with a
       // stale/empty token, so the job fails fast.
-      this.#cached = minted;
+      //
+      // FIX 4 fence: only cache if no invalidate() happened during this mint.
+      // Otherwise discard (do not re-cache) — but still return the token to the
+      // caller who awaited this specific mint.
+      if (this.#generation === startGeneration) {
+        this.#cached = minted;
+      }
       return minted.token;
     } finally {
       // Clear the in-flight slot whether the mint resolved or rejected, so a
@@ -159,11 +182,20 @@ export class GitHubAppCredentialProvider implements ForgeCredentialProvider {
   /**
    * Drop the cached token so the NEXT `getToken()` re-mints. The caller invokes
    * this on a 401/403 auth failure (the token was revoked/rotated server-side
-   * before its advertised expiry). An in-flight mint is left untouched — it is
-   * already a fresh acquisition.
+   * before its advertised expiry).
+   *
+   * FIX 4 (in-flight fence): a mint that was ALREADY in flight when this is
+   * called will still RESOLVE (its awaiter gets that token), but it will NOT be
+   * re-cached — it belongs to a pre-invalidation generation and could be the very
+   * token that was just revoked. The next fresh `getToken()` therefore mints
+   * anew rather than reusing a possibly-revoked in-flight result.
    */
   invalidate(): void {
     this.#cached = null;
+    // FIX 4: bump the generation so any mint already IN FLIGHT (started before
+    // this call) will NOT repopulate the cache when it resolves — its token
+    // belongs to a now-superseded generation (possibly the just-revoked token).
+    this.#generation += 1;
   }
 
   /**

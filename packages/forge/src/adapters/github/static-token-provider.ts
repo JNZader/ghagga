@@ -27,4 +27,14 @@ export class StaticTokenProvider implements ForgeCredentialProvider {
   async getToken(): Promise<string> {
     return this.#token;
   }
+
+  /**
+   * No-op: a static provider has NO cache to drop. The fixed token cannot be
+   * re-acquired (there is nothing to mint), so a 401/403 here is terminal — but
+   * the method exists to satisfy the {@link ForgeCredentialProvider} port so the
+   * SAME 401-recovery call-site works regardless of which provider is wired.
+   */
+  invalidate(): void {
+    // intentionally empty — no cache, nothing to invalidate.
+  }
 }

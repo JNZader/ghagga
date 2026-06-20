@@ -68,6 +68,10 @@ export type {
 
 // ─── Ports: credentials & webhooks ──────────────────────────────
 
+// ─── Errors ─────────────────────────────────────────────────────
+// ForgeAuthError + isForgeAuthError: the typed 401/403 signal the worker catches
+// to drive the in-job credential re-mint + retry (P2 401-recovery seam).
+export { FORGE_AUTH_STATUSES, ForgeAuthError, getErrorStatus, isForgeAuthError } from './errors.js';
 export type { ForgeCredentialProvider } from './ports/credential-provider.js';
 export type { ForgeWebhookCodec } from './ports/webhook-codec.js';
 

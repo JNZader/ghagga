@@ -17,4 +17,17 @@ export interface ForgeCredentialProvider {
    * one rather than holding it indefinitely.
    */
   getToken(): Promise<string>;
+
+  /**
+   * Drop any cached token so the NEXT {@link getToken} re-acquires a fresh one.
+   *
+   * Callers invoke this on a forge auth failure (HTTP 401/403) — the token was
+   * revoked/rotated server-side BEFORE its advertised expiry, so the cache is
+   * stale even though it looks valid. This is the in-job recovery seam: catch a
+   * {@link ForgeAuthError}, `invalidate()`, re-`getToken()`, retry the call once.
+   *
+   * Implementations with NO cache (e.g. a fixed-token provider) implement this
+   * as a no-op — there is nothing to drop.
+   */
+  invalidate(): void;
 }

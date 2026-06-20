@@ -24,6 +24,7 @@
  */
 
 import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
+import { ForgeAuthError, getErrorStatus } from '../../errors.js';
 import type {
   ForgeAdapterBase,
   GraphReadCapable,
@@ -111,19 +112,46 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
     this.#repo = deps.repo;
   }
 
+  /**
+   * Run a client call, reclassifying a 401/403 failure as a {@link ForgeAuthError}.
+   *
+   * This is the SINGLE point where a GitHub auth failure (the token was rejected
+   * server-side) becomes the typed signal the worker catches to drive the in-job
+   * re-mint + retry (P2 401-recovery). NON-auth failures are rethrown UNCHANGED
+   * (not reclassified) so retry logic only fires for genuine auth failures.
+   *
+   * The status is read off the thrown error's `status` field (the GitHub client
+   * tags its errors with `GitHubApiError.status`). Errors with no usable status
+   * pass through untouched.
+   */
+  async #mapAuth<T>(call: () => Promise<T>): Promise<T> {
+    try {
+      return await call();
+    } catch (error) {
+      const status = getErrorStatus(error);
+      if (status === 401 || status === 403) {
+        throw new ForgeAuthError(
+          status,
+          error instanceof Error ? error.message : `Forge auth failure (HTTP ${status})`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+  }
+
   // ─── Base: reads ───────────────────────────────────────────────
 
   async fetchDiff(ref: ChangeRequestRef): Promise<UnifiedDiff> {
-    const text = await this.#client.fetchPRDiff(this.#owner, this.#repo, ref.iid, this.#token);
+    const text = await this.#mapAuth(() =>
+      this.#client.fetchPRDiff(this.#owner, this.#repo, ref.iid, this.#token),
+    );
     return { text };
   }
 
   async fetchChangeRequest(ref: ChangeRequestRef): Promise<ChangeRequest> {
-    const details = await this.#client.fetchPRDetails(
-      this.#owner,
-      this.#repo,
-      ref.iid,
-      this.#token,
+    const details = await this.#mapAuth(() =>
+      this.#client.fetchPRDetails(this.#owner, this.#repo, ref.iid, this.#token),
     );
     return {
       ref,
@@ -141,7 +169,9 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
     // ChangedFile fields are OMITTED (honest absence) rather than fabricated as
     // zeros. The caller flattens via project.ts (toFileList) which only consumes
     // `path`.
-    const paths = await this.#client.getPRFileList(this.#owner, this.#repo, ref.iid, this.#token);
+    const paths = await this.#mapAuth(() =>
+      this.#client.getPRFileList(this.#owner, this.#repo, ref.iid, this.#token),
+    );
     return paths.map((path) => ({ path }));
   }
 
@@ -150,11 +180,8 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
     // endpoint wrapper does NOT expose sha/author, so those optional Commit fields
     // are OMITTED (honest absence) rather than fabricated as empty strings. The
     // caller flattens via toCommitMessages which only consumes `message`.
-    const messages = await this.#client.getPRCommitMessages(
-      this.#owner,
-      this.#repo,
-      ref.iid,
-      this.#token,
+    const messages = await this.#mapAuth(() =>
+      this.#client.getPRCommitMessages(this.#owner, this.#repo, ref.iid, this.#token),
     );
     return messages.map((message) => ({ message }));
   }
@@ -189,11 +216,8 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
     body: string,
     _marker: CommentMarker,
   ): Promise<UpsertSummaryResult> {
-    const existing = await this.#client.findExistingComment(
-      this.#owner,
-      this.#repo,
-      ref.iid,
-      this.#token,
+    const existing = await this.#mapAuth(() =>
+      this.#client.findExistingComment(this.#owner, this.#repo, ref.iid, this.#token),
     );
 
     const deleted: number[] = [];
@@ -218,13 +242,10 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
     }
 
     // Always post a fresh comment at the bottom. This is the ONLY error that
-    // propagates — without it there would be no summary at all.
-    const posted = await this.#client.postComment(
-      this.#owner,
-      this.#repo,
-      ref.iid,
-      body,
-      this.#token,
+    // propagates — without it there would be no summary at all. A 401/403 here is
+    // reclassified to ForgeAuthError so the worker can re-mint + retry (P2).
+    const posted = await this.#mapAuth(() =>
+      this.#client.postComment(this.#owner, this.#repo, ref.iid, body, this.#token),
     );
 
     // Robustness guard: the real client.postComment returns `{ id }` or throws,
@@ -251,12 +272,14 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
    * client.addCommentReaction (which is itself best-effort / non-throwing).
    */
   async addReaction(commentId: CommentId, reaction: ReactionKind): Promise<void> {
-    await this.#client.addCommentReaction(
-      this.#owner,
-      this.#repo,
-      toNativeCommentId(commentId),
-      toGitHubReaction(reaction),
-      this.#token,
+    await this.#mapAuth(() =>
+      this.#client.addCommentReaction(
+        this.#owner,
+        this.#repo,
+        toNativeCommentId(commentId),
+        toGitHubReaction(reaction),
+        this.#token,
+      ),
     );
   }
 

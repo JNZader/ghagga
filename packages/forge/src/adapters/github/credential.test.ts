@@ -263,6 +263,65 @@ describe('GitHubAppCredentialProvider (task 2.1) — R-TOKEN', () => {
     await provider.getToken();
     expect(mint).toHaveBeenCalledWith(7777, 'app-id', 'PEM', undefined);
   });
+
+  it('exposes invalidate() as part of the ForgeCredentialProvider port', () => {
+    const { provider } = makeProvider();
+    const asPort: ForgeCredentialProvider = provider;
+    expect(typeof asPort.invalidate).toBe('function');
+  });
+
+  // ── FIX 4: in-flight fence — a mint that started BEFORE invalidate() must
+  //    NOT repopulate the cache when it resolves AFTER the invalidate. ────────
+  it('does NOT re-cache an in-flight mint when invalidate() races it (generation fence)', async () => {
+    const clock = makeClock(0);
+    // Gate mint #1 so we can invalidate() WHILE it is in flight, then resolve it.
+    let release1!: (v: MintedInstallationToken) => void;
+    const gated1 = new Promise<MintedInstallationToken>((res) => {
+      release1 = res;
+    });
+    let mintCalls = 0;
+    const mint = vi.fn((): Promise<MintedInstallationToken> => {
+      mintCalls += 1;
+      if (mintCalls === 1) return gated1;
+      // mint #2 (the post-invalidation re-mint) resolves immediately.
+      return Promise.resolve({ token: 'ghs_mint-2', expiresAtMs: clock.now() + 60 * MINUTE });
+    });
+    const provider = new GitHubAppCredentialProvider({
+      mint,
+      installationId: 1,
+      appId: 'a',
+      privateKey: 'p',
+      now: clock.now,
+    });
+
+    // Start mint #1 (in flight, not yet resolved).
+    const inflight = provider.getToken();
+    expect(mint).toHaveBeenCalledTimes(1);
+
+    // A 401 arrives mid-mint → caller invalidates the (currently empty) cache.
+    provider.invalidate();
+
+    // NOW mint #1 resolves — its token belongs to the PRE-invalidation generation
+    // and MUST NOT be cached. The awaiting caller still RECEIVES it (fresh for it).
+    release1({ token: 'ghs_mint-1', expiresAtMs: clock.now() + 60 * MINUTE });
+    await expect(inflight).resolves.toBe('ghs_mint-1');
+
+    // The fence held: the cache was NOT repopulated with mint-1, so the next
+    // getToken() must RE-MINT (→ mint-2) rather than hand back the stale mint-1.
+    const next = await provider.getToken();
+    expect(next).toBe('ghs_mint-2');
+    expect(mint).toHaveBeenCalledTimes(2);
+  });
+
+  it('a normal (un-raced) in-flight mint DOES cache (fence does not over-fire)', async () => {
+    // Sanity counter-test: without an invalidate during the mint, the result IS
+    // cached and reused — proving the fence only blocks the raced case.
+    const { provider, mint, clock } = makeProvider({ ttlMs: 60 * MINUTE });
+    expect(await provider.getToken()).toBe('ghs_mint-1');
+    clock.advance(1 * MINUTE);
+    expect(await provider.getToken()).toBe('ghs_mint-1'); // cached, no re-mint
+    expect(mint).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('StaticTokenProvider (task 2.2) — R-TOKEN CLI path', () => {
@@ -277,6 +336,16 @@ describe('StaticTokenProvider (task 2.2) — R-TOKEN CLI path', () => {
     expect(await provider.getToken()).toBe('ghp_static-pat');
     expect(await provider.getToken()).toBe('ghp_static-pat');
     expect(await provider.getToken()).toBe('ghp_static-pat');
+  });
+
+  it('invalidate() is a no-op: the token is unchanged afterwards (no cache to drop)', async () => {
+    const provider = new StaticTokenProvider('ghp_static-pat');
+    // Satisfies the port and must not throw.
+    const asPort: ForgeCredentialProvider = provider;
+    expect(typeof asPort.invalidate).toBe('function');
+    expect(() => provider.invalidate()).not.toThrow();
+    // Same fixed token before AND after invalidate() — nothing was dropped.
+    await expect(provider.getToken()).resolves.toBe('ghp_static-pat');
   });
 });
 
