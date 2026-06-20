@@ -78,18 +78,27 @@ export { MapForgeRegistry, UnknownForgeError } from './registry.js';
 
 // ─── Adapters: GitHub ───────────────────────────────────────────
 
+// Credential providers (real, P2 — replace the P1 temporary source).
+// GitHubAppCredentialProvider: TTL-cached/singleflight installation-token source
+// for the server worker. StaticTokenProvider: fixed-token source for the CLI/
+// GitLab path. Both satisfy ForgeCredentialProvider so the auth strategy is a
+// pure construction-site choice (R-TOKEN provider-swap).
+export type { GitHubAppCredentialProviderDeps } from './adapters/github/github-app-credential-provider.js';
+export {
+  BUDGET_SECONDS,
+  GitHubAppCredentialProvider,
+  SKEW_SECONDS,
+} from './adapters/github/github-app-credential-provider.js';
 export type {
   GitHubClientPort,
   GitHubInstallationTokenMint,
+  GitHubInstallationTokenMintWithExpiry,
   GitHubReactionContent,
+  MintedInstallationToken,
 } from './adapters/github/github-client-port.js';
 export type { GitHubForgeAdapterDeps } from './adapters/github/github-forge-adapter.js';
 export { GitHubForgeAdapter } from './adapters/github/github-forge-adapter.js';
-
-// NOTE: TemporaryGitHubTokenSource is INTENTIONALLY NOT exported here. It is a
-// temporary P1-only credential provider and lives behind the non-public
-// `ghagga-forge/internal` entry point so the temporary auth path cannot ossify
-// into a second public surface. See src/internal.ts + the TODO(P2-REMOVE) marker.
+export { StaticTokenProvider } from './adapters/github/static-token-provider.js';
 
 // ─── Identity helpers ───────────────────────────────────────────
 

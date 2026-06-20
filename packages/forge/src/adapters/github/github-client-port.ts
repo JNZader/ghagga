@@ -114,6 +114,11 @@ export interface GitHubClientPort {
  * Mints a GitHub installation access token. Matches `getInstallationToken` in
  * `apps/server/src/github/client.ts`. Injected into
  * {@link TemporaryGitHubTokenSource}.
+ *
+ * @deprecated P2 — superseded by {@link GitHubInstallationTokenMintWithExpiry}.
+ * This token-ONLY shape carries no `expires_at`, so it cannot drive the TTL cache
+ * in `GitHubAppCredentialProvider`. It is retained ONLY for the soon-to-be-deleted
+ * {@link TemporaryGitHubTokenSource}; remove it together with that class.
  */
 export type GitHubInstallationTokenMint = (
   installationId: number,
@@ -121,3 +126,33 @@ export type GitHubInstallationTokenMint = (
   privateKey: string,
   options?: { repositoryIds?: number[] },
 ) => Promise<string>;
+
+/**
+ * A minted installation token plus its absolute expiry.
+ *
+ * `expiresAtMs` is the token's expiry as an epoch-millis timestamp (comparable to
+ * `Date.now()`), derived by the composition root from the GitHub access-token
+ * response `expires_at` (an ISO-8601 string the REST API already returns).
+ */
+export interface MintedInstallationToken {
+  /** The installation access token string. */
+  token: string;
+  /** Absolute expiry, epoch millis (comparable to {@link Date.now}). */
+  expiresAtMs: number;
+}
+
+/**
+ * Mints a GitHub installation access token AND reports its expiry (P2).
+ *
+ * This is the expiry-carrying mint the {@link GitHubAppCredentialProvider} TTL
+ * cache requires. The underlying `client.getInstallationToken` returns ONLY the
+ * token string today (it discards the GitHub `expires_at`); the composition root
+ * (apps/server) adapts it to ALSO surface the expiry so the forge package can
+ * cache without importing apps/server (dependency inversion, R-AGNOSTIC).
+ */
+export type GitHubInstallationTokenMintWithExpiry = (
+  installationId: number,
+  appId: string,
+  privateKey: string,
+  options?: { repositoryIds?: number[] },
+) => Promise<MintedInstallationToken>;
