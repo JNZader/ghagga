@@ -83,7 +83,7 @@ async function findCpdBinary(): Promise<{ cmd: string; args: string[] } | null> 
   for (const cmd of pmdPaths) {
     try {
       await execFileAsync(cmd, ['cpd', '--help'], { timeout: 5_000 });
-      console.log(`[ghagga:cpd] Found pmd at: ${cmd}`);
+      console.error(`[ghagga:cpd] Found pmd at: ${cmd}`);
       return { cmd, args: ['cpd'] };
     } catch {
       // Continue to next
@@ -113,7 +113,7 @@ export async function runCpd(
       executionTimeMs: Date.now() - start,
     };
   }
-  console.log(`[ghagga:cpd] Binary found: ${binary.cmd} ${binary.args.join(' ')}`);
+  console.error(`[ghagga:cpd] Binary found: ${binary.cmd} ${binary.args.join(' ')}`);
 
   try {
     const args = [

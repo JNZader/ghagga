@@ -67,7 +67,7 @@ export async function runSemgrep(
   try {
     // Check if semgrep is available
     const { stdout: semVer } = await execFileAsync(semgrepBin, ['--version'], { timeout: 10_000 });
-    console.log(`[ghagga:semgrep] Version check OK (${semgrepBin}): ${semVer.trim()}`);
+    console.error(`[ghagga:semgrep] Version check OK (${semgrepBin}): ${semVer.trim()}`);
   } catch (err: unknown) {
     const errObj = err as Record<string, unknown>;
     const stderr = errObj?.stderr ?? '';
@@ -102,7 +102,7 @@ export async function runSemgrep(
     }
 
     // Run semgrep
-    console.log(
+    console.error(
       `[ghagga:semgrep] Scanning ${files.size} files in ${tempDir}, rules: ${RULES_PATH}`,
     );
     const configArgs = ['--config', RULES_PATH];

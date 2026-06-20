@@ -139,6 +139,34 @@ describe('runSemgrep', () => {
     );
   });
 
+  // ── BL-SARIF-STDOUT: diagnostics must go to stderr, never stdout ──
+
+  it('writes progress/diagnostics to stderr (not stdout) so SARIF/JSON stays clean', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    mockExecFile
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      .mockResolvedValueOnce({ stdout: '1.0.0', stderr: '' } as any)
+      .mockResolvedValueOnce({
+        stdout: makeSemgrepOutput([]),
+        stderr: '',
+        // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      } as any);
+
+    await runSemgrep(new Map([['file.ts', 'clean code']]));
+
+    // No diagnostic was written to stdout.
+    expect(logSpy).not.toHaveBeenCalled();
+    // The version-check + scanning progress lines went to stderr.
+    const stderrText = errorSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(stderrText).toContain('[ghagga:semgrep] Version check OK');
+    expect(stderrText).toContain('[ghagga:semgrep] Scanning');
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
   it('returns success with empty findings when no issues found', async () => {
     mockExecFile
       // biome-ignore lint/suspicious/noExplicitAny: mock cast

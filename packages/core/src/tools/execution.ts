@@ -11,14 +11,22 @@ import type { ExecOptions, ExecutionContext, RawToolOutput } from './types.js';
 /**
  * Create a Node.js-based ExecutionContext.
  *
- * @param logger - Optional logger; defaults to console
+ * @param logger - Optional logger; defaults to a stderr-routing logger so that
+ *   tool progress/diagnostics never corrupt machine output (SARIF/JSON) emitted
+ *   on stdout by CLI consumers. (BL-SARIF-STDOUT)
  */
 export function createNodeExecutionContext(logger?: {
   info: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
 }): ExecutionContext {
-  const log = logger ?? console;
+  // Default logger routes ALL diagnostic levels to stderr. `console.info`/`console.log`
+  // write to stdout, which would interleave with and corrupt machine output.
+  const log = logger ?? {
+    info: (...args: unknown[]) => console.error(...args),
+    warn: (...args: unknown[]) => console.error(...args),
+    error: (...args: unknown[]) => console.error(...args),
+  };
 
   return {
     async exec(command: string, args: string[], opts: ExecOptions): Promise<RawToolOutput> {
