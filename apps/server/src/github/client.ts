@@ -630,17 +630,44 @@ export async function verifyWebhookSignature(
 // ─── Installation Token ─────────────────────────────────────────
 
 /**
- * Create a JWT for GitHub App authentication and exchange it
- * for an installation access token.
+ * A minted installation token plus its absolute expiry (epoch millis).
+ *
+ * Structurally matches `MintedInstallationToken` from `ghagga-forge` — the
+ * P2 `GitHubAppCredentialProvider` consumes this shape (via the injected
+ * expiry-carrying mint) to drive its TTL cache. Declared locally to avoid a
+ * value import that would couple the client to the forge package.
+ */
+export interface InstallationTokenResult {
+  /** The installation access token string. */
+  token: string;
+  /** Absolute expiry, epoch millis (comparable to {@link Date.now}). */
+  expiresAtMs: number;
+}
+
+/**
+ * Conservative fallback installation-token lifetime (ms) used ONLY when the
+ * GitHub access-token response omits or returns an unparseable `expires_at`.
+ * GitHub installation tokens live ~1h; 55min leaves margin under that.
+ */
+const FALLBACK_INSTALLATION_TOKEN_TTL_MS = 55 * 60 * 1000;
+
+/**
+ * Create a JWT for GitHub App authentication and exchange it for an installation
+ * access token, returning the token AND its expiry (P2).
+ *
+ * The GitHub access-token response includes an ISO-8601 `expires_at`; this reads
+ * it into an epoch-millis timestamp so the credential provider can TTL-cache.
+ * If `expires_at` is missing/unparseable, falls back to a conservative TTL so the
+ * provider never treats a token as longer-lived than GitHub actually grants.
  *
  * JWT is created manually using Node.js crypto (RS256).
  */
-export async function getInstallationToken(
+export async function getInstallationTokenWithExpiry(
   installationId: number,
   appId: string,
   privateKey: string,
   options?: { repositoryIds?: number[] },
-): Promise<string> {
+): Promise<InstallationTokenResult> {
   const now = Math.floor(Date.now() / 1000);
 
   // Create JWT header + payload
@@ -692,9 +719,35 @@ export async function getInstallationToken(
       );
     }
 
-    const data = (await response.json()) as { token: string };
-    return data.token;
+    const data = (await response.json()) as { token: string; expires_at?: string };
+    const parsed = data.expires_at ? Date.parse(data.expires_at) : Number.NaN;
+    const expiresAtMs = Number.isNaN(parsed)
+      ? Date.now() + FALLBACK_INSTALLATION_TOKEN_TTL_MS
+      : parsed;
+    return { token: data.token, expiresAtMs };
   });
+}
+
+/**
+ * Mint an installation access token (token string only).
+ *
+ * Back-compat thin wrapper over {@link getInstallationTokenWithExpiry} that
+ * discards the expiry — preserves the original `Promise<string>` signature for
+ * the direct callers that don't TTL-cache (webhook handlers, workflow injection).
+ */
+export async function getInstallationToken(
+  installationId: number,
+  appId: string,
+  privateKey: string,
+  options?: { repositoryIds?: number[] },
+): Promise<string> {
+  const { token } = await getInstallationTokenWithExpiry(
+    installationId,
+    appId,
+    privateKey,
+    options,
+  );
+  return token;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────

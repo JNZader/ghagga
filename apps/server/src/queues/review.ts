@@ -36,8 +36,13 @@ import {
   repositories,
   saveReview,
 } from 'ghagga-db';
-import { githubCommentId, REACTION_KIND, toCommitMessages, toFileList } from 'ghagga-forge';
-import { TemporaryGitHubTokenSource } from 'ghagga-forge/internal';
+import {
+  GitHubAppCredentialProvider,
+  githubCommentId,
+  REACTION_KIND,
+  toCommitMessages,
+  toFileList,
+} from 'ghagga-forge';
 import Redis from 'ioredis';
 // Namespace import (NOT named imports): getInstallationToken is read lazily at
 // call time (token mint), so a partial test mock of '../github/client.js' that
@@ -518,12 +523,22 @@ async function processReview(
     throw new Error('GITHUB_APP_ID and GITHUB_PRIVATE_KEY must be set');
   }
 
-  // Forge credential seam (P1): TemporaryGitHubTokenSource mints a FRESH token
-  // per getToken() (no cache) — preserving the current "mint each phase"
-  // behavior. P2's task 2.3 swaps this class for GitHubAppCredentialProvider in
-  // a single line, with zero call-site changes.
-  const tokenSource = new TemporaryGitHubTokenSource({
-    mint: githubClient.getInstallationToken,
+  // Forge credential seam (P2): GitHubAppCredentialProvider TTL-caches the
+  // installation token (singleflight + budget-valid + 401 force-refresh). It
+  // replaces P1's TemporaryGitHubTokenSource via a 1-line DI swap — the call
+  // sites below (tokenSource.getToken()) are unchanged because both implement
+  // ForgeCredentialProvider.
+  //
+  // OBSERVABLE CHANGE (deliberate, the point of P2): because the phase-1 token
+  // is still budget-valid by postback time, the second getToken() returns the
+  // CACHED token instead of minting a fresh one → the per-job mint count drops
+  // from 2 to 1. User-observable output (comments, review) is identical; only
+  // the token-mint count changes. See review.baseline.test.ts test 3.
+  //
+  // The injected mint is getInstallationTokenWithExpiry (NOT getInstallationToken)
+  // so the provider knows expires_at for its TTL cache.
+  const tokenSource = new GitHubAppCredentialProvider({
+    mint: githubClient.getInstallationTokenWithExpiry,
     installationId,
     appId,
     privateKey,
@@ -910,9 +925,11 @@ async function processReview(
   await job.updateProgress(80);
 
   // Step 6: Post or update comment on GitHub PR (idempotent)
-  // PHASE 2 mint (was getInstallationToken ~855): a FRESH token before postback.
-  // tokenSource.getToken() mints anew (no cache) → this is a SECOND, distinct
-  // mint, preserving the baseline 2-mint count + order.
+  // PHASE 2 token (was a FRESH mint pre-P2): tokenSource.getToken() now returns
+  // the CACHED phase-1 token when it is still budget-valid (the common case), so
+  // NO second mint occurs — the per-job mint count is 1, not 2. The provider
+  // guarantees this token outlives the postback (BUDGET_SECONDS), or re-mints
+  // PROACTIVELY if the cache has aged out during a long poll loop.
   const freshToken = await tokenSource.getToken();
   const adapter2 = makeGitHubAdapter({ owner, repo, token: freshToken });
   let commentBody = formatReviewComment(reviewResult, {

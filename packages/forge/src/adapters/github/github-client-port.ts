@@ -111,23 +111,6 @@ export interface GitHubClientPort {
 }
 
 /**
- * Mints a GitHub installation access token. Matches `getInstallationToken` in
- * `apps/server/src/github/client.ts`. Injected into
- * {@link TemporaryGitHubTokenSource}.
- *
- * @deprecated P2 — superseded by {@link GitHubInstallationTokenMintWithExpiry}.
- * This token-ONLY shape carries no `expires_at`, so it cannot drive the TTL cache
- * in `GitHubAppCredentialProvider`. It is retained ONLY for the soon-to-be-deleted
- * {@link TemporaryGitHubTokenSource}; remove it together with that class.
- */
-export type GitHubInstallationTokenMint = (
-  installationId: number,
-  appId: string,
-  privateKey: string,
-  options?: { repositoryIds?: number[] },
-) => Promise<string>;
-
-/**
  * A minted installation token plus its absolute expiry.
  *
  * `expiresAtMs` is the token's expiry as an epoch-millis timestamp (comparable to

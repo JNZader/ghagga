@@ -11,9 +11,12 @@
  * WHAT IT PINS:
  *   - token1 reuse: dispatchWorkflow AND adapter1.fetchGraph both run with the
  *     PHASE-1 token (ghp_mint-1) — the SAME token used for the context fetch.
- *   - mint count: the rewire introduces NO extra installation-token mint on this
- *     path — it stays at exactly 2 (token1 reused across fetch+dispatch+graph;
- *     token2 fresh before postback), matching the pre-rewire behavior.
+ *   - mint count: under P2's caching GitHubAppCredentialProvider this path mints
+ *     EXACTLY ONCE — token1 is reused across fetch+dispatch+graph AND the
+ *     postback (the cached token is still budget-valid). Pre-P2 the count was 2
+ *     (a fresh token2 before postback); the drop to 1 is the deliberate P2
+ *     caching optimization. The path still introduces NO EXTRA mint for dispatch
+ *     or graph — that durable property is what this file pins.
  *   - adapter1.fetchGraph is the routed graph read (the graph read goes THROUGH
  *     the adapter, which delegates to client.fetchGraphFromBranch — preserving
  *     the `?ref=ghagga/graph` orphan-branch semantics + 404→null inside the
@@ -142,9 +145,12 @@ vi.mock('ghagga-db', () => ({
 // ─── GitHub client mock (records tokens for token1-reuse assertions) ──
 
 let tokenSeq = 0;
-const mockGetInstallationToken = vi.fn(async () => {
+// P2: worker mints via getInstallationTokenWithExpiry; the credential provider
+// TTL-caches. Far-future expiry → the phase-1 token is reused for postback (no
+// second mint). Each callLog entry = one ACTUAL upstream mint.
+const mockGetInstallationTokenWithExpiry = vi.fn(async () => {
   tokenSeq += 1;
-  return `ghp_mint-${tokenSeq}`;
+  return { token: `ghp_mint-${tokenSeq}`, expiresAtMs: Date.now() + 60 * 60 * 1000 };
 });
 const mockFetchPRDiff = vi.fn().mockResolvedValue('diff content');
 const mockGetPRCommitMessages = vi.fn().mockResolvedValue(['feat: x']);
@@ -161,7 +167,8 @@ const mockFetchGraphFromBranch = vi.fn().mockResolvedValue({
 });
 
 vi.mock('../github/client.js', () => ({
-  getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
+  getInstallationTokenWithExpiry: (...args: unknown[]) =>
+    mockGetInstallationTokenWithExpiry(...args),
   fetchPRDiff: (...args: unknown[]) => mockFetchPRDiff(...args),
   getPRCommitMessages: (...args: unknown[]) => mockGetPRCommitMessages(...args),
   getPRFileList: (...args: unknown[]) => mockGetPRFileList(...args),
@@ -297,15 +304,16 @@ describe('GRAPH PATH: static-analysis dispatch→poll→graph (token1 reuse, ada
     expect(mockFetchGraphFromBranch).toHaveBeenCalledWith('acme', 'widget', 'ghp_mint-1');
   });
 
-  it('introduces NO extra mint: exactly 2 installation-token mints on this path', async () => {
+  it('introduces NO extra mint: exactly 1 installation-token mint on this path (P2 caching)', async () => {
     await runFlow();
 
-    // token1 reused across fetch+dispatch+graph; token2 fresh before postback.
-    // The rewire must NOT add a third mint for dispatch or graph.
-    expect(mockGetInstallationToken).toHaveBeenCalledTimes(2);
+    // token1 reused across fetch+dispatch+graph AND postback (the cached token is
+    // still budget-valid). NO extra mint for dispatch or graph — and, under P2,
+    // none for postback either. Count is 1 (was 2 pre-P2).
+    expect(mockGetInstallationTokenWithExpiry).toHaveBeenCalledTimes(1);
 
-    // Postback used the FRESH token2 (distinct from token1).
-    expect(mockPostComment.mock.calls[0][4]).toBe('ghp_mint-2');
+    // Postback reused the CACHED token1 (was the fresh ghp_mint-2 pre-P2).
+    expect(mockPostComment.mock.calls[0][4]).toBe('ghp_mint-1');
   });
 
   it('routes the graph read through adapter1.fetchGraph (orphan-branch semantics delegated)', async () => {
@@ -335,7 +343,7 @@ describe('GRAPH PATH: static-analysis dispatch→poll→graph (token1 reuse, ada
       'widget',
       555,
       'rocket',
-      'ghp_mint-2',
+      'ghp_mint-1', // P2: cached postback token (was ghp_mint-2 pre-P2)
     );
   });
 });

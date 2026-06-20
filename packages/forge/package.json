@@ -32,10 +32,6 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./internal": {
-      "import": "./dist/internal.js",
-      "types": "./dist/internal.d.ts"
     }
   },
   "files": [

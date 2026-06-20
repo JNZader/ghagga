@@ -103,9 +103,9 @@ COPY --from=builder /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/types/package.json ./packages/types/
 
-# Forge package (dist + package.json — server imports ghagga-forge AND
-# ghagga-forge/internal at runtime; the exports map resolves to ./dist, so the
-# built dist MUST ship. node_modules carries forge's own deps for the symlink.)
+# Forge package (dist + package.json — server imports ghagga-forge at runtime;
+# the exports map resolves to ./dist, so the built dist MUST ship. node_modules
+# carries forge's own deps for the symlink.)
 COPY --from=builder /app/packages/forge/dist ./packages/forge/dist
 COPY --from=builder /app/packages/forge/package.json ./packages/forge/
 COPY --from=builder /app/packages/forge/node_modules ./packages/forge/node_modules

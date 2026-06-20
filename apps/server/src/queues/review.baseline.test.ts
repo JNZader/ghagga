@@ -15,8 +15,13 @@
  *      review.test.ts) over a fixed, representative review result.
  *   2. PR-flow CALL SEQUENCE — the ordered list of (HTTP method + endpoint)
  *      forge calls across the whole flow, plus each request body.
- *   3. Token MINT count + order — installation tokens are minted twice:
- *      one reused across fetch+dispatch+poll, one fresh before postback.
+ *   3. Token MINT count + order — under P2's caching GitHubAppCredentialProvider
+ *      the installation token is minted exactly ONCE: the phase-1 token is still
+ *      budget-valid at postback, so the second getToken() returns it from cache
+ *      (no second mint). The DURABLE invariant (getToken resolved at BOTH phase
+ *      boundaries; postback token budget-valid) is pinned by test 3c. Pre-P2 the
+ *      count was 2 (TemporaryGitHubTokenSource minted per call); the drop to 1 is
+ *      the deliberate, documented P2 optimization — NOT a regression.
  *   4. Stale-delete-then-repost — find existing → delete ALL stale (best
  *      effort) → post fresh at bottom, with the delete-before-post ordering.
  *   5. Trigger-comment reaction — addCommentReaction on the trigger comment.
@@ -129,7 +134,12 @@ interface CallRecord {
 const callLog: CallRecord[] = [];
 let tokenSeq = 0;
 
-const mockGetInstallationToken = vi.fn(async (installationId: number) => {
+// P2: the worker now mints via getInstallationTokenWithExpiry and the
+// GitHubAppCredentialProvider TTL-caches the result. Each ACTUAL upstream mint
+// (one callLog entry) returns a token + a FAR-FUTURE expiry so the cache stays
+// valid across the whole job → the second getToken() returns the cached token
+// and NO second mint occurs (the deliberate P2 mint-count optimization).
+const mockGetInstallationTokenWithExpiry = vi.fn(async (installationId: number) => {
   tokenSeq += 1;
   const token = `ghp_mint-${tokenSeq}`;
   callLog.push({
@@ -138,7 +148,9 @@ const mockGetInstallationToken = vi.fn(async (installationId: number) => {
     endpoint: `/app/installations/${installationId}/access_tokens`,
     body: undefined,
   });
-  return token;
+  // 1h out — comfortably beyond SKEW_SECONDS + BUDGET_SECONDS, so the provider
+  // reuses this token for the postback instead of re-minting.
+  return { token, expiresAtMs: Date.now() + 60 * 60 * 1000 };
 });
 
 const mockFetchPRDiff = vi.fn(async (owner: string, repo: string, prNumber: number) => {
@@ -214,8 +226,10 @@ const mockUpdateComment = vi.fn().mockResolvedValue(undefined);
 const mockFetchGraphFromBranch = vi.fn().mockResolvedValue(null);
 
 vi.mock('../github/client.js', () => ({
-  getInstallationToken: (...args: unknown[]) =>
-    mockGetInstallationToken(...(args as Parameters<typeof mockGetInstallationToken>)),
+  getInstallationTokenWithExpiry: (...args: unknown[]) =>
+    mockGetInstallationTokenWithExpiry(
+      ...(args as Parameters<typeof mockGetInstallationTokenWithExpiry>),
+    ),
   fetchPRDiff: (...args: unknown[]) =>
     mockFetchPRDiff(...(args as Parameters<typeof mockFetchPRDiff>)),
   getPRCommitMessages: (...args: unknown[]) =>
@@ -399,13 +413,18 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     await runBaselineFlow();
 
     const sequence = callLog.map((c) => `${c.method} ${c.endpoint}`);
+    // P2 DELTA: the SECOND `POST /app/installations/7777/access_tokens` (the
+    // pre-postback mint) is GONE — the provider returns the still-budget-valid
+    // phase-1 token from cache. Every OTHER call (method + endpoint + order) is
+    // byte-identical to the pre-P2 baseline: same fetch reads, same
+    // find→delete-all-stale→post, same reaction. The ONLY change is the absent
+    // second mint (caching).
     expect(sequence).toMatchInlineSnapshot(`
       [
         "POST /app/installations/7777/access_tokens",
         "GET /repos/acme/widget/pulls/42 (Accept: diff)",
         "GET /repos/acme/widget/pulls/42/commits",
         "GET /repos/acme/widget/pulls/42/files",
-        "POST /app/installations/7777/access_tokens",
         "GET /repos/acme/widget/issues/42/comments (list)",
         "DELETE /repos/acme/widget/issues/comments/1001",
         "DELETE /repos/acme/widget/issues/comments/900",
@@ -428,56 +447,49 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
   });
 
   // ── 3. Token MINT count + order ──────────────────────────────────
-  it('3. mints the installation token exactly twice, in the expected order', async () => {
+  it('3. mints the installation token exactly ONCE (P2 caching), before the fetch', async () => {
     await runBaselineFlow();
 
     const mints = callLog.filter((c) => c.fn === 'getInstallationToken');
-    // CURRENT behavior: one reused across fetch+dispatch+poll (review.ts:498),
-    // one fresh before postback (review.ts:855).
+    // P2 behavior: GitHubAppCredentialProvider TTL-caches the installation token.
+    // The phase-1 token (minted before the context fetch) is still budget-valid
+    // at postback time, so the postback's getToken() returns it FROM CACHE — no
+    // second mint occurs. The count collapses from the pre-P2 value of 2 to 1.
     //
-    // P2-READINESS NOTE (do NOT delete): this 2-MINT count is an ARTIFACT of
-    // TemporaryGitHubTokenSource, which mints a fresh installation token per
-    // getToken() call (no cache). It is CORRECT for P1 and is the behavior-
-    // identical proof for the rewire. When P2's caching GitHubAppCredentialProvider
-    // lands (task 2.3, a 1-line DI swap), the SAME cached token will legitimately
-    // be returned for BOTH getToken() calls → the mint count collapses to 1.
-    // That is NOT a regression — update THIS assertion to 1 mint at that point.
-    // The invariant that survives caching is "getToken() resolved at the two
-    // phase boundaries" — pinned durably by test 3c below.
-    expect(mints).toHaveLength(2);
+    // This is the DELIBERATE, documented P2 optimization (see the P2-READINESS
+    // NOTE the P1 baseline left here, now realised). User-observable output is
+    // unchanged; only the mint count drops. The caching-DURABLE invariant —
+    // getToken() resolved at BOTH phase boundaries, postback token budget-valid —
+    // is pinned by test 3c below.
+    expect(mints).toHaveLength(1);
 
-    // First mint precedes the context fetch; second mint precedes the comment
-    // postback (after the pipeline + saveReview).
+    // The single mint precedes the context fetch (and therefore the postback).
     const idx = (fn: string) => callLog.findIndex((c) => c.fn === fn);
-    const firstMint = idx('getInstallationToken');
-    const lastMint = callLog.map((c) => c.fn).lastIndexOf('getInstallationToken');
+    const mintIdx = idx('getInstallationToken');
+    expect(mintIdx).toBeLessThan(idx('fetchPRDiff'));
+    expect(mintIdx).toBeLessThan(idx('findExistingComment'));
+    expect(mintIdx).toBeLessThan(idx('postComment'));
 
-    expect(firstMint).toBeLessThan(idx('fetchPRDiff'));
-    expect(lastMint).toBeGreaterThan(idx('fetchPRDiff'));
-    expect(lastMint).toBeLessThan(idx('findExistingComment'));
-    expect(lastMint).toBeLessThan(idx('postComment'));
-
-    // Both target the same installation's access-token endpoint.
-    for (const m of mints) {
-      expect(m.endpoint).toBe('/app/installations/7777/access_tokens');
-      expect(m.method).toBe('POST');
-    }
+    // It targets the installation's access-token endpoint.
+    expect(mints[0]?.endpoint).toBe('/app/installations/7777/access_tokens');
+    expect(mints[0]?.method).toBe('POST');
   });
 
-  it('3b. the postback token is a FRESH mint (not the fetch token)', async () => {
+  it('3b. the postback reuses the CACHED phase-1 token (P2 caching — no fresh mint)', async () => {
     await runBaselineFlow();
-    // First mint feeds fetchPRDiff; second mint feeds postComment. The two
-    // tokens differ (ghp_mint-1 vs ghp_mint-2) — pins the "fresh-before-postback"
-    // behavior so a credential-provider wrap can't collapse them silently.
+    // The single mint feeds the fetch phase; the postback phase reuses the SAME
+    // cached token (ghp_mint-1) — pins the P2 caching behavior. Pre-P2 these
+    // differed (ghp_mint-1 vs ghp_mint-2, fresh-before-postback). They are now
+    // EQUAL because the cached token is still budget-valid at postback.
     expect(mockFetchPRDiff).toHaveBeenCalledWith('acme', 'widget', 42, 'ghp_mint-1');
-    expect(mockFindExistingComment).toHaveBeenCalledWith('acme', 'widget', 42, 'ghp_mint-2');
-    expect(mockPostComment.mock.calls[0][4]).toBe('ghp_mint-2');
+    expect(mockFindExistingComment).toHaveBeenCalledWith('acme', 'widget', 42, 'ghp_mint-1');
+    expect(mockPostComment.mock.calls[0][4]).toBe('ghp_mint-1');
     expect(mockAddCommentReaction).toHaveBeenCalledWith(
       'acme',
       'widget',
       555,
       'rocket',
-      'ghp_mint-2',
+      'ghp_mint-1',
     );
   });
 
@@ -567,7 +579,7 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
       'widget',
       555, // triggerCommentId
       'rocket',
-      'ghp_mint-2',
+      'ghp_mint-1', // P2: cached postback token (was ghp_mint-2 pre-P2)
     );
 
     const order = callLog.map((c) => c.fn);

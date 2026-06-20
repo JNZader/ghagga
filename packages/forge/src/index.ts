@@ -91,7 +91,6 @@ export {
 } from './adapters/github/github-app-credential-provider.js';
 export type {
   GitHubClientPort,
-  GitHubInstallationTokenMint,
   GitHubInstallationTokenMintWithExpiry,
   GitHubReactionContent,
   MintedInstallationToken,

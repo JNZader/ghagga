@@ -99,6 +99,12 @@ vi.mock('ghagga-db', () => ({
 }));
 
 const mockGetInstallationToken = vi.fn().mockResolvedValue('ghp_mock-token');
+// P2: review.ts mints via getInstallationTokenWithExpiry (the credential provider
+// TTL-caches on expires_at). Far-future expiry so a single mint serves the whole
+// job (caching), matching production.
+const mockGetInstallationTokenWithExpiry = vi
+  .fn()
+  .mockResolvedValue({ token: 'ghp_mock-token', expiresAtMs: Date.now() + 60 * 60 * 1000 });
 const mockFetchPRDiff = vi.fn().mockResolvedValue('diff content');
 const mockGetPRCommitMessages = vi.fn().mockResolvedValue(['commit 1']);
 const mockGetPRFileList = vi.fn().mockResolvedValue(['file1.ts']);
@@ -122,6 +128,8 @@ const mockFetchGraphFromBranch = vi.fn().mockResolvedValue(null);
 
 vi.mock('../github/client.js', () => ({
   getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
+  getInstallationTokenWithExpiry: (...args: unknown[]) =>
+    mockGetInstallationTokenWithExpiry(...args),
   fetchPRDiff: (...args: unknown[]) => mockFetchPRDiff(...args),
   getPRCommitMessages: (...args: unknown[]) => mockGetPRCommitMessages(...args),
   getPRFileList: (...args: unknown[]) => mockGetPRFileList(...args),
