@@ -3,10 +3,55 @@
  *
  * Uses native fetch for all HTTP calls and Node.js crypto for
  * JWT creation and webhook signature verification. No extra deps.
+ *
+ * ─── FORGE-ADAPTER BOUNDARY (SDD forge-agnostic 1.5/1.6) ─────────
+ *
+ * The 11 forge-adapter functions in this module are INTERNAL. They are tagged
+ * `@internal` individually and MUST be consumed via `GitHubForgeAdapter`, built
+ * through the composition root at
+ * `apps/server/src/github/forge-adapter-factory.ts` (`makeGitHubAdapter`). Do
+ * NOT import these directly anywhere in `apps/server` outside that factory — the
+ * forge-boundary lint (`noRestrictedImports` in biome.json) enforces this.
+ *
+ * The 11 forge-adapter fns:
+ *   fetchPRDiff, fetchPRDetails, getPRFileList, getPRCommitMessages,
+ *   postComment, findExistingComment, deleteComment, updateComment,
+ *   addCommentReaction, fetchGraphFromBranch, fetchGraphMetadata.
+ *
+ * NOT forge-adapter fns (remain directly importable everywhere):
+ *   - getInstallationToken — the auth/token-mint seam
+ *   - verifyWebhookSignature — webhook signature check
+ *   plus any shared constants/types exported from this module.
  */
 
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
+
+// ─── Errors ─────────────────────────────────────────────────────
+
+/**
+ * An error from a GitHub REST call, carrying the HTTP `status`.
+ *
+ * The forge boundary (GitHubForgeAdapter) inspects this `status` to reclassify
+ * 401/403 failures as a `ForgeAuthError` so the worker can drive the in-job
+ * token re-mint + retry (P2 401-recovery seam). Non-2xx errors that are NOT
+ * 401/403 stay plain failures — the status is still attached for logging.
+ *
+ * The message is preserved byte-for-byte from the previous plain-Error throws
+ * (`GitHub API error <op>: <status> <statusText>`) so existing message-based
+ * assertions and logs are unaffected.
+ */
+export class GitHubApiError extends Error {
+  /** The HTTP status of the failed GitHub response. */
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'GitHubApiError';
+    this.status = status;
+    Object.setPrototypeOf(this, GitHubApiError.prototype);
+  }
+}
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -78,6 +123,11 @@ function decodePrivateKey(key: string): string {
 /**
  * Fetch pull request details (head SHA, base branch, etc.).
  * Used by the issue_comment handler to enrich the BullMQ job.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchPRDetails(
   owner: string,
@@ -98,7 +148,8 @@ export async function fetchPRDetails(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error fetching PR details: ${response.status} ${response.statusText}`,
       );
     }
@@ -115,6 +166,11 @@ export async function fetchPRDetails(
 
 /**
  * Fetch the unified diff for a pull request.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchPRDiff(
   owner: string,
@@ -135,7 +191,10 @@ export async function fetchPRDiff(
     });
 
     if (!response.ok) {
-      throw new Error(`GitHub API error fetching diff: ${response.status} ${response.statusText}`);
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error fetching diff: ${response.status} ${response.statusText}`,
+      );
     }
 
     return response.text();
@@ -144,6 +203,11 @@ export async function fetchPRDiff(
 
 /**
  * Post a markdown comment to a pull request via the issues comments API.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function postComment(
   owner: string,
@@ -168,7 +232,8 @@ export async function postComment(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error posting comment: ${response.status} ${response.statusText}`,
       );
     }
@@ -183,6 +248,11 @@ export async function postComment(
  * Returns the comment ID if found, or null if no previous review comment exists.
  *
  * Searches for the `<!-- ghagga-review -->` marker in issue comments.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function findExistingComment(
   owner: string,
@@ -209,7 +279,8 @@ export async function findExistingComment(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new GitHubApiError(
+          response.status,
           `GitHub API error listing comments: ${response.status} ${response.statusText}`,
         );
       }
@@ -238,6 +309,11 @@ export async function findExistingComment(
 
 /**
  * Delete a comment from a pull request.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function deleteComment(
   owner: string,
@@ -262,6 +338,11 @@ export async function deleteComment(
 
 /**
  * Update an existing comment on a pull request.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function updateComment(
   owner: string,
@@ -286,7 +367,8 @@ export async function updateComment(
     });
 
     if (!response.ok) {
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error updating comment: ${response.status} ${response.statusText}`,
       );
     }
@@ -296,6 +378,11 @@ export async function updateComment(
 /**
  * Fetch commit messages for a pull request.
  * Paginates through all pages (max 5 pages / 500 commits).
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function getPRCommitMessages(
   owner: string,
@@ -321,7 +408,8 @@ export async function getPRCommitMessages(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new GitHubApiError(
+          response.status,
           `GitHub API error fetching commits: ${response.status} ${response.statusText}`,
         );
       }
@@ -341,6 +429,11 @@ export async function getPRCommitMessages(
 /**
  * Fetch the list of changed file paths for a pull request.
  * Paginates through all pages (max 10 pages / 1000 files).
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function getPRFileList(
   owner: string,
@@ -366,7 +459,8 @@ export async function getPRFileList(
       });
 
       if (!response.ok) {
-        throw new Error(
+        throw new GitHubApiError(
+          response.status,
           `GitHub API error fetching files: ${response.status} ${response.statusText}`,
         );
       }
@@ -386,6 +480,11 @@ export async function getPRFileList(
 /**
  * Fetch the dependency graph from the ghagga/graph orphan branch.
  * Returns null if the branch or file doesn't exist.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchGraphFromBranch(
   owner: string,
@@ -423,6 +522,11 @@ export async function fetchGraphFromBranch(
 /**
  * Fetch the dependency graph metadata from the ghagga/graph orphan branch.
  * Returns null if the branch or file doesn't exist.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function fetchGraphMetadata(
   owner: string,
@@ -483,6 +587,11 @@ function validateMetadataJson(json: unknown): import('ghagga-core').GraphMetadat
 /**
  * Add a reaction emoji to an issue comment.
  * Used for acknowledging "ghagga review" trigger comments.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
  */
 export async function addCommentReaction(
   owner: string,
@@ -556,17 +665,44 @@ export async function verifyWebhookSignature(
 // ─── Installation Token ─────────────────────────────────────────
 
 /**
- * Create a JWT for GitHub App authentication and exchange it
- * for an installation access token.
+ * A minted installation token plus its absolute expiry (epoch millis).
+ *
+ * Structurally matches `MintedInstallationToken` from `ghagga-forge` — the
+ * P2 `GitHubAppCredentialProvider` consumes this shape (via the injected
+ * expiry-carrying mint) to drive its TTL cache. Declared locally to avoid a
+ * value import that would couple the client to the forge package.
+ */
+export interface InstallationTokenResult {
+  /** The installation access token string. */
+  token: string;
+  /** Absolute expiry, epoch millis (comparable to {@link Date.now}). */
+  expiresAtMs: number;
+}
+
+/**
+ * Conservative fallback installation-token lifetime (ms) used ONLY when the
+ * GitHub access-token response omits or returns an unparseable `expires_at`.
+ * GitHub installation tokens live ~1h; 55min leaves margin under that.
+ */
+const FALLBACK_INSTALLATION_TOKEN_TTL_MS = 55 * 60 * 1000;
+
+/**
+ * Create a JWT for GitHub App authentication and exchange it for an installation
+ * access token, returning the token AND its expiry (P2).
+ *
+ * The GitHub access-token response includes an ISO-8601 `expires_at`; this reads
+ * it into an epoch-millis timestamp so the credential provider can TTL-cache.
+ * If `expires_at` is missing/unparseable, falls back to a conservative TTL so the
+ * provider never treats a token as longer-lived than GitHub actually grants.
  *
  * JWT is created manually using Node.js crypto (RS256).
  */
-export async function getInstallationToken(
+export async function getInstallationTokenWithExpiry(
   installationId: number,
   appId: string,
   privateKey: string,
   options?: { repositoryIds?: number[] },
-): Promise<string> {
+): Promise<InstallationTokenResult> {
   const now = Math.floor(Date.now() / 1000);
 
   // Create JWT header + payload
@@ -618,9 +754,35 @@ export async function getInstallationToken(
       );
     }
 
-    const data = (await response.json()) as { token: string };
-    return data.token;
+    const data = (await response.json()) as { token: string; expires_at?: string };
+    const parsed = data.expires_at ? Date.parse(data.expires_at) : Number.NaN;
+    const expiresAtMs = Number.isNaN(parsed)
+      ? Date.now() + FALLBACK_INSTALLATION_TOKEN_TTL_MS
+      : parsed;
+    return { token: data.token, expiresAtMs };
   });
+}
+
+/**
+ * Mint an installation access token (token string only).
+ *
+ * Back-compat thin wrapper over {@link getInstallationTokenWithExpiry} that
+ * discards the expiry — preserves the original `Promise<string>` signature for
+ * the direct callers that don't TTL-cache (webhook handlers, workflow injection).
+ */
+export async function getInstallationToken(
+  installationId: number,
+  appId: string,
+  privateKey: string,
+  options?: { repositoryIds?: number[] },
+): Promise<string> {
+  const { token } = await getInstallationTokenWithExpiry(
+    installationId,
+    appId,
+    privateKey,
+    options,
+  );
+  return token;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────

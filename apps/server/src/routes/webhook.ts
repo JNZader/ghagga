@@ -20,13 +20,10 @@ import {
   upsertInstallation,
   upsertRepository,
 } from 'ghagga-db';
+import { githubCommentId, REACTION_KIND } from 'ghagga-forge';
 import { Hono } from 'hono';
-import {
-  addCommentReaction,
-  fetchPRDetails,
-  getInstallationToken,
-  verifyWebhookSignature,
-} from '../github/client.js';
+import { getInstallationToken, verifyWebhookSignature } from '../github/client.js';
+import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
 import { injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
 import { enqueueReview } from '../queues/review.js';
@@ -457,9 +454,38 @@ async function handleIssueComment(
   let prAuthor: string | undefined;
 
   if (appId && privateKey) {
+    // 401-RECOVERY SEAM (P2): intentionally NOT wired here. Unlike review.ts, the
+    // webhook mints a FRESH installation token per request (getInstallationToken,
+    // no caching/TTL provider) and uses it within the SAME short-lived request —
+    // there is no long-running phase during which the token could be revoked
+    // BEFORE these calls, so the caching-recovery concern (a stale CACHED token
+    // failing mid-job) simply does not apply. Both forge calls below are already
+    // wrapped in try/catch as non-critical (a failed ack reaction / PR-details
+    // fetch never fails the review). Adding invalidate→re-mint→retry here would be
+    // pure scope with no window to protect. Tracked in docs/BACKLOG.md
+    // (BL-WEBHOOK-401-RETRY) in case the webhook ever adopts a cached provider.
+    //
+    // Mint the installation token (NOT a forge-adapter fn — stays a direct call),
+    // then route BOTH forge calls through the shared composition-root factory so
+    // the GitHub client.ts forge fns have exactly ONE sanctioned consumer.
+    // Canonical forge-agnostic refs (mirror review.ts repoRef/changeRef shape).
+    const repoRef = {
+      kind: 'github' as const,
+      nativeId: `${owner}/${repoName}`,
+      path: payload.repository.full_name,
+    };
+    const changeRef = { repo: repoRef, iid: prNumber };
+
     try {
       installationToken = await getInstallationToken(payload.installation.id, appId, privateKey);
-      await addCommentReaction(owner, repoName, payload.comment.id, 'eyes', installationToken);
+      const adapter = makeGitHubAdapter({ owner, repo: repoName, token: installationToken });
+      // BEHAVIOR-IDENTICAL with the prior direct call:
+      //   addCommentReaction(owner, repoName, payload.comment.id, 'eyes', token)
+      // The trigger-comment id is BOXED into the canonical CommentId (R-COMMENTID)
+      // before crossing the adapter seam; guard by method-presence (R-CAPABILITY).
+      if ('addReaction' in adapter) {
+        await adapter.addReaction(githubCommentId(payload.comment.id), REACTION_KIND.EYES);
+      }
     } catch (error) {
       // Non-critical — don't fail the review
       logger.warn(
@@ -471,10 +497,15 @@ async function handleIssueComment(
     // Fetch PR details to get headSha and baseBranch
     if (installationToken) {
       try {
-        const prDetails = await fetchPRDetails(owner, repoName, prNumber, installationToken);
-        headSha = prDetails.headSha;
-        baseBranch = prDetails.baseBranch;
-        prAuthor = prDetails.prAuthor;
+        // BEHAVIOR-IDENTICAL with the prior direct call:
+        //   fetchPRDetails(owner, repoName, prNumber, token) → {headSha, baseBranch, prAuthor}
+        // The adapter's fetchChangeRequest maps the SAME three consumed fields:
+        //   headSha → headSha, baseBranch → baseBranch, prAuthor → author.login.
+        const adapter = makeGitHubAdapter({ owner, repo: repoName, token: installationToken });
+        const changeRequest = await adapter.fetchChangeRequest(changeRef);
+        headSha = changeRequest.headSha;
+        baseBranch = changeRequest.baseBranch;
+        prAuthor = changeRequest.author.login;
       } catch (error) {
         // Non-critical — review will proceed without headSha/baseBranch
         logger.warn(

@@ -22,6 +22,7 @@ import {
   fetchGatewayProviders,
   formatReviewComment,
   PreloadedGraphLoader,
+  REVIEW_COMMENT_MARKER,
   reviewPipeline,
   validateProviderChain,
 } from 'ghagga-core';
@@ -35,18 +36,23 @@ import {
   repositories,
   saveReview,
 } from 'ghagga-db';
-import Redis from 'ioredis';
 import {
-  addCommentReaction,
-  deleteComment,
-  fetchGraphFromBranch,
-  fetchPRDiff,
-  findExistingComment,
-  getInstallationToken,
-  getPRCommitMessages,
-  getPRFileList,
-  postComment,
-} from '../github/client.js';
+  GitHubAppCredentialProvider,
+  githubCommentId,
+  isForgeAuthError,
+  REACTION_KIND,
+  toCommitMessages,
+  toFileList,
+} from 'ghagga-forge';
+import Redis from 'ioredis';
+// Namespace import (NOT named imports): getInstallationToken is read lazily at
+// call time (token mint), so a partial test mock of '../github/client.js' that
+// omits other exports doesn't trip vitest's named-import validation.
+// NOTE: the forge-adapter wiring (GitHubClientPort) no longer lives here — it was
+// extracted to the composition-root factory (makeGitHubAdapter), now the SOLE
+// consumer of the client.ts forge-adapter fns.
+import * as githubClient from '../github/client.js';
+import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
 import { deriveCallbackSecret, dispatchWorkflow, injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
 import { callbackResultKey, redis } from '../lib/redis.js';
@@ -54,6 +60,29 @@ import { validateOutboundUrl } from '../lib/safe-url.js';
 import { PostgresMemoryStorage } from '../memory/postgres.js';
 
 const logger = rootLogger.child({ module: 'review-queue' });
+
+// ─── Forge adapter wiring (forge-agnostic seam) ─────────────────
+//
+// The review worker no longer calls the GitHub HTTP client directly. It routes
+// forge calls through GitHubForgeAdapter (packages/forge), built by the shared
+// composition-root factory `makeGitHubAdapter` (../github/forge-adapter-factory),
+// which injects the real apps/server client.ts functions as the GitHubClientPort.
+// That factory is the SOLE consumer of the client.ts forge-adapter fns; this
+// worker only asks it for a per-token adapter. The EXACT observable behavior
+// pinned by review.baseline.test.ts is preserved (the factory keeps the same
+// lazy-getter port wiring this module used to hold inline).
+
+/** Canonical GHAGGA summary-comment marker (boundary-faithful: the adapter
+ * currently matches the FIXED marker hard-coded in client.findExistingComment). */
+const REVIEW_MARKER = { html: REVIEW_COMMENT_MARKER } as const;
+
+// COMMENT-ID BOXING (R-COMMENTID): the boxing helper now lives in the
+// side-effect-free `ghagga-forge` package (githubCommentId) so it is reusable by
+// both this worker AND the P3 CLI without dragging Redis/BullMQ init into the
+// helper's test. review.ts call-sites box every native numeric id BEFORE it
+// crosses the adapter seam — the `kind` tag prevents a GitHub id from being
+// cross-assigned as a GitLab note id (same numeric value, different forge, never
+// collides).
 
 // ─── SSRF re-validation (DNS-rebinding TOCTOU defense) ──────────
 //
@@ -495,13 +524,66 @@ async function processReview(
     throw new Error('GITHUB_APP_ID and GITHUB_PRIVATE_KEY must be set');
   }
 
-  const token = await getInstallationToken(installationId, appId, privateKey);
+  // Forge credential seam (P2): GitHubAppCredentialProvider TTL-caches the
+  // installation token (singleflight + budget-valid + 401 force-refresh). It
+  // replaces P1's TemporaryGitHubTokenSource via a 1-line DI swap — the call
+  // sites below (tokenSource.getToken()) are unchanged because both implement
+  // ForgeCredentialProvider.
+  //
+  // OBSERVABLE CHANGE (deliberate, the point of P2): because the phase-1 token
+  // is still budget-valid by postback time, the second getToken() returns the
+  // CACHED token instead of minting a fresh one → the per-job mint count drops
+  // from 2 to 1. User-observable output (comments, review) is identical; only
+  // the token-mint count changes. See review.baseline.test.ts test 3.
+  //
+  // The injected mint is getInstallationTokenWithExpiry (NOT getInstallationToken)
+  // so the provider knows expires_at for its TTL cache.
+  const tokenSource = new GitHubAppCredentialProvider({
+    mint: githubClient.getInstallationTokenWithExpiry,
+    installationId,
+    appId,
+    privateKey,
+  });
 
-  const [diff, commitMessages, fileList] = await Promise.all([
-    fetchPRDiff(owner, repo, prNumber, token),
-    getPRCommitMessages(owner, repo, prNumber, token),
-    getPRFileList(owner, repo, prNumber, token),
+  // Canonical refs for adapter calls (forge-agnostic shape).
+  // TODO(forge): nativeId should be the IMMUTABLE numeric GitHub repo id
+  // (repositories.githubRepoId). It is NOT readily in scope here — the worker
+  // does not load the repo record in this scope (resolveEncryptedCredentials
+  // skips the DB round-trip on the in-flight-tolerance path), and FIX 4 says do
+  // NOT add a DB lookup just for this. The GitHub adapter ignores nativeId today
+  // (it keys on owner/repo), so using the path-shaped owner/repo as a temporary
+  // fallback is observably inert. Move the value into `path` (the mutable display
+  // label) and leave nativeId on the same fallback until the numeric id is
+  // threaded through the job payload.
+  const repoRef = { kind: 'github' as const, nativeId: `${owner}/${repo}`, path: repoFullName };
+  const changeRef = { repo: repoRef, iid: prNumber };
+
+  // PHASE 1 mint (was getInstallationToken ~498): one token reused across
+  // fetch + dispatch + poll. Kept as a raw token because dispatchWorkflow /
+  // runner.ts (CiRunner not wired this cycle) still consume it directly.
+  const token = await tokenSource.getToken();
+
+  // Fetch context via the adapter (adapter1) instead of the client directly.
+  //
+  // FETCH-PHASE 401-RETRY (assessed, deliberately NOT wrapped): the fetch phase
+  // runs IMMEDIATELY after the single mint above, so token1 is brand-new here —
+  // there is no long-poll window in which it could be revoked BEFORE these calls
+  // (unlike the postback, which runs AFTER the poll loop and is the actual P2
+  // regression). Wrapping the fetch in the same bounded retry would add code +
+  // test surface for a window that does not exist in this ordering, so the retry
+  // is intentionally scoped to the postback only. If fetch ordering ever moves
+  // after a long wait, mirror the postback's invalidate→re-mint→retry-once block.
+  const adapter1 = makeGitHubAdapter({ owner, repo, token });
+
+  const [diffResult, commits, files] = await Promise.all([
+    adapter1.fetchDiff(changeRef),
+    adapter1.fetchCommits(changeRef),
+    adapter1.fetchFileList(changeRef),
   ]);
+  const diff = diffResult.text;
+  // R-PROJECTION: project via the sanctioned helpers — NEVER hand-rolled .map().
+  const commitMessages = toCommitMessages(commits);
+  const fileList = toFileList(files);
 
   log.info(
     { metrics: { step: 'fetch-context', fileCount: fileList.length } },
@@ -765,7 +847,8 @@ async function processReview(
     log.info({ enableBlastRadius: settings.enableBlastRadius ?? false }, 'Blast-radius check');
     if (settings.enableBlastRadius) {
       try {
-        const graph = await fetchGraphFromBranch(owner, repo, token);
+        // R-CAPABILITY: guard by method-presence, never the capabilities flag.
+        const graph = 'fetchGraph' in adapter1 ? await adapter1.fetchGraph(repoRef) : null;
         if (graph) {
           graphLoader = new PreloadedGraphLoader(graph);
           log.info('Dependency graph loaded for blast-radius analysis');
@@ -852,7 +935,13 @@ async function processReview(
   await job.updateProgress(80);
 
   // Step 6: Post or update comment on GitHub PR (idempotent)
-  const freshToken = await getInstallationToken(installationId, appId, privateKey);
+  // PHASE 2 token (was a FRESH mint pre-P2): tokenSource.getToken() now returns
+  // the CACHED phase-1 token when it is still budget-valid (the common case), so
+  // NO second mint occurs — the per-job mint count is 1, not 2. The provider
+  // guarantees this token outlives the postback (BUDGET_SECONDS), or re-mints
+  // PROACTIVELY if the cache has aged out during a long poll loop.
+  const freshToken = await tokenSource.getToken();
+  let adapter2 = makeGitHubAdapter({ owner, repo, token: freshToken });
   let commentBody = formatReviewComment(reviewResult, {
     fileStats:
       reviewResult.metadata.totalAdditions !== undefined
@@ -871,29 +960,52 @@ async function processReview(
   // Strategy: delete all existing GHAGGA review comments, then post a fresh one at the bottom.
   // This ensures the review always appears at the most recent position in the PR thread,
   // which is better UX than editing in place (GitHub keeps edited comments at their original position).
-  const existing = await findExistingComment(owner, repo, prNumber, freshToken);
-  if (existing) {
-    // Delete ALL previous GHAGGA comments (latest + any stale duplicates)
-    const allIds = [existing.latestId, ...existing.staleIds];
-    for (const commentId of allIds) {
-      try {
-        await deleteComment(owner, repo, commentId, freshToken);
-        log.info({ commentId }, 'Deleted previous GHAGGA review comment');
-      } catch (error) {
-        log.warn({ commentId, error: String(error) }, 'Failed to delete previous comment');
-      }
-    }
+  //
+  // upsertSummaryComment folds find → delete-ALL([latestId, ...staleIds]) → post
+  // into one adapter call, preserving the EXACT baseline ordering + best-effort
+  // delete semantics. The marker passed MUST equal REVIEW_COMMENT_MARKER (the
+  // GitHub adapter matches that fixed marker inside client.findExistingComment).
+  //
+  // P2 401-RECOVERY (in-job, bounded to exactly ONE retry): with P2 caching the
+  // postback reuses the cached phase-1 token. If that token was REVOKED mid-job
+  // (server-side, before its advertised expiry), the postback fails with a typed
+  // ForgeAuthError (401/403). We then invalidate() the credential cache, re-mint
+  // a fresh token, rebuild the adapter, and retry the postback ONCE. If the retry
+  // ALSO 401s, we propagate (fail the job) — NO infinite loop. This restores P1's
+  // in-job recovery cheaply (re-mint + retry the POSTBACK only, not the review).
+  //
+  // HAPPY PATH IS UNCHANGED: with no 401, the try-body runs exactly once with the
+  // same single mint and same call sequence as before (the catch never fires).
+  let upsertResult: Awaited<ReturnType<typeof adapter2.upsertSummaryComment>>;
+  try {
+    upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
+  } catch (error) {
+    if (!isForgeAuthError(error)) throw error;
+    // Token was rejected (revoked/rotated) — drop the cache, re-mint, retry ONCE.
+    log.warn(
+      { status: error.status },
+      'Postback hit a forge auth failure (401/403) — invalidating credential cache and retrying once with a fresh token',
+    );
+    tokenSource.invalidate();
+    const retryToken = await tokenSource.getToken();
+    adapter2 = makeGitHubAdapter({ owner, repo, token: retryToken });
+    // The retry is UNGUARDED: if it ALSO throws (auth or otherwise) it propagates
+    // and fails the job. This is the bound — exactly one retry, never a loop.
+    upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
   }
-
-  // Always post a fresh comment at the bottom of the PR thread
-  const postedComment = await postComment(owner, repo, prNumber, commentBody, freshToken);
-  log.info({ commentId: postedComment?.id }, 'Review comment posted');
+  // BOX the GitHub-native numeric id review.ts-LOCAL (R-COMMENTID).
+  const postedCommentId = githubCommentId(upsertResult.created);
+  log.info({ commentId: postedCommentId.raw }, 'Review comment posted');
   await job.updateProgress(90);
 
   // Step 7: React with rocket to the trigger comment
   if (triggerCommentId) {
     try {
-      await addCommentReaction(owner, repo, triggerCommentId, 'rocket', freshToken);
+      // Box the trigger-comment id review.ts-LOCAL before crossing the adapter
+      // seam (R-COMMENTID). Guard by method-presence (R-CAPABILITY).
+      if ('addReaction' in adapter2) {
+        await adapter2.addReaction(githubCommentId(triggerCommentId), REACTION_KIND.ROCKET);
+      }
     } catch (error) {
       log.warn({ error: String(error) }, 'Failed to add completion reaction');
     }

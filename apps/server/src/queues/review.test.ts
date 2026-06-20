@@ -99,23 +99,46 @@ vi.mock('ghagga-db', () => ({
 }));
 
 const mockGetInstallationToken = vi.fn().mockResolvedValue('ghp_mock-token');
+// P2: review.ts mints via getInstallationTokenWithExpiry (the credential provider
+// TTL-caches on expires_at). Far-future expiry so a single mint serves the whole
+// job (caching), matching production.
+const mockGetInstallationTokenWithExpiry = vi
+  .fn()
+  .mockResolvedValue({ token: 'ghp_mock-token', expiresAtMs: Date.now() + 60 * 60 * 1000 });
 const mockFetchPRDiff = vi.fn().mockResolvedValue('diff content');
 const mockGetPRCommitMessages = vi.fn().mockResolvedValue(['commit 1']);
 const mockGetPRFileList = vi.fn().mockResolvedValue(['file1.ts']);
-const mockPostComment = vi.fn().mockResolvedValue(undefined);
+// Returns the realistic GitHub-native shape `{ id }` (matches client.postComment's
+// declared `Promise<{ id: number }>` contract). The forge adapter consumes
+// `posted.id` to build its UpsertSummaryResult, so an `undefined` return — a
+// mock-fidelity gap, not a behavior change — would crash the adapter.
+const mockPostComment = vi.fn().mockResolvedValue({ id: 2002 });
 const mockAddCommentReaction = vi.fn().mockResolvedValue(undefined);
 const mockFindExistingComment = vi.fn().mockResolvedValue(null);
 const mockUpdateComment = vi.fn().mockResolvedValue(undefined);
+// deleteComment is invoked by the adapter's upsertSummaryComment ONLY when
+// findExistingComment returns a non-null result. mockFindExistingComment returns
+// null here, so the delete loop never runs today — but omitting the mock would
+// crash any future test that returns a non-null existing comment with
+// `githubClient.deleteComment is not a function`. Mirror the baseline mock's
+// completeness so the client port is fully satisfied. (Same rationale for
+// fetchGraphFromBranch, reached only when blast-radius is enabled.)
+const mockDeleteComment = vi.fn().mockResolvedValue(undefined);
+const mockFetchGraphFromBranch = vi.fn().mockResolvedValue(null);
 
 vi.mock('../github/client.js', () => ({
   getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
+  getInstallationTokenWithExpiry: (...args: unknown[]) =>
+    mockGetInstallationTokenWithExpiry(...args),
   fetchPRDiff: (...args: unknown[]) => mockFetchPRDiff(...args),
   getPRCommitMessages: (...args: unknown[]) => mockGetPRCommitMessages(...args),
   getPRFileList: (...args: unknown[]) => mockGetPRFileList(...args),
   postComment: (...args: unknown[]) => mockPostComment(...args),
   addCommentReaction: (...args: unknown[]) => mockAddCommentReaction(...args),
   findExistingComment: (...args: unknown[]) => mockFindExistingComment(...args),
+  deleteComment: (...args: unknown[]) => mockDeleteComment(...args),
   updateComment: (...args: unknown[]) => mockUpdateComment(...args),
+  fetchGraphFromBranch: (...args: unknown[]) => mockFetchGraphFromBranch(...args),
 }));
 
 vi.mock('../github/runner.js', () => ({
