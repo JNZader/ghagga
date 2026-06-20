@@ -462,6 +462,13 @@ interface ForgePostbackConfig {
   resolveToken: () => string | null;
   /** The "set X / run ghagga login" guidance when no token resolves. */
   tokenHint: string;
+  /**
+   * Resolve the DESTINATION host the token will be sent to (for the pre-POST
+   * stderr disclosure). For GitLab this is the REAL resolved API host (derived
+   * from the git remote + GITLAB_HOST / GITLAB_API_BASE overrides), so a
+   * poisoned `origin` exfiltration target is visible BEFORE the token leaves.
+   */
+  resolveTargetHost: () => string;
   /** Build the forge adapter + canonical ref from a resolved token + number. */
   buildComposition: (token: string, changeRequestNumber: number) => Promise<ForgeComposition>;
 }
@@ -474,6 +481,9 @@ function githubPostbackConfig(): ForgePostbackConfig {
     forgeName: 'GitHub',
     resolveToken: resolvePrToken,
     tokenHint: 'Set GITHUB_TOKEN (or GH_TOKEN) in your environment, or run `ghagga login`.',
+    // The CLI GitHub client targets api.github.com (no GHE base override today);
+    // disclose what the client actually hits.
+    resolveTargetHost: () => 'api.github.com',
     async buildComposition(token, prNumber): Promise<ForgeComposition> {
       // Resolve owner/repo from the git remote (same source as issue-export).
       const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
@@ -507,6 +517,14 @@ function gitlabPostbackConfig(): ForgePostbackConfig {
     forgeName: 'GitLab',
     resolveToken: resolveMrToken,
     tokenHint: 'Set GITLAB_TOKEN (or GL_TOKEN) in your environment, or run `ghagga login`.',
+    // Disclose the REAL resolved API host (remote host + GITLAB_HOST /
+    // GITLAB_API_BASE overrides) — the ACTUAL host the GITLAB_TOKEN is sent to.
+    // A poisoned `origin` (or override) therefore surfaces BEFORE the post.
+    resolveTargetHost: () => {
+      const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+      const { host } = parseGitLabRemote(remoteUrl);
+      return gitlabApiBaseHost(resolveGitLabApiBase(host));
+    },
     async buildComposition(token, mrIid): Promise<ForgeComposition> {
       const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
       // Self-hosted GitLab: derive the API base from the REMOTE host (with a
@@ -529,6 +547,20 @@ function gitlabPostbackConfig(): ForgePostbackConfig {
       return { adapter, ref };
     },
   };
+}
+
+/**
+ * Extract the bare host from a resolved GitLab API base (`https://<host>/api/v4`
+ * or a verbatim `GITLAB_API_BASE`). Used ONLY for the human-readable pre-POST
+ * disclosure line — falls back to the raw base if it cannot be URL-parsed (e.g. a
+ * malformed override) so the user still sees SOMETHING about the destination.
+ */
+function gitlabApiBaseHost(apiBase: string): string {
+  try {
+    return new URL(apiBase).host;
+  } catch {
+    return apiBase;
+  }
 }
 
 /**
@@ -568,6 +600,15 @@ async function handleForgePostback(
   const marker = { html: REVIEW_COMMENT_MARKER };
 
   try {
+    // SECURITY HYGIENE: disclose the DESTINATION HOST on stderr BEFORE the POST
+    // fires, so the user sees where their token is going even if the post then
+    // fails/hangs. For GitLab the host is the REAL resolved API host (derived
+    // from the git remote + env overrides) — a poisoned `origin` that would
+    // exfiltrate the token is therefore visible. stderr ONLY (never stdout /
+    // SARIF): console.error regardless of --output, one line per post.
+    const targetHost = config.resolveTargetHost();
+    console.error(`→ Posting ${config.label} #${changeRequestNumber} review to ${targetHost}`);
+
     const outcome = await composeForgePostback({
       changeRequestNumber,
       resolveToken: config.resolveToken,
