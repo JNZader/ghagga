@@ -504,4 +504,38 @@ describe('findExistingComment — pagination', () => {
     expect(mockFetch.mock.calls[49][0]).toContain('page=50');
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MAX_PAGES (50)'));
   });
+
+  it('time budget — truncates paging once the wall-clock budget is exhausted, warns, returns what was found', async () => {
+    // Page 1 is full (no marker) → loop wants to fetch page 2. We advance the
+    // mocked clock past the 90s budget so the page-2 guard trips: the loop must
+    // STOP (not blow the 5-min worker lock) and proceed with page-1 results.
+    const page1 = makeFakeComments(100, 0, 4); // marker at id 4 on the first page
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(page1) });
+    // Any later page (should never be fetched once truncated).
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeFakeComments(100, 100)),
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Clock: deadline is captured as `Date.now() + 90_000` BEFORE the loop.
+    // 1st call (deadline capture) = 0; page-1 guard is skipped (page === 1);
+    // 2nd call (page-2 guard) = past the deadline → truncate.
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValueOnce(0); // deadline = 90_000
+    nowSpy.mockReturnValue(90_001); // every subsequent Date.now() is past it
+
+    const result = await findExistingComment('owner', 'repo', 1, 'token');
+
+    // Only page 1 was fetched; the budget guard stopped before page 2.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toContain('page=1');
+    // We still return what we found on page 1.
+    expect(result).toEqual({ latestId: 4, staleIds: [] });
+    // Non-silent truncation, distinct from the MAX_PAGES warn.
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('pagination budget'));
+
+    nowSpy.mockRestore();
+  });
 });
