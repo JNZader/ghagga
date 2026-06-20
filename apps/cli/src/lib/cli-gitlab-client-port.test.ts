@@ -8,7 +8,11 @@
 
 import { GitLabForgeAdapter } from 'ghagga-forge';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCliGitLabClientPort, resolveGitLabProjectId } from './cli-gitlab-client-port.js';
+import {
+  createCliGitLabClientPort,
+  resolveGitLabApiBase,
+  resolveGitLabProjectId,
+} from './cli-gitlab-client-port.js';
 import { postSummaryComment } from './pr-postback.js';
 
 const mockFetch = vi.fn();
@@ -124,15 +128,15 @@ describe('postSummaryComment via CLI GitLab port + GitLabForgeAdapter', () => {
     expect(allUrls).not.toContain('/notes/200');
   });
 
-  it('sends BOTH Bearer + PRIVATE-TOKEN headers and an AbortSignal', async () => {
+  it('sends ONLY PRIVATE-TOKEN (no Bearer) + an AbortSignal (FIX E)', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(200, []));
     mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 1 }));
     const adapter = buildAdapter('secret-pat');
     await postSummaryComment(adapter, REF, 'body', MARKER);
     const [, postInit] = mockFetch.mock.calls[1] as [string, RequestInit];
     const headers = postInit.headers as Record<string, string>;
-    expect(headers.Authorization).toBe('Bearer secret-pat');
     expect(headers['PRIVATE-TOKEN']).toBe('secret-pat');
+    expect(headers.Authorization).toBeUndefined();
     for (const call of mockFetch.mock.calls) {
       expect((call[1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
     }
@@ -173,5 +177,110 @@ describe('CLI GitLab port — publishInline partial failure end-to-end (R-LEAK-P
     ]);
     expect(report.failed.map((f) => f.index)).toEqual([1, 2, 4]);
     expect(mockFetch).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('resolveGitLabApiBase (FIX A — derive API base from host + env overrides)', () => {
+  it('defaults to https://<host>/api/v4 for the parsed remote host', () => {
+    expect(resolveGitLabApiBase('gitlab.com', {} as NodeJS.ProcessEnv)).toBe(
+      'https://gitlab.com/api/v4',
+    );
+    expect(resolveGitLabApiBase('gitlab.example.com', {} as NodeJS.ProcessEnv)).toBe(
+      'https://gitlab.example.com/api/v4',
+    );
+  });
+
+  it('GITLAB_HOST overrides the remote host', () => {
+    expect(
+      resolveGitLabApiBase('gitlab.com', { GITLAB_HOST: 'api.internal' } as NodeJS.ProcessEnv),
+    ).toBe('https://api.internal/api/v4');
+  });
+
+  it('GITLAB_API_BASE is a full override (subpath self-hosted)', () => {
+    expect(
+      resolveGitLabApiBase('gitlab.com', {
+        GITLAB_API_BASE: 'https://example.com/gitlab/api/v4',
+      } as NodeJS.ProcessEnv),
+    ).toBe('https://example.com/gitlab/api/v4');
+  });
+
+  it('GITLAB_API_BASE wins over GITLAB_HOST + trims trailing slash', () => {
+    expect(
+      resolveGitLabApiBase('gitlab.com', {
+        GITLAB_HOST: 'ignored.example',
+        GITLAB_API_BASE: 'https://example.com/gitlab/api/v4/',
+      } as NodeJS.ProcessEnv),
+    ).toBe('https://example.com/gitlab/api/v4');
+  });
+});
+
+describe('CLI GitLab port — self-hosted API base (FIX A)', () => {
+  beforeEach(() => mockFetch.mockReset());
+
+  function buildSelfHostedAdapter(): GitLabForgeAdapter {
+    return new GitLabForgeAdapter({
+      client: createCliGitLabClientPort('https://gitlab.example.com/api/v4'),
+      token: 'glpat',
+      projectId: PROJECT_ID,
+    });
+  }
+
+  it('routes note calls + project-id resolution against the self-hosted host', async () => {
+    // resolveGitLabProjectId against the self-hosted base.
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: 12345 }));
+    const id = await resolveGitLabProjectId(
+      'team/repo',
+      'glpat',
+      'https://gitlab.example.com/api/v4',
+    );
+    expect(id).toBe('12345');
+    const [idUrl] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(idUrl).toBe('https://gitlab.example.com/api/v4/projects/team%2Frepo');
+
+    mockFetch.mockReset();
+    // upsert against the self-hosted base.
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, []));
+    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 9001 }));
+    const adapter = buildSelfHostedAdapter();
+    await postSummaryComment(adapter, REF, 'body', MARKER);
+    const [postUrl, postInit] = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(postUrl).toBe('https://gitlab.example.com/api/v4/projects/12345/merge_requests/7/notes');
+    // PRIVATE-TOKEN only.
+    const headers = postInit.headers as Record<string, string>;
+    expect(headers['PRIVATE-TOKEN']).toBe('glpat');
+    expect(headers.Authorization).toBeUndefined();
+  });
+});
+
+describe('CLI GitLab port — createMrDiscussion (FIX C true positioning)', () => {
+  beforeEach(() => mockFetch.mockReset());
+
+  it('posts a positioned inline comment to /discussions and boxes notes[0].id', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 'disc-1', notes: [{ id: 555 }] }));
+    const adapter = buildAdapter();
+    const report = await adapter.publishInline(REF, [
+      {
+        path: 'src/x.ts',
+        line: 4,
+        side: 'new',
+        body: 'anchored',
+        position: { baseSha: 'B', headSha: 'H', startSha: 'S', newLine: 4 },
+      },
+    ]);
+    expect(report.posted).toEqual([{ kind: 'gitlab', raw: '555' }]);
+    const [discUrl, discInit] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(discUrl).toBe('https://gitlab.com/api/v4/projects/12345/merge_requests/7/discussions');
+    expect(discInit.method).toBe('POST');
+    const payload = JSON.parse(discInit.body as string) as Record<string, unknown>;
+    expect(payload.body).toBe('anchored');
+    expect(payload.position).toEqual({
+      position_type: 'text',
+      base_sha: 'B',
+      head_sha: 'H',
+      start_sha: 'S',
+      old_path: 'src/x.ts',
+      new_path: 'src/x.ts',
+      new_line: 4,
+    });
   });
 });

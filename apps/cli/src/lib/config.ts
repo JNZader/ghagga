@@ -18,6 +18,13 @@ export interface GhaggaCliConfig {
   /** GitHub username (fetched after login) */
   githubLogin?: string;
 
+  /**
+   * GitLab Personal/Project/Group Access Token (PAT). SEPARATE from the GitHub
+   * token: a GitHub token MUST NOT be used against GitLab. Resolved by the `--mr`
+   * post-back AFTER env GITLAB_TOKEN / GL_TOKEN.
+   */
+  gitlabToken?: string;
+
   /** Default LLM provider */
   defaultProvider?: string;
 
@@ -95,6 +102,16 @@ export function isLoggedIn(): boolean {
 export function getStoredToken(): string | null {
   const config = loadConfig();
   return config.githubToken ?? null;
+}
+
+/**
+ * Get the stored GitLab token, or null if none. SEPARATE from
+ * {@link getStoredToken} (GitHub): the `--mr` post-back must never authenticate
+ * to GitLab with a GitHub token.
+ */
+export function getStoredGitLabToken(): string | null {
+  const config = loadConfig();
+  return config.gitlabToken ?? null;
 }
 
 /**
