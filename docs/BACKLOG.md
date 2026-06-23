@@ -4,6 +4,36 @@ Tracked-but-deferred work. OPEN items at the top.
 
 ## OPEN
 
+### BL-GITLAB-MR-WRITE-E2E — run the GitLab `--mr` write-path live, against a real instance
+
+The `--mr` (GitLab MR post-back) path is fully unit/contract-tested
+(fetch-mocked) and was validated **read-only** against live gitlab.com on
+2026-06-20 (real auth handshake + typed-error surfacing; the deploy-token in use
+had no `api` scope, so it returned a typed `GitLabApiError(status:403)` as
+expected). The **write path** (resolve project id → upsert a summary note on a
+real MR) has **never run against a live GitLab instance** — it is the only real
+verification gap remaining on v3.1.0.
+
+The live gate is the `skipIf(!GITLAB_PAT)` manual test
+`apps/cli/src/lib/gitlab-e2e.manual.test.ts`. As of PR #273 it is hardened
+(4vr-gated): `afterAll` best-effort cleanup, self-hosted wiring via the
+production `resolveGitLabApiBase` helper, a marker assertion **anchored to the
+note production created** (the prior `.some(...)` was circular — the marker is
+caller-owned, the adapter only uses it to FILTER the sweep at
+`gitlab-forge-adapter.ts:182`), and an idempotency-fold assertion against real MR
+state (exactly one marker note remains after the repost). `typecheck` passes.
+
+FIX (needs operator inputs, not a code change): a PAT with the `api` scope + an
+OPEN, throwaway MR, then run:
+
+```bash
+GITLAB_PAT=… GITLAB_E2E_PROJECT=group/proj GITLAB_E2E_MR=<open iid> \
+  pnpm --filter ghagga exec vitest run src/lib/gitlab-e2e.manual.test.ts
+```
+
+If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardened,
+so the risk is low). (Deferred here pending the PAT + throwaway MR.)
+
 ### BL-ACTION-BUNDLE-REBUILD — rebuild `apps/action/dist` to pick up the SARIF-stdout fix (#4)
 
 The GitHub Action consumes a **manually-committed** pre-built bundle:
