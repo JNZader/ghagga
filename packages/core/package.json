@@ -57,7 +57,7 @@
     "ai": "^6.0.206",
     "fts5-sql-bundle": "^1.0.2",
     "minimatch": "^10.2.5",
-    "web-tree-sitter": "^0.26.9",
+    "web-tree-sitter": "^0.26.10",
     "zod": "^4.4.3"
   },
   "devDependencies": {
