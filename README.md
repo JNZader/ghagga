@@ -5,7 +5,7 @@
 <h1 align="center">GHAGGA</h1>
 
 <p align="center">
-  <strong>AI code review that learns your project — multi-agent orchestration, 17 static analysis tools, and persistent review memory.</strong>
+  <strong>AI code review that learns your project — multi-agent orchestration, 17 static-analysis tools, and persistent review memory.</strong>
 </p>
 
 <p align="center">
@@ -23,31 +23,34 @@
   <a href="https://github.com/apps/ghagga-review/installations/new"><strong>Install GitHub App</strong></a>
 </p>
 
+Read this in: [English](README.md) · [Español](README.es.md)
+
 ---
 
-GHAGGA is a production AI code review system — not a prompt wrapper. One review engine, four delivery modes: a hosted **GitHub App**, a **GitHub Action**, a **CLI** for local pre-push review, and a fully **self-hosted** Docker deployment.
+GHAGGA is a production AI code-review system — not a prompt wrapper. One review engine, four delivery surfaces: a hosted **GitHub App**, a **GitHub Action**, a **CLI** for local pre-push review, and a fully **self-hosted** Docker deployment.
 
 What makes it different:
 
-- **Static analysis runs first.** 17 deterministic tools (Semgrep, Trivy, Gitleaks, Ruff, clippy, …) catch known issues before a single LLM token is spent. Findings are injected into the review prompt so the model focuses on logic and architecture.
+- **Static analysis runs first.** 17 deterministic tools (Semgrep, Trivy, Gitleaks, Ruff, clippy, …) catch known issues before a single LLM token is spent. Findings are injected into the review prompt so the model spends its attention on logic and architecture, not lint.
 - **It remembers.** Past decisions, bugfixes, and patterns persist across reviews (PostgreSQL, SQLite, or [Engram](https://github.com/Gentleman-Programming/engram)) and feed back into future ones — with full-text search, strength decay, and privacy stripping.
-- **Five orchestration strategies.** From a fast single pass to multi-agent consensus voting, picked per review by cost/confidence tradeoff.
+- **Five orchestration strategies.** From a single fast pass to multi-agent consensus voting, chosen per review by the cost/confidence tradeoff you want.
+- **Forge-agnostic core.** The review engine speaks in provider-neutral ports; the CLI posts findings back to **GitHub pull requests** (`--pr`) and **GitLab merge requests** (`--mr`), with Gitea modeled in the same abstraction.
 - **No runner infrastructure.** Server mode injects an inline GitHub Actions workflow into each target repo and dispatches it — heavy analysis runs on the repo's own free CI minutes, secured with per-dispatch HMAC secrets.
 
 ## By the Numbers
 
 | | |
 |---|---|
-| **Production code** | ~48,000 lines of strict TypeScript across 7 workspaces |
-| **Test code** | ~67,000 lines — *more test code than production code* |
-| **Test suite** | 4,300+ test cases in 214 test files (Vitest), plus mutation testing with Stryker |
+| **Production code** | ~62,000 lines of strict TypeScript across 8 workspaces |
+| **Test code** | ~73,000 lines — *more test code than production code* |
+| **Test suite** | 4,500+ test cases in 231 test files (Vitest), plus mutation testing with Stryker |
 | **Static analysis** | 17 tools — 7 always-on, 10 auto-detected by stack |
 | **Review modes** | 5 orchestration strategies (single-pass → multi-agent consensus) |
 | **Distribution** | GitHub App (SaaS) · GitHub Action · npm CLI · self-hosted Docker |
 
 ## Architecture
 
-A reusable core owns the review pipeline; thin adapters translate transport and IO. `@ghagga/core` knows nothing about HTTP, dashboard auth, or terminal rendering.
+A reusable core owns the review pipeline; thin adapters translate transport and IO. `ghagga-core` knows nothing about HTTP, dashboard auth, or terminal rendering, and `ghagga-forge` keeps it from knowing whether it's talking to GitHub, GitLab, or Gitea.
 
 ```mermaid
 graph TB
@@ -66,14 +69,18 @@ graph TB
     InlineTools["Static Analysis<br/>on the repo's own runner"]
   end
 
-  subgraph Core["@ghagga/core"]
+  subgraph Core["ghagga-core"]
     SA["Static Analysis<br/>17-tool registry"]
     Agents["AI Agents<br/>5 review modes"]
     Memory["Memory<br/>Search / Persist / Decay / Versioning"]
     Scope["Scope<br/>Tree-sitter symbol extraction"]
   end
 
-  subgraph DB["@ghagga/db"]
+  subgraph Forge["ghagga-forge"]
+    Ports["Forge-agnostic ports<br/>GitHub / GitLab / Gitea"]
+  end
+
+  subgraph DB["ghagga-db"]
     PG["PostgreSQL 16<br/>+ tsvector FTS"]
     Crypto["AES-256-GCM<br/>Encryption"]
   end
@@ -85,6 +92,7 @@ graph TB
   InlineTools -- "HMAC-signed callback" --> Server
   Action --> Core
   CLI --> Core
+  Core --> Forge
   Core --> DB
 ```
 
@@ -124,16 +132,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v2.8.1
+      - uses: JNZader/ghagga@v3
 ```
 
 **CLI** — review local changes before they hit CI:
 
 ```bash
 npm install -g ghagga
-ghagga login
+ghagga login                    # authenticate with GitHub (free AI models)
 ghagga review --staged          # review staged changes
 ghagga review --mode consensus  # multi-agent vote
+ghagga review --pr 42           # review a GitHub PR and post findings back
+ghagga review --mr 42           # review a GitLab merge request and post findings back
 ghagga health --top 10          # project health score
 ghagga hooks install            # pre-commit + commit-msg hooks
 ```
@@ -161,7 +171,7 @@ Five strategies with explicit cost/confidence tradeoffs:
 | `workflow` | 5 specialists in parallel + synthesis step | ~6x | Thorough multi-angle reviews |
 | `diagnostic` | Hypothesis-driven analysis with adaptive follow-up queries | varies | Digging into suspicious changes |
 
-`fan-out` is the multi-agent workhorse: independent lenses review the same diff in parallel, then findings are merged by severity into one result.
+`fan-out` is the multi-agent workhorse: independent lenses review the same diff in parallel, then findings are merged by severity into one result. Custom lenses can be supplied with `--lenses` and `--lens-dir`.
 
 ```mermaid
 flowchart TD
@@ -186,7 +196,9 @@ Deterministic checks run before the expensive stochastic layer. All tools are op
 - **Always-on (7):** Semgrep, Trivy, Gitleaks, ShellCheck, CPD, markdownlint, Lizard
 - **Auto-detected by stack (10):** Ruff + Bandit (Python), golangci-lint (Go), Biome (JS/TS), clippy (Rust), PMD (Java), Psalm (PHP), Hadolint (Docker), zizmor (GitHub Actions), SonarQube (via MCP)
 
-In server mode, this layer runs as an **inline workflow injected into the target repo** — no separate runner repository to provision, no RAM-hungry analysis on the API server. Callbacks are verified with per-dispatch HMAC-SHA256 secrets with TTL enforcement.
+The GitHub Action bundles the 16 tools that run directly on the runner; SonarQube is available in server mode over MCP, for 17 total in the full registry.
+
+In server mode, this layer runs as an **inline workflow injected into the target repo** — no separate runner repository to provision, no RAM-hungry analysis on the API server. Callbacks are verified with per-dispatch HMAC-SHA256 secrets under a TTL.
 
 ## Project Memory
 
@@ -214,6 +226,8 @@ Backends: PostgreSQL (`tsvector` + `ts_rank`) for server mode, SQLite (FTS5 + BM
 | Injected workflow | `permissions: contents: read`, secret masking, output normalization |
 | Test coverage | Dedicated security suite: encryption tamper detection, HMAC correctness, no-secret-logging, no-eval, prototype-pollution checks |
 
+Vulnerability reports: see [SECURITY.md](SECURITY.md).
+
 ## Monorepo
 
 ```text
@@ -221,6 +235,7 @@ ghagga/
 ├── packages/
 │   ├── core/        # Review engine: agents, 17-tool registry, memory, tree-sitter scoping
 │   ├── db/          # Drizzle schema, PostgreSQL queries, AES-256-GCM crypto, migrations
+│   ├── forge/       # Forge-agnostic ports & domain types (GitHub / GitLab / Gitea)
 │   └── types/       # Shared API contracts
 ├── apps/
 │   ├── server/      # Hono API + BullMQ workers + GitHub App integration
@@ -231,6 +246,8 @@ ghagga/
 └── docs/            # Documentation site (GitHub Pages)
 ```
 
+Published packages: `ghagga` (CLI), `ghagga-core`, `ghagga-db`, and `ghagga-forge`.
+
 **Stack:** TypeScript (strict) · Hono · BullMQ + Redis · PostgreSQL 16 + Drizzle · React 19 + Vite + Tailwind 4 · Vitest + Stryker · Biome · pnpm + Turborepo
 
 **LLM providers:** everything routes through a provider chain with ordered fallback — `gateway` (any model via [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge)), `cli-bridge` (local Claude / Gemini / Copilot CLIs), or `ollama` (local models).
@@ -239,8 +256,8 @@ ghagga/
 
 A few decisions worth calling out:
 
-- **Core/adapter split.** The review engine is transport-agnostic; server, Action, and CLI are thin IO translators. Adding a delivery mode doesn't touch the pipeline.
-- **Tests outweigh production code** (~67k vs ~48k LOC), with mutation testing (Stryker) guarding the core, server, and Action against assertion-free tests.
+- **Core/adapter split.** The review engine is transport- and forge-agnostic; server, Action, and CLI are thin IO translators. Adding a delivery mode doesn't touch the pipeline.
+- **Tests outweigh production code** (~73k vs ~62k LOC), with mutation testing (Stryker) guarding core, server, and Action against assertion-free tests.
 - **v2 was a real rewrite**, not a patch: v1's Deno + Node + Python sprawl collapsed into a single-runtime Node monorepo with async orchestration (BullMQ), a 17-tool registry (up from Semgrep-only), and an actually-used memory system.
 - **Graceful degradation everywhere.** Missing static tools, unreachable memory backends, blocked workflow injection — every layer falls back instead of failing the review.
 
@@ -255,6 +272,10 @@ pnpm exec turbo typecheck build test
 ```
 
 Deep dives live in the [documentation site](https://ghagga.javierzader.com/docs/): [Architecture](https://ghagga.javierzader.com/docs/architecture) · [Memory System](https://ghagga.javierzader.com/docs/memory-system) · [API Reference](https://ghagga.javierzader.com/docs/api-reference) · [Database Schema](https://ghagga.javierzader.com/docs/database-schema)
+
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Security issues go through [SECURITY.md](SECURITY.md), not public issues.
 
 ## Credits
 
