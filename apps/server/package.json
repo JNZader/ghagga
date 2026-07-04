@@ -16,26 +16,26 @@
   },
   "dependencies": {
     "@ghagga/types": "workspace:*",
-    "@hono/node-server": "^2.0.5",
+    "@hono/node-server": "^2.0.8",
     "@octokit/rest": "^22.0.1",
-    "bullmq": "^5.78.1",
+    "bullmq": "^5.79.2",
     "dotenv": "^17.4.2",
     "ghagga-core": "workspace:*",
     "ghagga-db": "workspace:*",
     "ghagga-forge": "workspace:*",
-    "hono": "^4.12.25",
+    "hono": "^4.12.27",
     "hono-rate-limiter": "^0.5.3",
     "ioredis": "^5.11.1",
-    "node-cron": "^4.2.1",
+    "node-cron": "^4.5.0",
     "pino": "^10.3.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.1.0",
     "@types/node-cron": "^3.0.11",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }
