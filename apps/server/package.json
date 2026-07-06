@@ -23,10 +23,10 @@
     "ghagga-core": "workspace:*",
     "ghagga-db": "workspace:*",
     "ghagga-forge": "workspace:*",
-    "hono": "^4.12.27",
+    "hono": "^4.12.28",
     "hono-rate-limiter": "^0.5.3",
     "ioredis": "^5.11.1",
-    "node-cron": "^4.5.0",
+    "node-cron": "^4.6.0",
     "pino": "^10.3.1",
     "zod": "^4.4.3"
   },
@@ -37,6 +37,6 @@
     "@types/node-cron": "^3.0.11",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }
