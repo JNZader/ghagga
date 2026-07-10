@@ -105,30 +105,19 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-  # ── Tests (PR: fast, no coverage) ──────────────────────────
+  # ── Tests + Coverage (PR gate + main push) ─────────────────
+  # PRODOPS-009: coverage now runs (and its per-package thresholds are enforced,
+  # see apps/*/vitest.config.ts and packages/*/vitest.config.ts) on every PR, not
+  # just after merge — a regression is caught before it lands, not after. This
+  # replaces the previous split of a coverage-less "Tests" job on PRs and a
+  # separate "Tests + Coverage" job on push: running turbo once with coverage
+  # covers both cases without doubling the test run per event.
   test:
-    name: Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: [changes, check]
-    if: needs.changes.outputs.code == 'true' && github.event_name == 'pull_request'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: Setup
-        uses: ./.github/actions/setup
-      - name: Run tests
-        run: pnpm exec turbo test
-        env:
-          ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-
-  # ── Tests + Coverage (main push / manual only) ─────────────
-  coverage:
     name: Tests + Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [changes, check]
-    if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
+    if: needs.changes.outputs.code == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -138,8 +127,11 @@ jobs:
         run: pnpm exec turbo test:coverage
         env:
           ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      # Coverage HTML/JSON reports are only archived on push to main (not on every
+      # PR run) to avoid piling up artifact storage for runs that are superseded
+      # by the next commit anyway; the threshold gate above already ran for PRs.
       - name: Upload coverage reports
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-reports

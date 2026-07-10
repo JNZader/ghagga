@@ -83,6 +83,12 @@ services:
       - GITHUB_PRIVATE_KEY=${GITHUB_PRIVATE_KEY}
       # Security
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # Required for signing/validating GitHub Check Run callback state (SEC-006):
+      # apps/server/src/queues/review.ts derives a callback secret from this before
+      # every dispatch, and apps/server/src/github/runner.ts verifies it on the
+      # callback. Without it, jobs using the inline runner fail before static
+      # analysis even runs.
+      - STATE_SECRET=${STATE_SECRET}
       # Optional: Default LLM API keys
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -91,6 +97,27 @@ services:
       - postgres
       - redis
     restart: unless-stopped
+    # Explicit worker-specific healthcheck (PRODOPS-004). The image's default
+    # HEALTHCHECK (apps/server/Dockerfile) already branches on $SERVICE_TYPE and
+    # would do the right thing here too — this override is defense in depth so
+    # the worker's health contract is visible directly in this file, without
+    # having to cross-reference the Dockerfile to know it isn't just doing an
+    # HTTP probe that can never succeed against a process with no HTTP server.
+    #
+    # `$$` escapes Compose's own variable interpolation so REDIS_URL/REDIS_HOST/
+    # REDIS_PORT are read from the *container's* environment (set above) at
+    # healthcheck-run time, instead of being baked as literal values (including
+    # any embedded Redis credentials) into the rendered Compose config.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pgrep -f workers/review.js >/dev/null && (if [ -n \"$$REDIS_URL\" ]; then redis-cli -u \"$$REDIS_URL\" ping; else redis-cli -h \"$${REDIS_HOST:-redis}\" -p \"$${REDIS_PORT:-6379}\" ping; fi) | grep -q PONG"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   # ===========================================================================
   # PostgreSQL - Main database
