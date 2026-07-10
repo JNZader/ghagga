@@ -7,7 +7,9 @@ export default defineConfig({
     // container via testcontainers and require Docker. They are NOT part of the
     // default unit run (which also feeds `turbo run test`, where Docker is
     // absent). Run them explicitly with `pnpm --filter ghagga-db test:integration`.
-    exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
+    // vitest v4's default exclude no longer covers dist/, so stale compiled
+    // dist/**/*.test.js get collected and can fail locally. Exclude it explicitly.
+    exclude: [...configDefaults.exclude, '**/*.integration.test.ts', '**/dist/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json-summary'],

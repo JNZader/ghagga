@@ -3,7 +3,9 @@ import { configDefaults, defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     globals: false,
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    // vitest v4's default exclude no longer covers dist/, so stale compiled
+    // dist/**/*.test.js get collected and can fail locally. Exclude it explicitly.
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**', '**/dist/**'],
     // Type-level testing gate (P0 fix F1). Without this, the `@ts-expect-error`
     // directives in capability.test.ts — which prove the graph co-presence union
     // rejects an adapter with exactly one graph method — were enforced by NO
