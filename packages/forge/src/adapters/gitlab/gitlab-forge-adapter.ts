@@ -155,17 +155,22 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
   /**
    * Idempotently upsert the single GHAGGA summary note on an MR.
    *
-   * Behavior (mirrors the GitHub adapter's delete-all-stale + repost-at-bottom):
+   * Behavior (FORGE-UPSERT-005 remediation — update-in-place, never
+   * delete-before-create; mirrors the GitHub adapter):
    * 1. list MR notes; match the GHAGGA-owned ones by `marker.html` substring.
-   * 2. delete ALL matches in `[latest, ...stale]` order — BEST-EFFORT: each
-   *    delete is per-note try/catch so a 404 (already gone) OR any other failure
-   *    is tolerated and does NOT block the repost. Only ids that actually deleted
-   *    (no throw) are reported in `deleted`.
-   * 3. create a FRESH note at the bottom — this is the ONLY failure that
-   *    propagates (a failed create means no summary exists, which is fatal).
-   *
-   * "latest" = the LAST marker-matching note in chronological order (GitLab list
-   * returns notes oldest-first), matching the GitHub adapter's convention.
+   *    "latest" = the LAST marker-matching note in chronological order
+   *    (GitLab list returns notes oldest-first).
+   * 2a. NO matching note: create a FRESH note. Failure here just means no
+   *     summary was ever created — no regression vs. the previous behavior.
+   * 2b. A matching note exists: update the LATEST one IN PLACE via
+   *     `client.updateMrNote`. This is the ONLY error that propagates from the
+   *     existing-note path — and it propagates BEFORE anything has been
+   *     deleted, so a transient update failure (timeout / 5xx) leaves the
+   *     MR's PREVIOUS valid review intact instead of no review at all (the
+   *     bug this remediation closes). Only AFTER the update confirms success
+   *     are the stale duplicate notes removed, BEST-EFFORT: each delete is
+   *     per-note try/catch so a 404 (already gone) OR any other failure is
+   *     tolerated and does NOT undo the successful update.
    *
    * Returns GitLab-native numeric ids (boxing happens caller-local via
    * {@link gitlabCommentId}).
@@ -181,38 +186,52 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
 
     const matchIds = notes.filter((n) => n.body.includes(marker.html)).map((n) => n.id);
 
+    if (matchIds.length === 0) {
+      // No prior GHAGGA note: the only safe move is to create a fresh one. A
+      // 401/403 here is reclassified to ForgeAuthError.
+      const created = await this.#mapAuth(() =>
+        this.#client.createMrNote(this.#projectId, ref.iid, body, this.#token),
+      );
+
+      if (created?.id == null) {
+        throw new TypeError(
+          'GitLabForgeAdapter.upsertSummaryComment: createMrNote returned no id (expected { id: number })',
+        );
+      }
+
+      return { created: created.id, deleted: [] };
+    }
+
+    // latest = last marker note; the rest are stale. (Guaranteed non-empty
+    // inside this `matchIds.length > 0` branch.)
+    const latestId = matchIds[matchIds.length - 1] as number;
+    const staleIds = matchIds.slice(0, -1);
+
+    // Update the latest note IN PLACE. This is the ONLY error that propagates
+    // from the existing-note path — and it propagates BEFORE anything has
+    // been deleted, so the previous review remains visible on the MR if this
+    // fails transiently. A 401/403 here is reclassified to ForgeAuthError.
+    await this.#mapAuth(() =>
+      this.#client.updateMrNote(this.#projectId, ref.iid, latestId, body, this.#token),
+    );
+
+    // The update confirmed success — now it's safe to prune stale duplicates.
+    // BEST-EFFORT: tolerate any delete failure (404 or non-404), since the
+    // now-current note already carries the fresh body regardless of whether
+    // the old duplicates get cleaned up.
     const deleted: number[] = [];
-    if (matchIds.length > 0) {
-      // latest = last marker note; the rest are stale. Delete latest FIRST then
-      // stale, mirroring the GitHub adapter's baseline order. (Guaranteed
-      // non-empty inside this `matchIds.length > 0` branch.)
-      const latestId = matchIds[matchIds.length - 1];
-      const staleIds = matchIds.slice(0, -1);
-      const ordered = [latestId, ...staleIds];
-      for (const noteId of ordered) {
-        try {
-          await this.#client.deleteMrNote(this.#projectId, ref.iid, noteId, this.#token);
-          deleted.push(noteId);
-        } catch {
-          // Best-effort: tolerate any delete failure (404 or non-404). A stale
-          // note that cannot be deleted must NOT block the fresh repost.
-        }
+    for (const noteId of staleIds) {
+      try {
+        await this.#client.deleteMrNote(this.#projectId, ref.iid, noteId, this.#token);
+        deleted.push(noteId);
+      } catch {
+        // Best-effort: a stale duplicate that cannot be deleted must NOT be
+        // treated as a failure of the upsert — the primary note is already
+        // updated.
       }
     }
 
-    // Always create a fresh note at the bottom. This is the ONLY error that
-    // propagates. A 401/403 here is reclassified to ForgeAuthError.
-    const created = await this.#mapAuth(() =>
-      this.#client.createMrNote(this.#projectId, ref.iid, body, this.#token),
-    );
-
-    if (created?.id == null) {
-      throw new TypeError(
-        'GitLabForgeAdapter.upsertSummaryComment: createMrNote returned no id (expected { id: number })',
-      );
-    }
-
-    return { created: created.id, deleted };
+    return { created: latestId, deleted };
   }
 
   // ─── InlineCapable ─────────────────────────────────────────────

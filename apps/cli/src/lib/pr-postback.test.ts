@@ -67,7 +67,7 @@ describe('postSummaryComment via CLI port + GitHubForgeAdapter', () => {
     expect(JSON.parse(postInit.body as string)).toEqual({ body });
   });
 
-  it('finds stale → deletes ALL → reposts fresh (idempotent upsert + marker)', async () => {
+  it('finds stale → updates latest IN PLACE → prunes only stale duplicates (idempotent upsert + marker)', async () => {
     // list returns two GHAGGA comments (with marker) + one foreign comment
     mockFetch.mockResolvedValueOnce(
       jsonResponse(200, [
@@ -76,27 +76,39 @@ describe('postSummaryComment via CLI port + GitHubForgeAdapter', () => {
         { id: 300, body: `newer ${REVIEW_COMMENT_MARKER}` },
       ]),
     );
-    // deleteComment(latest=300), deleteComment(stale=100)
+    // FORGE-UPSERT-005: updateComment(latest=300) IN PLACE first...
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: 300 }));
+    // ...then deleteComment(stale=100) only after the update confirms success.
     mockFetch.mockResolvedValueOnce(jsonResponse(204, {}));
-    mockFetch.mockResolvedValueOnce(jsonResponse(204, {}));
-    // postComment fresh
-    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 400 }));
 
     const adapter = buildAdapter();
     const result = await postSummaryComment(adapter, REF, 'body', MARKER);
 
-    expect(result.createdNativeId).toBe(400);
-    // delete order: latest first, then stale.
-    expect(result.deletedNativeIds).toEqual([300, 100]);
+    // "created" now carries the id of the comment currently holding the review
+    // body — the updated latest (300), NOT a freshly posted comment.
+    expect(result.createdNativeId).toBe(300);
+    // The latest (300) is updated, never deleted; only the stale duplicate (100) is pruned.
+    expect(result.deletedNativeIds).toEqual([100]);
 
-    const delCall1 = mockFetch.mock.calls[1] as [string, RequestInit];
-    const delCall2 = mockFetch.mock.calls[2] as [string, RequestInit];
-    expect(delCall1[0]).toContain('/issues/comments/300');
-    expect(delCall1[1].method).toBe('DELETE');
-    expect(delCall2[0]).toContain('/issues/comments/100');
-    // foreign comment (200) is never deleted.
+    // Update happens in place (PATCH) on the latest, before any delete.
+    const updateCall = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(updateCall[0]).toContain('/issues/comments/300');
+    expect(updateCall[1].method).toBe('PATCH');
+    expect(JSON.parse(updateCall[1].body as string)).toEqual({ body: 'body' });
+    const delCall = mockFetch.mock.calls[2] as [string, RequestInit];
+    expect(delCall[0]).toContain('/issues/comments/100');
+    expect(delCall[1].method).toBe('DELETE');
+    // The latest (300) is updated, never the target of a DELETE.
+    const deleteUrls = mockFetch.mock.calls
+      .filter((c) => (c[1] as RequestInit).method === 'DELETE')
+      .map((c) => c[0] as string);
+    expect(deleteUrls.some((u) => u.includes('/issues/comments/300'))).toBe(false);
+    // foreign comment (200) is never touched.
     const allUrls = mockFetch.mock.calls.map((c) => c[0] as string).join('\n');
     expect(allUrls).not.toContain('/issues/comments/200');
+    // No fresh POST on the replace path — the update carried the body.
+    const methods = mockFetch.mock.calls.map((c) => (c[1] as RequestInit).method);
+    expect(methods).not.toContain('POST');
   });
 
   it('a 401 with the static token is fatal (no invalidate-retry)', async () => {
@@ -152,24 +164,28 @@ describe('CLI GitHub port — findExistingComment pagination (backlog #6)', () =
     expect(mockFetch.mock.calls[0][0] as string).toContain('page=1');
   });
 
-  it('multi-page → full page 1 forces page 2 fetch; stale-on-page-2 found + deleted (no duplicate)', async () => {
-    // page 1: 100 comments, NO marker → must fetch page 2; page 2 carries the stale marker.
+  it('multi-page → full page 1 forces page 2 fetch; stale-on-page-2 found + updated in place (no duplicate)', async () => {
+    // page 1: 100 comments, NO marker → must fetch page 2; page 2 carries the sole marker.
     mockFetch.mockResolvedValueOnce(jsonResponse(200, makeComments(100, 0)));
     mockFetch.mockResolvedValueOnce(jsonResponse(200, makeComments(15, 100, 5))); // marker id 105
-    // adapter deletes the found stale (105) then reposts fresh.
-    mockFetch.mockResolvedValueOnce(jsonResponse(204, {})); // delete 105
-    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 777 })); // repost
+    // FORGE-UPSERT-005: single GHAGGA comment → update it in place, nothing to prune.
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: 105 })); // update 105
 
     const adapter = buildAdapter();
     const result = await postSummaryComment(adapter, REF, 'body', MARKER);
 
-    expect(result.deletedNativeIds).toEqual([105]);
-    expect(result.createdNativeId).toBe(777);
+    // Sole comment (105) is updated in place: it carries the body, nothing is deleted.
+    expect(result.deletedNativeIds).toEqual([]);
+    expect(result.createdNativeId).toBe(105);
     expect(mockFetch.mock.calls[0][0] as string).toContain('page=1');
     expect(mockFetch.mock.calls[1][0] as string).toContain('page=2');
-    const delCall = mockFetch.mock.calls[2] as [string, RequestInit];
-    expect(delCall[0]).toContain('/issues/comments/105');
-    expect(delCall[1].method).toBe('DELETE');
+    const updateCall = mockFetch.mock.calls[2] as [string, RequestInit];
+    expect(updateCall[0]).toContain('/issues/comments/105');
+    expect(updateCall[1].method).toBe('PATCH');
+    // No DELETE and no POST — the sole comment is updated, not replaced.
+    const methods = mockFetch.mock.calls.map((c) => (c[1] as RequestInit).method);
+    expect(methods).not.toContain('DELETE');
+    expect(methods).not.toContain('POST');
   });
 
   it('safety bound → stops at MAX_PAGES (50) and warns instead of looping forever', async () => {

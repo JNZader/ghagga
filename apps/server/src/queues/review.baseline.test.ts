@@ -22,8 +22,10 @@
  *      boundaries; postback token budget-valid) is pinned by test 3c. Pre-P2 the
  *      count was 2 (TemporaryGitHubTokenSource minted per call); the drop to 1 is
  *      the deliberate, documented P2 optimization — NOT a regression.
- *   4. Stale-delete-then-repost — find existing → delete ALL stale (best
- *      effort) → post fresh at bottom, with the delete-before-post ordering.
+ *   4. Update-in-place-then-prune — find existing → UPDATE the latest comment
+ *      IN PLACE (PATCH) → delete only the STALE duplicates (best effort),
+ *      strictly AFTER the update succeeds. No fresh POST when a prior GHAGGA
+ *      comment already exists (FORGE-UPSERT-005 remediation).
  *   5. Trigger-comment reaction — addCommentReaction on the trigger comment.
  *
  * DETERMINISM (documented for the eventual 1.8/1.9 tests):
@@ -222,7 +224,16 @@ const mockAddCommentReaction = vi.fn(
   },
 );
 
-const mockUpdateComment = vi.fn().mockResolvedValue(undefined);
+const mockUpdateComment = vi.fn(
+  async (owner: string, repo: string, commentId: number, body: string) => {
+    callLog.push({
+      fn: 'updateComment',
+      method: 'PATCH',
+      endpoint: `/repos/${owner}/${repo}/issues/comments/${commentId}`,
+      body: { body },
+    });
+  },
+);
 const mockFetchGraphFromBranch = vi.fn().mockResolvedValue(null);
 
 vi.mock('../github/client.js', () => ({
@@ -369,11 +380,15 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
   });
 
   // ── 1. Golden summary-comment BODY (byte-exact) ──────────────────
-  it('1. posts a byte-identical summary-comment body (golden snapshot)', async () => {
+  it('1. updates the existing comment with a byte-identical body (golden snapshot)', async () => {
     await runBaselineFlow();
 
-    const post = callLog.find((c) => c.fn === 'postComment');
+    // Under update-in-place, findExistingComment returns an existing latest
+    // comment (1001), so the body is delivered via updateComment (PATCH), NOT
+    // a fresh postComment — the replace path never posts.
+    const post = callLog.find((c) => c.fn === 'updateComment');
     expect(post).toBeDefined();
+    expect(callLog.some((c) => c.fn === 'postComment')).toBe(false);
     const body = (post?.body as { body: string }).body;
 
     // Inline snapshot = committed golden. If the rewire changes a single byte
@@ -413,12 +428,14 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     await runBaselineFlow();
 
     const sequence = callLog.map((c) => `${c.method} ${c.endpoint}`);
-    // P2 DELTA: the SECOND `POST /app/installations/7777/access_tokens` (the
-    // pre-postback mint) is GONE — the provider returns the still-budget-valid
-    // phase-1 token from cache. Every OTHER call (method + endpoint + order) is
-    // byte-identical to the pre-P2 baseline: same fetch reads, same
-    // find→delete-all-stale→post, same reaction. The ONLY change is the absent
-    // second mint (caching).
+    // FORGE-UPSERT-005 DELTA: the replace path no longer deletes the latest
+    // comment and re-posts fresh. It now PATCHes comment 1001 in place, and
+    // only THEN deletes the stale duplicates (900, 950) — best-effort pruning
+    // that happens strictly AFTER the update succeeds. No `POST .../comments`
+    // fires on this path (that endpoint is reserved for the no-existing-comment
+    // case, not exercised by this fixture). Every OTHER call (method + endpoint
+    // + order) is unchanged from the P2 baseline: same fetch reads, same
+    // single mint, same trailing reaction.
     expect(sequence).toMatchInlineSnapshot(`
       [
         "POST /app/installations/7777/access_tokens",
@@ -426,22 +443,21 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
         "GET /repos/acme/widget/pulls/42/commits",
         "GET /repos/acme/widget/pulls/42/files",
         "GET /repos/acme/widget/issues/42/comments (list)",
-        "DELETE /repos/acme/widget/issues/comments/1001",
+        "PATCH /repos/acme/widget/issues/comments/1001",
         "DELETE /repos/acme/widget/issues/comments/900",
         "DELETE /repos/acme/widget/issues/comments/950",
-        "POST /repos/acme/widget/issues/42/comments",
         "POST /repos/acme/widget/issues/comments/555/reactions",
       ]
     `);
   });
 
-  it('2b. records the postComment + reaction request bodies', async () => {
+  it('2b. records the updateComment + reaction request bodies', async () => {
     await runBaselineFlow();
 
-    const post = callLog.find((c) => c.fn === 'postComment');
+    const update = callLog.find((c) => c.fn === 'updateComment');
     const reaction = callLog.find((c) => c.fn === 'addCommentReaction');
     expect(
-      (post?.body as { body: string }).body.endsWith(`<!-- reviewId: ${BASELINE_REVIEW_ID} -->`),
+      (update?.body as { body: string }).body.endsWith(`<!-- reviewId: ${BASELINE_REVIEW_ID} -->`),
     ).toBe(true);
     expect(reaction?.body).toEqual({ content: 'rocket' });
   });
@@ -468,7 +484,7 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     const mintIdx = idx('getInstallationToken');
     expect(mintIdx).toBeLessThan(idx('fetchPRDiff'));
     expect(mintIdx).toBeLessThan(idx('findExistingComment'));
-    expect(mintIdx).toBeLessThan(idx('postComment'));
+    expect(mintIdx).toBeLessThan(idx('updateComment'));
 
     // It targets the installation's access-token endpoint.
     expect(mints[0]?.endpoint).toBe('/app/installations/7777/access_tokens');
@@ -480,10 +496,12 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     // The single mint feeds the fetch phase; the postback phase reuses the SAME
     // cached token (ghp_mint-1) — pins the P2 caching behavior. Pre-P2 these
     // differed (ghp_mint-1 vs ghp_mint-2, fresh-before-postback). They are now
-    // EQUAL because the cached token is still budget-valid at postback.
+    // EQUAL because the cached token is still budget-valid at postback. Under
+    // update-in-place, the body-carrying call on the postback phase is
+    // updateComment (not postComment), so that's the call asserted here.
     expect(mockFetchPRDiff).toHaveBeenCalledWith('acme', 'widget', 42, 'ghp_mint-1');
     expect(mockFindExistingComment).toHaveBeenCalledWith('acme', 'widget', 42, 'ghp_mint-1');
-    expect(mockPostComment.mock.calls[0][4]).toBe('ghp_mint-1');
+    expect(mockUpdateComment.mock.calls[0][4]).toBe('ghp_mint-1');
     expect(mockAddCommentReaction).toHaveBeenCalledWith(
       'acme',
       'widget',
@@ -517,7 +535,8 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     expect(mockGetPRFileList).toHaveBeenCalledWith('acme', 'widget', 42, fetchToken);
 
     // Phase-2 boundary: every postback-phase forge call consumed the SAME token.
-    const postbackToken = mockPostComment.mock.calls[0][4];
+    // Under update-in-place, the body-carrying postback call is updateComment.
+    const postbackToken = mockUpdateComment.mock.calls[0][4];
     expect(typeof postbackToken).toBe('string');
     expect(mockFindExistingComment).toHaveBeenCalledWith('acme', 'widget', 42, postbackToken);
     expect(mockAddCommentReaction).toHaveBeenCalledWith(
@@ -539,34 +558,63 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     ]);
     const postbackPhaseTokens = new Set([
       mockFindExistingComment.mock.calls[0][3],
-      mockPostComment.mock.calls[0][4],
+      mockUpdateComment.mock.calls[0][4],
     ]);
     expect(fetchPhaseTokens.size).toBe(1);
     expect(postbackPhaseTokens.size).toBe(1);
   });
 
-  // ── 4. Stale-delete-then-repost ──────────────────────────────────
-  it('4. deletes ALL stale comments BEFORE posting the fresh one', async () => {
+  // ── 4. Update-in-place, then prune ONLY the stale duplicates ──────
+  it('4. updates the latest comment in place, THEN deletes only the stale duplicates', async () => {
     await runBaselineFlow();
 
     const order = callLog.map((c) => c.fn);
     const findIdx = order.indexOf('findExistingComment');
-    const postIdx = order.indexOf('postComment');
+    const updateIdx = order.indexOf('updateComment');
     const deleteIdxs = order
       .map((fn, i) => (fn === 'deleteComment' ? i : -1))
       .filter((i) => i >= 0);
 
-    // find → deletes → post (all deletes strictly between find and post).
+    // find → update (latest, in place) → delete (stale duplicates only).
     expect(findIdx).toBeGreaterThanOrEqual(0);
-    expect(deleteIdxs.length).toBe(3); // latest 1001 + stale 900, 950
+    expect(updateIdx).toBeGreaterThan(findIdx);
+    // Only the stale duplicates (900, 950) are deleted — the latest comment
+    // (1001) is updated, never deleted.
+    expect(deleteIdxs.length).toBe(2);
     for (const d of deleteIdxs) {
-      expect(d).toBeGreaterThan(findIdx);
-      expect(d).toBeLessThan(postIdx);
+      expect(d).toBeGreaterThan(updateIdx);
     }
 
-    // The exact set + order of deleted IDs: [latestId, ...staleIds].
+    // The exact set + order of deleted IDs: staleIds only, latestId excluded.
     const deletedIds = mockDeleteComment.mock.calls.map((c) => c[2]);
-    expect(deletedIds).toEqual([1001, 900, 950]);
+    expect(deletedIds).toEqual([900, 950]);
+
+    // No fresh postComment on the replace path.
+    expect(order.includes('postComment')).toBe(false);
+
+    // ── Transient-update-failure sub-case (same test: the regression this
+    // remediation closes) ──
+    //
+    // Simulate a transient update failure (timeout/5xx) on the PATCH call and
+    // re-run the flow. The failure must propagate WITHOUT deleting anything
+    // and WITHOUT reacting: under delete-before-create the PREVIOUS behavior
+    // would have already wiped the visible review before the (failing) post;
+    // under update-in-place nothing is deleted until AFTER the update
+    // confirms success, so a transient failure leaves the prior comment
+    // (including its duplicates) exactly as it was.
+    callLog.length = 0;
+    tokenSeq = 0;
+    mockDeleteComment.mockClear();
+    mockAddCommentReaction.mockClear();
+    mockUpdateComment.mockClear();
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+    mockUpdateComment.mockRejectedValueOnce(new Error('transient 503'));
+
+    await expect(capturedProcessor?.(makeFakeJob(makeJobData()))).rejects.toThrow('transient 503');
+
+    expect(mockDeleteComment).not.toHaveBeenCalled();
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+    expect(mockUpdateComment).toHaveBeenCalledTimes(1);
   });
 
   // ── 5. Trigger-comment reaction ──────────────────────────────────
@@ -583,6 +631,6 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     );
 
     const order = callLog.map((c) => c.fn);
-    expect(order.indexOf('addCommentReaction')).toBeGreaterThan(order.indexOf('postComment'));
+    expect(order.indexOf('addCommentReaction')).toBeGreaterThan(order.indexOf('updateComment'));
   });
 });

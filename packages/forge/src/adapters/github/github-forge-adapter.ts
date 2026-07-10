@@ -191,16 +191,27 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
   /**
    * Idempotently upsert the single GHAGGA summary comment.
    *
-   * Behavior (preserves the review.ts baseline exactly):
+   * Behavior (FORGE-UPSERT-005 remediation — update-in-place, never
+   * delete-before-create):
    * 1. find existing GHAGGA comments (latest + stale).
-   * 2. delete ALL of them in the order `[latestId, ...staleIds]` — BEST-EFFORT:
-   *    each delete is wrapped in try/catch so BOTH 404 (already gone) AND any
-   *    non-404 failure are tolerated and do NOT block the repost. Only ids that
-   *    actually deleted (no throw) are reported in `deleted`.
-   * 3. post a FRESH comment at the bottom — this is the ONLY failure that
-   *    propagates (a failed post means no summary exists, which is fatal).
+   * 2a. NO existing comment: post a FRESH comment. This is the only network
+   *     call, so failure here simply means no summary was ever created — no
+   *     regression vs. the previous behavior.
+   * 2b. AN existing comment: update the LATEST one IN PLACE via
+   *     `client.updateComment`. This call is the ONLY one that propagates on
+   *     failure — and critically, nothing has been deleted yet at that point,
+   *     so a transient update failure (timeout / 5xx) leaves the PR/MR with
+   *     its PREVIOUS valid review intact instead of no review at all (the bug
+   *     this remediation closes). Only AFTER the update confirms success are
+   *     the stale duplicates removed, BEST-EFFORT: each delete is wrapped in
+   *     try/catch so BOTH 404 (already gone) AND any non-404 failure are
+   *     tolerated and do NOT undo the successful update. Only ids that
+   *     actually deleted (no throw) are reported in `deleted`.
    *
-   * Returns GitHub-native numeric ids (boxing happens caller-local).
+   * Returns GitHub-native numeric ids (boxing happens caller-local). `created`
+   * is the id of the comment that now carries the review body — it may be a
+   * freshly-posted id (no prior comment) or the pre-existing latest id that
+   * was updated in place.
    *
    * NOTE: `marker` is accepted for the port contract but is NOT threaded into
    * the client. The GitHub adapter currently matches the FIXED
@@ -221,46 +232,54 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
       this.#client.findExistingComment(this.#owner, this.#repo, ref.iid, this.#token),
     );
 
+    if (!existing) {
+      // No prior GHAGGA comment: the only safe move is to post a fresh one. A
+      // 401/403 here is reclassified to ForgeAuthError so the worker can
+      // re-mint + retry (P2).
+      const posted = await this.#mapAuth(() =>
+        this.#client.postComment(this.#owner, this.#repo, ref.iid, body, this.#token),
+      );
+
+      // Robustness guard: the real client.postComment returns `{ id }` or
+      // throws, so a missing id is a contract violation (e.g. a mis-shaped
+      // test double), never a live path. Fail loudly here rather than
+      // silently boxing `undefined` → the meaningless CommentId
+      // `{ kind:'github', raw:'undefined' }` downstream.
+      if (posted?.id == null) {
+        throw new TypeError(
+          'GitHubForgeAdapter.upsertSummaryComment: postComment returned no id (expected { id: number })',
+        );
+      }
+
+      return { created: posted.id, deleted: [] };
+    }
+
+    // Update the latest comment IN PLACE. This is the ONLY error that
+    // propagates from the existing-comment path — and it propagates BEFORE
+    // anything has been deleted, so the previous review remains visible on
+    // the PR if this fails transiently. A 401/403 here is reclassified to
+    // ForgeAuthError so the worker can re-mint + retry (P2).
+    await this.#mapAuth(() =>
+      this.#client.updateComment(this.#owner, this.#repo, existing.latestId, body, this.#token),
+    );
+
+    // The update confirmed success — now it's safe to prune stale duplicates.
+    // BEST-EFFORT: tolerate BOTH 404 and non-404 delete failures, since the
+    // now-current comment already carries the fresh body regardless of
+    // whether the old duplicates get cleaned up.
     const deleted: number[] = [];
-    if (existing) {
-      // Preserve baseline delete-order: latest FIRST, then stale duplicates.
-      const allIds = [existing.latestId, ...existing.staleIds];
-      for (const commentId of allIds) {
-        try {
-          await this.#client.deleteComment(this.#owner, this.#repo, commentId, this.#token);
-          deleted.push(commentId);
-        } catch {
-          // Best-effort: tolerate BOTH 404 and non-404 delete failures. A stale
-          // comment that cannot be deleted must NOT block the fresh repost.
-          //
-          // REALITY NOTE: the real client.ts deleteComment is fire-and-forget
-          // (it does NOT check response.ok and never throws), so in production
-          // this catch is defensive belt-and-suspenders and `deleted[]` reflects
-          // attempted-and-not-thrown deletes. The catch only triggers under a
-          // test double / future client that does throw.
-        }
+    for (const commentId of existing.staleIds) {
+      try {
+        await this.#client.deleteComment(this.#owner, this.#repo, commentId, this.#token);
+        deleted.push(commentId);
+      } catch {
+        // Best-effort: a stale duplicate that cannot be deleted must NOT be
+        // treated as a failure of the upsert — the primary comment is already
+        // updated.
       }
     }
 
-    // Always post a fresh comment at the bottom. This is the ONLY error that
-    // propagates — without it there would be no summary at all. A 401/403 here is
-    // reclassified to ForgeAuthError so the worker can re-mint + retry (P2).
-    const posted = await this.#mapAuth(() =>
-      this.#client.postComment(this.#owner, this.#repo, ref.iid, body, this.#token),
-    );
-
-    // Robustness guard: the real client.postComment returns `{ id }` or throws,
-    // so a missing id is a contract violation (e.g. a mis-shaped test double),
-    // never a live path. Fail loudly here rather than silently boxing
-    // `undefined` → the meaningless CommentId `{ kind:'github', raw:'undefined' }`
-    // downstream.
-    if (posted?.id == null) {
-      throw new TypeError(
-        'GitHubForgeAdapter.upsertSummaryComment: postComment returned no id (expected { id: number })',
-      );
-    }
-
-    return { created: posted.id, deleted };
+    return { created: existing.latestId, deleted };
   }
 
   // ─── ReactionCapable ───────────────────────────────────────────

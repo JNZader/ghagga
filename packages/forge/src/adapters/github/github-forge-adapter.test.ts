@@ -117,74 +117,112 @@ describe('GitHubForgeAdapter — addReaction (R-5, task 1.2)', () => {
   });
 });
 
-describe('GitHubForgeAdapter — upsertSummaryComment (task 1.1b / 1.10)', () => {
+describe('GitHubForgeAdapter — upsertSummaryComment (task 1.1b / 1.10, FORGE-UPSERT-005)', () => {
   it('no existing comment: just posts, returns numeric created + empty deleted', async () => {
     const client = makeClient({ findExistingComment: vi.fn().mockResolvedValue(null) });
     const adapter = makeAdapter(client);
     const result = await adapter.upsertSummaryComment(ref, 'body', marker);
     expect(result).toEqual({ created: 1000, deleted: [] });
     expect(client.deleteComment).not.toHaveBeenCalled();
+    expect(client.updateComment).not.toHaveBeenCalled();
     expect(client.postComment).toHaveBeenCalledWith(OWNER, REPO, PR, 'body', TOKEN);
   });
 
-  it('deletes latest FIRST then stale, BEFORE posting (baseline order)', async () => {
+  it('existing comment: updates latest IN PLACE, then deletes stale, in that order', async () => {
     const calls: string[] = [];
     const client = makeClient({
       findExistingComment: vi.fn().mockResolvedValue({ latestId: 10, staleIds: [20, 30] }),
+      updateComment: vi.fn(async (_o, _r, id: number) => {
+        calls.push(`update:${id}`);
+      }),
       deleteComment: vi.fn(async (_o, _r, id: number) => {
         calls.push(`delete:${id}`);
       }),
-      postComment: vi.fn(async () => {
-        calls.push('post');
-        return { id: 999 };
+    });
+    const adapter = makeAdapter(client);
+    const result = await adapter.upsertSummaryComment(ref, 'body', marker);
+    expect(calls).toEqual(['update:10', 'delete:20', 'delete:30']);
+    expect(client.updateComment).toHaveBeenCalledWith(OWNER, REPO, 10, 'body', TOKEN);
+    expect(client.postComment).not.toHaveBeenCalled();
+    expect(result).toEqual({ created: 10, deleted: [20, 30] });
+  });
+
+  it('tolerates a 404-style stale-delete failure (best-effort) without undoing the update', async () => {
+    const client = makeClient({
+      findExistingComment: vi.fn().mockResolvedValue({ latestId: 10, staleIds: [20, 30] }),
+      deleteComment: vi.fn(async (_o, _r, id: number) => {
+        if (id === 20) throw new Error('GitHub API error: 404 Not Found');
       }),
     });
     const adapter = makeAdapter(client);
     const result = await adapter.upsertSummaryComment(ref, 'body', marker);
-    expect(calls).toEqual(['delete:10', 'delete:20', 'delete:30', 'post']);
-    expect(result).toEqual({ created: 999, deleted: [10, 20, 30] });
+    // 20 failed (not in deleted), 30 succeeded; the update already happened.
+    expect(result).toEqual({ created: 10, deleted: [30] });
+    expect(client.updateComment).toHaveBeenCalledOnce();
   });
 
-  it('tolerates a 404-style delete failure (best-effort) without blocking repost', async () => {
+  it('tolerates a NON-404 stale-delete failure (best-effort) without undoing the update', async () => {
     const client = makeClient({
       findExistingComment: vi.fn().mockResolvedValue({ latestId: 10, staleIds: [20] }),
-      deleteComment: vi.fn(async (_o, _r, id: number) => {
-        if (id === 10) throw new Error('GitHub API error: 404 Not Found');
-      }),
-      postComment: vi.fn().mockResolvedValue({ id: 999 }),
-    });
-    const adapter = makeAdapter(client);
-    const result = await adapter.upsertSummaryComment(ref, 'body', marker);
-    // 10 failed (not in deleted), 20 succeeded; post still happened.
-    expect(result).toEqual({ created: 999, deleted: [20] });
-    expect(client.postComment).toHaveBeenCalledOnce();
-  });
-
-  it('tolerates a NON-404 delete failure (best-effort) without blocking repost', async () => {
-    const client = makeClient({
-      findExistingComment: vi.fn().mockResolvedValue({ latestId: 10, staleIds: [] }),
       deleteComment: vi.fn(async () => {
         throw new Error('GitHub API error: 500 Internal Server Error');
       }),
-      postComment: vi.fn().mockResolvedValue({ id: 999 }),
     });
     const adapter = makeAdapter(client);
     const result = await adapter.upsertSummaryComment(ref, 'body', marker);
-    expect(result).toEqual({ created: 999, deleted: [] });
-    expect(client.postComment).toHaveBeenCalledOnce();
+    expect(result).toEqual({ created: 10, deleted: [] });
+    expect(client.updateComment).toHaveBeenCalledOnce();
   });
 
-  it('POST failure DOES propagate (only the create error is fatal)', async () => {
+  it('POST failure (no prior comment) DOES propagate', async () => {
     const client = makeClient({
-      findExistingComment: vi.fn().mockResolvedValue({ latestId: 10, staleIds: [] }),
+      findExistingComment: vi.fn().mockResolvedValue(null),
       postComment: vi.fn().mockRejectedValue(new Error('GitHub API error posting comment: 500')),
     });
     const adapter = makeAdapter(client);
     await expect(adapter.upsertSummaryComment(ref, 'body', marker)).rejects.toThrow(
       /posting comment/,
     );
-    // delete still ran before the failing post
-    expect(client.deleteComment).toHaveBeenCalledWith(OWNER, REPO, 10, TOKEN);
+    expect(client.deleteComment).not.toHaveBeenCalled();
+  });
+
+  // --- FORGE-UPSERT-005 regression: the old comment must survive a transient
+  // update/create failure. Delete must never run BEFORE the new body is
+  // confirmed published, so a timeout/5xx never leaves the PR with no review.
+
+  it('REGRESSION: update failure propagates WITHOUT deleting the previous comment', async () => {
+    const client = makeClient({
+      findExistingComment: vi.fn().mockResolvedValue({ latestId: 10, staleIds: [20] }),
+      updateComment: vi
+        .fn()
+        .mockRejectedValue(new Error('GitHub API error: 503 Service Unavailable')),
+    });
+    const adapter = makeAdapter(client);
+    await expect(adapter.upsertSummaryComment(ref, 'body', marker)).rejects.toThrow(
+      /503 Service Unavailable/,
+    );
+    // The previous review comment (10) and its stale duplicate (20) are both
+    // left untouched — no delete call happened at all.
+    expect(client.deleteComment).not.toHaveBeenCalled();
+    expect(client.postComment).not.toHaveBeenCalled();
+  });
+
+  it('REGRESSION: delete of stale duplicates never runs before the update resolves', async () => {
+    const calls: string[] = [];
+    const client = makeClient({
+      findExistingComment: vi.fn().mockResolvedValue({ latestId: 10, staleIds: [20] }),
+      updateComment: vi.fn(async () => {
+        calls.push('update-start');
+        await Promise.resolve();
+        calls.push('update-done');
+      }),
+      deleteComment: vi.fn(async (_o, _r, id: number) => {
+        calls.push(`delete:${id}`);
+      }),
+    });
+    const adapter = makeAdapter(client);
+    await adapter.upsertSummaryComment(ref, 'body', marker);
+    expect(calls).toEqual(['update-start', 'update-done', 'delete:20']);
   });
 });
 

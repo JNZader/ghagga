@@ -98,7 +98,7 @@ describe('postSummaryComment via CLI GitLab port + GitLabForgeAdapter', () => {
     expect(JSON.parse(postInit.body as string)).toEqual({ body });
   });
 
-  it('finds stale by marker → deletes ALL → reposts fresh (idempotent upsert)', async () => {
+  it('finds stale by marker → updates latest IN PLACE → prunes only stale duplicates (idempotent upsert)', async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse(200, [
         { id: 100, body: `old ${MARKER.html}` },
@@ -106,26 +106,37 @@ describe('postSummaryComment via CLI GitLab port + GitLabForgeAdapter', () => {
         { id: 300, body: `newer ${MARKER.html}` },
       ]),
     );
-    // delete latest=300, delete stale=100
+    // FORGE-UPSERT-005: updateMrNote(latest=300) IN PLACE (PUT) first...
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: 300 }));
+    // ...then delete stale=100 only after the update confirms success.
     mockFetch.mockResolvedValueOnce(jsonResponse(204, {}));
-    mockFetch.mockResolvedValueOnce(jsonResponse(204, {}));
-    // create fresh
-    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 400 }));
 
     const adapter = buildAdapter();
     const result = await postSummaryComment(adapter, REF, 'body', MARKER);
 
-    expect(result.createdNativeId).toBe(400);
-    expect(result.deletedNativeIds).toEqual([300, 100]);
+    // "created" now carries the updated latest note (300), not a freshly created one.
+    expect(result.createdNativeId).toBe(300);
+    // The latest (300) is updated, never deleted; only the stale duplicate (100) is pruned.
+    expect(result.deletedNativeIds).toEqual([100]);
 
-    const del1 = mockFetch.mock.calls[1] as [string, RequestInit];
-    const del2 = mockFetch.mock.calls[2] as [string, RequestInit];
-    expect(del1[0]).toContain('/notes/300');
-    expect(del1[1].method).toBe('DELETE');
-    expect(del2[0]).toContain('/notes/100');
-    // foreign note 200 never deleted.
+    // Update happens in place (PUT) on the latest, before any delete.
+    const updateCall = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(updateCall[0]).toContain('/notes/300');
+    expect(updateCall[1].method).toBe('PUT');
+    expect(JSON.parse(updateCall[1].body as string)).toEqual({ body: 'body' });
+    const del = mockFetch.mock.calls[2] as [string, RequestInit];
+    expect(del[0]).toContain('/notes/100');
+    expect(del[1].method).toBe('DELETE');
+    // The latest (300) is never the target of a DELETE.
+    const deleteUrls = mockFetch.mock.calls
+      .filter((c) => (c[1] as RequestInit).method === 'DELETE')
+      .map((c) => c[0] as string);
+    expect(deleteUrls.some((u) => u.includes('/notes/300'))).toBe(false);
+    // foreign note 200 never touched; no fresh POST on the replace path.
     const allUrls = mockFetch.mock.calls.map((c) => c[0] as string).join('\n');
     expect(allUrls).not.toContain('/notes/200');
+    const methods = mockFetch.mock.calls.map((c) => (c[1] as RequestInit).method);
+    expect(methods).not.toContain('POST');
   });
 
   it('sends ONLY PRIVATE-TOKEN (no Bearer) + an AbortSignal (FIX E)', async () => {
@@ -272,26 +283,29 @@ describe('CLI GitLab port — listMrNotes pagination (backlog #6)', () => {
     expect(url).toContain('page=1');
   });
 
-  it('multi-page → full page 1 forces page 2 fetch; stale-on-page-2 found + deleted (no duplicate)', async () => {
-    // page 1: 100 notes, NO marker → must fetch page 2; page 2 carries the stale marker.
+  it('multi-page → full page 1 forces page 2 fetch; stale-on-page-2 found + updated in place (no duplicate)', async () => {
+    // page 1: 100 notes, NO marker → must fetch page 2; page 2 carries the sole marker.
     mockFetch.mockResolvedValueOnce(jsonResponse(200, makeNotes(100, 0)));
     mockFetch.mockResolvedValueOnce(jsonResponse(200, makeNotes(15, 100, 5))); // marker id 105
-    // adapter then deletes the found stale (id 105) and reposts fresh.
-    mockFetch.mockResolvedValueOnce(jsonResponse(204, {})); // delete 105
-    mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 999 })); // repost
+    // FORGE-UPSERT-005: single GHAGGA note → update it in place (PUT), nothing to prune.
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: 105 })); // update 105
 
     const adapter = buildAdapter();
     const result = await postSummaryComment(adapter, REF, 'body', MARKER);
 
-    // Stale on page 2 WAS found and deleted — not duplicated.
-    expect(result.deletedNativeIds).toEqual([105]);
-    expect(result.createdNativeId).toBe(999);
+    // Sole note (105) is updated in place: it carries the body, nothing is deleted.
+    expect(result.deletedNativeIds).toEqual([]);
+    expect(result.createdNativeId).toBe(105);
     // page 1 + page 2 list calls happened.
     expect(mockFetch.mock.calls[0][0] as string).toContain('page=1');
     expect(mockFetch.mock.calls[1][0] as string).toContain('page=2');
-    const delCall = mockFetch.mock.calls[2] as [string, RequestInit];
-    expect(delCall[0]).toContain('/notes/105');
-    expect(delCall[1].method).toBe('DELETE');
+    const updateCall = mockFetch.mock.calls[2] as [string, RequestInit];
+    expect(updateCall[0]).toContain('/notes/105');
+    expect(updateCall[1].method).toBe('PUT');
+    // No DELETE and no POST — the sole note is updated, not replaced.
+    const methods = mockFetch.mock.calls.map((c) => (c[1] as RequestInit).method);
+    expect(methods).not.toContain('DELETE');
+    expect(methods).not.toContain('POST');
   });
 
   it('safety bound → stops at MAX_PAGES (50) and warns instead of looping forever', async () => {
