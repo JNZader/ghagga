@@ -116,48 +116,78 @@ describe('Graceful shutdown (SIGTERM)', () => {
 
 // ─── Fix #12: Detailed health check endpoint ────────────────────
 
-describe('GET /health/detailed', () => {
+describe('GET /health/detailed (SEC-003 hardened)', () => {
+  const HEALTH_TOKEN = 'monitoring-token-xyz';
+
   /**
-   * Build a mini Hono app that replicates the /health/detailed handler
-   * from index.ts, using a mock database object.
+   * Build a mini Hono app that replicates the hardened /health/detailed handler
+   * from index.ts (cache + auth-gated detail + redacted errors), using a mock
+   * database object. The cache is per-app so tests don't cross-contaminate.
    */
-  function createApp(dbExecute: () => Promise<unknown>) {
+  function createApp(dbExecute: () => Promise<unknown>, healthToken?: string) {
     const app = new Hono();
     const breaker = new SimpleCircuitBreaker();
-
     const mockDb = { execute: dbExecute };
 
-    app.get('/health/detailed', async (c) => {
-      const startTime = Date.now();
-      const checks: Record<string, { ok: boolean; latencyMs?: number; error?: string }> = {};
+    let cache: { at: number; healthy: boolean; dbLatencyMs?: number } | null = null;
+    const CACHE_MS = 10_000;
 
-      try {
-        const dbStart = Date.now();
-        await mockDb.execute();
-        checks.database = { ok: true, latencyMs: Date.now() - dbStart };
-      } catch (e) {
-        checks.database = { ok: false, error: e instanceof Error ? e.message : 'Unknown error' };
+    const isAuthorized = (authHeader?: string, tokenHeader?: string): boolean => {
+      if (!healthToken) return false;
+      const provided = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : tokenHeader;
+      return provided === healthToken;
+    };
+
+    app.get('/health/detailed', async (c) => {
+      const now = Date.now();
+      let healthy: boolean;
+      let dbLatencyMs: number | undefined;
+      if (cache && now - cache.at < CACHE_MS) {
+        healthy = cache.healthy;
+        dbLatencyMs = cache.dbLatencyMs;
+      } else {
+        try {
+          const dbStart = Date.now();
+          await mockDb.execute();
+          dbLatencyMs = Date.now() - dbStart;
+          healthy = true;
+        } catch {
+          healthy = false;
+          dbLatencyMs = undefined;
+        }
+        cache = { at: now, healthy, dbLatencyMs };
       }
 
-      const healthy = Object.values(checks).every((check) => check.ok);
-
+      const status = healthy ? 'healthy' : 'degraded';
+      const code = healthy ? 200 : 503;
+      const authorized = isAuthorized(
+        c.req.header('authorization'),
+        c.req.header('x-health-token'),
+      );
+      if (!authorized) {
+        return c.json({ status }, code);
+      }
       return c.json(
         {
-          status: healthy ? 'healthy' : 'degraded',
+          status,
           uptime: Math.floor(process.uptime()),
           memoryMB: Math.floor(process.memoryUsage().rss / 1024 / 1024),
-          checks,
+          checks: {
+            database: {
+              ok: healthy,
+              ...(dbLatencyMs !== undefined ? { latencyMs: dbLatencyMs } : {}),
+            },
+          },
           githubCircuitBreaker: breaker.getState(),
-          responseTimeMs: Date.now() - startTime,
         },
-        healthy ? 200 : 503,
+        code,
       );
     });
 
     return app;
   }
 
-  it('returns 200 with healthy status when database is reachable', async () => {
+  it('returns 200 with aggregated healthy status to an unauthenticated caller', async () => {
     const app = createApp(() => Promise.resolve([{ '?column?': 1 }]));
 
     const res = await app.request('/health/detailed');
@@ -165,44 +195,66 @@ describe('GET /health/detailed', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as Record<string, unknown>;
     expect(json.status).toBe('healthy');
-    expect(json.checks).toHaveProperty('database');
-    expect((json.checks as Record<string, { ok: boolean }>).database.ok).toBe(true);
+    // No internals exposed to the public.
+    expect(json.uptime).toBeUndefined();
+    expect(json.memoryMB).toBeUndefined();
+    expect(json.checks).toBeUndefined();
+    expect(json.githubCircuitBreaker).toBeUndefined();
   });
 
-  it('returns 503 with degraded status when database is unreachable', async () => {
-    const app = createApp(() => Promise.reject(new Error('ECONNREFUSED')));
+  it('returns 503 degraded WITHOUT the raw driver error to the public', async () => {
+    const app = createApp(() => Promise.reject(new Error('ECONNREFUSED at 10.0.0.5:5432')));
 
     const res = await app.request('/health/detailed');
 
     expect(res.status).toBe(503);
     const json = (await res.json()) as Record<string, unknown>;
     expect(json.status).toBe('degraded');
-    const dbCheck = (json.checks as Record<string, { ok: boolean; error?: string }>).database;
-    expect(dbCheck.ok).toBe(false);
-    expect(dbCheck.error).toBe('ECONNREFUSED');
+    // The raw driver message must never leak.
+    expect(JSON.stringify(json)).not.toContain('ECONNREFUSED');
+    expect(json.checks).toBeUndefined();
   });
 
-  it('includes uptime, memoryMB, responseTimeMs, and circuit breaker state', async () => {
-    const app = createApp(() => Promise.resolve([{ '?column?': 1 }]));
+  it('exposes internals only to an authorized monitoring caller (token)', async () => {
+    const app = createApp(() => Promise.resolve([{ '?column?': 1 }]), HEALTH_TOKEN);
 
-    const res = await app.request('/health/detailed');
+    const res = await app.request('/health/detailed', {
+      headers: { 'x-health-token': HEALTH_TOKEN },
+    });
     const json = (await res.json()) as Record<string, unknown>;
 
     expect(typeof json.uptime).toBe('number');
     expect(typeof json.memoryMB).toBe('number');
-    expect(typeof json.responseTimeMs).toBe('number');
     expect(json.githubCircuitBreaker).toBe('closed');
-  });
-
-  it('reports database latency in milliseconds', async () => {
-    const app = createApp(() => Promise.resolve([{ '?column?': 1 }]));
-
-    const res = await app.request('/health/detailed');
-    const json = (await res.json()) as Record<string, unknown>;
     const dbCheck = (json.checks as Record<string, { ok: boolean; latencyMs?: number }>).database;
-
     expect(dbCheck.ok).toBe(true);
     expect(typeof dbCheck.latencyMs).toBe('number');
-    expect(dbCheck.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('rejects a wrong token — internals stay hidden', async () => {
+    const app = createApp(() => Promise.resolve([{ '?column?': 1 }]), HEALTH_TOKEN);
+
+    const res = await app.request('/health/detailed', {
+      headers: { 'x-health-token': 'wrong' },
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(json.status).toBe('healthy');
+    expect(json.uptime).toBeUndefined();
+    expect(json.checks).toBeUndefined();
+  });
+
+  it('caches the DB probe — a burst runs at most one query per window', async () => {
+    let calls = 0;
+    const app = createApp(() => {
+      calls += 1;
+      return Promise.resolve([{ '?column?': 1 }]);
+    });
+
+    await app.request('/health/detailed');
+    await app.request('/health/detailed');
+    await app.request('/health/detailed');
+
+    expect(calls).toBe(1);
   });
 });

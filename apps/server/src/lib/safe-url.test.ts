@@ -73,6 +73,13 @@ describe('validateOutboundUrl', () => {
     ['http://192.168.1.1/', 'private'],
     ['http://169.254.169.254/latest/meta-data/', 'link-local/metadata'],
     ['http://0.0.0.0:8080/', 'unspecified'],
+    ['http://100.64.0.1/', 'CGNAT'],
+    ['http://100.127.255.255/', 'CGNAT'],
+    ['http://192.0.0.192/', 'IETF protocol assignment'],
+    ['http://224.0.0.1/', 'multicast'],
+    ['http://239.255.255.255/', 'multicast'],
+    ['http://240.0.0.1/', 'reserved'],
+    ['http://255.255.255.255/', 'reserved'],
   ])('rejects %s (%s)', async (raw, expectedReason) => {
     const result = await validateOutboundUrl(raw);
     expect(result.ok).toBe(false);
@@ -80,8 +87,16 @@ describe('validateOutboundUrl', () => {
     expect(mockLookup).not.toHaveBeenCalled();
   });
 
-  it('accepts borderline-public IPv4 literals (172.32.x, 192.169.x, 11.x)', async () => {
-    for (const raw of ['http://172.32.0.1/', 'http://192.169.0.1/', 'http://11.0.0.1/']) {
+  it('accepts borderline-public IPv4 literals (172.32.x, 192.169.x, 11.x, CGNAT/multicast boundaries)', async () => {
+    for (const raw of [
+      'http://172.32.0.1/',
+      'http://192.169.0.1/',
+      'http://11.0.0.1/',
+      'http://100.63.255.255/', // just below CGNAT 100.64.0.0/10
+      'http://100.128.0.1/', // just above CGNAT 100.64.0.0/10
+      'http://192.0.1.1/', // just above IETF 192.0.0.0/24
+      'http://223.255.255.255/', // just below multicast 224.0.0.0/4
+    ]) {
       const result = await validateOutboundUrl(raw);
       expect(result.ok, `should accept ${raw}`).toBe(true);
     }

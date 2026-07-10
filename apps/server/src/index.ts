@@ -7,7 +7,7 @@
 
 import 'dotenv/config';
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { initializeDefaultTools } from 'ghagga-core';
 import { createDatabaseFromEnv, sql } from 'ghagga-db';
@@ -19,6 +19,7 @@ import { rateLimiter } from 'hono-rate-limiter';
 import { githubCircuitBreaker } from './lib/circuit-breaker.js';
 import { getClientIp } from './lib/get-client-ip.js';
 import { logger } from './lib/logger.js';
+import { describeRedisConfig } from './lib/redis.js';
 import { validateEnvironment } from './lib/validate-env.js';
 import { authMiddleware } from './middleware/auth.js';
 import { createApiRouter } from './routes/api/index.js';
@@ -29,6 +30,18 @@ import { createWebhookRouter } from './routes/webhook.js';
 // ─── Validate required env vars (fail-fast) ────────────────────
 
 validateEnvironment();
+
+// SEC-004 / PRODOPS-003: surface how Redis will connect so an operator can
+// confirm at startup that the expected auth/TLS actually apply (never logs the
+// secret itself). REDIS_URL is the primary source across every client.
+const redisConfig = describeRedisConfig();
+if (redisConfig.source === 'url' && process.env.REDIS_HOST) {
+  logger.warn('Both REDIS_URL and REDIS_HOST are set — REDIS_URL wins; REDIS_HOST is ignored.');
+}
+logger.info(
+  { redis: redisConfig },
+  `Redis connection: ${redisConfig.source} (auth=${redisConfig.auth}, tls=${redisConfig.tls})`,
+);
 
 // ─── Tool Registry ─────────────────────────────────────────────
 // Populate the singleton registry so GET /api/settings returns
@@ -148,42 +161,99 @@ const webhookLimiter = rateLimiter({
   standardHeaders: 'draft-6',
 });
 
+// Dedicated rate limiter for detailed health — it is OUTSIDE /api/* so it would
+// otherwise be unthrottled (SEC-003). Combined with the response cache below,
+// this bounds DB-load amplification from repeated probes.
+const healthDetailedLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  limit: 30,
+  keyGenerator: (c) => getClientIp(c),
+  standardHeaders: 'draft-6',
+});
+
 app.use('/api/*', apiLimiter);
 app.use('/auth/*', oauthLimiter);
 app.use('/webhook', webhookLimiter);
+app.use('/health/detailed', healthDetailedLimiter);
 
 // Health check
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Detailed health check — reports database, uptime, memory, and circuit breaker state
+// ── Detailed health check (SEC-003) ─────────────────────────────
+//
+// Hardened against info-disclosure + DB-load amplification:
+//   - The DB probe result is CACHED for HEALTH_DETAILED_CACHE_MS so a burst of
+//     probes runs at most one `SELECT 1` per window.
+//   - Raw driver error messages are NEVER returned — only an aggregated
+//     healthy/degraded status. DB failures are logged server-side.
+//   - Infrastructure internals (uptime, RSS, circuit-breaker state, latency)
+//     are returned ONLY to an authorized monitoring caller that presents
+//     HEALTH_CHECK_TOKEN. Unauthenticated callers get status alone.
+const HEALTH_DETAILED_CACHE_MS = 10_000;
+let healthDetailedCache: { at: number; healthy: boolean; dbLatencyMs?: number } | null = null;
+
+function isAuthorizedHealthCheck(authHeader?: string, tokenHeader?: string): boolean {
+  const expected = process.env.HEALTH_CHECK_TOKEN;
+  if (!expected) return false;
+  const provided = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : tokenHeader;
+  if (!provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 app.get('/health/detailed', async (c) => {
-  const startTime = Date.now();
+  const now = Date.now();
 
-  const checks: Record<string, { ok: boolean; latencyMs?: number; error?: string }> = {};
-
-  // Database check
-  try {
-    const dbStart = Date.now();
-    await db.execute(sql`SELECT 1`);
-    checks.database = { ok: true, latencyMs: Date.now() - dbStart };
-  } catch (e) {
-    checks.database = { ok: false, error: e instanceof Error ? e.message : 'Unknown error' };
+  let healthy: boolean;
+  let dbLatencyMs: number | undefined;
+  if (healthDetailedCache && now - healthDetailedCache.at < HEALTH_DETAILED_CACHE_MS) {
+    healthy = healthDetailedCache.healthy;
+    dbLatencyMs = healthDetailedCache.dbLatencyMs;
+  } else {
+    try {
+      const dbStart = Date.now();
+      await db.execute(sql`SELECT 1`);
+      dbLatencyMs = Date.now() - dbStart;
+      healthy = true;
+    } catch (e) {
+      healthy = false;
+      dbLatencyMs = undefined;
+      // Log the real error server-side; never expose the raw driver message.
+      logger.error({ err: e }, 'Detailed health DB check failed');
+    }
+    healthDetailedCache = { at: now, healthy, dbLatencyMs };
   }
 
-  const healthy = Object.values(checks).every((check) => check.ok);
+  const status = healthy ? 'healthy' : 'degraded';
+  const code = healthy ? 200 : 503;
 
+  const authorized = isAuthorizedHealthCheck(
+    c.req.header('authorization'),
+    c.req.header('x-health-token'),
+  );
+  if (!authorized) {
+    // Public callers: aggregated status only — no internals, no driver errors.
+    return c.json({ status }, code);
+  }
+
+  // Authorized monitoring: richer detail, but STILL no raw driver message.
   return c.json(
     {
-      status: healthy ? 'healthy' : 'degraded',
+      status,
       uptime: Math.floor(process.uptime()),
       memoryMB: Math.floor(process.memoryUsage().rss / 1024 / 1024),
-      checks,
+      checks: {
+        database: {
+          ok: healthy,
+          ...(dbLatencyMs !== undefined ? { latencyMs: dbLatencyMs } : {}),
+        },
+      },
       githubCircuitBreaker: githubCircuitBreaker.getState(),
-      responseTimeMs: Date.now() - startTime,
     },
-    healthy ? 200 : 503,
+    code,
   );
 });
 

@@ -44,7 +44,6 @@ import {
   toCommitMessages,
   toFileList,
 } from 'ghagga-forge';
-import Redis from 'ioredis';
 // Namespace import (NOT named imports): getInstallationToken is read lazily at
 // call time (token mint), so a partial test mock of '../github/client.js' that
 // omits other exports doesn't trip vitest's named-import validation.
@@ -55,7 +54,7 @@ import * as githubClient from '../github/client.js';
 import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
 import { deriveCallbackSecret, dispatchWorkflow, injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
-import { callbackResultKey, redis } from '../lib/redis.js';
+import { callbackResultKey, createRedisClient, redis } from '../lib/redis.js';
 import { validateOutboundUrl } from '../lib/safe-url.js';
 import { PostgresMemoryStorage } from '../memory/postgres.js';
 
@@ -181,12 +180,11 @@ export async function validateChainAgainstBridge(
 
 // ─── Redis Connection ───────────────────────────────────────────
 
-const redisConnection = new Redis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: parseInt(process.env.REDIS_PORT || '6379', 10),
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-});
+// SEC-004 / PRODOPS-003: build the BullMQ connection from the SAME source as the
+// shared singleton — REDIS_URL first (auth + TLS), else host/port with optional
+// username/password/TLS. Previously this used host/port only, so managed Redis
+// with ACL/TLS in REDIS_URL was silently ignored.
+const redisConnection = createRedisClient();
 
 // ─── Types ──────────────────────────────────────────────────────
 

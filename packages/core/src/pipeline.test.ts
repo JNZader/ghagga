@@ -752,6 +752,108 @@ index 1234567..abcdefg 100644
 
       expect(runConsensusReview).toHaveBeenCalledWith(expect.objectContaining({ delayMs: 500 }));
     });
+
+    // ── CORE-CONC-004: boundary validation of concurrency/delay ──
+    // Invalid reviewConcurrency would make runWithConcurrency's `i += concurrency`
+    // loop stall (0) or run backwards (negatives). Reject at the settings boundary.
+    function settingsWith(overrides: Record<string, unknown>) {
+      return {
+        enableSemgrep: false,
+        enableTrivy: false,
+        enableCpd: false,
+        enableMemory: false,
+        customRules: [],
+        ignorePatterns: [],
+        reviewLevel: 'normal' as const,
+        ...overrides,
+      };
+    }
+
+    it.each([
+      ['zero', 0],
+      ['negative', -1],
+      ['NaN', Number.NaN],
+      ['Infinity', Number.POSITIVE_INFINITY],
+      ['fractional', 1.5],
+    ])('rejects reviewConcurrency = %s at the boundary (no infinite loop)', async (_label, value) => {
+      await expect(
+        reviewPipeline(
+          makeInput({
+            mode: 'workflow',
+            // biome-ignore lint/suspicious/noExplicitAny: exercising invalid runtime input
+            settings: settingsWith({ reviewConcurrency: value }) as any,
+          }),
+        ),
+      ).rejects.toThrow('reviewConcurrency must be a finite integer >= 1');
+    });
+
+    it('rejects a negative reviewDelayMs at the boundary', async () => {
+      await expect(
+        reviewPipeline(
+          makeInput({
+            mode: 'consensus',
+            // biome-ignore lint/suspicious/noExplicitAny: exercising invalid runtime input
+            settings: settingsWith({ reviewDelayMs: -100 }) as any,
+          }),
+        ),
+      ).rejects.toThrow('reviewDelayMs must be a finite number >= 0');
+    });
+
+    it('accepts a valid reviewConcurrency of 1', async () => {
+      await expect(
+        reviewPipeline(
+          makeInput({
+            mode: 'workflow',
+            settings: settingsWith({ reviewConcurrency: 1 }),
+          }),
+        ),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  // ── CORE-INTEL-003: code-intel failure visibility ─────────
+  describe('code-intel degradation', () => {
+    it('all code-intel queries fail: coverageComplete false + failedStep + filesFailed count', async () => {
+      const failingProvider = {
+        getCallers: async () => [],
+        getCallees: async () => [],
+        getFileImports: async () => {
+          throw new Error('code-intel provider offline');
+        },
+        getFileExports: async () => {
+          throw new Error('code-intel provider offline');
+        },
+        // biome-ignore lint/suspicious/noExplicitAny: minimal provider stub
+      } as any;
+
+      const result = await reviewPipeline(
+        makeInput({
+          codeIntelProvider: failingProvider,
+          settings: {
+            enableSemgrep: false,
+            enableTrivy: false,
+            enableCpd: false,
+            enableMemory: false,
+            customRules: [],
+            ignorePatterns: [],
+            reviewLevel: 'normal',
+            enableCodeIntel: true,
+          },
+        }),
+      );
+
+      // Degradation is now visible: coverage is incomplete and a failedStep exists.
+      expect(result.coverageComplete).toBe(false);
+      expect(result.failedSteps).toEqual(
+        expect.arrayContaining([expect.objectContaining({ step: 'code-intel' })]),
+      );
+      // The diff touches exactly one file (src/index.ts) → filesFailed = 1.
+      expect(result.codeIntelMetadata?.filesQueried).toBe(1);
+      expect(result.codeIntelMetadata?.filesFailed).toBe(1);
+      expect(result.codeIntelMetadata?.filesWithData).toBe(0);
+      // A previously-PASSED review downgrades to PARTIAL on a tracked failure.
+      expect(result.status).toBe('PARTIAL');
+    });
   });
 
   // ── SKIPPED Result Verification ───────────────────────────

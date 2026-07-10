@@ -14,19 +14,24 @@
 | `GITHUB_WEBHOOK_SECRET` | Yes | Secret configured in GitHub App webhook settings |
 | `GITHUB_CLIENT_ID` | No | GitHub OAuth App client ID override for dashboard login (defaults to the hosted public client ID) |
 | `GITHUB_CLIENT_SECRET` | Conditionally | Required for dashboard OAuth Web Flow (`/auth/callback`) |
-| `REDIS_URL` | No | Full Redis connection URL (e.g., `redis://localhost:6379`). Takes precedence over `REDIS_HOST`/`REDIS_PORT` |
-| `REDIS_HOST` | No | Redis hostname (default: `localhost`). Used when `REDIS_URL` is not set |
-| `REDIS_PORT` | No | Redis port (default: `6379`). Used when `REDIS_URL` is not set |
+| `REDIS_URL` | No | **Primary** Redis connection URL, honoured by every client (shared singleton + BullMQ). Carries auth and TLS: `redis://user:pass@host:6379`, `rediss://user:pass@host:6380` (TLS). Takes precedence over `REDIS_HOST`/`REDIS_PORT` (which are then ignored) |
+| `REDIS_HOST` | No | Redis hostname (default: `localhost`). Used ONLY when `REDIS_URL` is not set |
+| `REDIS_PORT` | No | Redis port (default: `6379`). Used ONLY when `REDIS_URL` is not set |
+| `REDIS_USERNAME` | No | Redis ACL username for the host/port fallback (ignored when `REDIS_URL` is set) |
+| `REDIS_PASSWORD` | No | Redis password for the host/port fallback (ignored when `REDIS_URL` is set) |
+| `REDIS_TLS` | No | Set to `true` to enable TLS for the host/port fallback (ignored when `REDIS_URL` is set) |
 | `WORKER_CONCURRENCY` | No | Number of concurrent BullMQ worker jobs (default: `3`) |
 | `SERVICE_TYPE` | No | Service role: `server` (API only), `worker` (queue processor only), or omit for both |
 | `SERVER_URL` | No | Public server URL for callbacks (default: `https://api.javierzader.com`) |
 | `ENCRYPTION_KEY` | Yes | 64-character hex string for AES-256-GCM encryption |
-| `STATE_SECRET` | Conditionally | Required for OAuth Web Flow state signing and runner callback HMAC derivation |
+| `STATE_SECRET` | Conditionally | Required for OAuth Web Flow state signing and runner callback HMAC derivation. The worker process **fails fast at startup** if it is missing (inline static-analysis dispatch derives a callback secret from it). OAuth-state and runner-callback keys are domain-separated from this secret |
+| `HEALTH_CHECK_TOKEN` | No | When set, `/health/detailed` returns infrastructure internals (uptime, memory, DB latency, circuit-breaker state) ONLY to callers presenting it via `Authorization: Bearer <token>` or `x-health-token`. Unauthenticated callers get an aggregated `status` only |
+| `GHAGGA_ALLOW_PRIVATE_GATEWAY` | No | Set to `true` for self-hosted deployments whose LLM gateway lives on a private network. Skips the SSRF private-IP range checks for gateway URLs; the connection is still pinned to the resolved address, and protocol/userinfo checks always apply |
 | `CALLBACK_TTL_MINUTES` | No | Runner callback secret TTL in minutes (default: `11`) |
 | `PORT` | No | Server port (default: `3000`) |
 | `NODE_ENV` | No | `development` or `production` |
 
-> **Startup vs runtime**: The server fails fast on core boot variables (`DATABASE_URL`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`). `GITHUB_CLIENT_SECRET` and `STATE_SECRET` are additionally required when you use dashboard OAuth Web Flow; `STATE_SECRET` is also used for runner callback signing. Redis connection is required for the worker service; without it, the server falls back to synchronous execution.
+> **Startup vs runtime**: The server fails fast on core boot variables (`DATABASE_URL`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `ENCRYPTION_KEY`). `GITHUB_CLIENT_SECRET` and `STATE_SECRET` are additionally required when you use dashboard OAuth Web Flow; `STATE_SECRET` is also used for runner callback signing and the **worker process fails fast** if it is missing. Redis connection is required for the worker service; without it, the server falls back to synchronous execution. Use `REDIS_URL` (with credentials/TLS baked into the URL) for managed/authenticated Redis — every client reads it first, and the effective mode (auth/TLS) is logged at startup.
 
 ### CLI Mode
 

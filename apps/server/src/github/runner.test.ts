@@ -108,9 +108,14 @@ describe('deriveCallbackSecret', () => {
     expect(secret1).not.toBe(secret2);
   });
 
-  it('computes HMAC-SHA256(STATE_SECRET, callbackId) as hex', () => {
+  it('computes HMAC-SHA256(domain-separated key, callbackId) as hex (SEC-006)', () => {
     const callbackId = '550e8400-e29b-41d4-a716-446655440000.m1abc';
-    const expected = createHmac('sha256', TEST_SECRET).update(callbackId).digest('hex');
+    // The callback key is domain-separated from STATE_SECRET so an OAuth-state
+    // signature can never be replayed as a callback signature.
+    const domainKey = createHmac('sha256', TEST_SECRET)
+      .update('ghagga.runner.callback.v1')
+      .digest('hex');
+    const expected = createHmac('sha256', domainKey).update(callbackId).digest('hex');
 
     expect(deriveCallbackSecret(callbackId)).toBe(expected);
   });

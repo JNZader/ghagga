@@ -25,6 +25,17 @@ export default defineConfig({
         'src/test/**',
         'src/main.tsx',
       ],
+      // Gradual coverage gate (PRODOPS-009). Deliberately conservative floors so
+      // this doesn't retroactively block on pre-existing debt — the point is to
+      // catch *regressions*, not to force an immediate rewrite. Dashboard starts
+      // lower than the backend packages (UI/component coverage is typically
+      // thinner); ratchet up over time, never lower without a note here.
+      thresholds: {
+        statements: 35,
+        branches: 30,
+        functions: 35,
+        lines: 35,
+      },
     },
   },
 });

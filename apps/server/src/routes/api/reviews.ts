@@ -15,16 +15,89 @@ import {
   deleteReviewById,
   deleteReviewsByIds,
   deleteReviewsByRepoId,
+  eq,
   getRepoByFullName,
   getReviewStats,
   getReviewsByDay,
   getReviewsByInstallationIds,
   getReviewsByRepoId,
+  type ReviewWithRepo,
+  repositories,
+  reviews as reviewsTable,
+  sql,
 } from 'ghagga-db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthUser } from '../../middleware/auth.js';
 import { generateErrorId, logger } from './utils.js';
+
+/** SQL condition chunk (eq(...) and sql`...` both produce this shape). */
+type SqlCondition = ReturnType<typeof eq>;
+
+/** Valid persisted review statuses (mirrors ReviewStatus in ghagga-core). */
+const REVIEW_STATUSES = ['PASSED', 'FAILED', 'NEEDS_HUMAN_REVIEW', 'SKIPPED', 'PARTIAL'] as const;
+
+/**
+ * Runtime validation for GET /api/reviews query params (PRODOPS-007).
+ *
+ * `page`/`limit` are coerced and constrained (positive finite integers, sane
+ * defaults, hard max) so a negative offset, NaN, or an enormous limit can never
+ * reach the database. Filters (`status`, `q`) are validated so server-side
+ * filtering (PRODOPS-005) runs on trusted input.
+ */
+const listReviewsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  // Positive finite integer; values above the cap are clamped (preserving the
+  // prior Math.min behaviour) rather than rejected.
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(50)
+    .transform((n) => Math.min(n, 100)),
+  status: z.enum(REVIEW_STATUSES).optional(),
+  q: z.string().trim().min(1).max(200).optional(),
+});
+
+/** Combine conditions with AND (never called empty — a base condition is always present). */
+function combineAnd(conds: SqlCondition[]): SqlCondition {
+  return conds.reduce((acc, cond) => sql`${acc} AND ${cond}`);
+}
+
+/**
+ * Build a LIKE pattern from raw user input, escaping the ILIKE wildcard
+ * metacharacters (`%`, `_`, `\`) so a search term is matched literally and can't
+ * inject wildcards.
+ */
+function likePattern(term: string): string {
+  const escaped = term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+  return `%${escaped}%`;
+}
+
+/**
+ * Case-insensitive search across a review's summary and PR number, optionally
+ * including the repository full name (cross-repository listing only).
+ */
+function reviewSearchCondition(
+  term: string,
+  fullNameColumn?: typeof repositories.fullName,
+): SqlCondition {
+  const like = likePattern(term);
+  const parts: SqlCondition[] = [
+    sql`${reviewsTable.summary} ILIKE ${like}`,
+    sql`${reviewsTable.prNumber}::text ILIKE ${like}`,
+  ];
+  if (fullNameColumn) parts.push(sql`${fullNameColumn} ILIKE ${like}`);
+  const ored = parts.reduce((acc, part) => sql`${acc} OR ${part}`);
+  return sql`(${ored})`;
+}
+
+interface ReviewFilters {
+  limit: number;
+  offset: number;
+  status?: (typeof REVIEW_STATUSES)[number];
+  q?: string;
+}
 
 /**
  * Structural view of a `reviews` DB row — the subset the wire contract needs.
@@ -99,6 +172,79 @@ function toReviewDto(row: ReviewRow, repoFullName: string): Review {
   };
 }
 
+/**
+ * Filtered per-repository listing (PRODOPS-005). Filters are applied in SQL
+ * BEFORE pagination, and the total is counted over the SAME filtered predicate.
+ */
+async function listFilteredRepoReviews(
+  db: Database,
+  repositoryId: number,
+  filters: ReviewFilters,
+): Promise<{ rows: ReviewRow[]; total: number }> {
+  const conds: SqlCondition[] = [eq(reviewsTable.repositoryId, repositoryId)];
+  if (filters.status) conds.push(eq(reviewsTable.status, filters.status));
+  if (filters.q) conds.push(reviewSearchCondition(filters.q));
+  const where = combineAnd(conds);
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select()
+      .from(reviewsTable)
+      .where(where)
+      .orderBy(sql`${reviewsTable.createdAt} DESC`)
+      .limit(filters.limit)
+      .offset(filters.offset),
+    db.select({ total: sql<number>`count(*)::int` }).from(reviewsTable).where(where),
+  ]);
+  return { rows: rows as ReviewRow[], total: countRows[0]?.total ?? 0 };
+}
+
+/**
+ * Filtered cross-installation listing (PRODOPS-005). Same predicate for the page
+ * and the total. Cross-tenant isolation is enforced by the `= ANY(installationIds)`
+ * base condition; the caller guarantees `installationIds` is non-empty.
+ */
+async function listFilteredInstallationReviews(
+  db: Database,
+  installationIds: number[],
+  filters: ReviewFilters,
+): Promise<{ rows: ReviewWithRepo[]; total: number }> {
+  const conds: SqlCondition[] = [sql`${repositories.installationId} = ANY(${installationIds})`];
+  if (filters.status) conds.push(eq(reviewsTable.status, filters.status));
+  if (filters.q) conds.push(reviewSearchCondition(filters.q, repositories.fullName));
+  const where = combineAnd(conds);
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        id: reviewsTable.id,
+        repositoryId: reviewsTable.repositoryId,
+        prNumber: reviewsTable.prNumber,
+        status: reviewsTable.status,
+        mode: reviewsTable.mode,
+        summary: reviewsTable.summary,
+        findings: reviewsTable.findings,
+        tokensUsed: reviewsTable.tokensUsed,
+        executionTimeMs: reviewsTable.executionTimeMs,
+        metadata: reviewsTable.metadata,
+        createdAt: reviewsTable.createdAt,
+        fullName: repositories.fullName,
+      })
+      .from(reviewsTable)
+      .innerJoin(repositories, eq(repositories.id, reviewsTable.repositoryId))
+      .where(where)
+      .orderBy(sql`${reviewsTable.createdAt} DESC`)
+      .limit(filters.limit)
+      .offset(filters.offset),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(reviewsTable)
+      .innerJoin(repositories, eq(repositories.id, reviewsTable.repositoryId))
+      .where(where),
+  ]);
+  return { rows: rows as ReviewWithRepo[], total: countRows[0]?.total ?? 0 };
+}
+
 export function createReviewsRouter(db: Database) {
   const router = new Hono();
 
@@ -106,9 +252,27 @@ export function createReviewsRouter(db: Database) {
   router.get('/api/reviews', async (c) => {
     const user = c.get('user') as AuthUser;
     const repoFullName = c.req.query('repo');
-    const page = parseInt(c.req.query('page') ?? '1', 10);
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 100);
+
+    // PRODOPS-007: validate pagination + filter params before touching the DB.
+    const parsedQuery = listReviewsQuerySchema.safeParse({
+      page: c.req.query('page'),
+      limit: c.req.query('limit'),
+      status: c.req.query('status'),
+      q: c.req.query('q'),
+    });
+    if (!parsedQuery.success) {
+      return c.json(
+        {
+          error: 'VALIDATION_ERROR',
+          message: parsedQuery.error.issues[0]?.message ?? 'Invalid query parameters',
+        },
+        400,
+      );
+    }
+    const { page, limit, status, q } = parsedQuery.data;
     const offset = (page - 1) * limit;
+    const hasFilters = status !== undefined || q !== undefined;
+    const filters: ReviewFilters = { limit, offset, status, q };
 
     try {
       // ── No repo specified → "All repositories": list reviews across every
@@ -119,16 +283,21 @@ export function createReviewsRouter(db: Database) {
           return c.json({ data: [], pagination: { page, limit, offset, total: 0 } });
         }
 
-        const [reviews, total] = await Promise.all([
-          getReviewsByInstallationIds(db, user.installationIds, { limit, offset }),
-          countReviewsByInstallationIds(db, user.installationIds),
-        ]);
+        // PRODOPS-005: when filters are active, filter server-side BEFORE
+        // pagination and count over the filtered set. Otherwise keep the exact
+        // tested default path (getReviewsByInstallationIds + count).
+        const { rows, total } = hasFilters
+          ? await listFilteredInstallationReviews(db, user.installationIds, filters)
+          : {
+              rows: await getReviewsByInstallationIds(db, user.installationIds, { limit, offset }),
+              total: await countReviewsByInstallationIds(db, user.installationIds),
+            };
 
         return c.json({
           // Each joined row carries its repository fullName → wire `repo`.
           // Destructured so the compiler resolves `fullName` from the real
           // query row type (ReviewWithRepo), not the structural ReviewRow.
-          data: reviews.map(({ fullName, ...row }) => toReviewDto(row, fullName)),
+          data: rows.map(({ fullName, ...row }) => toReviewDto(row, fullName)),
           pagination: { page, limit, offset, total },
         });
       }
@@ -143,15 +312,18 @@ export function createReviewsRouter(db: Database) {
         return c.json({ error: 'FORBIDDEN', message: 'Forbidden' }, 403);
       }
 
-      const [reviews, total] = await Promise.all([
-        getReviewsByRepoId(db, repo.id, { limit, offset }),
-        countReviewsByRepoId(db, repo.id),
-      ]);
+      // PRODOPS-005: server-side filter + filtered total; default path unchanged.
+      const { rows, total } = hasFilters
+        ? await listFilteredRepoReviews(db, repo.id, filters)
+        : {
+            rows: await getReviewsByRepoId(db, repo.id, { limit, offset }),
+            total: await countReviewsByRepoId(db, repo.id),
+          };
 
       return c.json({
         // All rows belong to `repo` (validated above) — compose its canonical
         // fullName instead of re-joining repositories per row in the query.
-        data: reviews.map((row) => toReviewDto(row, repo.fullName)),
+        data: rows.map((row) => toReviewDto(row, repo.fullName)),
         pagination: { page, limit, offset, total },
       });
     } catch (err) {

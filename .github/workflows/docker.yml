@@ -9,11 +9,16 @@ name: Docker Build & Push
 on:
   push:
     branches: [main]
+    # Keep in sync with everything apps/server/Dockerfile actually COPYs/builds
+    # (PRODOPS-002) — a path missing here means merged changes silently don't
+    # rebuild/redeploy the image.
     paths:
       - 'apps/server/**'
       - 'packages/core/**'
       - 'packages/db/**'
       - 'packages/types/**'
+      - 'packages/forge/**'
+      - 'templates/**'
       - 'tsconfig.base.json'
       - 'package.json'
       - 'pnpm-workspace.yaml'

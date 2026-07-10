@@ -5,7 +5,7 @@
  * and graceful handling of rejected tasks.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runWithConcurrency } from './concurrency.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -106,5 +106,43 @@ describe('runWithConcurrency', () => {
   it('handles empty task list', async () => {
     const results = await runWithConcurrency([]);
     expect(results).toEqual([]);
+  });
+
+  // ── CORE-CONC-004: defensive clamp against infinite/backward loops ──
+  // The settings boundary rejects these, but the helper is also called
+  // directly, so it must never stall on `i += concurrency`.
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['-Infinity', Number.NEGATIVE_INFINITY],
+  ])('clamps invalid concurrency = %s and still terminates', async (_label, value) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tasks = [makeTask('a'), makeTask('b'), makeTask('c')];
+
+    // Would hang forever with 0/negative before the clamp.
+    const results = await runWithConcurrency(tasks, { concurrency: value });
+
+    expect(results).toHaveLength(3);
+    expect(results.map((r) => (r.status === 'fulfilled' ? r.value : null))).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+    warn.mockRestore();
+  });
+
+  it('clamps a negative delayMs to 0 (no crash, prompt completion)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const start = Date.now();
+    const tasks = [makeTask(1), makeTask(2), makeTask(3)];
+
+    const results = await runWithConcurrency(tasks, { concurrency: 1, delayMs: -500 });
+
+    expect(results).toHaveLength(3);
+    // Negative delay must not be passed to setTimeout as a stall/backoff.
+    expect(Date.now() - start).toBeLessThan(200);
+    warn.mockRestore();
   });
 });

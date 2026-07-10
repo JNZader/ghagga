@@ -18,7 +18,14 @@ import type {
 } from '@/lib/types';
 
 export function GlobalSettings() {
-  const { data: installations, isLoading: instLoading } = useInstallations();
+  const {
+    data: installations,
+    isLoading: instLoading,
+    isError: instError,
+    error: instErrorObj,
+    refetch: refetchInstallations,
+    isFetching: instFetching,
+  } = useInstallations();
 
   // Auto-select first installation, or let user pick
   const [selectedInstallation, setSelectedInstallation] = useState<number>(0);
@@ -28,6 +35,10 @@ export function GlobalSettings() {
       setSelectedInstallation(installations[0]?.id);
     }
   }, [installations, selectedInstallation]);
+
+  // Only the empty-installations case (zero GitHub App installations for
+  // this user) — NOT a load error, which is handled separately below.
+  const hasNoInstallations = !instLoading && !instError && (installations?.length ?? 0) === 0;
 
   const { data: settings, isLoading: settingsLoading } =
     useInstallationSettings(selectedInstallation);
@@ -122,7 +133,6 @@ export function GlobalSettings() {
   };
 
   const selectedInst = installations?.find((i) => i.id === selectedInstallation);
-  const isLoading = instLoading || settingsLoading;
 
   return (
     <div>
@@ -148,11 +158,69 @@ export function GlobalSettings() {
         )}
       </div>
 
-      {!selectedInstallation || instLoading ? (
+      {instLoading ? (
+        /* ── Loading: fetching the caller's GitHub App installations ── */
         <div className="flex items-center justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
         </div>
-      ) : isLoading ? (
+      ) : instError ? (
+        /* ── Error: useInstallations failed (PRODOPS-006) — surface it
+           instead of leaving selectedInstallation stuck at 0 forever. ── */
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-red-500/30 bg-red-500/10 py-16 text-center">
+          <div className="text-4xl" aria-hidden="true">
+            ⚠️
+          </div>
+          <div>
+            <h2 className="mb-1 text-lg font-semibold text-text-primary">
+              Failed to load installations
+            </h2>
+            <p className="max-w-md text-sm text-text-secondary">
+              {instErrorObj instanceof Error && instErrorObj.message
+                ? instErrorObj.message
+                : 'Something went wrong while checking your GitHub App installations.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchInstallations()}
+            disabled={instFetching}
+            className="btn-primary"
+          >
+            {instFetching ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      ) : hasNoInstallations ? (
+        /* ── Empty: zero installations for this account (PRODOPS-006) ── */
+        <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+          <div className="text-5xl" aria-hidden="true">
+            🔌
+          </div>
+          <div>
+            <h2 className="mb-2 text-xl font-semibold text-text-primary">
+              No GitHub App Installations Found
+            </h2>
+            <p className="max-w-md text-text-secondary">
+              GHAGGA needs the GitHub App installed on your account or organization before global
+              defaults can be configured.
+            </p>
+          </div>
+          <a
+            href="https://github.com/apps/ghagga-review/installations/new"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary"
+          >
+            Install GitHub App
+          </a>
+        </div>
+      ) : !selectedInstallation ? (
+        // Installations loaded but the auto-select effect hasn't committed
+        // the derived selectedInstallation state yet — a brief, expected
+        // transition, not the persistent hang PRODOPS-006 described.
+        <div className="flex items-center justify-center py-20">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+        </div>
+      ) : settingsLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
         </div>

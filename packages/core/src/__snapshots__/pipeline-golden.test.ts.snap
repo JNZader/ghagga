@@ -2008,6 +2008,7 @@ exports[`golden: forced degradation — 12 failedSteps.push sites > code-intel f
   "result": {
     "codeIntelMetadata": {
       "enabled": true,
+      "filesFailed": 1,
       "filesQueried": 1,
       "filesWithData": 0,
       "providerAvailable": true,
@@ -3088,6 +3089,7 @@ exports[`golden: kitchen-sink > everything ON: pins the final findings order (en
     },
     "codeIntelMetadata": {
       "enabled": true,
+      "filesFailed": 0,
       "filesQueried": 2,
       "filesWithData": 2,
       "providerAvailable": true,
@@ -3933,6 +3935,7 @@ exports[`golden: optional steps ON (isolated) > code-intel ON: provider data flo
   "result": {
     "codeIntelMetadata": {
       "enabled": true,
+      "filesFailed": 0,
       "filesQueried": 1,
       "filesWithData": 1,
       "providerAvailable": true,

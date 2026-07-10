@@ -6,6 +6,7 @@ import type { ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { KNOWN_MODELS } from '@/components/settings/provider-fields/shared';
 import { ToolGrid } from '@/components/settings/ToolGrid';
 import {
+  ApiError,
   useCopySettingsToGlobal,
   useInstallWorkflow,
   useRepositories,
@@ -22,12 +23,38 @@ import type {
   SaaSProvider,
 } from '@/lib/types';
 
+/** Human-readable message for the Settings load-error state (PRODOPS-001). */
+function getSettingsErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 404) return 'This repository could not be found.';
+    if (error.status === 403) return "You don't have access to this repository's settings.";
+    return error.message || 'Failed to load settings.';
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return 'Failed to load settings.';
+}
+
 export function Settings() {
   const { selectedRepo, setSelectedRepo } = useSelectedRepo();
   const { data: repos } = useRepositories();
-  const { data: settings, isLoading } = useSettings(selectedRepo);
+  const {
+    data: settings,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useSettings(selectedRepo);
   const updateSettings = useUpdateSettings();
   const copyToGlobal = useCopySettingsToGlobal();
+
+  // ── Load-gated Save (PRODOPS-001) ───────────────────────────
+  // Tracks which repo's data the local form state was actually hydrated
+  // from. Save is only enabled once this matches selectedRepo — never on a
+  // failed/never-loaded fetch, and never with a previous repo's leftover
+  // state after switching repos.
+  const [hydratedRepo, setHydratedRepo] = useState<string | null>(null);
+  const canSave = hydratedRepo === selectedRepo && !!settings;
 
   // ── Workflow installation ───────────────────────────────────
   const [workflowOwner, workflowRepo] = selectedRepo
@@ -75,6 +102,29 @@ export function Settings() {
   const [showCopyConfirm, setShowCopyConfirm] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
+  // ── Reset local state immediately on repo change (PRODOPS-001) ──
+  // Runs BEFORE any fetch for the new repo resolves, so a slow or failing
+  // load for repo B can never leave repo A's values sitting in the form
+  // (and therefore never leak into a Save call for B). The hydration sync
+  // effect below re-populates these once B's load actually succeeds.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset-on-repo-change, not a data sync
+  useEffect(() => {
+    setHydratedRepo(null);
+    setUseGlobalSettings(true);
+    setEnableSemgrep(true);
+    setEnableTrivy(true);
+    setEnableCpd(false);
+    setEnableMemory(true);
+    setDisabledTools([]);
+    setRegisteredTools([]);
+    setAiReviewEnabled(true);
+    setProviderChain([]);
+    setReviewMode('simple');
+    setEnableBlastRadius(false);
+    setCustomRules('');
+    setIgnorePatterns('');
+  }, [selectedRepo]);
+
   // ── Sync form state with fetched settings ───────────────────
   useEffect(() => {
     if (settings) {
@@ -112,8 +162,12 @@ export function Settings() {
           gatewayUrl: entry.gatewayUrl,
         })),
       );
+
+      // Only NOW is it safe to Save — the form genuinely reflects a
+      // successful load for the currently selected repo.
+      setHydratedRepo(selectedRepo);
     }
-  }, [settings]);
+  }, [settings, selectedRepo]);
 
   // ── Handle global toggle ────────────────────────────────────
   const handleGlobalToggle = async (useGlobal: boolean) => {
@@ -158,6 +212,11 @@ export function Settings() {
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedRepo) return;
+    // Guard against submitting over a config that never successfully loaded
+    // for this repo (PRODOPS-001). The Save button is also disabled in this
+    // case, but the guard is kept here too since a stray Enter-key submit on
+    // a text field bypasses the disabled button.
+    if (!canSave) return;
 
     if (useGlobalSettings) {
       // Only save the toggle
@@ -255,6 +314,29 @@ export function Settings() {
       ) : isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+        </div>
+      ) : isError ? (
+        /* ── Load error: never render the editable form here (PRODOPS-001) ──
+           Rendering the form with default local state would let Save
+           overwrite a config that never actually loaded. */
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-red-500/30 bg-red-500/10 py-16 text-center">
+          <div className="text-4xl" aria-hidden="true">
+            ⚠️
+          </div>
+          <div>
+            <h2 className="mb-1 text-lg font-semibold text-text-primary">
+              Failed to load settings for {selectedRepo}
+            </h2>
+            <p className="max-w-md text-sm text-text-secondary">{getSettingsErrorMessage(error)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="btn-primary"
+          >
+            {isFetching ? 'Retrying...' : 'Retry'}
+          </button>
         </div>
       ) : (
         <form onSubmit={handleSave} className="space-y-6">
@@ -729,8 +811,14 @@ export function Settings() {
           </Card>
 
           {/* ── Save Button ──────────────────────────────────── */}
+          {/* Enabled only after a successful load hydrated the form for this
+              exact repo (PRODOPS-001) — see `canSave` above. */}
           <div className="flex items-center gap-4">
-            <button type="submit" disabled={updateSettings.isPending} className="btn-primary">
+            <button
+              type="submit"
+              disabled={updateSettings.isPending || !canSave}
+              className="btn-primary"
+            >
               {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
             </button>
             {saveSuccess && (

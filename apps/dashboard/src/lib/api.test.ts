@@ -687,6 +687,67 @@ describe('useReviews', () => {
     const [url] = mockFetch.mock.calls[0];
     expect(url).toContain('page=3');
   });
+
+  // ─── PRODOPS-005: forward-compatible limit/status/search options ────
+
+  it('forwards limit, status and search as query params when provided', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockJsonResponse({ data: [], pagination: { page: 1, limit: 100, offset: 0, total: 0 } }),
+    );
+
+    const { result } = renderHook(
+      () => useReviews('acme/app', 1, { limit: 100, status: 'FAILED', search: 'security issue' }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain('limit=100');
+    expect(url).toContain('status=FAILED');
+    expect(url).toContain('q=security+issue');
+  });
+
+  it('omits limit/status/q params when options are not provided', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockJsonResponse({ data: [], pagination: { page: 1, limit: 20, offset: 0, total: 0 } }),
+    );
+
+    const { result } = renderHook(() => useReviews('acme/app', 1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).not.toContain('limit=');
+    expect(url).not.toContain('status=');
+    expect(url).not.toContain('q=');
+  });
+
+  it('scopes the query cache by filter options so different filters never share stale data', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        mockJsonResponse({ data: [], pagination: { page: 1, limit: 20, offset: 0, total: 0 } }),
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({ data: [], pagination: { page: 1, limit: 100, offset: 0, total: 0 } }),
+      );
+
+    const wrapper = createWrapper();
+    const { result: unfiltered } = renderHook(() => useReviews('acme/app', 1), { wrapper });
+    await waitFor(() => expect(unfiltered.current.isSuccess).toBe(true));
+
+    const { result: filtered } = renderHook(
+      () => useReviews('acme/app', 1, { limit: 100, status: 'FAILED' }),
+      { wrapper },
+    );
+    await waitFor(() => expect(filtered.current.isSuccess).toBe(true));
+
+    // Two distinct fetches — the filtered query key did not hit the
+    // unfiltered query's cache entry.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════

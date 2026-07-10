@@ -23,6 +23,37 @@ export interface ConcurrencyOptions {
 }
 
 /**
+ * Coerce a caller-supplied concurrency into a finite integer >= 1.
+ *
+ * Returns the default (2) for `undefined`. Any non-finite value (NaN,
+ * Infinity), or anything below 1, is clamped to 1 with a warning — this is
+ * the last line of defence against the `i += concurrency` infinite loop.
+ */
+function normalizeConcurrency(value: number | undefined): number {
+  if (value === undefined) return 2;
+  if (!Number.isFinite(value) || value < 1) {
+    console.warn(
+      `[ghagga] runWithConcurrency received invalid concurrency (${value}); clamping to 1`,
+    );
+    return 1;
+  }
+  return Math.floor(value);
+}
+
+/**
+ * Coerce a caller-supplied delay into a finite, non-negative integer (ms).
+ * Non-finite or negative values are clamped to 0.
+ */
+function normalizeDelayMs(value: number | undefined): number {
+  if (value === undefined) return 0;
+  if (!Number.isFinite(value) || value < 0) {
+    console.warn(`[ghagga] runWithConcurrency received invalid delayMs (${value}); clamping to 0`);
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+/**
  * Run async tasks with bounded concurrency and optional inter-batch delay.
  *
  * Returns PromiseSettledResult[] in the same order as the input tasks,
@@ -32,7 +63,14 @@ export async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
   options: ConcurrencyOptions = {},
 ): Promise<PromiseSettledResult<T>[]> {
-  const { concurrency = 2, delayMs = 0 } = options;
+  // Defensive normalization — the settings boundary rejects invalid values,
+  // but this helper is also called directly (fan-out, workflow, consensus).
+  // A non-finite or < 1 concurrency would make `i += concurrency` stall on
+  // empty batches forever (0) or walk backwards (negatives), so clamp to a
+  // value that always makes forward progress. A negative/non-finite delay is
+  // coerced to 0 rather than passed to setTimeout.
+  const concurrency = normalizeConcurrency(options.concurrency);
+  const delayMs = normalizeDelayMs(options.delayMs);
 
   // Fast path: if concurrency >= task count, run all at once (original behavior)
   if (concurrency >= tasks.length) {

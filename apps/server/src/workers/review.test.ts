@@ -7,6 +7,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockLogger } = vi.hoisted(() => {
+  // SEC-006: the entry point fails fast (process.exit) when STATE_SECRET is
+  // missing. Set it BEFORE importing ./review.js so the happy-path handler tests
+  // run; the fail-fast path is covered in its own test below.
+  process.env.STATE_SECRET = 'test-state-secret';
   const mockLogger = {
     info: vi.fn(),
     warn: vi.fn(),

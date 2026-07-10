@@ -336,8 +336,14 @@ export interface ReviewResult {
   /** Doc-validation results (present when enableDocValidation is true). */
   docValidation?: import('./doc-validation/types.js').DocValidationResult;
 
-  /** Code intelligence metadata (present when enableCodeIntel is true). */
-  codeIntelMetadata?: import('./code-intel/types.js').CodeIntelMetadata;
+  /**
+   * Code intelligence metadata (present when enableCodeIntel is true).
+   * `filesFailed` augments CodeIntelMetadata to report per-file query
+   * failures (CORE-INTEL-003); optional for backward compatibility.
+   */
+  codeIntelMetadata?: import('./code-intel/types.js').CodeIntelMetadata & {
+    filesFailed?: number;
+  };
 
   /**
    * Entity-level semantic diff, computed in the enrich phase over the

@@ -257,8 +257,22 @@ function ObservationCard({
 
   return (
     <Card className="cursor-pointer transition-colors hover:border-primary-500/30">
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-      <div className="relative flex items-start gap-3" onClick={() => onClick(observation)}>
+      <div
+        className="relative flex items-start gap-3 outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-card"
+        onClick={() => onClick(observation)}
+        onKeyDown={(e) => {
+          // Enter/Space opens the detail modal, matching native
+          // button/link activation (PRODOPS-008). Space is prevented to
+          // avoid scrolling the page.
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick(observation);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`View observation details: ${observation.title}`}
+      >
         {onToggleSelect && (
           <div className="flex items-start pt-0.5">
             <input

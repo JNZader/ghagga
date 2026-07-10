@@ -59,17 +59,18 @@ describe('GitLabForgeAdapter — capability shape (R-GITLAB)', () => {
   });
 });
 
-describe('GitLabForgeAdapter — upsertSummaryComment (R-UPSERT fold)', () => {
+describe('GitLabForgeAdapter — upsertSummaryComment (R-UPSERT fold, FORGE-UPSERT-005)', () => {
   it('no existing note: just creates, returns numeric created + empty deleted', async () => {
     const client = makeClient({ listMrNotes: vi.fn().mockResolvedValue([]) });
     const adapter = makeAdapter(client);
     const result = await adapter.upsertSummaryComment(ref, 'body', marker);
     expect(result).toEqual({ created: 1000, deleted: [] });
     expect(client.deleteMrNote).not.toHaveBeenCalled();
+    expect(client.updateMrNote).not.toHaveBeenCalled();
     expect(client.createMrNote).toHaveBeenCalledWith(PROJECT_ID, MR_IID, 'body', TOKEN);
   });
 
-  it('find-by-marker → delete ALL stale (latest first) → repost fresh', async () => {
+  it('find-by-marker → updates the latest IN PLACE, then deletes stale duplicates', async () => {
     const calls: string[] = [];
     const client = makeClient({
       // chronological: marker note 100, foreign 200, marker note 300.
@@ -78,59 +79,104 @@ describe('GitLabForgeAdapter — upsertSummaryComment (R-UPSERT fold)', () => {
         { id: 200, body: 'someone else' },
         { id: 300, body: `newer ${marker.html}` },
       ]),
+      updateMrNote: vi.fn(async (_p, _iid, id: number) => {
+        calls.push(`update:${id}`);
+      }),
       deleteMrNote: vi.fn(async (_p, _iid, id: number) => {
         calls.push(`delete:${id}`);
-      }),
-      createMrNote: vi.fn(async () => {
-        calls.push('create');
-        return { id: 400 };
       }),
     });
     const adapter = makeAdapter(client);
     const result = await adapter.upsertSummaryComment(ref, 'body', marker);
-    // latest (last marker note) first, then stale; create last.
-    expect(calls).toEqual(['delete:300', 'delete:100', 'create']);
-    expect(result).toEqual({ created: 400, deleted: [300, 100] });
+    // latest (last marker note, 300) updated in place; stale (100) deleted after.
+    expect(calls).toEqual(['update:300', 'delete:100']);
+    expect(client.updateMrNote).toHaveBeenCalledWith(PROJECT_ID, MR_IID, 300, 'body', TOKEN);
+    expect(client.createMrNote).not.toHaveBeenCalled();
+    expect(result).toEqual({ created: 300, deleted: [100] });
     // foreign note (200) is never touched.
     expect(client.deleteMrNote).not.toHaveBeenCalledWith(PROJECT_ID, MR_IID, 200, TOKEN);
   });
 
-  it('tolerates a delete failure (best-effort) without blocking the repost', async () => {
+  it('tolerates a stale-delete failure (best-effort) without undoing the update', async () => {
+    const client = makeClient({
+      listMrNotes: vi.fn().mockResolvedValue([
+        { id: 10, body: `a ${marker.html}` },
+        { id: 20, body: `b ${marker.html}` },
+        { id: 30, body: `c ${marker.html}` },
+      ]),
+      deleteMrNote: vi.fn(async (_p, _iid, id: number) => {
+        if (id === 20) throw new Error('GitLab API error: 500');
+      }),
+    });
+    const adapter = makeAdapter(client);
+    const result = await adapter.upsertSummaryComment(ref, 'body', marker);
+    // latest (30) updated; stale 10 succeeded, stale 20 failed → not in deleted.
+    expect(result).toEqual({ created: 30, deleted: [10] });
+    expect(client.updateMrNote).toHaveBeenCalledOnce();
+  });
+
+  it('update failure DOES propagate (only the update error is fatal)', async () => {
+    const client = makeClient({
+      listMrNotes: vi.fn().mockResolvedValue([{ id: 10, body: `x ${marker.html}` }]),
+      updateMrNote: vi.fn().mockRejectedValue(new Error('GitLab API error updating note: 500')),
+    });
+    const adapter = makeAdapter(client);
+    await expect(adapter.upsertSummaryComment(ref, 'body', marker)).rejects.toThrow(
+      /updating note/,
+    );
+    expect(client.deleteMrNote).not.toHaveBeenCalled();
+  });
+
+  it('throws TypeError when createMrNote returns no id (contract violation, no-existing-note path)', async () => {
+    const client = makeClient({
+      listMrNotes: vi.fn().mockResolvedValue([]),
+      createMrNote: vi.fn().mockResolvedValue({} as { id: number }),
+    });
+    const adapter = makeAdapter(client);
+    await expect(adapter.upsertSummaryComment(ref, 'body', marker)).rejects.toThrow(TypeError);
+  });
+
+  // --- FORGE-UPSERT-005 regression: the old note must survive a transient
+  // update failure. Delete must never run BEFORE the new body is confirmed
+  // published, so a timeout/5xx never leaves the MR with no review.
+
+  it('REGRESSION: update failure propagates WITHOUT deleting any prior note', async () => {
     const client = makeClient({
       listMrNotes: vi.fn().mockResolvedValue([
         { id: 10, body: `a ${marker.html}` },
         { id: 20, body: `b ${marker.html}` },
       ]),
-      deleteMrNote: vi.fn(async (_p, _iid, id: number) => {
-        if (id === 20) throw new Error('GitLab API error: 500');
-      }),
-      createMrNote: vi.fn().mockResolvedValue({ id: 999 }),
-    });
-    const adapter = makeAdapter(client);
-    const result = await adapter.upsertSummaryComment(ref, 'body', marker);
-    // 20 (latest) failed → not in deleted; 10 succeeded; create still happened.
-    expect(result).toEqual({ created: 999, deleted: [10] });
-    expect(client.createMrNote).toHaveBeenCalledOnce();
-  });
-
-  it('create failure DOES propagate (only the create error is fatal)', async () => {
-    const client = makeClient({
-      listMrNotes: vi.fn().mockResolvedValue([{ id: 10, body: `x ${marker.html}` }]),
-      createMrNote: vi.fn().mockRejectedValue(new Error('GitLab API error creating note: 500')),
+      updateMrNote: vi
+        .fn()
+        .mockRejectedValue(new Error('GitLab API error: 503 Service Unavailable')),
     });
     const adapter = makeAdapter(client);
     await expect(adapter.upsertSummaryComment(ref, 'body', marker)).rejects.toThrow(
-      /creating note/,
+      /503 Service Unavailable/,
     );
-    expect(client.deleteMrNote).toHaveBeenCalledWith(PROJECT_ID, MR_IID, 10, TOKEN);
+    expect(client.deleteMrNote).not.toHaveBeenCalled();
+    expect(client.createMrNote).not.toHaveBeenCalled();
   });
 
-  it('throws TypeError when createMrNote returns no id (contract violation)', async () => {
+  it('REGRESSION: delete of stale duplicates never runs before the update resolves', async () => {
+    const calls: string[] = [];
     const client = makeClient({
-      createMrNote: vi.fn().mockResolvedValue({} as { id: number }),
+      listMrNotes: vi.fn().mockResolvedValue([
+        { id: 10, body: `a ${marker.html}` },
+        { id: 20, body: `b ${marker.html}` },
+      ]),
+      updateMrNote: vi.fn(async () => {
+        calls.push('update-start');
+        await Promise.resolve();
+        calls.push('update-done');
+      }),
+      deleteMrNote: vi.fn(async (_p, _iid, id: number) => {
+        calls.push(`delete:${id}`);
+      }),
     });
     const adapter = makeAdapter(client);
-    await expect(adapter.upsertSummaryComment(ref, 'body', marker)).rejects.toThrow(TypeError);
+    await adapter.upsertSummaryComment(ref, 'body', marker);
+    expect(calls).toEqual(['update-start', 'update-done', 'delete:10']);
   });
 });
 

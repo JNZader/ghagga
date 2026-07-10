@@ -24,10 +24,13 @@
  *     is the `semanticDiff` field gained by these snapshots: deliberate
  *     re-bless 2026-06-12, 240 added lines / 0 removed, audited as
  *     semanticDiff-blocks-only.)
- *   - code-intel's failedSteps.push (:1410) is UNREACHABLE via provider
+ *   - code-intel's OUTER catch failedSteps.push is UNREACHABLE via provider
  *     failures (Promise.allSettled swallows per-file rejections). The only
  *     way to exercise that catch is the emit callback throwing on the
- *     success message — which is exactly how we force it here.
+ *     success message — which is exactly how we force it here. NOTE
+ *     (CORE-INTEL-003): per-file rejections are no longer discarded — when
+ *     ALL queries fail, queryCodeIntelSafe now records its own failedStep and
+ *     filesFailed count (covered in pipeline.test.ts, not this suite).
  *   - negative-examples requires `memoryStorage instanceof SqliteMemoryStorage`
  *     (pipeline.ts:408). We satisfy it with
  *     Object.create(SqliteMemoryStorage.prototype) — real prototype chain,

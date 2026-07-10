@@ -272,8 +272,10 @@ describe('Reviews — All repositories', () => {
 
     renderReviews();
 
-    // No repo selected → useReviews is called with undefined repo (no-repo endpoint)
-    expect(mockUseReviews).toHaveBeenCalledWith(undefined, 1);
+    // No repo selected → useReviews is called with undefined repo (no-repo endpoint).
+    // A trailing `undefined` filter-options arg is always passed positionally
+    // (see PRODOPS-005 — Reviews.tsx), even when no filter is active.
+    expect(mockUseReviews).toHaveBeenCalledWith(undefined, 1, undefined);
 
     // Every row shows the repo it belongs to (mapped from the server fullName)
     expect(screen.getByText('acme/app')).toBeInTheDocument();
@@ -914,6 +916,184 @@ describe('Reviews — combined filters', () => {
     // Only the FAILED acme/api should be visible
     expect(screen.getByText('acme/api')).toBeInTheDocument();
     expect(screen.queryByText('acme/app')).not.toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// PRODOPS-005 — filters must widen the fetch window and totals must
+// reflect the filtered set, not the server's unfiltered page total.
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — filter fetch window and totals (PRODOPS-005)', () => {
+  it('requests a wide fetch window (not the default page) once a status filter is active', () => {
+    mockReviewsData(MULTI_REVIEWS);
+
+    renderReviews();
+
+    const statusSelect = screen.getByDisplayValue('All statuses');
+    fireEvent.change(statusSelect, { target: { value: 'FAILED' } });
+
+    const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
+    // (repo, page, options) — page pinned to 1, options carries a wide limit
+    // plus the active filter values, forward-compatible with server-side
+    // filtering and keyed correctly in the query cache.
+    expect(lastCall![1]).toBe(1);
+    expect(lastCall![2]).toMatchObject({ limit: 100, status: 'FAILED' });
+  });
+
+  it('requests a wide fetch window once a search filter is active', () => {
+    mockReviewsData(MULTI_REVIEWS);
+
+    renderReviews();
+
+    const searchInput = screen.getByPlaceholderText('Search reviews...');
+    fireEvent.change(searchInput, { target: { value: 'acme/api' } });
+
+    const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
+    expect(lastCall![2]).toMatchObject({ limit: 100, search: 'acme/api' });
+  });
+
+  it('does not request a wide window when no filter is active', () => {
+    mockReviewsData(MULTI_REVIEWS);
+
+    renderReviews();
+
+    const lastCall = mockUseReviews.mock.calls[mockUseReviews.mock.calls.length - 1];
+    expect(lastCall![2]).toBeUndefined();
+  });
+
+  it('shows the total of matching results, not the server unfiltered total, once filtered', () => {
+    // Server reports 4 total reviews for the repo (unfiltered), but the
+    // fetched window only contains 1 FAILED review once we filter client-side.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: MULTI_REVIEWS, total: 4, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    renderReviews();
+
+    const statusSelect = screen.getByDisplayValue('All statuses');
+    fireEvent.change(statusSelect, { target: { value: 'FAILED' } });
+
+    // Pagination footer is hidden for a single-result filtered set, so assert
+    // via the absence of the stale "4 total" and correctness of the visible
+    // rows instead (Reviews with >1 page would render "Page 1 of N (X total)").
+    expect(screen.getByText('acme/api')).toBeInTheDocument();
+    expect(screen.queryByText(/\(4 total\)/)).not.toBeInTheDocument();
+  });
+
+  it('never shows a false "No reviews found" for a match outside the default page size', () => {
+    // Simulate the server having returned a wide filtered window (as if
+    // FILTER_FETCH_LIMIT were honored) containing a match beyond what a
+    // single default-size page (20) would have carried.
+    const manyReviews = Array.from({ length: 25 }, (_, i) =>
+      makeReview({ id: i + 1, repo: 'acme/app', prNumber: i, status: 'PASSED' }),
+    );
+    manyReviews[24] = makeReview({
+      id: 999,
+      repo: 'acme/needle',
+      prNumber: 999,
+      status: 'PASSED',
+    });
+    mockUseReviews.mockReturnValue({
+      data: { reviews: manyReviews, total: 25, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    renderReviews();
+
+    const searchInput = screen.getByPlaceholderText('Search reviews...');
+    fireEvent.change(searchInput, { target: { value: 'acme/needle' } });
+
+    expect(screen.getByText('acme/needle')).toBeInTheDocument();
+    expect(screen.queryByText('No reviews found.')).not.toBeInTheDocument();
+  });
+
+  it('warns when the filtered window may not cover every match (server total exceeds fetched rows)', () => {
+    // The fetch window (reviews.length) is smaller than the server's
+    // unfiltered total for the repo — there could be matches beyond it.
+    mockUseReviews.mockReturnValue({
+      data: { reviews: MULTI_REVIEWS, total: 150, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    renderReviews();
+
+    const statusSelect = screen.getByDisplayValue('All statuses');
+    fireEvent.change(statusSelect, { target: { value: 'FAILED' } });
+
+    expect(screen.getByText(/out of 150 total/)).toBeInTheDocument();
+  });
+
+  it('does not warn about a truncated window when no filter is active', () => {
+    mockUseReviews.mockReturnValue({
+      data: { reviews: MULTI_REVIEWS, total: 150, page: 1, pageSize: 20 },
+      isLoading: false,
+    });
+
+    renderReviews();
+
+    expect(screen.queryByText(/out of 150 total/)).not.toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// PRODOPS-008 — keyboard access to review row detail
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Reviews — row keyboard accessibility (PRODOPS-008)', () => {
+  it('exposes each row as a focusable, labeled interactive element', () => {
+    mockReviewsData([makeReview({ repo: 'acme/app', prNumber: 42 })]);
+
+    renderReviews();
+
+    const row = screen.getByLabelText('View details for acme/app #42');
+    expect(row.tagName).toBe('TR');
+    expect(row).toHaveAttribute('tabIndex', '0');
+  });
+
+  it('opens the detail modal on Enter key', () => {
+    mockReviewsData([REVIEW_WITH_FINDINGS]);
+
+    renderReviews();
+
+    const row = screen.getByLabelText(`View details for acme/app #55`);
+    fireEvent.keyDown(row, { key: 'Enter' });
+
+    expect(screen.getByText('Found critical issues')).toBeInTheDocument();
+  });
+
+  it('opens the detail modal on Space key', () => {
+    mockReviewsData([REVIEW_WITH_FINDINGS]);
+
+    renderReviews();
+
+    const row = screen.getByLabelText(`View details for acme/app #55`);
+    fireEvent.keyDown(row, { key: ' ' });
+
+    expect(screen.getByText('Found critical issues')).toBeInTheDocument();
+  });
+
+  it('does not open the detail modal on unrelated keys', () => {
+    mockReviewsData([REVIEW_WITH_FINDINGS]);
+
+    renderReviews();
+
+    const row = screen.getByLabelText(`View details for acme/app #55`);
+    fireEvent.keyDown(row, { key: 'a' });
+
+    expect(screen.queryByText('Found critical issues')).not.toBeInTheDocument();
+  });
+
+  it('preserves table row semantics (still exposed with role "row")', () => {
+    mockReviewsData([makeReview({ repo: 'acme/app', prNumber: 42 })]);
+
+    renderReviews();
+
+    // getAllByRole('row') must include the header row + the data row —
+    // overriding role="button" on <tr> would strip it from this query.
+    const rows = screen.getAllByRole('row');
+    expect(rows.length).toBe(2);
   });
 });
 
