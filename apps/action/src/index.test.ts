@@ -61,6 +61,29 @@ vi.mock('@actions/cache', () => ({
   saveCache: (...args: unknown[]) => mockSaveCache(...args),
 }));
 
+// ─── Mock node:fs so path isolation is observable without touching disk ──
+
+const mockExistsSync = vi.fn();
+const mockMkdirSync = vi.fn();
+const mockRmSync = vi.fn();
+const mockCopyFileSync = vi.fn();
+const mockRenameSync = vi.fn();
+
+vi.mock('node:fs', () => ({
+  existsSync: (...args: unknown[]) => mockExistsSync(...args),
+  mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
+  rmSync: (...args: unknown[]) => mockRmSync(...args),
+  copyFileSync: (...args: unknown[]) => mockCopyFileSync(...args),
+  renameSync: (...args: unknown[]) => mockRenameSync(...args),
+}));
+
+// Stable RUNNER_TEMP so cache/staging paths are deterministic in assertions.
+const TEST_RUNNER_TEMP = '/runner/tmp';
+// Cache staging file is per-repo and stable across runs.
+const EXPECTED_CACHE_FILE = `${TEST_RUNNER_TEMP}/ghagga-memory-cache/test-owner-test-repo.db`;
+// Prefix of the isolated, per-run working directory (unique suffix appended).
+const EXPECTED_WORKING_PREFIX = `${TEST_RUNNER_TEMP}/ghagga-memory-test-owner-test-repo-`;
+
 const mockReviewPipeline = vi.fn();
 const mockSqliteCreate = vi.fn();
 
@@ -286,7 +309,7 @@ describe('GitHub Action', () => {
 // Integration tests — invoke run() directly (enabled by T2.5 guard)
 // ═══════════════════════════════════════════════════════════════
 
-import { run } from './index.js';
+import { resolveMemoryPaths, run } from './index.js';
 
 const defaultStaticAnalysis = {
   semgrep: { status: 'skipped' as const, findings: [], executionTimeMs: 0 },
@@ -333,6 +356,21 @@ describe('run() — integration', () => {
     mockSqliteCreate.mockResolvedValue(mockMemoryStorage);
     mockRestoreCache.mockResolvedValue(undefined);
     mockSaveCache.mockResolvedValue(undefined);
+
+    // Deterministic isolated-path resolution.
+    process.env.RUNNER_TEMP = TEST_RUNNER_TEMP;
+    delete process.env.GITHUB_JOB;
+    delete process.env.GITHUB_REPOSITORY_ID;
+
+    // fs defaults: directories/files "exist" so restore-copy and save-copy run.
+    mockExistsSync.mockReturnValue(true);
+    mockMkdirSync.mockReturnValue(undefined);
+    mockRmSync.mockReturnValue(undefined);
+    mockCopyFileSync.mockReturnValue(undefined);
+    mockRenameSync.mockReturnValue(undefined);
+
+    // A clean close by default (per-test overrides where needed).
+    mockMemoryStorage.close.mockResolvedValue(undefined);
   });
 
   it('happy path: calls reviewPipeline, posts comment, sets outputs', async () => {
@@ -412,8 +450,10 @@ describe('run() — integration', () => {
     // Cache restored first
     expect(mockRestoreCache).toHaveBeenCalled();
 
-    // SQLite memory created
-    expect(mockSqliteCreate).toHaveBeenCalledWith('/tmp/ghagga-memory.db');
+    // SQLite memory created on an ISOLATED per-run path (not the shared /tmp file)
+    expect(mockSqliteCreate).toHaveBeenCalledWith(expect.stringContaining(EXPECTED_WORKING_PREFIX));
+    expect(mockSqliteCreate).toHaveBeenCalledWith(expect.stringContaining('/memory.db'));
+    expect(mockSqliteCreate).not.toHaveBeenCalledWith('/tmp/ghagga-memory.db');
 
     // Memory passed to pipeline
     expect(mockReviewPipeline).toHaveBeenCalledWith(
@@ -431,7 +471,7 @@ describe('run() — integration', () => {
     await run();
 
     expect(mockRestoreCache).toHaveBeenCalledWith(
-      ['/tmp/ghagga-memory.db'],
+      [EXPECTED_CACHE_FILE],
       'ghagga-memory-test-owner-test-repo-12345-1',
       ['ghagga-memory-test-owner-test-repo-', 'ghagga-memory-test-owner-test-repo'],
     );
@@ -441,12 +481,12 @@ describe('run() — integration', () => {
     await run();
 
     expect(mockSaveCache).toHaveBeenCalledWith(
-      ['/tmp/ghagga-memory.db'],
+      [EXPECTED_CACHE_FILE],
       'ghagga-memory-test-owner-test-repo-12345-1',
     );
     // The save key must differ from the immutable base key
     expect(mockSaveCache).not.toHaveBeenCalledWith(
-      ['/tmp/ghagga-memory.db'],
+      [EXPECTED_CACHE_FILE],
       'ghagga-memory-test-owner-test-repo',
     );
   });
@@ -462,11 +502,184 @@ describe('run() — integration', () => {
       await run();
 
       expect(mockSaveCache).toHaveBeenCalledWith(
-        ['/tmp/ghagga-memory.db'],
+        [EXPECTED_CACHE_FILE],
         'ghagga-memory-test-owner-test-repo-12345-2',
       );
     } finally {
       mutableContext.runAttempt = 1;
     }
+  });
+
+  // ─── ACTION-MEM-001: per-run isolation of the SQLite database ─────────
+
+  it('isolation: opens SQLite on a per-run path, never the shared /tmp file', async () => {
+    await run();
+
+    const dbPath = mockSqliteCreate.mock.calls[0]?.[0] as string;
+    expect(dbPath).toBeDefined();
+    expect(dbPath).not.toBe('/tmp/ghagga-memory.db');
+    expect(dbPath.startsWith(EXPECTED_WORKING_PREFIX)).toBe(true);
+    expect(dbPath.endsWith('/memory.db')).toBe(true);
+    // A private per-run directory is created before the DB is opened.
+    expect(mockMkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining(EXPECTED_WORKING_PREFIX),
+      expect.objectContaining({ recursive: true, mode: 0o700 }),
+    );
+  });
+
+  it('cache miss: removes any residual working file so the DB starts empty', async () => {
+    // Repo A may have left a file at the working destination on a persistent
+    // runner. A cache miss for THIS run must guarantee an empty database.
+    mockRestoreCache.mockResolvedValue(undefined);
+
+    await run();
+
+    const dbPath = mockSqliteCreate.mock.calls[0]?.[0] as string;
+    expect(mockRmSync).toHaveBeenCalledWith(dbPath, { force: true });
+    // The residual file is removed BEFORE the fresh DB is opened.
+    expect(mockRmSync).toHaveBeenCalled();
+    expect(mockSqliteCreate).toHaveBeenCalledWith(dbPath);
+  });
+
+  it('failed restore: does not open a residual file (clears the destination)', async () => {
+    mockRestoreCache.mockRejectedValue(new Error('cache service unavailable'));
+
+    await run();
+
+    const dbPath = mockSqliteCreate.mock.calls[0]?.[0] as string;
+    // Restore failed → not marked restored → residual destination cleared.
+    expect(mockRmSync).toHaveBeenCalledWith(dbPath, { force: true });
+    // No stale bytes copied into the working path from a hit branch.
+    expect(mockCopyFileSync).not.toHaveBeenCalledWith(
+      EXPECTED_CACHE_FILE,
+      expect.stringContaining('memory.restore.db'),
+    );
+    expect(mockWarning).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to restore memory cache'),
+    );
+  });
+
+  it('cache hit: materializes the DB via staging file + atomic rename', async () => {
+    mockRestoreCache.mockResolvedValue('ghagga-memory-test-owner-test-repo-12340-1');
+    mockExistsSync.mockReturnValue(true);
+
+    await run();
+
+    const dbPath = mockSqliteCreate.mock.calls[0]?.[0] as string;
+    const stagingPath = dbPath.replace('/memory.db', '/memory.restore.db');
+    // Restore lands in the stable cache file, copied to staging, then renamed
+    // atomically into the isolated working path.
+    expect(mockCopyFileSync).toHaveBeenCalledWith(EXPECTED_CACHE_FILE, stagingPath);
+    expect(mockRenameSync).toHaveBeenCalledWith(stagingPath, dbPath);
+  });
+
+  // ─── ACTION-LIFE-002: close in finally, cache only after a clean close ─
+
+  it('lifecycle: close runs in finally even when comment publication throws', async () => {
+    // A comment failure must NOT lose the memory snapshot nor the outputs.
+    mockListComments.mockRejectedValue(new Error('secondary rate limit'));
+
+    await run();
+
+    expect(mockMemoryStorage.close).toHaveBeenCalled();
+    expect(mockSaveCache).toHaveBeenCalled();
+    // Review outputs are still published (decoupled from the comment).
+    expect(mockSetOutput).toHaveBeenCalledWith('status', 'PASSED');
+    // A comment failure is non-fatal.
+    expect(mockSetFailed).not.toHaveBeenCalled();
+    expect(mockWarning).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to publish review comment'),
+    );
+  });
+
+  it('lifecycle: close runs in finally even when the pipeline throws', async () => {
+    mockReviewPipeline.mockRejectedValue(new Error('provider down'));
+
+    await run();
+
+    expect(mockMemoryStorage.close).toHaveBeenCalled();
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      expect.stringContaining('GHAGGA review failed: provider down'),
+    );
+  });
+
+  it('lifecycle: cache is saved ONLY after a clean close', async () => {
+    const order: string[] = [];
+    mockMemoryStorage.close.mockImplementation(async () => {
+      order.push('close');
+    });
+    mockSaveCache.mockImplementation(async () => {
+      order.push('save');
+    });
+
+    await run();
+
+    expect(order).toEqual(['close', 'save']);
+    // Snapshot copied from the closed working DB into the cache file first.
+    expect(mockCopyFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('/memory.db'),
+      EXPECTED_CACHE_FILE,
+    );
+  });
+
+  it('lifecycle: a failed close does NOT save a stale cache snapshot', async () => {
+    mockMemoryStorage.close.mockRejectedValue(new Error('disk I/O error'));
+
+    await run();
+
+    expect(mockMemoryStorage.close).toHaveBeenCalled();
+    expect(mockSaveCache).not.toHaveBeenCalled();
+    expect(mockWarning).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to close memory storage'),
+    );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// resolveMemoryPaths — per-run/per-process isolation (ACTION-MEM-001)
+// ═══════════════════════════════════════════════════════════════
+
+describe('resolveMemoryPaths', () => {
+  const baseParams = {
+    repoFullName: 'test-owner/test-repo',
+    repoId: '123',
+    runId: 12345,
+    runAttempt: 1,
+    jobId: 'review',
+  };
+
+  beforeEach(() => {
+    process.env.RUNNER_TEMP = TEST_RUNNER_TEMP;
+  });
+
+  it('roots the working DB under RUNNER_TEMP, scoped by repo', () => {
+    const paths = resolveMemoryPaths(baseParams);
+    expect(paths.workingDbPath.startsWith(EXPECTED_WORKING_PREFIX)).toBe(true);
+    expect(paths.workingDbPath.endsWith('/memory.db')).toBe(true);
+    expect(paths.cacheFilePath).toBe(EXPECTED_CACHE_FILE);
+  });
+
+  it('two concurrent jobs never resolve to the same working destination', () => {
+    // Same repo, run, attempt and job — only the random/pid suffix differs.
+    const a = resolveMemoryPaths(baseParams);
+    const b = resolveMemoryPaths(baseParams);
+    expect(a.workingDbPath).not.toBe(b.workingDbPath);
+    expect(a.perRunDir).not.toBe(b.perRunDir);
+    // The shared cache staging file is stable across both (cross-run continuity).
+    expect(a.cacheFilePath).toBe(b.cacheFilePath);
+  });
+
+  it('repo A and repo B resolve to different working paths (no cross-repo leak)', () => {
+    const a = resolveMemoryPaths({ ...baseParams, repoFullName: 'org/repo-a' });
+    const b = resolveMemoryPaths({ ...baseParams, repoFullName: 'org/repo-b' });
+    expect(a.workingDbPath).not.toBe(b.workingDbPath);
+    expect(a.cacheFilePath).not.toBe(b.cacheFilePath);
+  });
+
+  it('falls back to os.tmpdir() when RUNNER_TEMP is unset', () => {
+    delete process.env.RUNNER_TEMP;
+    const paths = resolveMemoryPaths(baseParams);
+    expect(paths.workingDbPath).toContain('ghagga-memory-test-owner-test-repo-');
+    process.env.RUNNER_TEMP = TEST_RUNNER_TEMP;
   });
 });
