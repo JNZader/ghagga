@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ProviderChainEntry } from '../types.js';
 import {
   fetchGatewayModels,
@@ -8,56 +10,99 @@ import {
   validateProviderChain,
 } from './gateway-discovery.js';
 
-const URL = 'https://llm-gateway.example.com';
 const TOKEN = 'test-token';
 
+// Loopback server helper — the pinned client uses Node's real http stack, so
+// discovery transport tests hit a local server. 127.0.0.1 is a forbidden range,
+// so the self-hosted escape hatch is enabled (pinning still applies).
+interface Captured {
+  method?: string;
+  url?: string;
+  headers: http.IncomingHttpHeaders;
+}
+
+async function withServer(
+  responder: () => { status: number; body: string },
+  fn: (baseUrl: string, captured: () => Captured) => Promise<void>,
+): Promise<void> {
+  let captured: Captured = { headers: {} };
+  const server = http.createServer((req, res) => {
+    captured = { method: req.method, url: req.url, headers: req.headers };
+    const out = responder();
+    res.writeHead(out.status, { 'Content-Type': 'application/json' });
+    res.end(out.body);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address() as AddressInfo;
+  try {
+    await fn(`http://127.0.0.1:${port}`, () => captured);
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+}
+
 function gatewayEntry(over: Partial<ProviderChainEntry> = {}): ProviderChainEntry {
-  return { provider: 'gateway', model: 'auto', apiKey: '', gatewayUrl: URL, ...over };
+  return {
+    provider: 'gateway',
+    model: 'auto',
+    apiKey: '',
+    gatewayUrl: 'https://llm-gateway.example.com',
+    ...over,
+  };
 }
 
 describe('fetchGatewayModels', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY = 'true';
+  });
+  afterEach(() => {
+    process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY = undefined;
+  });
 
-  it('returns the data array from GET /v1/models with auth', async () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ object: 'list', data: [{ id: 'gpt-5.5', provider: 'codex-cli' }] }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      ),
+  it('returns the data array from GET /v1/models with auth (pinned client)', async () => {
+    await withServer(
+      () => ({
+        status: 200,
+        body: JSON.stringify({ object: 'list', data: [{ id: 'gpt-5.5', provider: 'codex-cli' }] }),
+      }),
+      async (baseUrl, captured) => {
+        const models = await fetchGatewayModels(baseUrl, TOKEN);
+        expect(models).toEqual([{ id: 'gpt-5.5', provider: 'codex-cli' }]);
+        expect(captured().method).toBe('GET');
+        expect(captured().url).toBe('/v1/models');
+        expect(captured().headers.authorization).toBe(`Bearer ${TOKEN}`);
+      },
     );
-
-    const models = await fetchGatewayModels(URL, TOKEN);
-    expect(models).toEqual([{ id: 'gpt-5.5', provider: 'codex-cli' }]);
-
-    const [url, options] = spy.mock.calls[0] ?? [];
-    expect(url).toBe(`${URL}/v1/models`);
-    expect(options?.method).toBe('GET');
-    expect(options?.redirect).toBe('manual');
-    expect(options?.headers).toEqual(expect.objectContaining({ Authorization: `Bearer ${TOKEN}` }));
   });
 
   it('returns [] when data is missing', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ object: 'list' }), { status: 200 }),
+    await withServer(
+      () => ({ status: 200, body: JSON.stringify({ object: 'list' }) }),
+      async (baseUrl) => {
+        expect(await fetchGatewayModels(baseUrl, TOKEN)).toEqual([]);
+      },
     );
-    expect(await fetchGatewayModels(URL, TOKEN)).toEqual([]);
   });
 
   it('filters out malformed entries (no string id)', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: [null, { id: 'gpt-5.5' }, { nope: 1 }, 42] }), {
+    await withServer(
+      () => ({
         status: 200,
+        body: JSON.stringify({ data: [null, { id: 'gpt-5.5' }, { nope: 1 }, 42] }),
       }),
+      async (baseUrl) => {
+        expect(await fetchGatewayModels(baseUrl, TOKEN)).toEqual([{ id: 'gpt-5.5' }]);
+      },
     );
-    expect(await fetchGatewayModels(URL, TOKEN)).toEqual([{ id: 'gpt-5.5' }]);
   });
 
   it('throws on non-ok response', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('nope', { status: 500 }));
-    await expect(fetchGatewayModels(URL, TOKEN)).rejects.toThrow('Gateway error (500)');
+    await withServer(
+      () => ({ status: 500, body: 'nope' }),
+      async (baseUrl) => {
+        await expect(fetchGatewayModels(baseUrl, TOKEN)).rejects.toThrow('Gateway error (500)');
+      },
+    );
   });
 
   it('throws when URL is missing', async () => {
@@ -66,21 +111,29 @@ describe('fetchGatewayModels', () => {
 });
 
 describe('fetchGatewayProviders', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY = 'true';
+  });
+  afterEach(() => {
+    process.env.GHAGGA_ALLOW_PRIVATE_GATEWAY = undefined;
+  });
 
-  it('returns the providers array from GET /v1/providers', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
+  it('returns the providers array from GET /v1/providers (pinned client)', async () => {
+    await withServer(
+      () => ({
+        status: 200,
+        body: JSON.stringify({
           providers: [{ id: 'codex-cli', name: 'Codex', type: 'cli', available: true }],
         }),
-        {
-          status: 200,
-        },
-      ),
+      }),
+      async (baseUrl, captured) => {
+        const providers = await fetchGatewayProviders(baseUrl, TOKEN);
+        expect(providers).toEqual([
+          { id: 'codex-cli', name: 'Codex', type: 'cli', available: true },
+        ]);
+        expect(captured().url).toBe('/v1/providers');
+      },
     );
-    const providers = await fetchGatewayProviders(URL, TOKEN);
-    expect(providers).toEqual([{ id: 'codex-cli', name: 'Codex', type: 'cli', available: true }]);
   });
 });
 

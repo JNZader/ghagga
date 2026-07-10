@@ -5,10 +5,12 @@
  * `export` was added and relative import paths adjusted. They are
  * private to the gather-context phase.
  *
- * ⚠️ queryCodeIntelSafe's catch is UNREACHABLE via provider failures
+ * ⚠️ queryCodeIntelSafe's OUTER catch is UNREACHABLE via provider failures
  * (Promise.allSettled swallows per-file rejections); it only fires when
  * the emit callback throws on the success message. Pinned by the golden
- * suite — preserve the catch literally.
+ * suite — preserve the catch literally. Per-file rejections ARE now counted
+ * in the success path (CORE-INTEL-003): they feed `filesFailed` and, when
+ * every query fails, record their own `failedStep`.
  */
 
 import type { CodeIntelResult } from '../code-intel/types.js';
@@ -94,17 +96,36 @@ export async function searchMemorySafe(
 }
 
 /**
+ * Outcome of a code-intelligence query, carrying enough telemetry for the
+ * caller to build accurate metadata (CORE-INTEL-003). `filesFailed` counts
+ * per-file queries that rejected (previously discarded by allSettled), and
+ * `durationMs` is the real wall-clock duration of the step.
+ */
+export interface CodeIntelQueryOutcome {
+  results: CodeIntelResult[];
+  /** Number of per-file queries that rejected. */
+  filesFailed: number;
+  /** Real wall-clock duration of the code-intel step in ms. */
+  durationMs: number;
+}
+
+/**
  * Query the code intelligence provider for structural context.
- * Returns an empty array when disabled, unavailable, or on error.
+ *
+ * Returns an empty outcome when disabled or unavailable. Per-file rejections
+ * are no longer silently discarded: they are counted (`filesFailed`) and, when
+ * EVERY query fails, a `failedStep` is recorded so `coverageComplete` flips and
+ * the degradation is visible to the user and observability. Partial failures
+ * surface via `filesFailed` and a warning emit without downgrading the review.
  */
 export async function queryCodeIntelSafe(
   input: ReviewInput,
   fileList: string[],
   emit: (event: import('../types.js').ProgressEvent) => void,
   failedSteps: { step: string; error: string }[],
-): Promise<CodeIntelResult[]> {
+): Promise<CodeIntelQueryOutcome> {
   if (!input.settings.enableCodeIntel || !input.codeIntelProvider) {
-    return [];
+    return { results: [], filesFailed: 0, durationMs: 0 };
   }
 
   const startTime = Date.now();
@@ -115,6 +136,7 @@ export async function queryCodeIntelSafe(
 
   try {
     const results: CodeIntelResult[] = [];
+    const failureReasons: string[] = [];
     const provider = input.codeIntelProvider;
 
     // Query each changed file for structural data (parallel)
@@ -142,20 +164,56 @@ export async function queryCodeIntelSafe(
     for (const outcome of settled) {
       if (outcome.status === 'fulfilled') {
         results.push(outcome.value);
+      } else {
+        failureReasons.push(
+          outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+        );
       }
     }
 
+    const filesFailed = failureReasons.length;
     const durationMs = Date.now() - startTime;
     const withData = results.filter(
       (r) => r.callers.length > 0 || r.callees.length > 0 || r.imports.length > 0,
     ).length;
+
+    // All queries failed → the step produced no structural data. Mark it as a
+    // real failure so coverageComplete flips and PASSED downgrades to PARTIAL.
+    if (filesFailed > 0 && results.length === 0) {
+      const aggregated = failureReasons.slice(0, 3).join('; ');
+      console.warn(
+        '[ghagga] Code intelligence query failed (all files, degrading gracefully):',
+        aggregated,
+      );
+      failedSteps.push({
+        step: 'code-intel',
+        error: `all ${filesFailed} code-intel queries failed: ${aggregated}`,
+      });
+      emit({
+        step: 'code-intel',
+        message: `Code intelligence: all ${filesFailed} file query(ies) failed (${durationMs}ms) — continuing without`,
+      });
+      return { results, filesFailed, durationMs };
+    }
+
+    // Partial failure → visible via filesFailed + warning, but not a hard fail.
+    if (filesFailed > 0) {
+      console.warn(
+        `[ghagga] Code intelligence: ${filesFailed} of ${fileList.length} file query(ies) failed (degrading gracefully)`,
+      );
+      emit({
+        step: 'code-intel',
+        message: `Code intelligence: ${withData}/${results.length} files with structural data, ${filesFailed} query(ies) failed (${durationMs}ms)`,
+      });
+      return { results, filesFailed, durationMs };
+    }
 
     emit({
       step: 'code-intel',
       message: `Code intelligence: ${withData}/${results.length} files with structural data (${durationMs}ms)`,
     });
 
-    return results;
+    return { results, filesFailed: 0, durationMs };
   } catch (error) {
     console.warn(
       '[ghagga] Code intelligence query failed (degrading gracefully):',
@@ -166,6 +224,6 @@ export async function queryCodeIntelSafe(
       error: error instanceof Error ? error.message : String(error),
     });
     emit({ step: 'code-intel', message: 'Code intelligence: failed — continuing without' });
-    return [];
+    return { results: [], filesFailed: fileList.length, durationMs: Date.now() - startTime };
   }
 }

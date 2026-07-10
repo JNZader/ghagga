@@ -43,6 +43,34 @@ export type PrepareOutcome =
 // ─── Validation ─────────────────────────────────────────────────
 
 /**
+ * Validate the numeric concurrency/delay knobs on ReviewSettings.
+ *
+ * `reviewConcurrency` must be a finite integer >= 1 (it drives the
+ * `i += concurrency` batch loop in runWithConcurrency); `reviewDelayMs`
+ * must be a finite integer >= 0. Undefined values fall back to defaults
+ * downstream and are accepted here. Throws on any invalid value.
+ */
+function validateReviewSettings(settings: ReviewInput['settings']): void {
+  const { reviewConcurrency, reviewDelayMs } = settings;
+
+  if (reviewConcurrency !== undefined) {
+    if (!Number.isInteger(reviewConcurrency) || reviewConcurrency < 1) {
+      throw new Error(
+        `reviewConcurrency must be a finite integer >= 1, received: ${reviewConcurrency}`,
+      );
+    }
+  }
+
+  if (reviewDelayMs !== undefined) {
+    if (!Number.isFinite(reviewDelayMs) || reviewDelayMs < 0) {
+      throw new Error(
+        `reviewDelayMs must be a finite number >= 0, received: ${reviewDelayMs}`,
+      );
+    }
+  }
+}
+
+/**
  * Validate the review input for required fields.
  * Throws descriptive errors for misconfiguration.
  */
@@ -50,6 +78,12 @@ function validateInput(input: ReviewInput): void {
   if (!input.diff || input.diff.trim().length === 0) {
     throw new Error('Review input must include a non-empty diff');
   }
+
+  // Central boundary validation for public tuning knobs. These flow from the
+  // API straight into runWithConcurrency; an invalid concurrency would make
+  // the batch loop stall (0) or run backwards (negatives), and a negative
+  // delay is nonsensical for setTimeout. Reject early with a clear message.
+  validateReviewSettings(input.settings);
 
   // If AI review is explicitly disabled, no provider/model/key needed
   if (input.aiReviewEnabled === false) {

@@ -11,14 +11,15 @@
  * wiring lands the chain is sent unvalidated (tracked as a follow-up).
  *
  * SECURITY: the fetch helpers take a raw gatewayUrl and attach the bearer
- * token. The codebase's SSRF/DNS-rebind defense (validateOutboundUrl, applied
- * by the server worker's revalidateGatewayChain before generation) is NOT
- * applied here. Any caller MUST re-validate the URL through that same path
- * immediately before calling, exactly as the generation path does — otherwise
- * a rebound host receives the token. Do not call these on an un-revalidated URL.
+ * token. They route through `pinnedFetch` (gateway.ts) — the SAME SSRF /
+ * DNS-rebinding-pinning policy as the generation path (SEC-001): the hostname
+ * is resolved ONCE, every A/AAAA answer is validated, and the socket is pinned
+ * to an approved IP with Host header + TLS SNI preserved. Discovery and generate
+ * therefore share one pinning policy; a rebound host can never receive the token.
  */
 
 import type { ProviderChainEntry } from '../types.js';
+import { pinnedFetch } from './gateway.js';
 
 // ─── Bridge response shapes ─────────────────────────────────────
 
@@ -54,13 +55,14 @@ async function gatewayGet(
     );
   }
 
-  const response = await fetch(`${gatewayUrl}${path}`, {
+  // SSRF: pinnedFetch resolves once, validates every DNS answer, and pins the
+  // socket to a non-forbidden IP (same policy as generateViaGateway). Node's
+  // http/https client never follows a 3xx, so a redirect surfaces as a non-ok
+  // response below and can never chase a Location to an unvalidated host.
+  const response = await pinnedFetch(`${gatewayUrl}${path}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${gatewayToken}` },
     signal: AbortSignal.timeout(30_000),
-    // SSRF defense: same rationale as generateViaGateway — never chase a 3xx
-    // to an unvalidated host. A redirect surfaces as a non-ok response below.
-    redirect: 'manual',
   });
 
   if (!response.ok) {

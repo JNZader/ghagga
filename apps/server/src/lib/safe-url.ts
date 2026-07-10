@@ -19,6 +19,15 @@
  * the IP-range checks (loopback/private/link-local/metadata/unspecified).
  * The protocol and userinfo checks are ALWAYS enforced, even with the
  * escape hatch enabled.
+ *
+ * SEC-001 (DNS-rebinding TOCTOU): this validator resolves DNS to CHECK the URL,
+ * but the returned URL is re-resolved at fetch time — so validation alone cannot
+ * stop a rebind between check and connect. The actual connection-time defense
+ * (resolve-once + PIN the socket to the approved IP, preserving Host + SNI) lives
+ * in `packages/core/src/providers/gateway.ts` (`pinnedFetch`), through which BOTH
+ * the discovery and the generation gateway requests flow. This function remains
+ * the persist-time / execution-time validation gate (defense in depth); the pin
+ * is what closes the TOCTOU at the moment the connection is opened.
  */
 
 import { lookup } from 'node:dns/promises';
@@ -59,6 +68,14 @@ function forbiddenIPv4Reason(ip: string): string | null {
   if (a === 192 && b === 168) return 'private address (192.168.0.0/16)';
   // 169.254.0.0/16 — link-local, includes cloud metadata (169.254.169.254)
   if (a === 169 && b === 254) return 'link-local/metadata address (169.254.0.0/16)';
+  // 100.64.0.0/10 — CGNAT (RFC 6598); a real SSRF entry on EKS/GCP internal ranges
+  if (a === 100 && b >= 64 && b <= 127) return 'CGNAT address (100.64.0.0/10)';
+  // 192.0.0.0/24 — IETF protocol assignments (includes 192.0.0.192)
+  if (a === 192 && b === 0 && octets[2] === 0) return 'IETF protocol assignment (192.0.0.0/24)';
+  // 224.0.0.0/4 — multicast
+  if (a >= 224 && a <= 239) return 'multicast address (224.0.0.0/4)';
+  // 240.0.0.0/4 — reserved (future use)
+  if (a >= 240) return 'reserved address (240.0.0.0/4)';
 
   return null;
 }
@@ -104,8 +121,9 @@ function expandIPv6(ip: string): number[] | null {
   };
 
   if (doubleColonParts.length === 2) {
-    const head = toHextets(doubleColonParts[0]!);
-    const tailHex = toHextets(doubleColonParts[1]!);
+    const [headPart, tailPart] = doubleColonParts as [string, string];
+    const head = toHextets(headPart);
+    const tailHex = toHextets(tailPart);
     if (!head || !tailHex) return null;
     const fill = 8 - head.length - tailHex.length;
     if (fill < 1) return null;
@@ -135,15 +153,17 @@ function forbiddenIPv6Reason(ip: string): string | null {
   // ::ffff:a.b.c.d — IPv4-mapped: re-check the embedded IPv4
   const isV4Mapped = hextets.slice(0, 5).every((h) => h === 0) && hextets[5] === 0xffff;
   if (isV4Mapped) {
-    const v4 = `${hextets[6]! >> 8}.${hextets[6]! & 0xff}.${hextets[7]! >> 8}.${hextets[7]! & 0xff}`;
+    const [h6, h7] = [hextets[6], hextets[7]] as [number, number];
+    const v4 = `${h6 >> 8}.${h6 & 0xff}.${h7 >> 8}.${h7 & 0xff}`;
     const reason = forbiddenIPv4Reason(v4);
     return reason ? `IPv4-mapped ${reason}` : null;
   }
 
+  const h0 = hextets[0] as number;
   // fe80::/10 — link-local
-  if ((hextets[0]! & 0xffc0) === 0xfe80) return 'link-local address (fe80::/10)';
+  if ((h0 & 0xffc0) === 0xfe80) return 'link-local address (fe80::/10)';
   // fc00::/7 — unique local (the IPv6 analogue of RFC 1918 private space)
-  if ((hextets[0]! & 0xfe00) === 0xfc00) return 'private address (fc00::/7)';
+  if ((h0 & 0xfe00) === 0xfc00) return 'private address (fc00::/7)';
 
   return null;
 }

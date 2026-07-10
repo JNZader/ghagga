@@ -79,7 +79,10 @@ export interface PipelineStateBase {
   staticResult: StaticAnalysisResult;
   rawMemoryContext: string | null;
   codeIntelResults: CodeIntelResult[];
-  codeIntelMetadata?: CodeIntelMetadata;
+  // `filesFailed` augments CodeIntelMetadata (defined in code-intel/types.ts)
+  // to surface per-file query failures (CORE-INTEL-003) without editing that
+  // module. Optional keeps it backward-compatible.
+  codeIntelMetadata?: CodeIntelMetadata & { filesFailed?: number };
   staticContext: string;
   memoryContext: string | null;
   codeIntelContext: string;

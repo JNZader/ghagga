@@ -45,13 +45,14 @@ export async function gatherContext(state: PipelineStateBase): Promise<void> {
       ? 'Using precomputed static analysis from runner...'
       : 'Running static analysis & memory search...',
   });
-  const [staticResult, rawMemoryContext, codeIntelResults] = await Promise.all([
+  const [staticResult, rawMemoryContext, codeIntelOutcome] = await Promise.all([
     input.precomputedStaticAnalysis
       ? Promise.resolve(input.precomputedStaticAnalysis)
       : runStaticAnalysisSafe(fileList, input, failedSteps),
     aiEnabled ? searchMemorySafe(input, fileList, failedSteps) : Promise.resolve(null),
     queryCodeIntelSafe(input, fileList, emit, failedSteps),
   ]);
+  const codeIntelResults = codeIntelOutcome.results;
   state.staticResult = staticResult;
   state.rawMemoryContext = rawMemoryContext;
   state.codeIntelResults = codeIntelResults;
@@ -158,10 +159,11 @@ export async function gatherContext(state: PipelineStateBase): Promise<void> {
       enabled: true,
       providerAvailable: !!input.codeIntelProvider,
       filesQueried: fileList.length,
+      filesFailed: codeIntelOutcome.filesFailed,
       filesWithData: codeIntelResults.filter(
         (r) => r.callers.length > 0 || r.callees.length > 0 || r.imports.length > 0,
       ).length,
-      queryDurationMs: 0, // Timing captured in queryCodeIntelSafe
+      queryDurationMs: codeIntelOutcome.durationMs,
     };
   }
 
