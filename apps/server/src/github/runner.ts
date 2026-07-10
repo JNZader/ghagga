@@ -78,8 +78,24 @@ export function getCallbackTtlMs(): number {
 }
 
 /**
- * Derive a callback secret deterministically using HMAC-SHA256.
- * Returns a 64-char hex string (32 bytes).
+ * Domain-separation label for the runner-callback signing key (SEC-006).
+ *
+ * The runner-callback key and the OAuth-state key are BOTH derived from
+ * STATE_SECRET but under distinct domain labels, so a signature minted for one
+ * context can never be presented as a valid signature for the other. Callback
+ * secrets derive from THIS key (not STATE_SECRET directly); OAuth state derives
+ * from its own domain label in routes/oauth.ts.
+ */
+const CALLBACK_DOMAIN = 'ghagga.runner.callback.v1';
+
+/** Derive the domain-separated runner-callback signing key from STATE_SECRET. */
+function callbackKey(stateSecret: string): string {
+  return createHmac('sha256', stateSecret).update(CALLBACK_DOMAIN).digest('hex');
+}
+
+/**
+ * Derive a callback secret deterministically using HMAC-SHA256 over a
+ * domain-separated key (SEC-006). Returns a 64-char hex string (32 bytes).
  *
  * @throws {Error} if STATE_SECRET is not configured
  */
@@ -88,7 +104,7 @@ export function deriveCallbackSecret(callbackId: string): string {
   if (!STATE_SECRET) {
     throw new Error('STATE_SECRET is not configured');
   }
-  return createHmac('sha256', STATE_SECRET).update(callbackId).digest('hex');
+  return createHmac('sha256', callbackKey(STATE_SECRET)).update(callbackId).digest('hex');
 }
 
 /**

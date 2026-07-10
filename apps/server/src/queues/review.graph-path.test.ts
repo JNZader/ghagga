@@ -94,13 +94,26 @@ vi.mock('../lib/logger.js', () => ({
 
 const mockRedisGet = vi.fn();
 const mockRedisDel = vi.fn().mockResolvedValue(1);
-vi.mock('../lib/redis.js', () => ({
-  redis: {
-    get: (...args: unknown[]) => mockRedisGet(...args),
-    del: (...args: unknown[]) => mockRedisDel(...args),
-  },
-  callbackResultKey: (id: string) => `ghagga:callback:${id}`,
-}));
+vi.mock('../lib/redis.js', async () => {
+  // Real ioredis for the BullMQ connection (lazyConnect so no socket opens at
+  // import), matching the pre-change behaviour; the get/del calls stay mocked.
+  const IORedis = (await import('ioredis')).default;
+  return {
+    redis: {
+      get: (...args: unknown[]) => mockRedisGet(...args),
+      del: (...args: unknown[]) => mockRedisDel(...args),
+    },
+    callbackResultKey: (id: string) => `ghagga:callback:${id}`,
+    createRedisClient: () =>
+      new IORedis({
+        host: 'localhost',
+        port: 6379,
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+        lazyConnect: true,
+      }),
+  };
+});
 
 // ─── ghagga-core: real formatReviewComment, stubbed pipeline ────────
 

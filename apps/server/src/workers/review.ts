@@ -19,6 +19,18 @@ import { createReviewWorker } from '../queues/review.js';
 
 logger.info('🚀 Starting GHAGGA Review Worker...');
 
+// SEC-006: fail fast at startup if STATE_SECRET is missing. Inline-runner jobs
+// derive a callback secret from it (deriveCallbackSecret in github/runner.ts);
+// without this gate a misconfigured worker would accept jobs and only fail LATE,
+// mid-dispatch, after fetching context and burning a GitHub token mint. Checked
+// inline (not via a runner import) so the worker entry stays lightweight.
+if (!process.env.STATE_SECRET) {
+  logger.error(
+    'STATE_SECRET is not configured — the review worker cannot dispatch inline static analysis. Set STATE_SECRET and restart.',
+  );
+  process.exit(1);
+}
+
 const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '3', 10);
 
 const worker = createReviewWorker(WORKER_CONCURRENCY);
