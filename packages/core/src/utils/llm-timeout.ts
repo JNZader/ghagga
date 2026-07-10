@@ -37,8 +37,8 @@ type GenerateTextParams = Parameters<typeof generateText>[0];
 export async function generateTextWithTimeout(
   params: GenerateTextParams,
   context?: { provider?: string; model?: string },
-  // biome-ignore lint/suspicious/noExplicitAny: GenerateTextResult<TOOLS, OUTPUT> requires concrete generic params but callers (simple/workflow/consensus agents) each use different tool configs.
-): Promise<GenerateTextResult<any, any> | null> {
+  // biome-ignore lint/suspicious/noExplicitAny: GenerateTextResult<TOOLS, RUNTIME_CONTEXT, OUTPUT> (AI SDK v7) requires concrete generic params but callers (simple/workflow/consensus agents) each use different tool configs.
+): Promise<GenerateTextResult<any, any, any> | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
