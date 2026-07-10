@@ -125,6 +125,19 @@ function ReviewDetail({ review, onClose }: { review: Review; onClose: () => void
   );
 }
 
+/**
+ * When a status/search filter is active, request this many rows in a
+ * single window instead of the default page size (server cap — see
+ * `Math.min(..., 100)` in apps/server/src/routes/api/reviews.ts). The
+ * server does not filter by status/search yet (PRODOPS-005 remediation is
+ * server-side and out of scope for the dashboard package), so filtering
+ * client-side over just the default page produced false "No reviews
+ * found" results and totals scoped to the wrong set. Widening the fetch
+ * window to the server's max bounds that error for the common case; the
+ * `filterWindowTruncated` notice below covers the remainder honestly.
+ */
+const FILTER_FETCH_LIMIT = 100;
+
 export function Reviews() {
   const { selectedRepo, setSelectedRepo } = useSelectedRepo();
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | ''>('');
@@ -141,16 +154,62 @@ export function Reviews() {
 
   const { addToast } = useToast();
   const { data: repos } = useRepositories();
+
+  const trimmedSearch = search.trim();
+  const isFiltering = statusFilter !== '' || trimmedSearch !== '';
+
+  // When filtering, always fetch a single wide window (page 1, up to
+  // FILTER_FETCH_LIMIT) instead of paging — see FILTER_FETCH_LIMIT comment.
   // Defensive: never send a page < 1 to the server (negative offset → 500).
-  const { data, isLoading, isError } = useReviews(selectedRepo || undefined, Math.max(1, page));
+  const { data, isLoading, isError } = useReviews(
+    selectedRepo || undefined,
+    isFiltering ? 1 : Math.max(1, page),
+    isFiltering
+      ? {
+          limit: FILTER_FETCH_LIMIT,
+          status: statusFilter || undefined,
+          search: trimmedSearch || undefined,
+        }
+      : undefined,
+  );
   const deleteReviews = useDeleteRepoReviews();
   const batchDeleteReviews = useBatchDeleteReviews();
   const deleteReview = useDeleteReview();
 
   const reviews = data?.reviews ?? [];
-  const total = data?.total ?? 0;
+  const serverTotal = data?.total ?? 0;
   const pageSize = data?.pageSize ?? 20;
-  const totalPages = Math.ceil(total / pageSize);
+
+  // Client-side filtering for status and search, applied over whatever
+  // window was actually fetched above (a single default-size page when not
+  // filtering, or the FILTER_FETCH_LIMIT window when filtering). This never
+  // filters over a stale/different page than the one just fetched
+  // (PRODOPS-005).
+  const filteredReviews = reviews.filter((review: Review) => {
+    if (statusFilter && review.status !== statusFilter) return false;
+    if (trimmedSearch) {
+      const q = trimmedSearch.toLowerCase();
+      return (
+        review.repo.toLowerCase().includes(q) ||
+        review.summary.toLowerCase().includes(q) ||
+        String(review.prNumber).includes(q)
+      );
+    }
+    return true;
+  });
+
+  // Totals must reflect the filtered set once a filter is active — showing
+  // the server's unfiltered total would misrepresent what's actually on
+  // screen (PRODOPS-005). Pagination is disabled while filtering since the
+  // fetch window above already covers up to FILTER_FETCH_LIMIT rows in one
+  // shot instead of paging through them.
+  const total = isFiltering ? filteredReviews.length : serverTotal;
+  const totalPages = isFiltering ? 1 : Math.ceil(total / pageSize);
+
+  // The filter window may not cover every matching review if the repo (or
+  // "All repositories") has more rows than FILTER_FETCH_LIMIT. Surface that
+  // honestly instead of silently under-reporting results.
+  const filterWindowTruncated = isFiltering && serverTotal > reviews.length;
 
   // ── Reset to page 1 whenever the selected repo changes ────────
   // The repo <select> onChange also calls setPage(1), but selectedRepo can
@@ -170,24 +229,10 @@ export function Reviews() {
   // on an empty ghost page ("No reviews found."). Clamp down to the last valid
   // page. Guard against totalPages === 0 (empty result) forcing page to 0.
   useEffect(() => {
-    if (totalPages >= 1 && page > totalPages) {
+    if (!isFiltering && totalPages >= 1 && page > totalPages) {
       setPage(totalPages);
     }
-  }, [totalPages, page]);
-
-  // Client-side filtering for status and search
-  const filteredReviews = reviews.filter((review: Review) => {
-    if (statusFilter && review.status !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        review.repo.toLowerCase().includes(q) ||
-        review.summary.toLowerCase().includes(q) ||
-        String(review.prNumber).includes(q)
-      );
-    }
-    return true;
-  });
+  }, [totalPages, page, isFiltering]);
 
   // ── Clear selection on filter/repo/page changes ───────────────
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset selection when filter values change
@@ -320,6 +365,13 @@ export function Reviews() {
         )}
       </div>
 
+      {filterWindowTruncated && (
+        <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-sm text-yellow-300">
+          Showing filter results from the {FILTER_FETCH_LIMIT} most recent reviews (out of{' '}
+          {serverTotal} total). Narrow your search to see results outside this window.
+        </div>
+      )}
+
       {/* Table */}
       <Card padding="none">
         <div className="overflow-x-auto">
@@ -370,7 +422,21 @@ export function Reviews() {
                   <tr
                     key={review.id}
                     onClick={() => setSelectedReview(review)}
-                    className="cursor-pointer border-b border-surface-border/50 transition-colors hover:bg-surface-hover"
+                    onKeyDown={(e) => {
+                      // Enter/Space activates the row like a click, matching
+                      // native button/link behavior (PRODOPS-008). Space is
+                      // prevented to avoid scrolling the page. Deliberately
+                      // NOT role="button" — overriding the tr's implicit
+                      // "row" role would strip its cells from the
+                      // accessibility tree for screen reader users.
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedReview(review);
+                      }
+                    }}
+                    tabIndex={0}
+                    aria-label={`View details for ${review.repo} #${review.prNumber}`}
+                    className="cursor-pointer border-b border-surface-border/50 transition-colors hover:bg-surface-hover focus:outline-none focus-visible:bg-surface-hover focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset"
                   >
                     <td className="w-10 px-3 py-3">
                       <input

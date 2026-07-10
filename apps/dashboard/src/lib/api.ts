@@ -9,6 +9,7 @@ import type {
   Repository,
   RepositorySettings,
   Review,
+  ReviewStatus,
   ReviewsResponse,
   SaaSProvider,
   Stats,
@@ -106,13 +107,35 @@ async function fetchData<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ─── Reviews ──────────────────────────────────────────────
 
-export function useReviews(repo?: string, page: number = 1) {
+/**
+ * Extra query options for `useReviews`. `status`/`search` are forwarded to
+ * the API as `status`/`q` query params so the dashboard is ready the moment
+ * the server implements server-side filtering (PRODOPS-005) — today the
+ * server ignores unknown params and returns the same unfiltered page, so
+ * Reviews.tsx still applies status/search client-side over whatever window
+ * was fetched. `limit` lets a caller request a wider window (up to the
+ * server's cap) when filters are active, so client-side filtering isn't
+ * scoped to a single default-size page.
+ */
+export interface UseReviewsOptions {
+  limit?: number;
+  status?: ReviewStatus | '';
+  search?: string;
+}
+
+export function useReviews(repo?: string, page: number = 1, options?: UseReviewsOptions) {
+  const { limit, status, search } = options ?? {};
   const params = new URLSearchParams();
   if (repo) params.set('repo', repo);
   params.set('page', String(page));
+  if (limit) params.set('limit', String(limit));
+  if (status) params.set('status', status);
+  if (search) params.set('q', search);
 
   return useQuery<ReviewsResponse>({
-    queryKey: ['reviews', repo, page],
+    // status/search are included so a query for one filter combination never
+    // resolves stale cached data from a different one (PRODOPS-005).
+    queryKey: ['reviews', repo, page, limit, status, search],
     queryFn: async () => {
       // The server populates `repo` (repository fullName) on EVERY review row,
       // for both the per-repo and the "All repositories" listings — no

@@ -33,6 +33,15 @@ vi.mock('@/lib/api', () => ({
     mutateAsync: vi.fn().mockResolvedValue(undefined),
     isPending: false,
   }),
+  ApiError: class ApiError extends Error {
+    constructor(
+      public status: number,
+      message: string,
+    ) {
+      super(message);
+      this.name = 'ApiError';
+    }
+  },
 }));
 
 const mockUseSelectedRepo = vi.fn();
@@ -206,7 +215,14 @@ function setupSelectedRepo(repo = 'acme/app') {
 
 function setupWithSettings(settingsData = DEFAULT_SETTINGS) {
   setupSelectedRepo();
-  mockUseSettings.mockReturnValue({ data: settingsData, isLoading: false });
+  mockUseSettings.mockReturnValue({
+    data: settingsData,
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+    isFetching: false,
+  });
 }
 
 // ─── Setup ──────────────────────────────────────────────────────
@@ -219,7 +235,14 @@ beforeEach(() => {
     setSelectedRepo: vi.fn(),
   });
   mockUseRepositories.mockReturnValue({ data: DEFAULT_REPOS, isLoading: false });
-  mockUseSettings.mockReturnValue({ data: undefined, isLoading: false });
+  mockUseSettings.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+    isFetching: false,
+  });
   mockUseUpdateSettings.mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue({ message: 'ok' }),
     isPending: false,
@@ -267,6 +290,126 @@ describe('Settings — loading state', () => {
     const { container } = renderSettings();
 
     expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    expect(screen.queryByText('Save Settings')).not.toBeInTheDocument();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// PRODOPS-001 — load error must never render an editable/saveable form
+// ═══════════════════════════════════════════════════════════════════
+
+describe('Settings — load error (PRODOPS-001)', () => {
+  it('shows an error message with repo context instead of the form on a failed GET', () => {
+    setupSelectedRepo('acme/app');
+    mockUseSettings.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('Request failed'),
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    renderSettings();
+
+    expect(screen.getByText('Failed to load settings for acme/app')).toBeInTheDocument();
+    expect(screen.queryByText('Save Settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Static Analysis Tools')).not.toBeInTheDocument();
+  });
+
+  it('offers a Retry button that calls refetch', () => {
+    const mockRefetch = vi.fn();
+    setupSelectedRepo('acme/app');
+    mockUseSettings.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('boom'),
+      refetch: mockRefetch,
+      isFetching: false,
+    });
+
+    renderSettings();
+
+    fireEvent.click(screen.getByText('Retry'));
+
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('a successful retry hydrates the form and enables Save', () => {
+    setupSelectedRepo('acme/app');
+    mockUseSettings.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('boom'),
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    const { rerender } = renderSettings();
+    expect(screen.queryByText('Save Settings')).not.toBeInTheDocument();
+
+    // Simulate a successful refetch: the query now returns real data.
+    mockUseSettings.mockReturnValue({
+      data: DEFAULT_SETTINGS,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+    rerender(
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <Settings />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Save Settings')).toBeInTheDocument();
+    expect(screen.getByText('Save Settings')).not.toBeDisabled();
+  });
+
+  it('does not leak repo A values into repo B after B fails to load', () => {
+    setupSelectedRepo('acme/app');
+    mockUseSettings.mockReturnValue({
+      data: DEFAULT_SETTINGS,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+
+    const { rerender } = renderSettings();
+    // Loaded A: custom rules field shows A's value.
+    expect(screen.getByPlaceholderText('Add custom review rules...')).toHaveValue('no eval()');
+
+    // Switch to repo B, whose load fails.
+    mockUseSelectedRepo.mockReturnValue({
+      selectedRepo: 'acme/api',
+      setSelectedRepo: vi.fn(),
+    });
+    mockUseSettings.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('boom'),
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+    rerender(
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <Settings />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    // Error state renders — never the form with A's stale "no eval()" value.
+    expect(screen.getByText('Failed to load settings for acme/api')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Add custom review rules...')).not.toBeInTheDocument();
     expect(screen.queryByText('Save Settings')).not.toBeInTheDocument();
   });
 });
