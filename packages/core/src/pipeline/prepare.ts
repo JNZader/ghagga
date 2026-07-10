@@ -63,9 +63,7 @@ function validateReviewSettings(settings: ReviewInput['settings']): void {
 
   if (reviewDelayMs !== undefined) {
     if (!Number.isFinite(reviewDelayMs) || reviewDelayMs < 0) {
-      throw new Error(
-        `reviewDelayMs must be a finite number >= 0, received: ${reviewDelayMs}`,
-      );
+      throw new Error(`reviewDelayMs must be a finite number >= 0, received: ${reviewDelayMs}`);
     }
   }
 }
