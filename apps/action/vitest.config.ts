@@ -5,7 +5,9 @@ export default defineConfig({
     globals: false,
     // Preserve vitest's default excludes and also skip Stryker's sandbox
     // directories, which contain stale test files that can break discovery.
-    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
+    // vitest v4's default exclude no longer covers dist/, so stale compiled
+    // dist/**/*.test.js get collected and can fail locally. Exclude it explicitly.
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**', '**/dist/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json-summary'],

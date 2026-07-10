@@ -1,8 +1,11 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     globals: false,
+    // vitest v4's default exclude no longer covers dist/, so stale compiled
+    // dist/**/*.test.js get collected and can fail locally. Exclude it explicitly.
+    exclude: [...configDefaults.exclude, '**/dist/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary', 'json-summary'],
