@@ -110,6 +110,56 @@ graph TB
   Session --> B["bugfix -- Race condition in concurrent cache writes"]
 ```
 
+## Semantic Memory Search
+
+Memory search is **hybrid** when an embedding provider is configured: a bounded cosine-similarity candidate set (JS-computed, symmetric on both PostgreSQL and SQLite) is UNIONed with the keyword candidates, deduped by observation `id`, then re-ranked with `finalScore = 0.7 * cosineSimilarity + 0.3 * normalizedKeywordScore` before the existing decay filter and result limit apply. This closes **MEM-HYBRID-006**: previously, semantic scoring only re-ranked the keyword candidate set, so a lexically-disjoint query (e.g. "secret leakage") could never surface a relevant observation whose text used different words (e.g. "credential exposure"). Now a lexically-disjoint but semantically-close observation can be retrieved through the cosine union path even with zero keyword overlap.
+
+With **no provider configured** (`EMBEDDING_PROVIDER=none`, the default), search stays keyword-only -- output, ordering, and `last_accessed_at` updates are byte-for-byte identical to the pre-existing behavior. The union logic is entirely inert without a provider.
+
+### How the candidate union works
+
+1. **Keyword candidates**: the existing FTS5 (SQLite) / `tsvector` (PostgreSQL) search, capped at `limit * 5`.
+2. **Cosine candidates**: a bounded, project- (and type-, when filtered) scoped query over rows with a non-NULL embedding, `ORDER BY last_accessed_at DESC LIMIT EMBEDDING_CANDIDATE_K` (default 200) -- cosine similarity is computed in JS over that bounded set, top `limit * 5` kept. Rows whose stored `embedding_model`/`embedding_dim` don't match the active provider are excluded from this set (dimension-consistency guard), not errored on.
+3. **Union + dedup**: the two candidate sets are merged by `id`. An observation that matched both keyword and cosine search is scored once, with its real keyword score. A vector-only match (no lexical hit) gets keyword-score `0` -- mirroring the pre-existing "no embedding -> cosine 0" convention symmetrically.
+4. **Rank + decay + limit**: the unchanged `0.7 * cosine + 0.3 * keywordScore` re-rank, decay filter, and result cap apply to the unioned set exactly as before.
+
+See [Configuration -- Semantic Memory Search](configuration.md#semantic-memory-search-embedding-provider) for how to enable a provider per context (server env, CLI config, GitHub Action inputs), the recommended local/API setups, and the dimension-consistency contract.
+
+### Backfill (re-embedding)
+
+Observations saved before an embedding provider was configured -- or under a different provider/model -- have `embedding_model`/`embedding_dim` set to `NULL` (or mismatched) and are excluded from the cosine candidate set until backfilled.
+
+Run the backfill after enabling or swapping a provider:
+
+```bash
+# CLI
+ghagga memory backfill [--batch <n>] [--limit <n>] [--re-embed] [--delay <ms>]
+
+# Server (self-hosted / SaaS worker box)
+pnpm --filter @ghagga/server memory:backfill -- [--batch <n>] [--limit <n>] [--re-embed] [--delay <ms>]
+```
+
+| Flag | Default | Description |
+|------|---------|--------------|
+| `--batch` | `100` | Rows per `embedBatch()` call |
+| `--limit` | unlimited | Maximum total rows to process in this run |
+| `--re-embed` | `false` | Also re-embed rows whose stored `embedding_model`/`embedding_dim` mismatches the active provider (not just `NULL` rows) -- use this after a provider or model swap |
+| `--delay` | `0` (ms) | Delay between batches, for rate/cost control against paid embedding APIs |
+
+Both entry points call the same shared backfill routine, so CLI and server behave identically. The backfill is **not available in the GitHub Action** -- the Action's per-run SQLite database is ephemeral (persisted only via `@actions/cache` between runs of the same repo/workflow), so there's no long-lived history to backfill.
+
+**Idempotent and resumable**: each batch is selected fresh from storage, matching only `NULL`-embedding rows (plus model/dimension-mismatched rows when `--re-embed` is set). A row already embedded with a matching model/dimension is never re-selected, so re-running the command after a partial run or a mid-batch failure (network error, process crash) picks up exactly where it left off with no duplicate work.
+
+### Rollback
+
+To disable semantic search and instantly return to keyword-only behavior, set:
+
+```bash
+EMBEDDING_PROVIDER=none
+```
+
+No migration reversal is needed -- the `embedding`, `embedding_model`, and `embedding_dim` columns stay in place as harmless, unused data. The cosine union code path is inert whenever no provider is configured, so this is a pure config change with immediate effect on the next process restart.
+
 ## Full-Text Search
 
 ### PostgreSQL (Server Mode)
