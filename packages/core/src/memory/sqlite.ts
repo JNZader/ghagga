@@ -160,7 +160,29 @@ export interface SqliteMemoryStorageOptions {
    * is used for search. When undefined, falls back to keyword-only search.
    */
   embeddingProvider?: EmbeddingProvider;
+
+  /**
+   * Identifier for the active embedding model (e.g. "text-embedding-3-small").
+   * Persisted per-row alongside the vector and compared on read (design D3).
+   *
+   * NOTE: `EmbeddingProvider` (packages/core/src/embed.ts) does not currently
+   * expose a model name, so this is supplied by the caller out-of-band. When
+   * omitted, the read guard only enforces dimension compatibility (never
+   * throws either way) — the model-mismatch check is a no-op until callers
+   * start passing it (wired in PR5).
+   */
+  embeddingModel?: string;
+
+  /**
+   * Bounded cosine candidate set size (design D4). Defaults to 200.
+   * Callers should pass `resolveEmbeddingConfig(env).candidateK` (PR1) rather
+   * than relying on this default once wired (PR5).
+   */
+  embeddingCandidateK?: number;
 }
+
+/** Default bounded cosine candidate set size (design D4) when not configured. */
+const DEFAULT_EMBEDDING_CANDIDATE_K = 200;
 
 /**
  * Runs an ADD COLUMN migration idempotently.
@@ -182,6 +204,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
   private dedupWindowMinutes: number;
   private decayConfig: DecayConfig;
   private embeddingProvider: EmbeddingProvider | undefined;
+  private embeddingModel: string | undefined;
+  private embeddingCandidateK: number;
   private pageIndex: ProjectPageIndexService;
 
   private constructor(
@@ -192,6 +216,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
     this.dedupWindowMinutes = options.dedupWindowMinutes ?? DEFAULT_DEDUP_WINDOW_MINUTES;
     this.decayConfig = options.decayConfig ?? DEFAULT_DECAY_CONFIG;
     this.embeddingProvider = options.embeddingProvider;
+    this.embeddingModel = options.embeddingModel;
+    this.embeddingCandidateK = options.embeddingCandidateK ?? DEFAULT_EMBEDDING_CANDIDATE_K;
     this.pageIndex = new ProjectPageIndexService(this.db);
   }
 
@@ -356,23 +382,26 @@ export class SqliteMemoryStorage implements MemoryStorage {
   }
 
   /**
-   * Hybrid BM25 + semantic RE-RANKING (70% semantic, 30% keyword).
-   * Only called when embeddingProvider is set.
-   *
-   * LIMITATION (MEM-HYBRID-006): this re-ranks a keyword-derived candidate set;
-   * it does not perform true semantic retrieval. Step 1 gates candidates on an
-   * FTS5 lexical match, so a semantically-close but lexically-disjoint
-   * observation never enters the candidate pool and cannot be recalled by
-   * embedding similarity alone. A future ANN/vector candidate source unioned
-   * with the keyword candidates would remove this floor.
+   * Hybrid keyword + semantic search: unions a bounded cosine candidate set
+   * with the keyword (FTS5) candidate set before scoring (spec R5.7-R5.10,
+   * design D4/D5). Only called when embeddingProvider is set.
    *
    * Strategy:
-   *   1. Run FTS5 to get keyword candidates (up to limit * 5 to have enough for re-ranking)
-   *   2. Embed the query
-   *   3. For each candidate, deserialize its stored embedding and compute cosine similarity
-   *   4. Candidates without embeddings get cosine_sim = 0 (keyword-only score still applies)
-   *   5. Combine: final_score = 0.7 * cosine_sim + 0.3 * normalized_bm25
-   *   6. Sort descending, apply decay filter, return top-k
+   *   1. Run FTS5 to get keyword candidates (up to limit * 5), preserving
+   *      native bm25() order (best match first).
+   *   2. Run a bounded, project(+type)-scoped cosine candidate query
+   *      (embedding IS NOT NULL, ORDER BY last_accessed_at DESC LIMIT K).
+   *   3. Compute cosine similarity in JS for candidates that pass the
+   *      dimension/model read guard (mismatches are excluded, never thrown).
+   *   4. Union both sets by id, dedup: an overlapping candidate keeps its
+   *      real keyword score; a cosine-only candidate gets keyword-score 0.
+   *   5. Keyword score uses the unified positional-rank convention
+   *      `1 - i/(n-1)` over the keyword-ordered list (design D5) — shared
+   *      with the PostgreSQL backend so both engines score identically
+   *      post-union.
+   *   6. Combine: finalScore = 0.7 * cosineSim + 0.3 * keywordScore.
+   *   7. Apply the decay filter, sort descending, cap at limit, update
+   *      last_accessed_at only for the rows actually returned (R5.10).
    */
   private async _hybridSearch(
     project: string,
@@ -380,6 +409,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
     options: { limit: number; type?: string },
   ): Promise<MemoryObservationRow[]> {
     const { limit, type } = options;
+    const provider = this.embeddingProvider;
+    if (!provider) return [];
 
     const ftsQuery = query
       .trim()
@@ -393,28 +424,6 @@ export class SqliteMemoryStorage implements MemoryStorage {
     // Fetch a larger candidate set for re-ranking
     const fetchLimit = limit * 5;
 
-    let sql = `
-      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity,
-             o.last_accessed_at, o.embedding,
-             bm25(memory_observations_fts) AS bm25_score
-      FROM memory_observations o
-      JOIN memory_observations_fts fts ON fts.rowid = o.id
-      WHERE memory_observations_fts MATCH ?
-        AND o.project = ?
-    `;
-    const params: (string | number)[] = [ftsQuery, project];
-
-    if (type) {
-      sql += ' AND o.type = ?';
-      params.push(type);
-    }
-
-    sql += ' ORDER BY bm25(memory_observations_fts) LIMIT ?';
-    params.push(fetchLimit);
-
-    const stmt = this.db.prepare(sql);
-    stmt.bind(params);
-
     interface CandidateRow {
       id: number;
       type: string;
@@ -425,71 +434,158 @@ export class SqliteMemoryStorage implements MemoryStorage {
       lastAccessed: Date;
       /** sql.js returns BLOB columns as Uint8Array (not Buffer) */
       embedding: Buffer | Uint8Array | null;
-      bm25Score: number;
+      embeddingModel: string | null;
+      embeddingDim: number | null;
     }
 
-    const candidates: CandidateRow[] = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
-      candidates.push({
-        id: row.id as number,
-        type: row.type as string,
-        title: row.title as string,
-        content: row.content as string,
-        filePaths: row.file_paths ? JSON.parse(row.file_paths as string) : null,
-        severity: (row.severity as string) ?? null,
-        lastAccessed: row.last_accessed_at ? new Date(row.last_accessed_at as string) : new Date(),
-        embedding: row.embedding ? (row.embedding as Buffer | Uint8Array) : null,
-        bm25Score: row.bm25_score as number,
+    const mapCandidateRow = (row: Record<string, unknown>): CandidateRow => ({
+      id: row.id as number,
+      type: row.type as string,
+      title: row.title as string,
+      content: row.content as string,
+      filePaths: row.file_paths ? JSON.parse(row.file_paths as string) : null,
+      severity: (row.severity as string) ?? null,
+      lastAccessed: row.last_accessed_at ? new Date(row.last_accessed_at as string) : new Date(),
+      embedding: row.embedding ? (row.embedding as Buffer | Uint8Array) : null,
+      embeddingModel: (row.embedding_model as string) ?? null,
+      embeddingDim: (row.embedding_dim as number) ?? null,
+    });
+
+    // ── Step 1: keyword candidates (FTS5, unchanged gate) ────────────
+    let keywordSql = `
+      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity,
+             o.last_accessed_at, o.embedding, o.embedding_model, o.embedding_dim
+      FROM memory_observations o
+      JOIN memory_observations_fts fts ON fts.rowid = o.id
+      WHERE memory_observations_fts MATCH ?
+        AND o.project = ?
+    `;
+    const keywordParams: (string | number)[] = [ftsQuery, project];
+
+    if (type) {
+      keywordSql += ' AND o.type = ?';
+      keywordParams.push(type);
+    }
+
+    keywordSql += ' ORDER BY bm25(memory_observations_fts) LIMIT ?';
+    keywordParams.push(fetchLimit);
+
+    const keywordStmt = this.db.prepare(keywordSql);
+    keywordStmt.bind(keywordParams);
+
+    const keywordCandidates: CandidateRow[] = [];
+    while (keywordStmt.step()) {
+      keywordCandidates.push(mapCandidateRow(keywordStmt.getAsObject()));
+    }
+    keywordStmt.free();
+
+    // ── Step 2: bounded cosine candidates (spec R5.7, design D4) ─────
+    let cosineSql = `
+      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity,
+             o.last_accessed_at, o.embedding, o.embedding_model, o.embedding_dim
+      FROM memory_observations o
+      WHERE o.project = ?
+        AND o.embedding IS NOT NULL
+    `;
+    const cosineParams: (string | number)[] = [project];
+
+    if (type) {
+      cosineSql += ' AND o.type = ?';
+      cosineParams.push(type);
+    }
+
+    cosineSql += ' ORDER BY o.last_accessed_at DESC LIMIT ?';
+    cosineParams.push(this.embeddingCandidateK);
+
+    const cosineStmt = this.db.prepare(cosineSql);
+    cosineStmt.bind(cosineParams);
+
+    const cosineBoundedCandidates: CandidateRow[] = [];
+    while (cosineStmt.step()) {
+      cosineBoundedCandidates.push(mapCandidateRow(cosineStmt.getAsObject()));
+    }
+    cosineStmt.free();
+
+    if (keywordCandidates.length === 0 && cosineBoundedCandidates.length === 0) return [];
+
+    // Compute query embedding once
+    const queryVec = await provider.embed(query);
+
+    // Dimension/model read guard (design D3): a row whose stored dimension or
+    // model doesn't match the active provider is excluded from the cosine set
+    // (task 3.2) — mirrors the pre-existing "no embedding → cosine 0" rule.
+    // `this.embeddingModel` may be undefined (EmbeddingProvider does not yet
+    // expose a model name) — when undefined, only dimension is enforced.
+    const isEmbeddingUsable = (row: CandidateRow): boolean => {
+      if (!row.embedding) return false;
+      if (row.embeddingDim !== null && row.embeddingDim !== provider.dimension) return false;
+      if (this.embeddingModel !== undefined && row.embeddingModel !== this.embeddingModel) {
+        return false;
+      }
+      return true;
+    };
+
+    const computeCosine = (row: CandidateRow): number => {
+      if (!row.embedding || !isEmbeddingUsable(row)) return 0;
+      try {
+        const storedVec = deserializeEmbedding(row.embedding);
+        if (storedVec.length !== queryVec.length) return 0;
+        return cosineSimilarity(queryVec, storedVec);
+      } catch {
+        // Malformed embedding — treat as 0
+        return 0;
+      }
+    };
+
+    // ── Step 3: unified positional-rank keyword score (design D5) ────
+    // keywordCandidates is already ordered by bm25() ASC (best match first).
+    const n = keywordCandidates.length;
+    const keywordScoreById = new Map<number, number>();
+    keywordCandidates.forEach((candidate, i) => {
+      keywordScoreById.set(candidate.id, n > 1 ? 1 - i / (n - 1) : 1);
+    });
+
+    // ── Step 4: cosine similarity, top limit*5 of the GUARDED set ────
+    const cosineTop = cosineBoundedCandidates
+      .filter(isEmbeddingUsable)
+      .map((candidate) => ({ candidate, cosineSim: computeCosine(candidate) }))
+      .sort((a, b) => b.cosineSim - a.cosineSim)
+      .slice(0, fetchLimit);
+
+    // ── Step 5: union + dedup by id (spec R5.8/R5.9) ──────────────────
+    interface MergedCandidate {
+      candidate: CandidateRow;
+      cosineSim: number;
+      keywordScore: number;
+    }
+    const merged = new Map<number, MergedCandidate>();
+
+    for (const candidate of keywordCandidates) {
+      merged.set(candidate.id, {
+        candidate,
+        cosineSim: computeCosine(candidate),
+        keywordScore: keywordScoreById.get(candidate.id) ?? 0,
       });
     }
-    stmt.free();
+    for (const { candidate, cosineSim } of cosineTop) {
+      if (merged.has(candidate.id)) continue; // keep the real keyword score (R5.8)
+      merged.set(candidate.id, { candidate, cosineSim, keywordScore: 0 }); // vector-only (R5.9)
+    }
 
-    if (candidates.length === 0) return [];
+    if (merged.size === 0) return [];
 
-    // Compute query embedding
-    // biome-ignore lint/style/noNonNullAssertion: embeddingProvider is checked by the caller (_hybridSearch is only called when it's set)
-    const queryVec = await this.embeddingProvider!.embed(query);
-
-    // BM25 scores from FTS5 are negative (lower = better match).
-    // Normalize to [0, 1]: higher is better.
-    const bm25Scores = candidates.map((c) => c.bm25Score);
-    const minBm25 = Math.min(...bm25Scores);
-    const maxBm25 = Math.max(...bm25Scores);
-    const bm25Range = maxBm25 - minBm25;
-
+    // ── Step 6: score, decay filter, sort, cap (spec R5.5/R5.8) ──────
     const now = new Date();
     const scored: Array<{ candidate: CandidateRow; finalScore: number; strength: number }> = [];
 
-    for (const candidate of candidates) {
+    for (const { candidate, cosineSim, keywordScore } of merged.values()) {
       const strength = computeStrength(candidate.lastAccessed, now, this.decayConfig);
       if (strength < this.decayConfig.minStrength) continue;
 
-      // Normalize BM25 to [0, 1]. FTS5 bm25() is MORE NEGATIVE = BETTER match,
-      // so the best candidate (minBm25) must map to 1 and the worst (maxBm25) to 0.
-      const normalizedBm25 = bm25Range === 0 ? 1 : (maxBm25 - candidate.bm25Score) / bm25Range;
-
-      // Cosine similarity from stored embedding (0 if not present)
-      let cosineSim = 0;
-      if (candidate.embedding) {
-        try {
-          const storedVec = deserializeEmbedding(candidate.embedding);
-          // Dimension guard: a stored vector from a different embedding model
-          // is meaningless against this query — skip cosine (mirror queries.ts)
-          if (storedVec.length === queryVec.length) {
-            cosineSim = cosineSimilarity(queryVec, storedVec);
-          }
-        } catch {
-          // Malformed embedding — treat as 0
-        }
-      }
-
-      // 70/30 weighted combination
-      const finalScore = 0.7 * cosineSim + 0.3 * normalizedBm25;
+      const finalScore = 0.7 * cosineSim + 0.3 * keywordScore;
       scored.push({ candidate, finalScore, strength });
     }
 
-    // Sort by final score descending
     scored.sort((a, b) => b.finalScore - a.finalScore);
 
     const results: MemoryObservationRow[] = [];
@@ -509,7 +605,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
       });
     }
 
-    // Update last_accessed_at for returned observations
+    // Update last_accessed_at only for the final returned rows (R5.10)
     if (accessedIds.length > 0) {
       const placeholders = accessedIds.map(() => '?').join(',');
       this.db.run(
@@ -591,14 +687,14 @@ export class SqliteMemoryStorage implements MemoryStorage {
         const existingId = existingByTopic[0]?.values[0]?.[0] as number;
         const filePathsJson = JSON.stringify(data.filePaths ?? []);
 
-        // Compute and store embedding if provider available
-        const embeddingBuf = await this._computeEmbeddingBuffer(`${data.title} ${data.content}`);
+        // Compute and store embedding + its provider metadata if provider available
+        const embeddingMeta = await this._computeEmbeddingMeta(`${data.title} ${data.content}`);
 
         const updated = this.db.exec(
           `
           UPDATE memory_observations
           SET content = ?, title = ?, content_hash = ?, file_paths = ?,
-              severity = ?, embedding = ?,
+              severity = ?, embedding = ?, embedding_model = ?, embedding_dim = ?,
               revision_count = revision_count + 1,
               updated_at = datetime('now'),
               last_accessed_at = datetime('now')
@@ -611,7 +707,9 @@ export class SqliteMemoryStorage implements MemoryStorage {
             contentHash,
             filePathsJson,
             data.severity ?? null,
-            embeddingBuf,
+            embeddingMeta.buffer,
+            embeddingMeta.model,
+            embeddingMeta.dim,
             existingId,
           ],
         );
@@ -629,14 +727,15 @@ export class SqliteMemoryStorage implements MemoryStorage {
       }
     }
 
-    // New observation — compute embedding if provider available
-    const embeddingBuf = await this._computeEmbeddingBuffer(`${data.title} ${data.content}`);
+    // New observation — compute embedding + its provider metadata if provider available
+    const embeddingMeta = await this._computeEmbeddingMeta(`${data.title} ${data.content}`);
     const filePathsJson = JSON.stringify(data.filePaths ?? []);
     const inserted = this.db.exec(
       `
       INSERT INTO memory_observations
-        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash, embedding, last_accessed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        (session_id, project, type, title, content, severity, topic_key, file_paths, content_hash,
+         embedding, embedding_model, embedding_dim, last_accessed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       RETURNING id, type, title, content, file_paths, severity
     `,
       [
@@ -649,7 +748,9 @@ export class SqliteMemoryStorage implements MemoryStorage {
         data.topicKey ?? null,
         filePathsJson,
         contentHash,
-        embeddingBuf,
+        embeddingMeta.buffer,
+        embeddingMeta.model,
+        embeddingMeta.dim,
       ],
     );
 
@@ -675,18 +776,32 @@ export class SqliteMemoryStorage implements MemoryStorage {
   }
 
   /**
-   * Compute embedding buffer for storage.
-   * Returns the serialized float32 Buffer when embeddingProvider is available,
-   * or null (no-op) when it is not — enabling graceful degradation.
+   * Compute the embedding buffer plus its provider metadata for storage
+   * (design D3 — per-row `embedding_model`/`embedding_dim`, task 3.6).
+   * Returns all-null when no embeddingProvider is configured (no-op) or when
+   * embedding generation fails — a failed embed is non-fatal: the row is
+   * still saved with a NULL embedding rather than throwing (spec: Graceful
+   * Degradation on Provider/API Failure).
    */
-  private async _computeEmbeddingBuffer(text: string): Promise<Buffer | null> {
-    if (!this.embeddingProvider) return null;
+  private async _computeEmbeddingMeta(
+    text: string,
+  ): Promise<{ buffer: Buffer | null; model: string | null; dim: number | null }> {
+    if (!this.embeddingProvider) return { buffer: null, model: null, dim: null };
     try {
       const vec = await this.embeddingProvider.embed(text);
-      return serializeEmbedding(vec);
-    } catch {
+      return {
+        buffer: serializeEmbedding(vec),
+        model: this.embeddingModel ?? null,
+        dim: this.embeddingProvider.dimension,
+      };
+    } catch (error) {
       // Embedding failure is non-fatal — store NULL and continue
-      return null;
+      console.warn(
+        `[ghagga] embedding computation failed during save — persisting NULL embedding: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { buffer: null, model: null, dim: null };
     }
   }
 

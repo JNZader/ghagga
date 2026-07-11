@@ -48,14 +48,14 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 3: SQLite Cosine Union (PR 3)
 
-- [ ] 3.1 In `packages/core/src/memory/sqlite.ts:257-515`, add bounded cosine candidate query: project- (+type-) scoped, `embedding IS NOT NULL`, `ORDER BY last_accessed_at DESC LIMIT EMBEDDING_CANDIDATE_K` (default 200, env-configurable).
-- [ ] 3.2 Add dimension-mismatch read guard: skip row (cosine 0 / excluded from candidate set) when `row.embedding_dim !== provider.dimension` or `row.embedding_model !== active model` or length mismatch.
-- [ ] 3.3 Compute cosine similarity in JS over the guarded candidate set; take top `limit*5`.
-- [ ] 3.4 Union keyword candidates (`limit*5`) with cosine candidates, dedup by `id`; unified positional-rank keyword-score `1 - i/(n-1)` over merged lexical-rank order; vector-only candidates get keyword-score 0.
-- [ ] 3.5 Apply unchanged `finalScore = 0.7*cosineSim + 0.3*normalizedKeywordScore` → decay filter → `limit` cap; update `last_accessed_at` only for final returned rows.
-- [ ] 3.6 Persist `embedding_model`/`embedding_dim` alongside vector on save; on embed failure during save, persist NULL embedding + log warning, do not throw.
-- [ ] 3.7 Test (acceptance gate): with `none` provider, `searchObservations` output/order/`last_accessed_at` byte-for-byte identical to pre-change baseline (golden test using `FakeEmbeddingProvider` absent).
-- [ ] 3.8 Test: lexically-disjoint semantic match surfaces via cosine union; keyword+vector overlap dedups to one entry with real keyword score; mixed-dimension rows excluded from cosine set without error; partial-backfill mix (some NULL, some embedded) returns correctly via both paths.
+- [x] 3.1 In `packages/core/src/memory/sqlite.ts:257-515`, add bounded cosine candidate query: project- (+type-) scoped, `embedding IS NOT NULL`, `ORDER BY last_accessed_at DESC LIMIT EMBEDDING_CANDIDATE_K` (default 200, env-configurable).
+- [x] 3.2 Add dimension-mismatch read guard: skip row (cosine 0 / excluded from candidate set) when `row.embedding_dim !== provider.dimension` or `row.embedding_model !== active model` or length mismatch.
+- [x] 3.3 Compute cosine similarity in JS over the guarded candidate set; take top `limit*5`.
+- [x] 3.4 Union keyword candidates (`limit*5`) with cosine candidates, dedup by `id`; unified positional-rank keyword-score `1 - i/(n-1)` over merged lexical-rank order; vector-only candidates get keyword-score 0.
+- [x] 3.5 Apply unchanged `finalScore = 0.7*cosineSim + 0.3*normalizedKeywordScore` → decay filter → `limit` cap; update `last_accessed_at` only for final returned rows.
+- [x] 3.6 Persist `embedding_model`/`embedding_dim` alongside vector on save; on embed failure during save, persist NULL embedding + log warning, do not throw.
+- [x] 3.7 Test (acceptance gate): with `none` provider, `searchObservations` output/order/`last_accessed_at` byte-for-byte identical to pre-change baseline (golden test using `FakeEmbeddingProvider` absent).
+- [x] 3.8 Test: lexically-disjoint semantic match surfaces via cosine union; keyword+vector overlap dedups to one entry with real keyword score; mixed-dimension rows excluded from cosine set without error; partial-backfill mix (some NULL, some embedded) returns correctly via both paths.
 
 ## Phase 4: Postgres Cosine Union (PR 4)
 
