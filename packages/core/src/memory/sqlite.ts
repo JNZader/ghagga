@@ -261,7 +261,14 @@ export class SqliteMemoryStorage implements MemoryStorage {
   ): Promise<MemoryObservationRow[]> {
     const { limit = 10, type } = options;
 
-    // ── Hybrid search (BM25 + semantic) ──────────────────────────
+    // ── Hybrid search (BM25 + semantic RE-RANKING) ───────────────
+    // NOTE (MEM-HYBRID-006): this is semantic *re-ranking* of a keyword
+    // candidate set, NOT pure semantic retrieval. Even with an embedding
+    // provider, candidates are first gated by the FTS5 MATCH below, so an
+    // observation with no lexical overlap with the query is never a candidate
+    // and cannot be surfaced by embedding similarity alone (e.g. "secret
+    // leakage" will not recall a "credential exposure" note). Closing this
+    // would require unioning an ANN/vector candidate set with the keyword set.
     if (this.embeddingProvider) {
       return this._hybridSearch(project, query, { limit, type });
     }
@@ -342,8 +349,15 @@ export class SqliteMemoryStorage implements MemoryStorage {
   }
 
   /**
-   * Hybrid BM25 + semantic search (70% semantic, 30% keyword).
+   * Hybrid BM25 + semantic RE-RANKING (70% semantic, 30% keyword).
    * Only called when embeddingProvider is set.
+   *
+   * LIMITATION (MEM-HYBRID-006): this re-ranks a keyword-derived candidate set;
+   * it does not perform true semantic retrieval. Step 1 gates candidates on an
+   * FTS5 lexical match, so a semantically-close but lexically-disjoint
+   * observation never enters the candidate pool and cannot be recalled by
+   * embedding similarity alone. A future ANN/vector candidate source unioned
+   * with the keyword candidates would remove this floor.
    *
    * Strategy:
    *   1. Run FTS5 to get keyword candidates (up to limit * 5 to have enough for re-ranking)

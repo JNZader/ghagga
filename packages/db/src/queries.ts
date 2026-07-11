@@ -759,6 +759,12 @@ export async function searchObservations(
 
   if (!sanitizedQuery) return [];
 
+  // NOTE (MEM-HYBRID-006): the `@@ to_tsquery` predicate below is a lexical
+  // gate. When embedFn is set this is semantic *re-ranking* of keyword
+  // candidates, NOT pure semantic retrieval: an observation with no lexical
+  // overlap with the query never matches the tsquery, so it never enters the
+  // candidate set and embedding similarity can't surface it. Closing this would
+  // require unioning a pgvector/ANN candidate source with the tsquery matches.
   const conditions: SQL[] = [
     eq(memoryObservations.project, project),
     sql`search_observations @@ to_tsquery('english', ${sanitizedQuery})`,
