@@ -7,7 +7,7 @@ Implement Option A (bounded brute-force cosine union, symmetric on both backends
 ## Architecture Decisions
 
 ### D1 — Ship 2 providers, not per-vendor clients
-**Choice**: One generic **OpenAI-compatible HTTP provider** (`base URL + model + optional key`) + one optional **local Transformers.js provider** (`@xenova/transformers`, `optionalDependency`).
+**Choice**: One generic **OpenAI-compatible HTTP provider** (`base URL + model + optional key`) + one optional **local Transformers.js provider** (`@xenova/transformers`, undeclared user-installed peer — see D7).
 **Rejected**: Separate Voyage/OpenAI/Cohere SDK clients (N deps, N maintenance surfaces, bundle bloat).
 **Rationale**: The `/v1/embeddings` contract is a de-facto standard — one client covers OpenAI, Voyage-compatible endpoints, and free self-hosted servers (Ollama, LM Studio, text-embeddings-inference) by URL alone. Satisfies "agnostic + free + local" with 1 network impl + 1 offline impl.
 
@@ -18,13 +18,13 @@ Implement Option A (bounded brute-force cosine union, symmetric on both backends
 | `EMBEDDING_MODEL` | e.g. `text-embedding-3-small`, `Xenova/all-MiniLM-L6-v2` |
 | `EMBEDDING_BASE_URL` | `https://api.openai.com/v1` \| `http://localhost:11434/v1` |
 | `EMBEDDING_API_KEY` | optional (omitted for local/self-hosted) |
-| `EMBEDDING_DIMENSION` | int; asserted against provider’s reported dim |
+| `EMBEDDING_DIMENSION` | int; asserted against provider's reported dim |
 
 **Mapping**: server reads `process.env`; CLI merges the same keys from its config file over env; Action exposes matching `inputs`/`secrets` mapped to the same env names. One `resolveEmbeddingConfig(env)` (Zod-parsed) in `packages/core` feeds `createEmbeddingProvider(config)` at every construction site. `none`/unset → factory returns `null` → current path.
 
 ### D3 — Dimension/provider metadata + read guard
 **Choice**: Store `embedding_model TEXT` + `embedding_dim INT` **per row** (columns, not a config singleton) alongside the vector; both NULL when unembedded. Read guard: skip cosine (treat as 0) when `row.embedding_dim !== provider.dimension` OR `model !== active model` OR length mismatch — mirrors existing "no embedding → cosine 0".
-**Rejected**: Single metadata/config row (can’t represent a half-migrated table; races on swap).
+**Rejected**: Single metadata/config row (can't represent a half-migrated table; races on swap).
 **Rationale**: Per-row metadata makes a provider/dim swap safe *and* observable — old rows silently degrade to keyword-only until re-embedded. Documented path: swap config → run backfill in re-embed mode (D6).
 
 ### D4 — Bounded cosine candidate K
@@ -33,7 +33,7 @@ Implement Option A (bounded brute-force cosine union, symmetric on both backends
 
 ### D5 — Unified keyword-score convention
 **Choice**: Both backends use a **normalized positional rank** `1 - i/(n-1)` over the merged candidate list ordered by native lexical rank (BM25 for SQLite, `ts_rank` for PG). **Vector-only candidates** (no lexical match) get keyword-score **0**.
-**Rejected**: Keeping SQLite’s raw normalized BM25 (not comparable to PG’s proxy; two conventions).
+**Rejected**: Keeping SQLite's raw normalized BM25 (not comparable to PG's proxy; two conventions).
 **Rationale**: Positional rank is the only score both engines can produce identically post-union; converges the pre-existing PG/SQLite inconsistency onto one rule. Vector-only = 0 mirrors "no embedding → cosine 0" symmetrically.
 
 ### D6 — Backfill mechanism
@@ -41,7 +41,7 @@ Implement Option A (bounded brute-force cosine union, symmetric on both backends
 **Rationale**: Idempotency via the same read guard predicate; batching bounds API cost and enables resume after failure.
 
 ### D7 — Optional dep + Action bundle
-**Choice**: Local provider uses lazy `await import('@xenova/transformers')` inside the factory branch, wrapped in try/catch → on absence log + fall back to `none`. `@xenova/transformers` is an `optionalDependency`; `ncc` config for the Action externals/excludes it, and the Action never selects `local` (HTTP or `none` only).
+**Choice**: Local provider uses lazy `await import('@xenova/transformers')` inside the factory branch, wrapped in try/catch → on absence log + fall back to `none`. `@xenova/transformers` is an **undeclared, user-installed optional peer** (`pnpm add @xenova/transformers`), NOT an `optionalDependency` — declaring it would force-install a heavy ML lib + its vulnerable transitive `protobufjs` for everyone (this surfaced as a `pnpm audit --prod` failure during merge). `ncc` config for the Action externals/excludes it, and the Action never selects `local` (HTTP or `none` only).
 **Rationale**: Keeps the Action bundle lean; CLI/server get local embeddings when installed; missing dep never crashes.
 
 ### D8 — Testing with a deterministic fake provider
