@@ -30,6 +30,18 @@ export interface GhaggaCliConfig {
 
   /** Default model for the provider */
   defaultModel?: string;
+
+  /**
+   * Embedding provider config overrides (design D2). Config-file keys take
+   * precedence over the matching `EMBEDDING_*` env vars — see
+   * `resolveCliEmbeddingConfig` in `./embedding.js`.
+   */
+  embeddingProvider?: string;
+  embeddingModel?: string;
+  embeddingBaseUrl?: string;
+  embeddingApiKey?: string;
+  embeddingDimension?: number;
+  embeddingCandidateK?: number;
 }
 
 // ─── Paths ──────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { SqliteMemoryStorage } from 'ghagga-core';
 import { getConfigDir } from '../../lib/config.js';
+import { resolveCliEmbeddingProvider } from '../../lib/embedding.js';
 import {
   formatId as _formatId,
   formatSize as _formatSize,
@@ -39,7 +40,19 @@ export async function openMemoryOrExit(): Promise<{
     process.exit(0);
   }
 
-  const storage = await SqliteMemoryStorage.create(dbPath);
+  // Provider + model/candidateK threaded from the merged CLI config (design
+  // D2, task 5.2) — when unconfigured, `provider` is undefined and
+  // `SqliteMemoryStorage` falls back to keyword-only search unchanged.
+  const { config, provider } = resolveCliEmbeddingProvider();
+  const storage = await SqliteMemoryStorage.create(dbPath, {
+    ...(provider
+      ? {
+          embeddingProvider: provider,
+          embeddingModel: config.model,
+          embeddingCandidateK: config.candidateK,
+        }
+      : {}),
+  });
   return { storage, dbPath };
 }
 

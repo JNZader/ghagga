@@ -44,6 +44,7 @@ import {
   resolveGitLabProjectId,
 } from '../lib/cli-gitlab-client-port.js';
 import { getConfigDir, getStoredToken } from '../lib/config.js';
+import { resolveCliEmbeddingProvider } from '../lib/embedding.js';
 import { composeForgePostback, type ForgeComposition } from '../lib/forge-postback.js';
 import { getStagedDiff, resolveProjectId } from '../lib/git.js';
 import {
@@ -256,6 +257,19 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
       try {
         const dbPath = join(getConfigDir(), 'memory.db');
 
+        // Provider + model/candidateK threaded from the merged CLI config
+        // (design D2, task 5.2) — when unconfigured, `provider` is undefined
+        // and SqliteMemoryStorage falls back to keyword-only search unchanged.
+        const { config: embeddingConfig, provider: embeddingProvider } =
+          resolveCliEmbeddingProvider();
+        const sqliteOptions = embeddingProvider
+          ? {
+              embeddingProvider,
+              embeddingModel: embeddingConfig.model,
+              embeddingCandidateK: embeddingConfig.candidateK,
+            }
+          : {};
+
         if (memoryBackend === 'engram') {
           // Try Engram; fall back to SQLite if unavailable
           const engramHost = process.env.GHAGGA_ENGRAM_HOST ?? 'http://localhost:7437';
@@ -272,10 +286,10 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
             memoryStorage = engramStorage;
           } else {
             tui.log.warn('⚠️  Engram not available, falling back to SQLite memory');
-            memoryStorage = await SqliteMemoryStorage.create(dbPath);
+            memoryStorage = await SqliteMemoryStorage.create(dbPath, sqliteOptions);
           }
         } else {
-          memoryStorage = await SqliteMemoryStorage.create(dbPath);
+          memoryStorage = await SqliteMemoryStorage.create(dbPath, sqliteOptions);
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

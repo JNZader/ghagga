@@ -393,8 +393,17 @@ export { buildCodeIntelContext, McpCodeIntelClient } from './code-intel/index.js
 
 // ─── Embeddings (Intelligence v2) ─────────────────────────────
 
-export type { EmbeddingProvider, EmbeddingProviderFactory } from './embed.js';
-export { cosineSimilarity, deserializeEmbedding, serializeEmbedding } from './embed.js';
+export type { EmbeddingConfig, EmbeddingProvider, EmbeddingProviderFactory } from './embed.js';
+export {
+  cosineSimilarity,
+  createEmbeddingProvider,
+  deserializeEmbedding,
+  EmbeddingProviderError,
+  FakeEmbeddingProvider,
+  OpenAICompatibleEmbeddingProvider,
+  resolveEmbeddingConfig,
+  serializeEmbedding,
+} from './embed.js';
 export type { AuthorTrustScore, AuthorTrustTier, NegativeExample } from './types.js';
 
 // ─── Author Trust Scoring (Intelligence v2) ───────────────────

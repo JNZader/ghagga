@@ -88,6 +88,16 @@ vi.mock('node:fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
 }));
 
+// Embedding resolution is unrelated to output routing — stub to `none`
+// (undefined provider) so the SqliteMemoryStorage.create call stays on the
+// pre-existing keyword-only path the mocked ghagga-core above expects.
+vi.mock('../lib/embedding.js', () => ({
+  resolveCliEmbeddingProvider: () => ({
+    config: { provider: 'none', candidateK: 200 },
+    provider: undefined,
+  }),
+}));
+
 // ─── Imports ────────────────────────────────────────────────────
 
 import { execSync } from 'node:child_process';

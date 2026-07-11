@@ -89,6 +89,46 @@ inputs:
     required: false
     default: 'true'
 
+  embedding-provider:
+    description: >-
+      Optional semantic-search embedding provider for review memory.
+      Options: none (default — keyword-only), openai-compatible (any
+      /v1/embeddings-compatible HTTP API: OpenAI, Voyage-compatible endpoints,
+      self-hosted servers). "local" is NOT available in the Action (no bundled
+      model) and is coerced to "none" with a warning.
+    required: false
+    default: 'none'
+
+  embedding-model:
+    description: >-
+      Embedding model identifier for embedding-provider "openai-compatible"
+      (e.g. "text-embedding-3-small").
+    required: false
+
+  embedding-base-url:
+    description: >-
+      Base URL for the embedding-provider "openai-compatible" HTTP API
+      (e.g. "https://api.openai.com/v1").
+    required: false
+
+  embedding-api-key:
+    description: >-
+      API key/bearer token for the embedding-provider "openai-compatible" HTTP
+      API. Omit for unauthenticated self-hosted endpoints.
+    required: false
+
+  embedding-dimension:
+    description: >-
+      Expected vector dimension for embedding-provider "openai-compatible"
+      (e.g. "1536" for text-embedding-3-small).
+    required: false
+
+  embedding-candidate-k:
+    description: >-
+      Bounded cosine candidate set size for semantic memory search. Defaults
+      to 200.
+    required: false
+
 outputs:
   status:
     description: 'Review status: PASSED, FAILED, NEEDS_HUMAN_REVIEW, or SKIPPED'

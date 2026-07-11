@@ -18,11 +18,13 @@ import type {
   StaticAnalysisResult,
 } from 'ghagga-core';
 import {
+  createEmbeddingProvider,
   fetchGatewayModels,
   fetchGatewayProviders,
   formatReviewComment,
   PreloadedGraphLoader,
   REVIEW_COMMENT_MARKER,
+  resolveEmbeddingConfig,
   reviewPipeline,
   validateProviderChain,
 } from 'ghagga-core';
@@ -858,7 +860,27 @@ async function processReview(
 
     // Reuse the single db handle created at the top of processReview — do NOT
     // create another pool here (that was the per-job connection leak).
-    const memoryStorage = db ? new PostgresMemoryStorage(db, installationId) : undefined;
+    //
+    // Embedding provider (env-driven, design D2 / task 5.1): resolved
+    // per-invocation (not module scope) so `process.env` is read fresh on
+    // every job — matches how the rest of processReview reads env-driven
+    // credentials, and keeps this wiring test-observable without module
+    // reset gymnastics. `embeddingProvider` is `undefined` when
+    // `EMBEDDING_PROVIDER` is unset/`none`, so this stays on the pre-existing
+    // keyword-only path unless a provider is actually configured (none-default
+    // parity, spec R5).
+    const embeddingConfig = resolveEmbeddingConfig(process.env);
+    const embeddingProvider = createEmbeddingProvider(embeddingConfig) ?? undefined;
+    const memoryStorage = db
+      ? new PostgresMemoryStorage(
+          db,
+          installationId,
+          embeddingProvider,
+          undefined,
+          embeddingProvider ? embeddingConfig.model : undefined,
+          embeddingProvider ? embeddingConfig.candidateK : undefined,
+        )
+      : undefined;
 
     // Fetch dependency graph for blast-radius analysis (if enabled)
     let graphLoader: GraphLoader | undefined;
