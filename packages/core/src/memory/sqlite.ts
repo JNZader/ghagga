@@ -64,7 +64,9 @@ const SCHEMA_SQL = `
     revision_count INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    last_accessed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    last_accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    embedding_model TEXT,
+    embedding_dim INTEGER
   );
 
   CREATE INDEX IF NOT EXISTS idx_obs_project ON memory_observations(project);
@@ -250,6 +252,11 @@ export class SqliteMemoryStorage implements MemoryStorage {
 
     // Migration: add embedding column for hybrid search (NULL when no embedding provider)
     runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN embedding BLOB');
+
+    // Migration: add per-row embedding provider metadata (NULL when embedding is NULL).
+    // Used by the read guard to detect provider/dimension mismatches (design D3).
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN embedding_model TEXT');
+    runIdempotentAlter(db, 'ALTER TABLE memory_observations ADD COLUMN embedding_dim INTEGER');
 
     return new SqliteMemoryStorage(db, filePath, options);
   }

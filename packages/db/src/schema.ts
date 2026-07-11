@@ -211,6 +211,18 @@ export const memoryObservations = pgTable(
      * Used for hybrid BM25 + semantic search (feature #4).
      */
     embedding: doublePrecision('embedding').array(),
+    /**
+     * Provider id that produced `embedding` (e.g. 'openai-compatible', 'local').
+     * NULL when `embedding` is NULL. Used by the read guard to detect
+     * provider/dimension mismatches on rows embedded by a different config.
+     */
+    embeddingModel: text('embedding_model'),
+    /**
+     * Vector length of `embedding` at insertion time.
+     * NULL when `embedding` is NULL. Compared against the active provider's
+     * `dimension` on read; mismatched rows are excluded from the cosine set.
+     */
+    embeddingDim: integer('embedding_dim'),
   },
   (t) => [
     index('idx_observations_project').on(t.project),

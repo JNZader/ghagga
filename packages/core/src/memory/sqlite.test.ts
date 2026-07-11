@@ -142,6 +142,91 @@ describe('SqliteMemoryStorage', () => {
 
       await storage.close();
     });
+
+    it('adds embedding_model/embedding_dim columns to a legacy DB with existing rows, both NULL, no error', async () => {
+      // Build a pre-migration database: observations table WITHOUT
+      // embedding_model / embedding_dim, with one existing row.
+      const sqlJsModule = (await import('fts5-sql-bundle')).default;
+      const initSqlJs =
+        typeof sqlJsModule === 'function'
+          ? sqlJsModule
+          : (sqlJsModule as unknown as { initSqlJs: typeof sqlJsModule }).initSqlJs;
+      const SQL = await initSqlJs();
+      const legacy = new SQL.Database();
+      legacy.run(`
+        CREATE TABLE memory_observations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER,
+          project TEXT NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          severity TEXT,
+          topic_key TEXT,
+          file_paths TEXT DEFAULT '[]',
+          content_hash TEXT,
+          revision_count INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
+          embedding BLOB
+        );
+        CREATE VIRTUAL TABLE memory_observations_fts
+          USING fts5(title, content, content='memory_observations', content_rowid='id');
+        CREATE TRIGGER obs_fts_insert AFTER INSERT ON memory_observations BEGIN
+          INSERT INTO memory_observations_fts(rowid, title, content)
+            VALUES (new.id, new.title, new.content);
+        END;
+        INSERT INTO memory_observations (project, type, title, content)
+          VALUES ('owner/repo', 'pattern', 'Pre-embedding note', 'Some note before metadata columns existed.');
+      `);
+      writeFileSync(dbPath, Buffer.from(legacy.export()));
+      legacy.close();
+
+      // Opening with the current backend must add both columns without error
+      const storage = await SqliteMemoryStorage.create(dbPath);
+      // biome-ignore lint/suspicious/noExplicitAny: test access to private db
+      const db = (storage as any).db;
+
+      const cols = db.exec(
+        "SELECT name FROM pragma_table_info('memory_observations') WHERE name IN ('embedding_model', 'embedding_dim')",
+      );
+      expect(cols[0]?.values.map((v: unknown[]) => v[0]).sort()).toEqual([
+        'embedding_dim',
+        'embedding_model',
+      ]);
+
+      // Existing row reads back with both new columns NULL
+      const row = db.exec(
+        'SELECT embedding_model, embedding_dim FROM memory_observations WHERE title = ?',
+        ['Pre-embedding note'],
+      )[0]?.values[0];
+      expect(row?.[0]).toBeNull();
+      expect(row?.[1]).toBeNull();
+
+      // Queries against the table still work post-migration
+      const results = await storage.searchObservations('owner/repo', 'note');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.title).toBe('Pre-embedding note');
+
+      await storage.close();
+    });
+
+    it('creates embedding_model/embedding_dim as NULL on a fresh DB', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath);
+      // biome-ignore lint/suspicious/noExplicitAny: mock cast
+      const db = (storage as any).db;
+
+      const row = await storage.saveObservation(makeObservationData());
+
+      const result = db.exec(
+        `SELECT embedding_model, embedding_dim FROM memory_observations WHERE id = ${row.id}`,
+      )[0]?.values[0];
+      expect(result?.[0]).toBeNull();
+      expect(result?.[1]).toBeNull();
+
+      await storage.close();
+    });
   });
 
   // ── saveObservation — Insert ──
