@@ -660,6 +660,49 @@ export interface MemoryStorage {
 
   /** Delete all observations, optionally scoped to a project. Returns count of deleted rows. */
   clearObservations(options?: { project?: string }): Promise<number>;
+
+  // ── Backfill (design D6) ────────────────────────────────────────
+  // Optional: only backends with per-row embedding columns (SQLite,
+  // PostgreSQL) implement these. EngramMemoryStorage has no local embedding
+  // storage to backfill and omits them — the backfill script checks for
+  // their presence and errors clearly when a storage lacks support.
+
+  /**
+   * List up to `limit` observations (ordered by id ascending, keyset-paginated
+   * via `afterId`) that need an embedding for the active provider/model.
+   * Always includes NULL-embedding rows; additionally includes rows whose
+   * `embedding_model`/`embedding_dim` don't match the active provider when
+   * `includeMismatched` is true (backfill `--re-embed`, design D6). Returns
+   * the exact `"{title} {content}"` text used at save time (packages/core/src/memory/sqlite.ts `_computeEmbeddingMeta`).
+   */
+  listObservationsNeedingEmbedding?(options: {
+    afterId: number;
+    limit: number;
+    activeModel: string;
+    activeDim: number;
+    includeMismatched: boolean;
+  }): Promise<{ id: number; text: string }[]>;
+
+  /**
+   * Persist a backfilled embedding for a single observation (design D6).
+   * Metadata-only write — does not touch content, `updated_at`, or
+   * `last_accessed_at`.
+   */
+  updateObservationEmbedding?(
+    id: number,
+    embedding: number[],
+    model: string,
+    dim: number,
+  ): Promise<void>;
+
+  /**
+   * Optional durability hook for backends that buffer writes in memory
+   * before an explicit flush (SQLite: export + write to disk). Backends
+   * whose writes are already durable per-statement (PostgreSQL) can omit
+   * this — the backfill script calls it only when present (design D6,
+   * task 6.1 "commits per batch").
+   */
+  flush?(): Promise<void>;
 }
 
 /**

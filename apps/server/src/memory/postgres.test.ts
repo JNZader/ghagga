@@ -31,6 +31,8 @@ const mockGetMemoryObservation = vi.hoisted(() => vi.fn());
 const mockListMemoryObservations = vi.hoisted(() => vi.fn());
 const mockGetMemoryStats = vi.hoisted(() => vi.fn());
 const mockBumpObservationsLastAccessed = vi.hoisted(() => vi.fn());
+const mockListObservationsNeedingEmbedding = vi.hoisted(() => vi.fn());
+const mockUpdateObservationEmbedding = vi.hoisted(() => vi.fn());
 
 vi.mock('ghagga-db', () => ({
   searchObservations: mockSearchObservations,
@@ -44,6 +46,8 @@ vi.mock('ghagga-db', () => ({
   getMemoryObservation: mockGetMemoryObservation,
   listMemoryObservations: mockListMemoryObservations,
   getMemoryStats: mockGetMemoryStats,
+  listObservationsNeedingEmbedding: mockListObservationsNeedingEmbedding,
+  updateObservationEmbedding: mockUpdateObservationEmbedding,
 }));
 
 // ─── Core method tests ──────────────────────────────────────────
@@ -589,6 +593,52 @@ describe('PostgresMemoryStorage — core methods', () => {
   describe('close', () => {
     it('is a no-op that resolves without error', async () => {
       await expect(storage.close()).resolves.toBeUndefined();
+    });
+  });
+
+  // ── Backfill (design D6, task 6.4) ──────────────────────────────
+
+  describe('listObservationsNeedingEmbedding', () => {
+    it('delegates to ghagga-db.listObservationsNeedingEmbedding with the same options', async () => {
+      const rows = [
+        { id: 1, text: 'title one content one' },
+        { id: 2, text: 'title two content two' },
+      ];
+      mockListObservationsNeedingEmbedding.mockResolvedValueOnce(rows);
+
+      const options = {
+        afterId: 0,
+        limit: 100,
+        activeModel: 'text-embedding-3-small',
+        activeDim: 1536,
+        includeMismatched: false,
+      };
+      const result = await storage.listObservationsNeedingEmbedding(options);
+
+      expect(mockListObservationsNeedingEmbedding).toHaveBeenCalledWith(fakeDb, options);
+      expect(result).toEqual(rows);
+    });
+  });
+
+  describe('updateObservationEmbedding', () => {
+    it('delegates to ghagga-db.updateObservationEmbedding with id/embedding/model/dim', async () => {
+      mockUpdateObservationEmbedding.mockResolvedValueOnce(undefined);
+
+      await storage.updateObservationEmbedding(7, [0.1, 0.2, 0.3], 'text-embedding-3-small', 3);
+
+      expect(mockUpdateObservationEmbedding).toHaveBeenCalledWith(
+        fakeDb,
+        7,
+        [0.1, 0.2, 0.3],
+        'text-embedding-3-small',
+        3,
+      );
+    });
+  });
+
+  describe('flush', () => {
+    it('is not implemented on PostgresMemoryStorage (writes commit per-statement)', () => {
+      expect((storage as unknown as { flush?: () => void }).flush).toBeUndefined();
     });
   });
 });

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, or, type SQL, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import {
   type DbProviderChainEntry,
@@ -1011,6 +1011,71 @@ export async function getObservationsBySession(db: Database, sessionId: number) 
     .from(memoryObservations)
     .where(eq(memoryObservations.sessionId, sessionId))
     .orderBy(desc(memoryObservations.createdAt));
+}
+
+// ─── Memory: Backfill (design D6) ────────────────────────────────
+// Global (not installation-scoped) — the backfill script is a one-time
+// admin maintenance job over the whole table, not a tenant-facing query.
+
+/**
+ * List up to `limit` observations needing an embedding for the active
+ * provider/model, ordered by id ascending starting after `afterId`. Always
+ * matches NULL-embedding rows; with `includeMismatched` also matches rows
+ * whose stored `embeddingModel`/`embeddingDim` disagree with the active
+ * provider (backfill `--re-embed`). Mirrors SqliteMemoryStorage's
+ * `listObservationsNeedingEmbedding` (packages/core/src/memory/sqlite.ts).
+ */
+export async function listObservationsNeedingEmbedding(
+  db: Database,
+  options: {
+    afterId: number;
+    limit: number;
+    activeModel: string;
+    activeDim: number;
+    includeMismatched: boolean;
+  },
+): Promise<{ id: number; text: string }[]> {
+  const { afterId, limit, activeModel, activeDim, includeMismatched } = options;
+
+  const needsEmbedding = includeMismatched
+    ? or(
+        sql`${memoryObservations.embedding} IS NULL`,
+        sql`${memoryObservations.embeddingModel} IS NULL`,
+        sql`${memoryObservations.embeddingModel} != ${activeModel}`,
+        sql`${memoryObservations.embeddingDim} IS NULL`,
+        sql`${memoryObservations.embeddingDim} != ${activeDim}`,
+      )
+    : sql`${memoryObservations.embedding} IS NULL`;
+
+  const rows = await db
+    .select({
+      id: memoryObservations.id,
+      title: memoryObservations.title,
+      content: memoryObservations.content,
+    })
+    .from(memoryObservations)
+    .where(and(gt(memoryObservations.id, afterId), needsEmbedding))
+    .orderBy(asc(memoryObservations.id))
+    .limit(limit);
+
+  return rows.map((row) => ({ id: row.id, text: `${row.title} ${row.content}` }));
+}
+
+/**
+ * Persist a backfilled embedding for a single observation (design D6).
+ * Metadata-only write — content/updatedAt/lastAccessedAt are untouched.
+ */
+export async function updateObservationEmbedding(
+  db: Database,
+  id: number,
+  embedding: number[],
+  model: string,
+  dim: number,
+): Promise<void> {
+  await db
+    .update(memoryObservations)
+    .set({ embedding, embeddingModel: model, embeddingDim: dim })
+    .where(eq(memoryObservations.id, id));
 }
 
 // ─── Memory: Management (Delete / Clear / Purge) ────────────────

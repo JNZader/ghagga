@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "test:mutate": "stryker run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "memory:backfill": "tsx scripts/backfill-embeddings.ts"
   },
   "dependencies": {
     "@ghagga/types": "workspace:*",
