@@ -41,10 +41,10 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 2: Schema — Per-Row Embedding Metadata (PR 2)
 
-- [ ] 2.1 Add `embedding_model TEXT` + `embedding_dim INT` nullable columns to `packages/db/src/schema.ts:191-223` (`memoryObservations`).
-- [ ] 2.2 Generate additive Drizzle migration for the two new columns (PostgreSQL); confirm no destructive changes.
-- [ ] 2.3 Add equivalent nullable `embedding_model`/`embedding_dim` columns to the SQLite observations table (`packages/core/src/memory/sqlite.ts` schema/init) — mirror PG shape.
-- [ ] 2.4 Test: existing rows read back with `embedding_model`/`embedding_dim` = NULL after migration; no error.
+- [x] 2.1 Add `embedding_model TEXT` + `embedding_dim INT` nullable columns to `packages/db/src/schema.ts:191-223` (`memoryObservations`).
+- [x] 2.2 Generate additive Drizzle migration for the two new columns (PostgreSQL); confirm no destructive changes.
+- [x] 2.3 Add equivalent nullable `embedding_model`/`embedding_dim` columns to the SQLite observations table (`packages/core/src/memory/sqlite.ts` schema/init) — mirror PG shape.
+- [x] 2.4 Test: existing rows read back with `embedding_model`/`embedding_dim` = NULL after migration; no error.
 
 ## Phase 3: SQLite Cosine Union (PR 3)
 
