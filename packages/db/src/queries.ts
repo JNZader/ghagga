@@ -619,6 +619,17 @@ export async function saveObservation(
     severity?: string;
     /** Pre-computed embedding vector. NULL when no embedding provider was available. */
     embedding?: number[] | null;
+    /**
+     * Provider/model id that produced `embedding` (design D3). NULL alongside
+     * a NULL/omitted `embedding`. Only meaningful when `embedding` is set.
+     */
+    embeddingModel?: string | null;
+    /**
+     * Vector length of `embedding` at insertion time (design D3). NULL
+     * alongside a NULL/omitted `embedding`. Only meaningful when `embedding`
+     * is set.
+     */
+    embeddingDim?: number | null;
   },
 ) {
   const contentHash = computeContentHash(data.content, data.type, data.title);
@@ -673,8 +684,16 @@ export async function saveObservation(
           contentHash,
           filePaths: data.filePaths ?? [],
           severity: data.severity ?? null,
-          // Only update embedding when a new one is provided (preserve existing otherwise)
-          ...(data.embedding !== undefined ? { embedding: data.embedding } : {}),
+          // Only update embedding (+ its metadata) when a new one is provided
+          // (preserve existing otherwise) — mirrors the SQLite backend's
+          // per-row embedding_model/embedding_dim persistence (design D3).
+          ...(data.embedding !== undefined
+            ? {
+                embedding: data.embedding,
+                embeddingModel: data.embeddingModel ?? null,
+                embeddingDim: data.embeddingDim ?? null,
+              }
+            : {}),
           revisionCount: sql`${memoryObservations.revisionCount} + 1`,
           updatedAt: new Date(),
           lastAccessedAt: new Date(),
@@ -694,6 +713,8 @@ export async function saveObservation(
       contentHash,
       filePaths: data.filePaths ?? [],
       embedding: data.embedding ?? null,
+      embeddingModel: data.embeddingModel ?? null,
+      embeddingDim: data.embeddingDim ?? null,
     })
     .returning();
   // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert/update
@@ -721,13 +742,85 @@ export function buildTsQuery(query: string): string {
     .join(' | ');
 }
 
+/** Bounded cosine candidate set size (design D4) when the caller doesn't specify one. */
+const DEFAULT_EMBEDDING_CANDIDATE_K = 200;
+
+/**
+ * Cosine similarity between two same-length numeric vectors. Returns 0 when
+ * either norm is 0 (avoids a 0/0 NaN) — mirrors the SQLite backend's
+ * `cosineSimilarity` helper (packages/core/src/embed.ts) so both engines
+ * score identically post-union (design D5).
+ */
+function cosineSimilarityArrays(a: number[], b: number[]): number {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let j = 0; j < a.length; j++) {
+    const x = a[j] ?? 0;
+    const y = b[j] ?? 0;
+    dot += x * y;
+    normA += x * x;
+    normB += y * y;
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom === 0 ? 0 : dot / denom;
+}
+
+/**
+ * Bumps `last_accessed_at` for exactly the given observation ids (spec R5.10).
+ *
+ * Exported so a decay-aware caller (the Postgres adapter) can touch ONLY the
+ * final survivors AFTER its own strength-decay filter — mirroring the SQLite
+ * oracle's `accessedIds` scoping (packages/core/src/memory/sqlite.ts). On the
+ * union (embedFn-set) path, `searchObservations` intentionally does NOT touch
+ * here (it returns the full, uncapped, un-touched scored pool), so the adapter
+ * owns the touch of the rows that actually survive decay AND make the limit cut.
+ * No-op on an empty id list.
+ */
+export async function bumpObservationsLastAccessed(db: Database, ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(memoryObservations)
+    .set({ lastAccessedAt: new Date() })
+    .where(inArray(memoryObservations.id, ids));
+}
+
+/** Bumps `last_accessed_at` for exactly the rows returned to the caller (spec R5.10). */
+async function touchLastAccessed(db: Database, rows: Array<{ id: number }>): Promise<void> {
+  await bumpObservationsLastAccessed(
+    db,
+    rows.map((r) => r.id),
+  );
+}
+
 /**
  * Full-text search observations using PostgreSQL tsvector.
  * The search_observations SQL column is maintained by a trigger.
  *
- * When `embedFn` is provided, performs hybrid search:
- *   final_score = 0.7 * cosine_similarity + 0.3 * ts_rank
- * Otherwise falls back to keyword-only tsvector search (original behavior).
+ * When `embedFn` is provided, performs hybrid search (spec R5.7-R5.10, design
+ * D4/D5 — mirrors packages/core/src/memory/sqlite.ts `_hybridSearch`):
+ *   1. Run the tsquery keyword candidates (unchanged gate/order).
+ *   2. Run a bounded, project(+type)-scoped cosine candidate query
+ *      (embedding IS NOT NULL, ORDER BY last_accessed_at DESC LIMIT K).
+ *   3. Compute cosine similarity in JS for candidates passing the
+ *      dimension/model read guard (mismatches excluded, never thrown).
+ *   4. Union both sets by id, dedup: an overlapping candidate keeps its real
+ *      keyword score; a cosine-only candidate gets keyword-score 0.
+ *   5. Keyword score uses the unified positional-rank convention
+ *      `1 - i/(n-1)` over the ts_rank-ordered list (design D5).
+ *   6. Combine: finalScore = 0.7 * cosineSim + 0.3 * keywordScore.
+ *   7. Sort descending and return the FULL scored pool UNCAPPED, WITHOUT
+ *      touching last_accessed_at. The union path has no decay concept (that
+ *      lives in the adapter), so it must not cap before decay (R3-001) nor
+ *      touch rows a later decay filter will drop (R3-002). The decay-aware
+ *      caller (PostgresMemoryStorage) filters the full pool by strength, caps
+ *      to the true `limit`, then calls `bumpObservationsLastAccessed` on ONLY
+ *      those survivors — mirroring the SQLite oracle (decay-filter full pool →
+ *      cap → touch survivors).
+ *
+ * Otherwise (no `embedFn`) falls back to keyword-only tsvector search,
+ * byte-for-byte identical to the pre-union behavior (spec R5.11): it caps to
+ * returnLimit and touches last_accessed_at itself.
  */
 export async function searchObservations(
   db: Database,
@@ -738,8 +831,9 @@ export async function searchObservations(
     type?: string;
     /**
      * Optional embedding function for hybrid search.
-     * When provided, semantic re-ranking is applied on top of keyword results.
-     * When undefined, falls back to keyword-only tsvector search.
+     * When provided, the bounded cosine candidate set is unioned with the
+     * keyword candidates before ranking (spec R5.7).
+     * When undefined, falls back to keyword-only tsvector search (R5.11).
      */
     embedFn?: (text: string) => Promise<number[]>;
     /**
@@ -749,9 +843,27 @@ export async function searchObservations(
      * can drop decayed rows without under-delivering below `limit`.
      */
     fetchLimit?: number;
+    /**
+     * Active embedding provider's vector dimension (design D3 read guard).
+     * Required, together with `embedFn`, to admit any row into the cosine
+     * candidate set — when `embedFn` is set but this is omitted, every row
+     * fails the dimension guard and the cosine set is simply empty (never
+     * throws).
+     */
+    embeddingDimension?: number;
+    /**
+     * Active embedding provider/model id, compared against each row's stored
+     * `embedding_model` (design D3). Optional — when omitted, only the
+     * dimension is enforced (mirrors the SQLite backend's `embeddingModel`
+     * option, packages/core/src/memory/sqlite.ts).
+     */
+    embeddingModel?: string;
+    /** Bounded cosine candidate set size (design D4). Defaults to 200. */
+    embeddingCandidateK?: number;
   } = {},
 ) {
-  const { limit = 10, type, embedFn } = options;
+  const { limit = 10, type, embedFn, embeddingDimension, embeddingModel } = options;
+  const embeddingCandidateK = options.embeddingCandidateK ?? DEFAULT_EMBEDDING_CANDIDATE_K;
   // How many ranked rows the caller wants back (>= limit when post-filtering).
   const returnLimit = Math.max(options.fetchLimit ?? limit, limit);
 
@@ -759,12 +871,8 @@ export async function searchObservations(
 
   if (!sanitizedQuery) return [];
 
-  // NOTE (MEM-HYBRID-006): the `@@ to_tsquery` predicate below is a lexical
-  // gate. When embedFn is set this is semantic *re-ranking* of keyword
-  // candidates, NOT pure semantic retrieval: an observation with no lexical
-  // overlap with the query never matches the tsquery, so it never enters the
-  // candidate set and embedding similarity can't surface it. Closing this would
-  // require unioning a pgvector/ANN candidate source with the tsquery matches.
+  // The `@@ to_tsquery` predicate below is the keyword candidate gate,
+  // unchanged by this union (spec R5.1).
   const conditions: SQL[] = [
     eq(memoryObservations.project, project),
     sql`search_observations @@ to_tsquery('english', ${sanitizedQuery})`,
@@ -778,76 +886,123 @@ export async function searchObservations(
   // than the caller asked to RETURN (returnLimit) so post-filtering has headroom.
   const candidateLimit = Math.max(embedFn ? limit * 5 : limit, returnLimit);
 
-  const results = await db
+  const keywordResults = await db
     .select()
     .from(memoryObservations)
     .where(and(...conditions))
     .orderBy(sql`ts_rank(search_observations, to_tsquery('english', ${sanitizedQuery})) DESC`)
     .limit(candidateLimit);
 
-  if (results.length === 0) return [];
-
-  // ── Hybrid re-ranking ──────────────────────────────────────────
-  let finalResults = results;
-
-  if (embedFn) {
-    try {
-      const queryVec = await embedFn(query);
-
-      // Results are already sorted by ts_rank DESC.
-      // Use positional rank as a proxy: index 0 = best keyword match.
-      // Normalize to [0, 1]: position 0 → 1.0, last position → 0.0.
-      const n = results.length;
-
-      const scored = results.map((r, i) => {
-        const normalizedRank = n === 1 ? 1 : 1 - i / (n - 1);
-
-        // Cosine similarity from stored embedding array (0 if NULL)
-        let cosineSim = 0;
-        if (r.embedding && r.embedding.length === queryVec.length) {
-          let dot = 0;
-          let normA = 0;
-          let normB = 0;
-          for (let j = 0; j < queryVec.length; j++) {
-            const a = queryVec[j] ?? 0;
-            const b = r.embedding[j] ?? 0;
-            dot += a * b;
-            normA += a * a;
-            normB += b * b;
-          }
-          const denom = Math.sqrt(normA) * Math.sqrt(normB);
-          cosineSim = denom === 0 ? 0 : dot / denom;
-        }
-
-        // 70/30 weighted combination
-        const finalScore = 0.7 * cosineSim + 0.3 * normalizedRank;
-        return { row: r, finalScore };
-      });
-
-      // Sort by final score descending and take the top returnLimit candidates.
-      // (returnLimit >= limit; callers post-filter then cap to limit themselves.)
-      scored.sort((a, b) => b.finalScore - a.finalScore);
-      finalResults = scored.slice(0, returnLimit).map((s) => s.row);
-    } catch {
-      // Embedding failure is non-fatal — fall back to keyword-only ordering
-      finalResults = results.slice(0, returnLimit);
-    }
-  } else {
-    // Keyword-only path: the candidate query already capped at candidateLimit
-    // (>= returnLimit). Trim to the requested return count.
-    finalResults = results.slice(0, returnLimit);
+  // ── R5.11: no-provider parity — byte-for-byte identical to the pre-union
+  // keyword-only path. No cosine query, no union/dedup step ever runs. ──────
+  if (!embedFn) {
+    if (keywordResults.length === 0) return [];
+    const finalResults = keywordResults.slice(0, returnLimit);
+    await touchLastAccessed(db, finalResults);
+    return finalResults;
   }
 
-  // Update last_accessed_at for returned observations (decay tracking)
-  if (finalResults.length > 0) {
-    const ids = finalResults.map((r) => r.id);
-    await db
-      .update(memoryObservations)
-      .set({ lastAccessedAt: new Date() })
-      .where(inArray(memoryObservations.id, ids));
+  type ObservationRow = (typeof keywordResults)[number];
+
+  // Query-time embed failure is non-fatal — fall back to keyword-only
+  // ordering (spec: Graceful Degradation on Provider/API Failure).
+  let queryVec: number[];
+  try {
+    queryVec = await embedFn(query);
+  } catch {
+    // Query-time embed failure → keyword-only ordering. This is still the
+    // union (embedFn-set) path, so keep the union contract: return the FULL
+    // keyword pool UNCAPPED and UNTOUCHED. The decay-aware caller filters it,
+    // caps to `limit`, and touches only the survivors (R3-001/R3-002).
+    return keywordResults;
   }
 
-  return finalResults;
+  // ── Bounded cosine candidate query (spec R5.7, design D4) ────────────────
+  // Runs even when keywordResults is empty — a lexically-disjoint observation
+  // must still be reachable via cosine alone.
+  const cosineConditions: SQL[] = [
+    eq(memoryObservations.project, project),
+    sql`${memoryObservations.embedding} IS NOT NULL`,
+  ];
+  if (type) {
+    cosineConditions.push(eq(memoryObservations.type, type));
+  }
+
+  const cosineBoundedCandidates = await db
+    .select()
+    .from(memoryObservations)
+    .where(and(...cosineConditions))
+    .orderBy(desc(memoryObservations.lastAccessedAt))
+    .limit(embeddingCandidateK);
+
+  if (keywordResults.length === 0 && cosineBoundedCandidates.length === 0) return [];
+
+  // Dimension/model read guard (design D3): a row whose stored dimension or
+  // model doesn't match the active provider is excluded from the cosine set,
+  // never thrown — mirrors the pre-existing "no embedding → cosine 0" rule.
+  const isEmbeddingUsable = (row: ObservationRow): boolean => {
+    if (!row.embedding) return false;
+    if (row.embeddingDim !== null && row.embeddingDim !== embeddingDimension) return false;
+    if (embeddingModel !== undefined && row.embeddingModel !== embeddingModel) return false;
+    return true;
+  };
+
+  const computeCosine = (row: ObservationRow): number => {
+    if (!row.embedding || !isEmbeddingUsable(row)) return 0;
+    if (row.embedding.length !== queryVec.length) return 0;
+    return cosineSimilarityArrays(queryVec, row.embedding);
+  };
+
+  // ── Unified positional-rank keyword score (design D5) ────────────────────
+  // keywordResults is already ordered by ts_rank DESC (best match first).
+  const n = keywordResults.length;
+  const keywordScoreById = new Map<number, number>();
+  keywordResults.forEach((row, i) => {
+    keywordScoreById.set(row.id, n > 1 ? 1 - i / (n - 1) : 1);
+  });
+
+  // Cosine similarity, top limit*5 of the GUARDED bounded set.
+  const cosineFetchLimit = limit * 5;
+  const cosineTop = cosineBoundedCandidates
+    .filter(isEmbeddingUsable)
+    .map((row) => ({ row, cosineSim: computeCosine(row) }))
+    .sort((a, b) => b.cosineSim - a.cosineSim)
+    .slice(0, cosineFetchLimit);
+
+  // ── Union + dedup by id (spec R5.8/R5.9) ──────────────────────────────────
+  const merged = new Map<
+    number,
+    { row: ObservationRow; cosineSim: number; keywordScore: number }
+  >();
+  for (const row of keywordResults) {
+    merged.set(row.id, {
+      row,
+      cosineSim: computeCosine(row),
+      keywordScore: keywordScoreById.get(row.id) ?? 0,
+    });
+  }
+  for (const { row, cosineSim } of cosineTop) {
+    if (merged.has(row.id)) continue; // keep the real keyword score (R5.8)
+    merged.set(row.id, { row, cosineSim, keywordScore: 0 }); // vector-only (R5.9)
+  }
+
+  if (merged.size === 0) return [];
+
+  // ── Score, sort (spec R5.5/R5.8) ──────────────────────────────────────────
+  const scored = Array.from(merged.values()).map(({ row, cosineSim, keywordScore }) => ({
+    row,
+    finalScore: 0.7 * cosineSim + 0.3 * keywordScore,
+  }));
+  scored.sort((a, b) => b.finalScore - a.finalScore);
+
+  // ── Union path: return the FULL scored+sorted pool, UNCAPPED and WITHOUT
+  //    touching last_accessed_at (R3-001 / R3-002). Decay filtering must see
+  //    the whole pool BEFORE any cap, and last_accessed_at must be bumped ONLY
+  //    for the rows that survive decay AND make the caller's limit cut. Both
+  //    are the decay-aware caller's responsibility (the union path has no decay
+  //    concept). This mirrors the SQLite oracle: decay-filter full pool → cap
+  //    to limit → touch survivors. See PostgresMemoryStorage.searchObservations.
+  return scored.map((s) => s.row);
 }
 
 export async function getObservationsBySession(db: Database, sessionId: number) {

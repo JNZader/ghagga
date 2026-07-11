@@ -59,13 +59,13 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 4: Postgres Cosine Union (PR 4)
 
-- [ ] 4.1 In `packages/db/src/queries.ts:732-851`, mirror the SQLite bounded cosine candidate query (project/type-scoped, `embedding IS NOT NULL`, `ORDER BY last_accessed_at DESC LIMIT K`) with dimension-guard.
-- [ ] 4.2 Replace/reconcile PG's `ts_rank`-based keyword score with the same positional-rank convention `1 - i/(n-1)` used by SQLite (design D5) — remove the prior ts_rank-as-proxy inconsistency.
-- [ ] 4.3 Union + dedup by `id`; apply `0.7*cosine + 0.3*posRank`; vector-only candidates get keyword-score 0.
-- [ ] 4.4 Sync `apps/server/src/memory/postgres.ts:56-98` decay filtering with the SQLite decay logic (spec: "decay filter MUST stay in sync").
-- [ ] 4.5 Persist `embedding_model`/`embedding_dim` on save; on embed failure, persist NULL embedding + warn, no throw.
-- [ ] 4.6 Test (acceptance gate): `none` provider ⇒ PG `searchObservations` output identical to pre-change baseline.
-- [ ] 4.7 Test: PG mirrors the same lexically-disjoint-recall, dedup, mixed-dimension, and partial-backfill scenarios as Phase 3, confirming symmetric SQLite/PG behavior with the same fake-provider dataset.
+- [x] 4.1 In `packages/db/src/queries.ts:732-851`, mirror the SQLite bounded cosine candidate query (project/type-scoped, `embedding IS NOT NULL`, `ORDER BY last_accessed_at DESC LIMIT K`) with dimension-guard.
+- [x] 4.2 Replace/reconcile PG's `ts_rank`-based keyword score with the same positional-rank convention `1 - i/(n-1)` used by SQLite (design D5) — remove the prior ts_rank-as-proxy inconsistency.
+- [x] 4.3 Union + dedup by `id`; apply `0.7*cosine + 0.3*posRank`; vector-only candidates get keyword-score 0.
+- [x] 4.4 Sync `apps/server/src/memory/postgres.ts:56-98` decay filtering with the SQLite decay logic (spec: "decay filter MUST stay in sync").
+- [x] 4.5 Persist `embedding_model`/`embedding_dim` on save; on embed failure, persist NULL embedding + warn, no throw.
+- [x] 4.6 Test (acceptance gate): `none` provider ⇒ PG `searchObservations` output identical to pre-change baseline.
+- [x] 4.7 Test: PG mirrors the same lexically-disjoint-recall, dedup, mixed-dimension, and partial-backfill scenarios as Phase 3, confirming symmetric SQLite/PG behavior with the same fake-provider dataset.
 
 ## Phase 5: Context Wiring (PR 5)
 
