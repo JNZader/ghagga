@@ -49,6 +49,16 @@ vi.mock('../../lib/config.js', () => ({
   getConfigDir: vi.fn().mockReturnValue('/mock-config'),
 }));
 
+// Embedding resolution is unrelated to clear's behavior — stub to `none`
+// (undefined provider) so openMemoryOrExit's SqliteMemoryStorage.create call
+// stays on the pre-existing keyword-only path this test suite exercises.
+vi.mock('../../lib/embedding.js', () => ({
+  resolveCliEmbeddingProvider: () => ({
+    config: { provider: 'none', candidateK: 200 },
+    provider: undefined,
+  }),
+}));
+
 vi.mock('node:readline/promises', () => ({
   createInterface: vi.fn().mockReturnValue({
     question: (...args: unknown[]) => mockQuestion(...args),

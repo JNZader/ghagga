@@ -450,10 +450,16 @@ describe('run() — integration', () => {
     // Cache restored first
     expect(mockRestoreCache).toHaveBeenCalled();
 
-    // SQLite memory created on an ISOLATED per-run path (not the shared /tmp file)
-    expect(mockSqliteCreate).toHaveBeenCalledWith(expect.stringContaining(EXPECTED_WORKING_PREFIX));
-    expect(mockSqliteCreate).toHaveBeenCalledWith(expect.stringContaining('/memory.db'));
-    expect(mockSqliteCreate).not.toHaveBeenCalledWith('/tmp/ghagga-memory.db');
+    // SQLite memory created on an ISOLATED per-run path (not the shared /tmp
+    // file). No embedding-provider input is set in this suite's default
+    // inputs, so the second arg is an empty options object (none-default
+    // parity, task 5.3/5.4).
+    expect(mockSqliteCreate).toHaveBeenCalledWith(
+      expect.stringContaining(EXPECTED_WORKING_PREFIX),
+      {},
+    );
+    expect(mockSqliteCreate).toHaveBeenCalledWith(expect.stringContaining('/memory.db'), {});
+    expect(mockSqliteCreate).not.toHaveBeenCalledWith('/tmp/ghagga-memory.db', {});
 
     // Memory passed to pipeline
     expect(mockReviewPipeline).toHaveBeenCalledWith(
@@ -538,7 +544,7 @@ describe('run() — integration', () => {
     expect(mockRmSync).toHaveBeenCalledWith(dbPath, { force: true });
     // The residual file is removed BEFORE the fresh DB is opened.
     expect(mockRmSync).toHaveBeenCalled();
-    expect(mockSqliteCreate).toHaveBeenCalledWith(dbPath);
+    expect(mockSqliteCreate).toHaveBeenCalledWith(dbPath, {});
   });
 
   it('failed restore: does not open a residual file (clears the destination)', async () => {
@@ -632,6 +638,110 @@ describe('run() — integration', () => {
     expect(mockWarning).toHaveBeenCalledWith(
       expect.stringContaining('Failed to close memory storage'),
     );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Embedding provider wiring (design D7 — Action-never-local, task 5.3/5.4)
+// ═══════════════════════════════════════════════════════════════
+
+describe('run() — embedding provider wiring', () => {
+  const mockMemoryStorage = {
+    searchObservations: vi.fn().mockResolvedValue([]),
+    saveObservation: vi.fn().mockResolvedValue({}),
+    createSession: vi.fn().mockResolvedValue({ id: 1 }),
+    endSession: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  };
+
+  /** Base inputs shared by every test in this block, overridable per-test. */
+  function stubInputs(overrides: Record<string, string> = {}) {
+    mockGetInput.mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        provider: 'github',
+        model: '',
+        mode: 'simple',
+        'api-key': '',
+        'github-token': 'ghp_faketoken',
+        'enable-semgrep': 'true',
+        'enable-trivy': 'true',
+        'enable-cpd': 'true',
+        'enable-memory': 'true',
+        ...overrides,
+      };
+      return inputs[name] ?? '';
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubInputs();
+
+    process.env.GITHUB_TOKEN = 'ghp_faketoken';
+    mockPullsGet.mockResolvedValue({
+      data: 'diff --git a/file.ts b/file.ts\n+const x = 1;',
+    });
+    mockRunLocalAnalysis.mockResolvedValue(defaultStaticAnalysis);
+    mockReviewPipeline.mockResolvedValue(makeResult());
+    mockSqliteCreate.mockResolvedValue(mockMemoryStorage);
+    mockRestoreCache.mockResolvedValue(undefined);
+    mockSaveCache.mockResolvedValue(undefined);
+
+    process.env.RUNNER_TEMP = TEST_RUNNER_TEMP;
+    delete process.env.GITHUB_JOB;
+    delete process.env.GITHUB_REPOSITORY_ID;
+
+    mockExistsSync.mockReturnValue(true);
+    mockMkdirSync.mockReturnValue(undefined);
+    mockRmSync.mockReturnValue(undefined);
+    mockCopyFileSync.mockReturnValue(undefined);
+    mockRenameSync.mockReturnValue(undefined);
+    mockMemoryStorage.close.mockResolvedValue(undefined);
+  });
+
+  it('resolves to no provider (empty options) when unconfigured', async () => {
+    await run();
+
+    const [, options] = mockSqliteCreate.mock.calls[0] as [string, Record<string, unknown>];
+    expect(options).toEqual({});
+    expect(mockWarning).not.toHaveBeenCalledWith(expect.stringContaining('embedding-provider'));
+  });
+
+  it('threads a concrete openai-compatible provider + model + candidateK when configured', async () => {
+    stubInputs({
+      'embedding-provider': 'openai-compatible',
+      'embedding-model': 'text-embedding-3-small',
+      'embedding-base-url': 'https://api.openai.com/v1',
+      'embedding-dimension': '1536',
+      'embedding-candidate-k': '50',
+    });
+
+    await run();
+
+    const [, options] = mockSqliteCreate.mock.calls[0] as [
+      string,
+      {
+        embeddingProvider?: { dimension: number };
+        embeddingModel?: string;
+        embeddingCandidateK?: number;
+      },
+    ];
+    expect(options.embeddingProvider).toBeDefined();
+    expect(options.embeddingProvider?.dimension).toBe(1536);
+    expect(options.embeddingModel).toBe('text-embedding-3-small');
+    expect(options.embeddingCandidateK).toBe(50);
+  });
+
+  it('coerces embedding-provider "local" to none with a warning — never attempts the excluded import', async () => {
+    stubInputs({ 'embedding-provider': 'local' });
+
+    await run();
+
+    expect(mockWarning).toHaveBeenCalledWith(
+      expect.stringContaining('embedding-provider "local" is not available'),
+    );
+    const [, options] = mockSqliteCreate.mock.calls[0] as [string, Record<string, unknown>];
+    expect(options).toEqual({});
   });
 });
 

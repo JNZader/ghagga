@@ -27,12 +27,20 @@ import { join } from 'node:path';
 import * as cache from '@actions/cache';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import type { LLMProvider, MemoryStorage, ReviewMode } from 'ghagga-core';
+import type {
+  EmbeddingConfig,
+  EmbeddingProvider,
+  LLMProvider,
+  MemoryStorage,
+  ReviewMode,
+} from 'ghagga-core';
 import {
+  createEmbeddingProvider,
   DEFAULT_MODELS,
   DEFAULT_SETTINGS,
   formatReviewComment,
   REVIEW_COMMENT_MARKER,
+  resolveEmbeddingConfig,
   reviewPipeline,
   SqliteMemoryStorage,
 } from 'ghagga-core';
@@ -75,6 +83,43 @@ function resolveActionProvider(raw: string): LLMProvider {
   }
   core.warning(`[ghagga] Unknown provider "${raw}" — defaulting to "gateway".`);
   return 'gateway';
+}
+
+// ─── Embedding provider (Action-never-local, design D7 / task 5.3) ──
+//
+// The Action bundle excludes the local Transformers.js provider entirely
+// (ncc externals, PR7) — it can only ever resolve `none` or the
+// OpenAI-compatible HTTP provider. If a workflow author sets
+// `embedding-provider: local` anyway, coerce to `none` with a warning
+// instead of letting the (excluded) import ever get attempted.
+/** `core.getInput` returns `''` for an unset input; the resolver expects `undefined` for "not set" (an empty string would fail Zod's `min(1)` instead of triggering the default). */
+function actionInputOrUndefined(name: string): string | undefined {
+  const value = core.getInput(name);
+  return value === '' ? undefined : value;
+}
+
+function resolveActionEmbeddingConfig(): EmbeddingConfig {
+  const rawProvider = actionInputOrUndefined('embedding-provider');
+  if (rawProvider === 'local') {
+    core.warning(
+      '[ghagga] embedding-provider "local" is not available in the GitHub Action ' +
+        '(no bundled local model) — falling back to "none". Use "openai-compatible" ' +
+        'with embedding-base-url/embedding-api-key for semantic search in Actions.',
+    );
+  }
+  return resolveEmbeddingConfig({
+    EMBEDDING_PROVIDER: rawProvider === 'local' ? 'none' : rawProvider,
+    EMBEDDING_MODEL: actionInputOrUndefined('embedding-model'),
+    EMBEDDING_BASE_URL: actionInputOrUndefined('embedding-base-url'),
+    EMBEDDING_API_KEY: actionInputOrUndefined('embedding-api-key'),
+    EMBEDDING_DIMENSION: actionInputOrUndefined('embedding-dimension'),
+    EMBEDDING_CANDIDATE_K: actionInputOrUndefined('embedding-candidate-k'),
+  });
+}
+
+/** Build the provider from the Action's resolved config — never `local`. */
+function resolveActionEmbeddingProvider(config: EmbeddingConfig): EmbeddingProvider | undefined {
+  return createEmbeddingProvider(config) ?? undefined;
 }
 
 // ─── Memory path isolation ──────────────────────────────────────
@@ -344,9 +389,21 @@ async function run(): Promise<void> {
         }
       }
 
-      // Create SQLite memory storage on the isolated working path.
+      // Create SQLite memory storage on the isolated working path. Provider
+      // resolution never selects `local` here (task 5.3, design D7) — the
+      // Action bundle excludes the local dependency tree entirely.
       try {
-        memoryStorage = await SqliteMemoryStorage.create(memoryPaths.workingDbPath);
+        const embeddingConfig = resolveActionEmbeddingConfig();
+        const embeddingProvider = resolveActionEmbeddingProvider(embeddingConfig);
+        memoryStorage = await SqliteMemoryStorage.create(memoryPaths.workingDbPath, {
+          ...(embeddingProvider
+            ? {
+                embeddingProvider,
+                embeddingModel: embeddingConfig.model,
+                embeddingCandidateK: embeddingConfig.candidateK,
+              }
+            : {}),
+        });
         core.info('🧠 Memory storage initialized');
       } catch (error) {
         core.warning(

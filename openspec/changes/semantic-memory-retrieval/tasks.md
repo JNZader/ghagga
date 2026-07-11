@@ -69,10 +69,10 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 5: Context Wiring (PR 5)
 
-- [ ] 5.1 Wire `resolveEmbeddingConfig(process.env)` + `createEmbeddingProvider` into the server memory construction site (env-driven).
-- [ ] 5.2 Wire the same resolver into the CLI memory construction site, merging config-file keys over env per design D2.
-- [ ] 5.3 Wire the Action's memory construction site to only ever resolve `none` or the OpenAI-compatible provider (never `local`), mapped from Action `inputs`/`secrets`.
-- [ ] 5.4 Test: each of the 3 sites resolves `none` when unconfigured and a concrete provider when configured; Action selecting `local` id resolves to `none` (or documented error), never attempts the excluded import.
+- [x] 5.1 Wire `resolveEmbeddingConfig(process.env)` + `createEmbeddingProvider` into the server memory construction site (env-driven).
+- [x] 5.2 Wire the same resolver into the CLI memory construction site, merging config-file keys over env per design D2.
+- [x] 5.3 Wire the Action's memory construction site to only ever resolve `none` or the OpenAI-compatible provider (never `local`), mapped from Action `inputs`/`secrets`.
+- [x] 5.4 Test: each of the 3 sites resolves `none` when unconfigured and a concrete provider when configured; Action selecting `local` id resolves to `none` (or documented error), never attempts the excluded import.
 
 ## Phase 6: Backfill Script (PR 6)
 

@@ -69,8 +69,9 @@ const mockFetchGatewayModels = vi.fn();
 const mockFetchGatewayProviders = vi.fn();
 
 vi.mock('ghagga-core', async (importOriginal) => {
-  // Keep the REAL validateProviderChain (pure) so the wiring is tested for
-  // real; stub the network fetchers so tests control discovery results.
+  // Keep the REAL validateProviderChain / resolveEmbeddingConfig /
+  // createEmbeddingProvider (all pure) so the wiring is tested for real;
+  // stub the network fetchers so tests control discovery results.
   const actual = await importOriginal<typeof import('ghagga-core')>();
   return {
     reviewPipeline: (...args: unknown[]) => mockReviewPipeline(...args),
@@ -79,6 +80,8 @@ vi.mock('ghagga-core', async (importOriginal) => {
     validateProviderChain: actual.validateProviderChain,
     fetchGatewayModels: (...args: unknown[]) => mockFetchGatewayModels(...args),
     fetchGatewayProviders: (...args: unknown[]) => mockFetchGatewayProviders(...args),
+    resolveEmbeddingConfig: actual.resolveEmbeddingConfig,
+    createEmbeddingProvider: actual.createEmbeddingProvider,
   };
 });
 
@@ -660,14 +663,70 @@ describe('processReview – encrypted credentials re-fetched from DB, not the jo
 
     // Credential resolver received the shared handle...
     expect(mockGetRepositoryById).toHaveBeenCalledWith(dbHandle, 7);
-    // ...and the memory adapter was constructed with the SAME instance.
-    expect(mockPostgresMemoryStorage).toHaveBeenCalledWith(dbHandle, 12345);
+    // ...and the memory adapter was constructed with the SAME instance. No
+    // EMBEDDING_PROVIDER env is set in this test, so the trailing
+    // provider/model/candidateK args resolve to `undefined` (none-default
+    // parity, task 5.1/5.4).
+    expect(mockPostgresMemoryStorage).toHaveBeenCalledWith(
+      dbHandle,
+      12345,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     // The resolver no longer mints its own pool: createDatabaseFromEnv is invoked
     // ONCE for the credential+memory concern (the single top-of-job handle).
     // saveReview() reuses its own call later, so we assert the resolver+memory
     // pair never triggered an EXTRA mint beyond the shared handle by checking the
     // identity threading above rather than a brittle global count.
     expect(mockGetRepositoryById.mock.calls[0][0]).toBe(mockPostgresMemoryStorage.mock.calls[0][0]);
+  });
+
+  it('SDD-5.1/5.4: threads a resolved provider + model + candidateK into PostgresMemoryStorage when EMBEDDING_PROVIDER is configured', async () => {
+    const dbHandle = { __sentinel: 'embedding-configured' };
+    mockCreateDatabaseFromEnv.mockReturnValue(dbHandle);
+    mockGetRepositoryById.mockResolvedValue({ id: 8, encryptedApiKey: null });
+    mockGetEffectiveRepoSettings.mockResolvedValue({ providerChain: [] });
+
+    const originalEnv = { ...process.env };
+    process.env.EMBEDDING_PROVIDER = 'openai-compatible';
+    process.env.EMBEDDING_MODEL = 'text-embedding-3-small';
+    process.env.EMBEDDING_BASE_URL = 'https://api.openai.com/v1';
+    process.env.EMBEDDING_DIMENSION = '1536';
+    process.env.EMBEDDING_CANDIDATE_K = '50';
+
+    try {
+      const data = makeJobData({
+        repositoryId: 8,
+        encryptedApiKey: undefined,
+        providerChain: undefined,
+        settings: {
+          enableSemgrep: false,
+          enableTrivy: false,
+          enableCpd: false,
+          enableMemory: true,
+          customRules: [],
+          ignorePatterns: [],
+          reviewLevel: 'standard',
+        },
+      });
+      await capturedProcessor?.(makeFakeJob(data));
+
+      expect(mockPostgresMemoryStorage).toHaveBeenCalledTimes(1);
+      const call = mockPostgresMemoryStorage.mock.calls[0];
+      expect(call[0]).toBe(dbHandle);
+      expect(call[1]).toBe(12345);
+      // Concrete provider (not undefined) — the active model id and candidateK
+      // resolved from env are threaded through positionally (task 5.1: closes
+      // the "active model id" TODO deferred from PR3/PR4).
+      expect(call[2]).toBeDefined();
+      expect(call[2]?.dimension).toBe(1536);
+      expect(call[4]).toBe('text-embedding-3-small');
+      expect(call[5]).toBe(50);
+    } finally {
+      process.env = originalEnv;
+    }
   });
 
   it('TOLERANCE: old-format in-flight job with encryptedApiKey still works without a DB re-fetch', async () => {
