@@ -1,8 +1,9 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmbeddingProvider } from '../embed.js';
+import { EmbeddingProviderError, LocalEmbeddingProvider } from '../embed.js';
 import { SqliteMemoryStorage } from './sqlite.js';
 
 // ─── Test Setup ─────────────────────────────────────────────────
@@ -943,6 +944,109 @@ describe('SqliteMemoryStorage', () => {
       expect(titles).toEqual(['Legacy keyword doc', 'Vectorized doc']);
 
       await storage.close();
+    });
+  });
+
+  // ── Graceful Degradation on Provider Failure (Defects 1 & 2) ──
+  //
+  // Defect 1: a degraded LocalEmbeddingProvider must THROW on the save path,
+  // so the row is persisted with a NULL embedding (backfillable) rather than a
+  // zero vector (which would MATCH model/dim and be invisible to backfill).
+  // Defect 2: a provider that throws at QUERY time must degrade the search to
+  // keyword-only, byte-for-byte matching the none-provider ranking — never crash.
+
+  describe('graceful degradation on provider failure', () => {
+    function makeEmbeddingProvider(vectorFor: (text: string) => number[]): EmbeddingProvider {
+      const dimension = vectorFor('probe').length;
+      return {
+        dimension,
+        embed: async (text: string) => vectorFor(text),
+        embedBatch: async (texts: string[]) => texts.map(vectorFor),
+      };
+    }
+
+    it('[defect 1] degraded local provider on SAVE persists a NULL embedding, then backfill picks it up', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Loader always throws → the provider is degraded and embed() throws.
+      const degraded = new LocalEmbeddingProvider({ model: 'degraded-model', dimension: 384 }, () =>
+        Promise.reject(new Error('@xenova/transformers not installed')),
+      );
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: degraded,
+        embeddingModel: 'degraded-model',
+      });
+
+      const saved = await storage.saveObservation(
+        makeObservationData({ title: 'Degraded save doc', content: 'body of the degraded save.' }),
+      );
+
+      // The row was saved (non-fatal) but WITHOUT a zero vector: embedding is NULL.
+      // biome-ignore lint/suspicious/noExplicitAny: test access to private db
+      const db = (storage as any).db;
+      const stored = db.exec(
+        `SELECT embedding, embedding_model, embedding_dim FROM memory_observations WHERE id = ${saved.id}`,
+      )[0]?.values[0];
+      expect(stored?.[0]).toBeNull(); // embedding
+      expect(stored?.[1]).toBeNull(); // embedding_model
+      expect(stored?.[2]).toBeNull(); // embedding_dim
+
+      // A NULL-embedding row IS recoverable via backfill (embedding IS NULL match).
+      const needing = await storage.listObservationsNeedingEmbedding({
+        afterId: 0,
+        limit: 10,
+        activeModel: 'degraded-model',
+        activeDim: 384,
+        includeMismatched: false,
+      });
+      expect(needing.map((r) => r.id)).toContain(saved.id);
+
+      await storage.close();
+      warnSpy.mockRestore();
+    });
+
+    it('[defect 2] provider that throws on embed(query) degrades search to keyword-only (no crash)', async () => {
+      // Seed rows WITH embeddings using a working provider.
+      const working = makeEmbeddingProvider((text) =>
+        text.includes('rotate') ? [1, 0, 0] : [0, 1, 0],
+      );
+      const seed = await SqliteMemoryStorage.create(dbPath, { embeddingProvider: working });
+      await seed.saveObservation(
+        makeObservationData({ title: 'token doc', content: 'token token token match.' }),
+      );
+      await seed.saveObservation(
+        makeObservationData({ title: 'rotate doc', content: 'we rotate token secrets.' }),
+      );
+      await seed.saveObservation(
+        makeObservationData({ title: 'filler', content: 'unrelated indexing notes.' }),
+      );
+      await seed.close();
+
+      const throwingProvider: EmbeddingProvider = {
+        dimension: 3,
+        embed: async () => {
+          throw new EmbeddingProviderError('query embed boom');
+        },
+        embedBatch: async () => {
+          throw new EmbeddingProviderError('query embed boom');
+        },
+      };
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const storageThrow = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: throwingProvider,
+      });
+      // No crash — resolves to keyword-only results.
+      const resultsThrow = await storageThrow.searchObservations('owner/repo', 'token rotate');
+      await storageThrow.close();
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+
+      // none-parity: same DB searched with NO provider yields identical titles/order.
+      const storageNone = await SqliteMemoryStorage.create(dbPath); // no provider
+      const resultsNone = await storageNone.searchObservations('owner/repo', 'token rotate');
+      await storageNone.close();
+
+      expect(resultsThrow.map((r) => r.title)).toEqual(resultsNone.map((r) => r.title));
+      expect(resultsThrow.length).toBeGreaterThan(0);
     });
   });
 

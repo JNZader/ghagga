@@ -909,11 +909,17 @@ export async function searchObservations(
   let queryVec: number[];
   try {
     queryVec = await embedFn(query);
-  } catch {
+  } catch (error) {
     // Query-time embed failure → keyword-only ordering. This is still the
     // union (embedFn-set) path, so keep the union contract: return the FULL
     // keyword pool UNCAPPED and UNTOUCHED. The decay-aware caller filters it,
     // caps to `limit`, and touches only the survivors (R3-001/R3-002).
+    // Warn once (symmetric with the SQLite backend's _hybridSearch).
+    console.warn(
+      `[ghagga] query embedding failed — degrading to keyword-only for this search: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
     return keywordResults;
   }
 

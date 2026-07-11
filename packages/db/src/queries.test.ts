@@ -1378,10 +1378,11 @@ describe('searchObservations — cosine union (Phase 4)', () => {
     expect(result[0]?.id).toBe(7);
   });
 
-  it('[4.7] query-time embed failure falls back to keyword-only ordering without a 2nd select() call', async () => {
+  it('[4.7] query-time embed failure falls back to keyword-only ordering without a 2nd select() call, warns once', async () => {
     const keywordRows = [row({ id: 1 }), row({ id: 2 })];
     const { db, mockSelect } = makeUnionDb([keywordRows]);
     const embedFn = vi.fn().mockRejectedValue(new Error('provider down'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const result = await searchObservations(db, 'proj', 'token', {
       embedFn,
@@ -1391,6 +1392,10 @@ describe('searchObservations — cosine union (Phase 4)', () => {
     // Cosine query never runs after the embed failure (graceful degradation).
     expect(mockSelect).toHaveBeenCalledTimes(1);
     expect(result).toEqual(keywordRows);
+    // Warns once, symmetric with the SQLite backend's _hybridSearch.
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('provider down');
+    warnSpy.mockRestore();
   });
 
   it('[4.7] respects a custom embeddingCandidateK on the bounded cosine query', async () => {
