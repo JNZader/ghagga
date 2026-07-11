@@ -32,7 +32,7 @@ The system MUST resolve a concrete `EmbeddingProvider` (implementing `embed`, `e
 
 ### Requirement: Local Provider is an Optional Dependency
 
-A local/embedded provider (e.g. Transformers.js) MUST be declared as an optional dependency, loaded lazily only when selected, and MUST NOT be a hard dependency of `packages/core`.
+A local/embedded provider (e.g. Transformers.js) MUST be loaded lazily only when selected and MUST NOT be a hard dependency of `packages/core`. It MUST NOT be a declared dependency at all (not even `optionalDependencies`) — pnpm installs optional dependencies by default, which would force the heavy ML library and its vulnerable transitive `protobufjs` onto every install, including those that never use local embeddings. Instead it is an undeclared, user-installed optional peer (`pnpm add @xenova/transformers`); when absent or failing to initialize, the provider MUST degrade to keyword-only without throwing.
 
 #### Scenario: Local provider selected and installed
 

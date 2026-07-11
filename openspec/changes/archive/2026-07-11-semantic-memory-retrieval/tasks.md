@@ -26,7 +26,7 @@ Chain strategy: stacked-to-main
 | 4 | Postgres cosine union + dedup + posRank reconcile + decay sync + `none`-parity tests | PR 4 | Base = PR 3. Touches `packages/db/src/queries.ts:732-851`, `apps/server/src/memory/postgres.ts`. ~250-350 lines. |
 | 5 | Context wiring: server (env), CLI (config), Action (secrets, HTTP-only) | PR 5 | Base = PR 4. Injects `createEmbeddingProvider` at 3 construction sites. ~150-200 lines. |
 | 6 | Backfill script `packages/core/scripts/backfill-embeddings.ts` + CLI subcommand + server admin script + idempotency tests | PR 6 | Base = PR 5. ~200-250 lines. |
-| 7 | Local Transformers.js provider (`optionalDependency`) + lazy import + ncc exclude for Action | PR 7 | Base = PR 6. ~150-200 lines. |
+| 7 | Local Transformers.js provider (undeclared user-installed peer) + lazy import + ncc exclude for Action | PR 7 | Base = PR 6. ~150-200 lines. |
 | 8 | Docs: config surface, recommended default, rollout/rollback, backfill usage | PR 8 | Base = PR 7. ~60-100 lines, docs only. |
 
 Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6/7 tasks below) — no slice may regress the keyword-only baseline before its own merge.
@@ -83,7 +83,7 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 7: Local Optional Provider (PR 7)
 
-- [x] 7.1 Add `@xenova/transformers` as an `optionalDependency` in `packages/core/package.json`.
+- [x] 7.1 Keep `@xenova/transformers` UNDECLARED in `packages/core/package.json` (user-installed optional peer via `pnpm add`); not an `optionalDependency`, since pnpm force-installs those and would ship its vulnerable transitive `protobufjs` to every install.
 - [x] 7.2 Implement local provider in `packages/core/src/embed.ts` (recommended default `Xenova/all-MiniLM-L6-v2`, 384 dims) behind `await import('@xenova/transformers')` inside a try/catch; on import or init failure, log + degrade factory result to `none`.
 - [x] 7.3 Update `@vercel/ncc` externals/excludes config for the Action build to exclude `@xenova/transformers`; confirm Action factory path never selects `local`.
 - [x] 7.4 Test: local provider selected + installed ⇒ working provider; selected + not installed (mocked import failure) ⇒ degrades to `none`, warns, no throw; selected + installed but init throws ⇒ same degrade behavior; Action bundle build excludes the package (bundle-content assertion or ncc config test).
