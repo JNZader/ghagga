@@ -1,0 +1,12 @@
+{
+  // Typecheck-only config that also covers scripts/ (standalone admin/CLI tools
+  // that live outside the build's rootDir: ./src and are therefore invisible to
+  // the plain `tsc --noEmit`). noEmit — this never produces dist output.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}
