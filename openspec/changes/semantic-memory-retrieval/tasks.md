@@ -90,6 +90,6 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 8: Documentation (PR 8)
 
-- [ ] 8.1 Document `EMBEDDING_PROVIDER`/`EMBEDDING_MODEL`/`EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY`/`EMBEDDING_DIMENSION`/`EMBEDDING_CANDIDATE_K` config surface per context (server env, CLI config, Action inputs/secrets).
-- [ ] 8.2 Document recommended default (local `Xenova/all-MiniLM-L6-v2`, 384 dims, free) vs API option (`text-embedding-3-small`, 1536 dims), and that Action always uses HTTP or `none`.
-- [ ] 8.3 Document backfill usage (`pnpm ghagga memory backfill`, flags, `--re-embed` for provider swap) and rollback plan (set `EMBEDDING_PROVIDER=none`, no migration reversal needed).
+- [x] 8.1 Document `EMBEDDING_PROVIDER`/`EMBEDDING_MODEL`/`EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY`/`EMBEDDING_DIMENSION`/`EMBEDDING_CANDIDATE_K` config surface per context (server env, CLI config, Action inputs/secrets).
+- [x] 8.2 Document recommended default (local `Xenova/all-MiniLM-L6-v2`, 384 dims, free) vs API option (`text-embedding-3-small`, 1536 dims), and that Action always uses HTTP or `none`.
+- [x] 8.3 Document backfill usage (`pnpm ghagga memory backfill`, flags, `--re-embed` for provider swap) and rollback plan (set `EMBEDDING_PROVIDER=none`, no migration reversal needed).

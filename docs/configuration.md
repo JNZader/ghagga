@@ -50,6 +50,42 @@
 
 API key and provider are passed as action inputs, not environment variables. See [GitHub Action](github-action.md).
 
+### Semantic Memory Search (Embedding Provider)
+
+Semantic memory search is **opt-in**. With no embedding config set, memory search stays keyword-only (FTS5/`tsvector`) -- the pre-existing behavior is unchanged byte-for-byte. Setting `EMBEDDING_PROVIDER` to anything other than `none` unions a bounded cosine-similarity candidate set with the keyword candidates before ranking. See [Memory System -- Semantic Memory Search](memory-system.md#semantic-memory-search) for how retrieval works.
+
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `EMBEDDING_PROVIDER` | `none` | `none` (keyword-only, default) \| `openai-compatible` (any `/v1/embeddings`-compatible HTTP API) \| `local` (offline, `@xenova/transformers`) |
+| `EMBEDDING_MODEL` | -- | Model identifier, e.g. `text-embedding-3-small` (API) or `Xenova/all-MiniLM-L6-v2` (local) |
+| `EMBEDDING_BASE_URL` | -- | Base URL for `openai-compatible`, e.g. `https://api.openai.com/v1` or a self-hosted `http://localhost:11434/v1` (Ollama/LM Studio/TEI) |
+| `EMBEDDING_API_KEY` | -- | Optional bearer token for `openai-compatible`. Omit for unauthenticated self-hosted endpoints |
+| `EMBEDDING_DIMENSION` | -- | Expected vector dimension, asserted against the provider's reported dimension (e.g. `1536` for `text-embedding-3-small`, `384` for `Xenova/all-MiniLM-L6-v2`) |
+| `EMBEDDING_CANDIDATE_K` | `200` | Bounded cosine candidate set size per project (+ type filter when set); see [Memory System](memory-system.md#semantic-memory-search) |
+
+**Per context**:
+
+| Context | How it's configured |
+|---------|---------------------|
+| Server | Reads the `EMBEDDING_*` variables directly from `process.env` |
+| CLI | Reads the same keys from `~/.config/ghagga/config.json` (`embeddingProvider`, `embeddingModel`, `embeddingBaseUrl`, `embeddingApiKey`, `embeddingDimension`, `embeddingCandidateK`), falling back to the matching `EMBEDDING_*` env var when a config-file key is unset. **Config file takes priority over env** |
+| GitHub Action | Maps `embedding-provider` / `embedding-model` / `embedding-base-url` / `embedding-api-key` / `embedding-dimension` / `embedding-candidate-k` action inputs onto the same config surface. `embedding-api-key` should be sourced from a repository secret in your workflow YAML, not hardcoded |
+
+> **Action limitation**: the Action can only ever resolve `none` or `openai-compatible`. `local` requires `@xenova/transformers`, which is deliberately excluded from the Action's `ncc` bundle to keep it lean. Setting `embedding-provider: local` in a workflow logs a warning and is coerced to `none` automatically -- it never attempts the excluded import.
+
+#### Recommended setups
+
+| Setup | Model | Dimension | Cost | Contexts |
+|-------|-------|-----------|------|----------|
+| **Local (recommended default)** | `Xenova/all-MiniLM-L6-v2` | 384 | Free, offline | Server, CLI (requires installing the optional `@xenova/transformers` dependency) |
+| **API** | `text-embedding-3-small` | 1536 | Paid (or free via a self-hosted OpenAI-compatible endpoint) | Server, CLI, Action -- any provider speaking the `/v1/embeddings` contract: OpenAI, Voyage-compatible endpoints, or self-hosted Ollama/LM Studio/text-embeddings-inference (TEI) by base URL |
+
+The local provider is the primary recommendation when semantics is enabled: it's free, requires no API key, and runs entirely in-process. It is **not** installed by default and is intentionally **not** declared as a dependency of `ghagga-core` -- an optional dependency would be installed for everyone (pulling a heavy ML library and its vulnerable transitive `protobufjs` into installs that never use local embeddings). To enable it, install it yourself: `pnpm add @xenova/transformers`. If it's missing or fails to initialize, the provider degrades to keyword-only automatically and logs a warning -- it never crashes the review.
+
+#### Dimension consistency
+
+Embeddings from different models/dimensions are **not comparable**. Each observation row stores the `embedding_model` and `embedding_dim` it was embedded with; on search, a row is excluded from the cosine candidate set (treated as if it had no embedding) whenever its stored model or dimension doesn't match the currently configured provider. Changing `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, or `EMBEDDING_DIMENSION` does not retroactively re-embed existing rows -- those rows silently fall back to keyword-only ranking until you run a backfill (see [Backfill](memory-system.md#backfill-re-embedding)).
+
 ## Config File (`.ghagga.json`)
 
 Place a `.ghagga.json` in your repo root for project-level defaults:
