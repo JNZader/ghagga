@@ -83,10 +83,10 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 7: Local Optional Provider (PR 7)
 
-- [ ] 7.1 Add `@xenova/transformers` as an `optionalDependency` in `packages/core/package.json`.
-- [ ] 7.2 Implement local provider in `packages/core/src/embed.ts` (recommended default `Xenova/all-MiniLM-L6-v2`, 384 dims) behind `await import('@xenova/transformers')` inside a try/catch; on import or init failure, log + degrade factory result to `none`.
-- [ ] 7.3 Update `@vercel/ncc` externals/excludes config for the Action build to exclude `@xenova/transformers`; confirm Action factory path never selects `local`.
-- [ ] 7.4 Test: local provider selected + installed ⇒ working provider; selected + not installed (mocked import failure) ⇒ degrades to `none`, warns, no throw; selected + installed but init throws ⇒ same degrade behavior; Action bundle build excludes the package (bundle-content assertion or ncc config test).
+- [x] 7.1 Add `@xenova/transformers` as an `optionalDependency` in `packages/core/package.json`.
+- [x] 7.2 Implement local provider in `packages/core/src/embed.ts` (recommended default `Xenova/all-MiniLM-L6-v2`, 384 dims) behind `await import('@xenova/transformers')` inside a try/catch; on import or init failure, log + degrade factory result to `none`.
+- [x] 7.3 Update `@vercel/ncc` externals/excludes config for the Action build to exclude `@xenova/transformers`; confirm Action factory path never selects `local`.
+- [x] 7.4 Test: local provider selected + installed ⇒ working provider; selected + not installed (mocked import failure) ⇒ degrades to `none`, warns, no throw; selected + installed but init throws ⇒ same degrade behavior; Action bundle build excludes the package (bundle-content assertion or ncc config test).
 
 ## Phase 8: Documentation (PR 8)
 

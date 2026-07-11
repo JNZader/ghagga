@@ -10,9 +10,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   cosineSimilarity,
   createEmbeddingProvider,
+  DEFAULT_LOCAL_DIMENSION,
+  DEFAULT_LOCAL_MODEL,
   deserializeEmbedding,
   EmbeddingProviderError,
   FakeEmbeddingProvider,
+  LocalEmbeddingProvider,
   OpenAICompatibleEmbeddingProvider,
   resolveEmbeddingConfig,
   serializeEmbedding,
@@ -271,5 +274,129 @@ describe('FakeEmbeddingProvider', () => {
     const a = await provider.embed('cats and dogs');
     const b = await provider.embed('quantum entanglement physics');
     expect(a).not.toEqual(b);
+  });
+});
+
+describe('LocalEmbeddingProvider (design D7, optional @xenova/transformers dependency)', () => {
+  it('createEmbeddingProvider("local") returns a LocalEmbeddingProvider using the default model/dimension', () => {
+    const provider = createEmbeddingProvider(
+      resolveEmbeddingConfig({ EMBEDDING_PROVIDER: 'local' }),
+    );
+    expect(provider).toBeInstanceOf(LocalEmbeddingProvider);
+    expect(provider?.dimension).toBe(DEFAULT_LOCAL_DIMENSION);
+    expect(DEFAULT_LOCAL_MODEL).toBe('Xenova/all-MiniLM-L6-v2');
+  });
+
+  it('createEmbeddingProvider("local") honors an explicit EMBEDDING_MODEL/EMBEDDING_DIMENSION', () => {
+    const provider = createEmbeddingProvider(
+      resolveEmbeddingConfig({
+        EMBEDDING_PROVIDER: 'local',
+        EMBEDDING_MODEL: 'Xenova/custom-model',
+        EMBEDDING_DIMENSION: '128',
+      }),
+    );
+    expect(provider).toBeInstanceOf(LocalEmbeddingProvider);
+    expect(provider?.dimension).toBe(128);
+  });
+
+  it('(a) import succeeds: embeds via an injected pipeline loader, returning the mocked vector', async () => {
+    const fakeVector = [0.1, 0.2, 0.3];
+    const loadPipeline = vi.fn(async () => async (texts: string[]) => ({
+      tolist: () => texts.map(() => fakeVector),
+    }));
+    const provider = new LocalEmbeddingProvider(
+      { model: 'test-model', dimension: 3 },
+      loadPipeline,
+    );
+
+    const vector = await provider.embed('hello world');
+
+    expect(vector).toEqual(fakeVector);
+    expect(loadPipeline).toHaveBeenCalledTimes(1);
+    expect(loadPipeline).toHaveBeenCalledWith('test-model');
+  });
+
+  it('embedBatch issues one pipeline call for N inputs and returns N vectors', async () => {
+    const loadPipeline = vi.fn(async () => async (texts: string[]) => ({
+      tolist: () => texts.map((_text, i) => [i, i + 1]),
+    }));
+    const provider = new LocalEmbeddingProvider({ model: 'm', dimension: 2 }, loadPipeline);
+
+    const vectors = await provider.embedBatch(['a', 'b', 'c']);
+
+    expect(vectors).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+    ]);
+  });
+
+  it('memoizes the loaded pipeline across multiple embed calls (loader invoked once)', async () => {
+    const loadPipeline = vi.fn(async () => async (texts: string[]) => ({
+      tolist: () => texts.map(() => [1, 1]),
+    }));
+    const provider = new LocalEmbeddingProvider({ model: 'm', dimension: 2 }, loadPipeline);
+
+    await provider.embed('a');
+    await provider.embed('b');
+
+    expect(loadPipeline).toHaveBeenCalledTimes(1);
+  });
+
+  it('(b) import fails: throws EmbeddingProviderError (never zero vectors), warns once', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadPipeline = vi.fn(async () => {
+      throw new Error('Cannot find module "@xenova/transformers"');
+    });
+    const provider = new LocalEmbeddingProvider(
+      { model: 'missing-dep-model', dimension: 4 },
+      loadPipeline,
+    );
+
+    await expect(provider.embed('hello')).rejects.toBeInstanceOf(EmbeddingProviderError);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('missing-dep-model');
+    warnSpy.mockRestore();
+  });
+
+  it('(c) import succeeds but pipeline init throws: embed/embedBatch throw, warns', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadPipeline = vi.fn(async () => {
+      throw new Error('pipeline init failed: unsupported model architecture');
+    });
+    const provider = new LocalEmbeddingProvider({ model: 'bad-model', dimension: 4 }, loadPipeline);
+
+    await expect(provider.embed('hello')).rejects.toBeInstanceOf(EmbeddingProviderError);
+    await expect(provider.embedBatch(['x', 'y'])).rejects.toBeInstanceOf(EmbeddingProviderError);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('permanently degrades after the first failure — never retries the loader, warns once, keeps throwing', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadPipeline = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const provider = new LocalEmbeddingProvider({ model: 'm', dimension: 2 }, loadPipeline);
+
+    await expect(provider.embed('a')).rejects.toBeInstanceOf(EmbeddingProviderError);
+    await expect(provider.embed('b')).rejects.toBeInstanceOf(EmbeddingProviderError);
+    await expect(provider.embedBatch(['c', 'd'])).rejects.toBeInstanceOf(EmbeddingProviderError);
+
+    // loader tried once, warn fired once — subsequent throws are silent
+    expect(loadPipeline).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  it('a degraded provider NEVER returns a persistable zero vector — it throws so save stores NULL', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const loadPipeline = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const provider = new LocalEmbeddingProvider({ model: 'm', dimension: 4 }, loadPipeline);
+
+    await expect(provider.embed('anything')).rejects.toBeInstanceOf(EmbeddingProviderError);
+    warnSpy.mockRestore();
   });
 });

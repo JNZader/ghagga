@@ -3,7 +3,7 @@
   "version": "3.0.1",
   "private": true,
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt -t",
+    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt -t -e @xenova/transformers",
     "build:tsc": "tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

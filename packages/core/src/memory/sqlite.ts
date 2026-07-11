@@ -508,8 +508,22 @@ export class SqliteMemoryStorage implements MemoryStorage {
 
     if (keywordCandidates.length === 0 && cosineBoundedCandidates.length === 0) return [];
 
-    // Compute query embedding once
-    const queryVec = await provider.embed(query);
+    // Compute query embedding once. A query-time embed failure is non-fatal
+    // (spec: Graceful Degradation on Provider/API Failure): warn once and fall
+    // back to keyword-only for this query. `queryVec === null` makes every
+    // cosine 0 and empties the cosine-only candidate set, so the union/decay/cap
+    // pipeline below runs over the keyword candidates alone — unchanged.
+    let queryVec: number[] | null;
+    try {
+      queryVec = await provider.embed(query);
+    } catch (error) {
+      console.warn(
+        `[ghagga] query embedding failed — degrading to keyword-only for this search: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      queryVec = null;
+    }
 
     // Dimension/model read guard (design D3): a row whose stored dimension or
     // model doesn't match the active provider is excluded from the cosine set
@@ -526,7 +540,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
     };
 
     const computeCosine = (row: CandidateRow): number => {
-      if (!row.embedding || !isEmbeddingUsable(row)) return 0;
+      if (queryVec === null || !row.embedding || !isEmbeddingUsable(row)) return 0;
       try {
         const storedVec = deserializeEmbedding(row.embedding);
         if (storedVec.length !== queryVec.length) return 0;
@@ -546,11 +560,16 @@ export class SqliteMemoryStorage implements MemoryStorage {
     });
 
     // ── Step 4: cosine similarity, top limit*5 of the GUARDED set ────
-    const cosineTop = cosineBoundedCandidates
-      .filter(isEmbeddingUsable)
-      .map((candidate) => ({ candidate, cosineSim: computeCosine(candidate) }))
-      .sort((a, b) => b.cosineSim - a.cosineSim)
-      .slice(0, fetchLimit);
+    // When the query embed failed (queryVec === null), there are no cosine
+    // candidates — the union below sees keyword candidates only.
+    const cosineTop =
+      queryVec === null
+        ? []
+        : cosineBoundedCandidates
+            .filter(isEmbeddingUsable)
+            .map((candidate) => ({ candidate, cosineSim: computeCosine(candidate) }))
+            .sort((a, b) => b.cosineSim - a.cosineSim)
+            .slice(0, fetchLimit);
 
     // ── Step 5: union + dedup by id (spec R5.8/R5.9) ──────────────────
     interface MergedCandidate {

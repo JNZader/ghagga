@@ -74,9 +74,15 @@ export function resolveEmbeddingConfig(env: Record<string, string | undefined>):
 type ProviderBuilder = (config: EmbeddingConfig) => EmbeddingProvider | null;
 
 /**
- * Registry of known provider ids. `local` is intentionally absent until
- * PR7 (design D7 — optional dependency, lazy-imported); selecting it
- * before then degrades to `none` via the "unknown provider id" path below.
+ * Registry of known provider ids. `local` (design D7) never throws or
+ * requires config: it falls back to `DEFAULT_LOCAL_MODEL`/`DEFAULT_LOCAL_DIMENSION`
+ * when `EMBEDDING_MODEL`/`EMBEDDING_DIMENSION` are unset, and the underlying
+ * `@xenova/transformers` package is loaded lazily on first use — a missing
+ * or failing optional dependency degrades the provider instance itself
+ * (never the factory) to keyword-only output. The GitHub Action never
+ * reaches this branch: its own config resolver coerces `local` → `none`
+ * before calling `createEmbeddingProvider` (task 5.3), and its `ncc` build
+ * excludes `@xenova/transformers` from the bundle entirely (task 7.3).
  */
 const providerRegistry: Record<string, ProviderBuilder> = {
   none: () => null,
@@ -94,6 +100,11 @@ const providerRegistry: Record<string, ProviderBuilder> = {
       apiKey: config.apiKey,
     });
   },
+  local: (config) =>
+    new LocalEmbeddingProvider({
+      model: config.model ?? DEFAULT_LOCAL_MODEL,
+      dimension: config.dimension ?? DEFAULT_LOCAL_DIMENSION,
+    }),
 };
 
 /**
@@ -196,6 +207,150 @@ export class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
       }
       return item.embedding;
     });
+  }
+}
+
+// ─── Local Transformers.js Provider (Optional) ─────────────────
+
+/**
+ * Default local model + dimension used when `EMBEDDING_PROVIDER=local` is
+ * selected without an explicit `EMBEDDING_MODEL`/`EMBEDDING_DIMENSION`
+ * (design D7, task 7.2).
+ */
+export const DEFAULT_LOCAL_MODEL = 'Xenova/all-MiniLM-L6-v2';
+export const DEFAULT_LOCAL_DIMENSION = 384;
+
+interface LocalEmbeddingProviderConfig {
+  model: string;
+  dimension: number;
+}
+
+/**
+ * Output shape of a `@xenova/transformers` feature-extraction pipeline
+ * call — the real `Tensor` return value exposes `.tolist()`. Hand-rolled
+ * instead of importing the package's types because `@xenova/transformers`
+ * is an undeclared, user-installed optional peer and may not be present.
+ */
+interface TensorLike {
+  tolist(): number[][];
+}
+
+/** Minimal shape of the `@xenova/transformers` module this provider depends on. */
+interface TransformersModule {
+  pipeline(task: string, model: string): Promise<LocalPipelineFn>;
+}
+
+type LocalPipelineFn = (
+  texts: string[],
+  options: { pooling: 'mean'; normalize: true },
+) => Promise<TensorLike>;
+
+/**
+ * Loads (and returns) a ready-to-call feature-extraction pipeline for
+ * `model`. Injectable so tests can simulate import/init success or
+ * failure without the optional package actually being installed;
+ * defaults to {@link defaultLoadLocalPipeline} in production.
+ */
+export type LoadLocalPipeline = (model: string) => Promise<LocalPipelineFn>;
+
+const LOCAL_MODULE_SPECIFIER = '@xenova/transformers';
+
+async function defaultLoadLocalPipeline(model: string): Promise<LocalPipelineFn> {
+  // Lazy + dynamic on purpose (design D7): `@xenova/transformers` is an
+  // undeclared user-installed optional peer, never statically imported, and the
+  // Action's `ncc` build excludes it from the bundle entirely (task 7.3). Routing the
+  // specifier through a `string`-typed local (rather than passing the
+  // string literal directly to `import()`) also stops TypeScript from
+  // trying to resolve the module's types at compile time, which would
+  // fail whenever the optional dependency isn't installed.
+  const specifier: string = LOCAL_MODULE_SPECIFIER;
+  const transformers = (await import(specifier)) as TransformersModule;
+  return transformers.pipeline('feature-extraction', model);
+}
+
+/**
+ * Local, offline embedding provider backed by `@xenova/transformers`
+ * (Transformers.js) running entirely in-process — no network calls, no
+ * API key required.
+ *
+ * Optional dependency handling (design D7, task 7.2): the underlying
+ * pipeline is loaded lazily on first `embed`/`embedBatch` call, not in
+ * the constructor or the factory. If the dynamic import fails (package
+ * not installed) OR the pipeline itself throws during initialization
+ * (bad model id, unsupported runtime), this provider logs a warning once
+ * and permanently degrades — from then on every `embed`/`embedBatch`
+ * call THROWS an {@link EmbeddingProviderError} rather than producing a
+ * vector. It must NOT return zero vectors: a zero vector persisted on the
+ * save path is an indistinguishable-but-useless "valid" embedding (it
+ * passes the read guard, contributes cosine 0 forever, and is invisible
+ * to backfill because its model/dim MATCH). Throwing instead routes the
+ * caller to the correct fallback: the save path catches it and persists a
+ * NULL embedding (backfillable later once the dependency is fixed), and
+ * the search path catches it and degrades to keyword-only for that query.
+ * The "warn once, never crash the caller" intent is preserved — the warn
+ * fires a single time on first failure, and the throw is always caught by
+ * the save/search layers.
+ */
+export class LocalEmbeddingProvider implements EmbeddingProvider {
+  readonly dimension: number;
+  private readonly model: string;
+  private readonly loadPipeline: LoadLocalPipeline;
+  private pipelinePromise: Promise<LocalPipelineFn> | null = null;
+  private degraded = false;
+
+  constructor(
+    config: LocalEmbeddingProviderConfig,
+    loadPipeline: LoadLocalPipeline = defaultLoadLocalPipeline,
+  ) {
+    this.model = config.model;
+    this.dimension = config.dimension;
+    this.loadPipeline = loadPipeline;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const vectors = await this.embedBatch([text]);
+    const [vector] = vectors as [number[]];
+    return vector;
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    const pipe = await this.getPipeline();
+    if (!pipe) {
+      // Degraded (import/init failed): throw instead of returning zero
+      // vectors so the save path persists NULL (backfillable) and the
+      // search path degrades to keyword-only. See class-level docstring.
+      throw new EmbeddingProviderError(
+        `Local embedding provider "${this.model}" is degraded ` +
+          `(@xenova/transformers missing or pipeline init failed) — no embedding produced.`,
+      );
+    }
+    const output = await pipe(texts, { pooling: 'mean', normalize: true });
+    return output.tolist();
+  }
+
+  /**
+   * Lazily loads and memoizes the pipeline. On failure, warns once and
+   * permanently marks this instance as degraded (`getPipeline` returns
+   * `null` from then on) — the loader is never retried on later calls.
+   */
+  private async getPipeline(): Promise<LocalPipelineFn | null> {
+    if (this.degraded) {
+      return null;
+    }
+    if (!this.pipelinePromise) {
+      this.pipelinePromise = this.loadPipeline(this.model);
+    }
+    try {
+      return await this.pipelinePromise;
+    } catch (error) {
+      this.degraded = true;
+      console.warn(
+        `[ghagga] local embedding provider "${this.model}" failed to load ` +
+          `(@xenova/transformers missing or pipeline init failed) — degrading ` +
+          `to keyword-only ranking for the rest of this process: ${(error as Error).message}`,
+      );
+      return null;
+    }
   }
 }
 
