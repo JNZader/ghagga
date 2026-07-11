@@ -90,11 +90,13 @@ import {
   getReviewsByRepoId,
   getSessionsByProject,
   listMemoryObservations,
+  listObservationsNeedingEmbedding,
   removeRepoApiKey,
   saveObservation,
   saveRepoApiKey,
   saveReview,
   searchObservations,
+  updateObservationEmbedding,
   updateRepoSettings,
   upsertInstallation,
   upsertInstallationSettings,
@@ -1084,6 +1086,53 @@ describe('saveObservation', () => {
 
     // The key assertion is that it doesn't throw
     expect(true).toBe(true);
+  });
+});
+
+describe('listObservationsNeedingEmbedding (design D6)', () => {
+  it('maps rows to { id, text } joining title + content', async () => {
+    const rows = [
+      { id: 1, title: 'Rotate secrets', content: 'We rotate credentials regularly.' },
+      { id: 2, title: 'Auth flow', content: 'JWT validation notes.' },
+    ];
+    const db = createMockDb(rows) as unknown as Database;
+
+    const result = await listObservationsNeedingEmbedding(db, {
+      afterId: 0,
+      limit: 100,
+      activeModel: 'text-embedding-3-small',
+      activeDim: 1536,
+      includeMismatched: false,
+    });
+
+    expect(result).toEqual([
+      { id: 1, text: 'Rotate secrets We rotate credentials regularly.' },
+      { id: 2, text: 'Auth flow JWT validation notes.' },
+    ]);
+  });
+
+  it('returns an empty array when no rows need embedding', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await listObservationsNeedingEmbedding(db, {
+      afterId: 0,
+      limit: 100,
+      activeModel: 'text-embedding-3-small',
+      activeDim: 1536,
+      includeMismatched: true,
+    });
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe('updateObservationEmbedding (design D6)', () => {
+  it('resolves without error when the update chain resolves', async () => {
+    const db = createMockDb(undefined) as unknown as Database;
+
+    await expect(
+      updateObservationEmbedding(db, 7, [0.1, 0.2, 0.3], 'text-embedding-3-small', 3),
+    ).resolves.toBeUndefined();
   });
 });
 

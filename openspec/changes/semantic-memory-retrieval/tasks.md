@@ -76,10 +76,10 @@ Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6
 
 ## Phase 6: Backfill Script (PR 6)
 
-- [ ] 6.1 Create `packages/core/scripts/backfill-embeddings.ts`: iterate rows where `embedding IS NULL OR embedding_model != active`, batch by `id` (default 100), call `embedBatch`, `UPDATE` with embedding + `embedding_model` + `embedding_dim`, commit per batch.
-- [ ] 6.2 Add flags: `--batch`, `--limit`, `--re-embed` (forces model-mismatch rows); add inter-batch delay + max-rows cap for rate/cost control.
-- [ ] 6.3 Add `pnpm ghagga memory backfill` CLI subcommand invoking the script; add a server admin script entry point; explicitly exclude from the Action.
-- [ ] 6.4 Test: backfill populates all NULL-embedding rows and persists provider id + dimension; re-run is idempotent (already-matching rows skipped, only NULL/mismatched rows re-embedded); resumable after simulated mid-batch failure.
+- [x] 6.1 Create `packages/core/scripts/backfill-embeddings.ts`: iterate rows where `embedding IS NULL OR embedding_model != active`, batch by `id` (default 100), call `embedBatch`, `UPDATE` with embedding + `embedding_model` + `embedding_dim`, commit per batch.
+- [x] 6.2 Add flags: `--batch`, `--limit`, `--re-embed` (forces model-mismatch rows); add inter-batch delay + max-rows cap for rate/cost control.
+- [x] 6.3 Add `pnpm ghagga memory backfill` CLI subcommand invoking the script; add a server admin script entry point; explicitly exclude from the Action.
+- [x] 6.4 Test: backfill populates all NULL-embedding rows and persists provider id + dimension; re-run is idempotent (already-matching rows skipped, only NULL/mismatched rows re-embedded); resumable after simulated mid-batch failure.
 
 ## Phase 7: Local Optional Provider (PR 7)
 

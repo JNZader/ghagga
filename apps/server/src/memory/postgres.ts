@@ -19,8 +19,10 @@ import {
   getMemoryObservation,
   getMemoryStats,
   listMemoryObservations,
+  listObservationsNeedingEmbedding,
   saveObservation,
   searchObservations,
+  updateObservationEmbedding,
 } from 'ghagga-db';
 
 type ObservationRow = typeof memoryObservations.$inferSelect;
@@ -273,4 +275,30 @@ export class PostgresMemoryStorage implements MemoryStorage {
     }
     return clearAllMemoryObservations(this.db, this.installationId);
   }
+
+  // ── Backfill (design D6) ─────────────────────────────────────────
+  // Global (not installation-scoped): the backfill script is a one-time
+  // admin maintenance job over the whole table (packages/core/scripts/backfill-embeddings.ts).
+
+  async listObservationsNeedingEmbedding(options: {
+    afterId: number;
+    limit: number;
+    activeModel: string;
+    activeDim: number;
+    includeMismatched: boolean;
+  }): Promise<{ id: number; text: string }[]> {
+    return listObservationsNeedingEmbedding(this.db, options);
+  }
+
+  async updateObservationEmbedding(
+    id: number,
+    embedding: number[],
+    model: string,
+    dim: number,
+  ): Promise<void> {
+    await updateObservationEmbedding(this.db, id, embedding, model, dim);
+  }
+
+  // flush() intentionally omitted: PostgreSQL writes commit per-statement,
+  // no in-memory buffering to flush (design D6).
 }

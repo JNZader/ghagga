@@ -1091,7 +1091,11 @@ export class SqliteMemoryStorage implements MemoryStorage {
     return this.db.getRowsModified() > 0;
   }
 
-  async close(): Promise<void> {
+  /**
+   * Export the in-memory WASM database and write it to disk WITHOUT closing
+   * the underlying handle — shared by close() and flush() (design D6).
+   */
+  private _writeToDisk(): void {
     const dir = dirname(this.filePath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -1099,6 +1103,93 @@ export class SqliteMemoryStorage implements MemoryStorage {
 
     const data = this.db.export();
     writeFileSync(this.filePath, Buffer.from(data));
+  }
+
+  /**
+   * Durability hook for the backfill script (design D6, task 6.1): flushes
+   * the in-memory WASM database to disk after each batch so a mid-run crash
+   * loses at most the in-flight batch, not prior progress. Unlike close(),
+   * the database handle stays open and usable.
+   */
+  async flush(): Promise<void> {
+    this._writeToDisk();
+  }
+
+  async close(): Promise<void> {
+    this._writeToDisk();
     this.db.close();
+  }
+
+  // ── Backfill (design D6) ────────────────────────────────────────
+
+  /**
+   * List up to `limit` observations needing an embedding for the active
+   * provider/model, ordered by id ascending starting after `afterId`.
+   * Always matches NULL-embedding rows; with `includeMismatched` also
+   * matches rows whose stored `embedding_model`/`embedding_dim` disagree
+   * with the active provider (backfill `--re-embed`).
+   */
+  async listObservationsNeedingEmbedding(options: {
+    afterId: number;
+    limit: number;
+    activeModel: string;
+    activeDim: number;
+    includeMismatched: boolean;
+  }): Promise<{ id: number; text: string }[]> {
+    const { afterId, limit, activeModel, activeDim, includeMismatched } = options;
+
+    let sql = `
+      SELECT id, title, content FROM memory_observations
+      WHERE id > ?
+        AND (
+          embedding IS NULL
+    `;
+    const params: (string | number)[] = [afterId];
+
+    if (includeMismatched) {
+      sql += `
+          OR embedding_model IS NULL OR embedding_model != ?
+          OR embedding_dim IS NULL OR embedding_dim != ?
+      `;
+      params.push(activeModel, activeDim);
+    }
+
+    sql += `
+        )
+      ORDER BY id ASC
+      LIMIT ?
+    `;
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    stmt.bind(params);
+
+    const rows: { id: number; text: string }[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      rows.push({
+        id: row.id as number,
+        text: `${row.title as string} ${row.content as string}`,
+      });
+    }
+    stmt.free();
+
+    return rows;
+  }
+
+  /**
+   * Persist a backfilled embedding for a single observation (design D6).
+   * Metadata-only write — content/updated_at/last_accessed_at are untouched.
+   */
+  async updateObservationEmbedding(
+    id: number,
+    embedding: number[],
+    model: string,
+    dim: number,
+  ): Promise<void> {
+    this.db.run(
+      'UPDATE memory_observations SET embedding = ?, embedding_model = ?, embedding_dim = ? WHERE id = ?',
+      [serializeEmbedding(embedding), model, dim, id],
+    );
   }
 }

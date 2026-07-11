@@ -1,12 +1,13 @@
 /**
  * Memory command group barrel.
  *
- * Registers all six `ghagga memory` subcommands (list, search, show,
- * delete, stats, clear) and exports the parent Command for registration
- * in the CLI entry point.
+ * Registers all seven `ghagga memory` subcommands (list, search, show,
+ * delete, stats, clear, backfill) and exports the parent Command for
+ * registration in the CLI entry point.
  */
 
 import { Command } from 'commander';
+import { registerBackfillCommand } from './backfill.js';
 import { registerClearCommand } from './clear.js';
 import { registerDeleteCommand } from './delete.js';
 import { registerListCommand } from './list.js';
@@ -24,3 +25,4 @@ registerShowCommand(memoryCommand);
 registerDeleteCommand(memoryCommand);
 registerStatsCommand(memoryCommand);
 registerClearCommand(memoryCommand);
+registerBackfillCommand(memoryCommand);

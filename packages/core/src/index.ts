@@ -406,6 +406,11 @@ export {
 } from './embed.js';
 export type { AuthorTrustScore, AuthorTrustTier, NegativeExample } from './types.js';
 
+// ─── Embedding Backfill (design D6) ────────────────────────────
+
+export type { BackfillOptions, BackfillResult } from './memory/backfill.js';
+export { backfillEmbeddings } from './memory/backfill.js';
+
 // ─── Author Trust Scoring (Intelligence v2) ───────────────────
 
 export type { TrustScoringOptions } from './trust/index.js';
