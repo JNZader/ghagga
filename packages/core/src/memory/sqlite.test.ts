@@ -669,10 +669,15 @@ describe('SqliteMemoryStorage', () => {
     });
 
     it('best BM25 match ranks first when cosine ties (normalization not inverted)', async () => {
-      // All texts embed to the same vector → cosine is 1 everywhere and
-      // ranking is decided purely by normalized BM25
+      // Both keyword-matching texts embed to the same vector → cosine ties
+      // between them and ranking is decided by the positional-rank keyword
+      // score (design D5). The filler doc embeds orthogonally so it is a
+      // valid (but lowest-scoring) cosine-union candidate, not a tie — this
+      // also exercises the union surfacing a lexically-disjoint doc (R5.7)
+      // without disturbing the original tie-break assertion below.
+      const vectorFor = (text: string) => (text.includes('token') ? [1, 0, 0] : [0, 1, 0]);
       const storage = await SqliteMemoryStorage.create(dbPath, {
-        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0]),
+        embeddingProvider: makeEmbeddingProvider(vectorFor),
       });
 
       await storage.saveObservation(
@@ -696,11 +701,16 @@ describe('SqliteMemoryStorage', () => {
 
       const results = await storage.searchObservations('owner/repo', 'token');
 
-      expect(results.length).toBe(2);
-      // FTS5 bm25() is MORE NEGATIVE = BETTER: the heavy doc must map to 1,
-      // not 0 (the old formula gave the best match the WORST normalized score)
+      // The union brings in all 3 (filler now reachable as a vector-only
+      // candidate), but its orthogonal embedding + zero keyword score put it
+      // last, deterministically.
+      expect(results.length).toBe(3);
+      // FTS5 bm25() is MORE NEGATIVE = BETTER: the heavy doc must map to the
+      // best positional rank (1), not the worst (the old formula gave the
+      // best match the WORST normalized score)
       expect(results[0]?.title).toBe('token heavy');
       expect(results[1]?.title).toBe('token light');
+      expect(results[2]?.title).toBe('Unrelated filler');
 
       await storage.close();
     });
@@ -733,6 +743,206 @@ describe('SqliteMemoryStorage', () => {
       // No throw, and order falls back to BM25 (cosine contributed 0 for all)
       expect(results[0]?.title).toBe('token heavy');
       await storage4d.close();
+    });
+  });
+
+  // ── Cosine Union (Phase 3 — spec R5.7-R5.11, design D3-D5) ──
+  //
+  // Unlike the "hybrid search" re-rank tests above, these exercise the
+  // bounded cosine CANDIDATE query itself: a lexically-disjoint observation
+  // (no FTS5 match at all) must still be retrievable when it clears the
+  // cosine bar, and the `none`-parity acceptance gate proves the keyword-only
+  // path never runs the union logic.
+
+  describe('cosine union (Phase 3)', () => {
+    function makeEmbeddingProvider(vectorFor: (text: string) => number[]): EmbeddingProvider {
+      const dimension = vectorFor('probe').length;
+      return {
+        dimension,
+        embed: async (text: string) => vectorFor(text),
+        embedBatch: async (texts: string[]) => texts.map(vectorFor),
+      };
+    }
+
+    it('[3.7 acceptance gate] none provider: output/order/last_accessed_at identical to the pre-union keyword-only path', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath); // no embeddingProvider
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Alpha token match',
+          content: 'token token token strong match.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({ title: 'Beta token match', content: 'a single token mention.' }),
+      );
+      // Lexically disjoint from the query — must stay unreachable without a
+      // provider, proving no cosine candidate set is ever computed (R5.11).
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Gamma unrelated',
+          content: 'Completely unrelated content, zero overlap.',
+        }),
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'token');
+
+      // Exact row/order/shape match — only the two lexical matches, BM25-ordered.
+      expect(results).toEqual([
+        {
+          id: expect.any(Number),
+          type: 'pattern',
+          title: 'Alpha token match',
+          content: 'token token token strong match.',
+          filePaths: [],
+          severity: null,
+          strength: 1,
+        },
+        {
+          id: expect.any(Number),
+          type: 'pattern',
+          title: 'Beta token match',
+          content: 'a single token mention.',
+          filePaths: [],
+          severity: null,
+          strength: 1,
+        },
+      ]);
+
+      // last_accessed_at updated ONLY for the two returned (lexically matched) rows
+      // biome-ignore lint/suspicious/noExplicitAny: test access to private db
+      const db = (storage as any).db;
+      const unchanged = db.exec(
+        "SELECT updated_at, last_accessed_at FROM memory_observations WHERE title = 'Gamma unrelated'",
+      )[0]?.values[0];
+      expect(unchanged?.[1]).toBe(unchanged?.[0]); // last_accessed_at still equals its initial value
+
+      await storage.close();
+    });
+
+    it('[3.8] surfaces a lexically-disjoint semantic match via the cosine union', async () => {
+      const vectorFor = (text: string) =>
+        text.includes('credential') || text.includes('secret') ? [1, 0, 0] : [0, 1, 0];
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(vectorFor),
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Credential exposure in logs',
+          content: 'Application logs printed raw credential values in plaintext.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Unrelated filler',
+          content: 'Completely unrelated content about database indexing.',
+        }),
+      );
+
+      // No literal token overlap with either doc — only reachable via cosine.
+      // Both docs are embedded (so both are in the bounded cosine candidate
+      // set), but 'Credential exposure' ties the query vector while 'Unrelated
+      // filler' is orthogonal (cosineSim 0) — it must rank strictly first.
+      const results = await storage.searchObservations('owner/repo', 'secret leakage');
+
+      expect(results.some((r) => r.title === 'Credential exposure in logs')).toBe(true);
+      expect(results[0]?.title).toBe('Credential exposure in logs');
+
+      await storage.close();
+    });
+
+    it('[3.8] dedups a candidate present in both keyword and cosine sets, using its real keyword score', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0]), // all docs tie on cosine
+      });
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Overlap doc',
+          content: 'overlap keyword and cosine both match this doc.',
+        }),
+      );
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Vector-only doc',
+          content: 'no lexical overlap here at all.',
+        }),
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'overlap');
+
+      // Exactly 2 rows (no duplicate for the doc matched by both sources)
+      expect(results).toHaveLength(2);
+      // 'Overlap doc' matches keyword AND cosine → real keyword score (1),
+      // not the vector-only 0 → higher finalScore → ranks first
+      expect(results[0]?.title).toBe('Overlap doc');
+      expect(results[1]?.title).toBe('Vector-only doc');
+
+      await storage.close();
+    });
+
+    it('[3.8] excludes mixed-dimension rows from the cosine candidate set without error', async () => {
+      // Save with a 3-dim provider — this doc has NO lexical overlap with the query
+      const storage3d = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0]),
+      });
+      await storage3d.saveObservation(
+        makeObservationData({
+          title: 'Vector-only 3d doc',
+          content: 'photonic entanglement drift ratio measurements.',
+        }),
+      );
+      await storage3d.close();
+
+      // Search with a 4-dim provider: the stored 3-dim embedding must be
+      // excluded from the cosine candidate set entirely — never surfaced,
+      // never thrown (task 3.2 read guard). Query shares no literal token
+      // with the doc, so it cannot be reached via the keyword path either.
+      const storage4d = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(() => [1, 0, 0, 0]),
+      });
+      const results = await storage4d.searchObservations('owner/repo', 'zephyr cascade unrelated');
+
+      expect(results).toHaveLength(0);
+      await storage4d.close();
+    });
+
+    it('[3.8] returns correctly with a partial-backfill mix of NULL and embedded rows', async () => {
+      const vectorFor = (text: string) =>
+        text.includes('alpha-trigger') || text.includes('beta-trigger') ? [1, 0, 0] : [0, 1, 0];
+      const storage = await SqliteMemoryStorage.create(dbPath, {
+        embeddingProvider: makeEmbeddingProvider(vectorFor),
+      });
+
+      // Embedded row: no literal token overlap with the query — only reachable via cosine
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Vectorized doc',
+          content: 'contains the beta-trigger marker only.',
+        }),
+      );
+
+      // Simulate a NULL-embedding row (pre-backfill state) that DOES share a
+      // literal keyword with the query — reachable only via the keyword path.
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Legacy keyword doc',
+          content: 'this legacy row matches on plainkeyword.',
+        }),
+      );
+      // biome-ignore lint/suspicious/noExplicitAny: test access to private db
+      const db = (storage as any).db;
+      db.run(
+        "UPDATE memory_observations SET embedding = NULL, embedding_model = NULL, embedding_dim = NULL WHERE title = 'Legacy keyword doc'",
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'alpha-trigger plainkeyword');
+
+      const titles = results.map((r) => r.title).sort();
+      expect(titles).toEqual(['Legacy keyword doc', 'Vectorized doc']);
+
+      await storage.close();
     });
   });
 
