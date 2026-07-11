@@ -5,9 +5,18 @@
  * functions with correct arguments and map results properly.
  */
 
+import type { EmbeddingProvider } from 'ghagga-core';
 import { computeStrength, DEFAULT_DECAY_CONFIG } from 'ghagga-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostgresMemoryStorage } from './postgres.js';
+
+function makeFakeProvider(dimension = 3): EmbeddingProvider {
+  return {
+    dimension,
+    embed: vi.fn().mockResolvedValue(new Array(dimension).fill(0.1)),
+    embedBatch: vi.fn().mockResolvedValue([]),
+  };
+}
 
 // ─── Mock ghagga-db ─────────────────────────────────────────────
 
@@ -21,9 +30,11 @@ const mockClearAllMemoryObservations = vi.hoisted(() => vi.fn());
 const mockGetMemoryObservation = vi.hoisted(() => vi.fn());
 const mockListMemoryObservations = vi.hoisted(() => vi.fn());
 const mockGetMemoryStats = vi.hoisted(() => vi.fn());
+const mockBumpObservationsLastAccessed = vi.hoisted(() => vi.fn());
 
 vi.mock('ghagga-db', () => ({
   searchObservations: mockSearchObservations,
+  bumpObservationsLastAccessed: mockBumpObservationsLastAccessed,
   saveObservation: mockSaveObservation,
   createMemorySession: mockCreateMemorySession,
   endMemorySession: mockEndMemorySession,
@@ -273,6 +284,139 @@ describe('PostgresMemoryStorage — core methods', () => {
       expect(result).toHaveLength(2);
       expect(result.map((r) => r.id)).toEqual([3, 4]);
     });
+
+    // ── R3-001 / R3-002 integration (addresses R3-003) ────────────────────
+    // Exercises the REAL ghagga-db.searchObservations union pipeline flowing
+    // into the adapter's decay filter — NOT a mock of searchObservations —
+    // which is the only way to catch the pre-cap (R3-001) and decay-evasion
+    // touch (R3-002) that lived in queries.ts. Mirrors the SQLite oracle
+    // (packages/core/src/memory/sqlite.ts `_hybridSearch`).
+    it('R3-001/R3-002: real union pool → adapter decay delivers fresh rows below the old pre-cap AND touches only survivors', async () => {
+      const { searchObservations: realSearchObservations } =
+        await vi.importActual<typeof import('ghagga-db')>('ghagga-db');
+      // Delegate to the REAL union query implementation for this test only.
+      mockSearchObservations.mockImplementation(realSearchObservations as never);
+
+      const day = 24 * 60 * 60 * 1000;
+      const stale = new Date(Date.now() - 200 * day); // well past clearance → decayed out
+      const fresh = new Date();
+
+      // Keyword candidates in ts_rank DESC order. No embeddings → cosine 0 →
+      // finalScore = 0.3 * positional-rank, so the sorted pool == this order.
+      // The 6 STALE rows fill the top-6 slots — exactly the OLD pre-cap for
+      // limit=2 (returnLimit = fetchLimit = limit*3 = 6). The 2 FRESH rows rank
+      // BELOW it. Old queries.ts sliced to returnLimit BEFORE decay, so the
+      // adapter saw only decayed rows and under-delivered 0. Fixed queries.ts
+      // returns the full uncapped pool, so decay filtering reaches the fresh rows.
+      const mkRow = (id: number, lastAccessedAt: Date) => ({
+        id,
+        type: 'note',
+        title: `t${id}`,
+        content: `c${id}`,
+        filePaths: [],
+        severity: null,
+        embedding: null,
+        embeddingModel: null,
+        embeddingDim: null,
+        lastAccessedAt,
+      });
+      const keywordRows = [
+        mkRow(1, stale),
+        mkRow(2, stale),
+        mkRow(3, stale),
+        mkRow(4, stale),
+        mkRow(5, stale),
+        mkRow(6, stale),
+        mkRow(7, fresh),
+        mkRow(8, fresh),
+      ];
+
+      // Fake db: select #1 = keyword candidates, select #2 = (empty) cosine set.
+      let selectCall = 0;
+      const selectSequence: unknown[][] = [keywordRows, []];
+      const mkSelect = vi.fn().mockImplementation(() => {
+        const rows = selectSequence[selectCall] ?? [];
+        selectCall++;
+        const limit = vi.fn().mockResolvedValue(rows);
+        const orderBy = vi.fn().mockReturnValue({ limit });
+        const where = vi.fn().mockReturnValue({ orderBy });
+        const from = vi.fn().mockReturnValue({ where });
+        return { from };
+      });
+      const unionDb = { select: mkSelect } as never;
+
+      const provider = makeFakeProvider(3);
+      const providerStorage = new PostgresMemoryStorage(unionDb, installationId, provider);
+
+      const result = await providerStorage.searchObservations('proj', 'q', { limit: 2 });
+
+      // R3-001: the 2 fresh rows ranked below the old pre-cap are still delivered.
+      expect(result.map((r) => r.id)).toEqual([7, 8]);
+
+      // R3-002: last_accessed_at bumped for EXACTLY the returned survivors —
+      // never a row the decay filter dropped (no decay-evasion).
+      expect(mockBumpObservationsLastAccessed).toHaveBeenCalledTimes(1);
+      const touchedIds = mockBumpObservationsLastAccessed.mock.calls[0]?.[1] as number[];
+      expect(touchedIds).toEqual([7, 8]);
+      for (const staleId of [1, 2, 3, 4, 5, 6]) {
+        expect(touchedIds).not.toContain(staleId);
+      }
+    });
+
+    // ── Task 4.1/4.5: embedding-union wiring passed through to ghagga-db ──
+
+    it('[4.1] passes embeddingDimension/embeddingModel/embeddingCandidateK to ghagga-db when a provider is active', async () => {
+      const provider = makeFakeProvider(3);
+      const providerStorage = new PostgresMemoryStorage(
+        fakeDb,
+        installationId,
+        provider,
+        DEFAULT_DECAY_CONFIG,
+        'test-model',
+        50,
+      );
+      mockSearchObservations.mockResolvedValueOnce([]);
+
+      await providerStorage.searchObservations('owner/repo', 'query', { limit: 5 });
+
+      expect(mockSearchObservations).toHaveBeenCalledWith(fakeDb, 'owner/repo', 'query', {
+        limit: 5,
+        fetchLimit: 15,
+        embedFn: expect.any(Function),
+        embeddingDimension: 3,
+        embeddingModel: 'test-model',
+        embeddingCandidateK: 50,
+      });
+    });
+
+    it('[4.1] defaults embeddingCandidateK to 200 and omits embeddingModel when not configured', async () => {
+      const provider = makeFakeProvider(3);
+      const providerStorage = new PostgresMemoryStorage(fakeDb, installationId, provider);
+      mockSearchObservations.mockResolvedValueOnce([]);
+
+      await providerStorage.searchObservations('owner/repo', 'query');
+
+      expect(mockSearchObservations).toHaveBeenCalledWith(fakeDb, 'owner/repo', 'query', {
+        fetchLimit: 30,
+        embedFn: expect.any(Function),
+        embeddingDimension: 3,
+        embeddingModel: undefined,
+        embeddingCandidateK: 200,
+      });
+    });
+
+    it('[R5.11 none-parity] omits embedding-union options entirely when no provider is active', async () => {
+      mockSearchObservations.mockResolvedValueOnce([]);
+
+      await storage.searchObservations('owner/repo', 'query');
+
+      // Exact call shape unchanged from the pre-union contract — no
+      // embeddingDimension/embeddingModel/embeddingCandidateK keys at all.
+      expect(mockSearchObservations).toHaveBeenCalledWith(fakeDb, 'owner/repo', 'query', {
+        fetchLimit: 30,
+        embedFn: undefined,
+      });
+    });
   });
 
   describe('saveObservation', () => {
@@ -298,10 +442,17 @@ describe('PostgresMemoryStorage — core methods', () => {
 
       const result = await storage.saveObservation(input);
 
-      // The storage layer always forwards a computed `embedding` (null when no
-      // embedding provider is configured, as in this test). Assert the real
-      // contract — `{ ...input, embedding: null }` — not the bare input.
-      expect(mockSaveObservation).toHaveBeenCalledWith(fakeDb, { ...input, embedding: null });
+      // The storage layer always forwards a computed `embedding` (+ its
+      // provider metadata), all null when no embedding provider is
+      // configured, as in this test. Assert the real contract —
+      // `{ ...input, embedding: null, embeddingModel: null, embeddingDim: null }`
+      // — not the bare input.
+      expect(mockSaveObservation).toHaveBeenCalledWith(fakeDb, {
+        ...input,
+        embedding: null,
+        embeddingModel: null,
+        embeddingDim: null,
+      });
       expect(result).toEqual({
         id: 10,
         type: 'pattern',
@@ -329,6 +480,85 @@ describe('PostgresMemoryStorage — core methods', () => {
       });
 
       expect(result.filePaths).toBeNull();
+    });
+
+    // ── Task 4.5: persist embedding_model/embedding_dim alongside the vector ──
+
+    it('[4.5] persists embedding + embeddingModel + embeddingDim when a provider is active', async () => {
+      const provider = makeFakeProvider(3);
+      const providerStorage = new PostgresMemoryStorage(
+        fakeDb,
+        installationId,
+        provider,
+        DEFAULT_DECAY_CONFIG,
+        'test-model',
+      );
+      mockSaveObservation.mockResolvedValueOnce({
+        id: 20,
+        type: 'pattern',
+        title: 'T',
+        content: 'C',
+        filePaths: null,
+      });
+
+      await providerStorage.saveObservation({
+        project: 'proj',
+        type: 'pattern',
+        title: 'T',
+        content: 'C',
+      });
+
+      expect(provider.embed).toHaveBeenCalledWith('T C');
+      expect(mockSaveObservation).toHaveBeenCalledWith(fakeDb, {
+        project: 'proj',
+        type: 'pattern',
+        title: 'T',
+        content: 'C',
+        embedding: [0.1, 0.1, 0.1],
+        embeddingModel: 'test-model',
+        embeddingDim: 3,
+      });
+    });
+
+    it('[4.5] embed failure: persists NULL embedding/model/dim, warns, does not throw', async () => {
+      const provider = makeFakeProvider(3);
+      (provider.embed as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network down'));
+      const providerStorage = new PostgresMemoryStorage(
+        fakeDb,
+        installationId,
+        provider,
+        DEFAULT_DECAY_CONFIG,
+        'test-model',
+      );
+      mockSaveObservation.mockResolvedValueOnce({
+        id: 21,
+        type: 'pattern',
+        title: 'T',
+        content: 'C',
+        filePaths: null,
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      const result = await providerStorage.saveObservation({
+        project: 'proj',
+        type: 'pattern',
+        title: 'T',
+        content: 'C',
+      });
+
+      expect(mockSaveObservation).toHaveBeenCalledWith(fakeDb, {
+        project: 'proj',
+        type: 'pattern',
+        title: 'T',
+        content: 'C',
+        embedding: null,
+        embeddingModel: null,
+        embeddingDim: null,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('network down'));
+      expect(result.id).toBe(21);
+
+      warnSpy.mockRestore();
     });
   });
 
