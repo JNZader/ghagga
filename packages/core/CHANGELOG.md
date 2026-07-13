@@ -1,5 +1,13 @@
 # ghagga-core
 
+## 3.2.0
+
+### Minor Changes
+
+- 8cc5cdd: Publish semantic-memory retrieval across the CLI, core engine, and storage backends, including configurable embedding providers, hybrid keyword/vector search, safe schema metadata, backfill tooling, and graceful keyword-only fallback.
+
+  Include the post-3.1.0 reliability, security, forge-integration, and distribution corrections, and keep the four published package versions aligned for the coordinated release.
+
 ## 3.1.0
 
 ### Minor Changes
