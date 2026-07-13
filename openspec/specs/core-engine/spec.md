@@ -402,3 +402,50 @@ The `ReviewInput` type MUST be extended with new optional fields to support the 
 - WHEN the ReviewInput is constructed
 - THEN none of the new fields MUST affect the pipeline
 - AND existing behavior MUST be preserved exactly
+
+
+## Backend-Agnostic Generation and Rate-Aware Scheduling
+
+### Requirement: Backend-Agnostic Text Generation
+
+The review engine MUST expose one asynchronous text-generation contract for AI
+SDK, CLI Bridge, and Gateway backends. Simple, workflow, and consensus modes
+MUST consume that contract without backend-specific review implementations.
+When callers do not inject a generation function, the agents MUST retain the
+AI SDK-compatible fallback behavior.
+
+#### Scenario: Workflow review through CLI Bridge
+
+- GIVEN CLI Bridge resolves to one generation function
+- WHEN workflow mode runs
+- THEN all specialist and synthesis calls use that function
+- AND execution is serialized when only one function is available
+
+#### Scenario: Consensus review through Gateway
+
+- GIVEN Gateway resolves to a generation function
+- WHEN consensus mode runs
+- THEN every stance and vote uses the shared generation contract
+- AND provider/model metadata from each result is preserved
+
+### Requirement: Rate-Aware Review Scheduling
+
+Workflow and consensus review MUST accept a positive integer concurrency limit
+and a non-negative inter-batch delay. The pipeline MUST validate and pass these
+settings to the agents. Multi-call prompts SHOULD avoid repeating shared
+calibration context after the first call, and HTTP 413 responses MUST be
+eligible for provider fallback.
+
+#### Scenario: Free-tier provider is serialized
+
+- GIVEN `reviewConcurrency` is `1` and `reviewDelayMs` is non-zero
+- WHEN a workflow or consensus review executes multiple calls
+- THEN no more than one call runs at once
+- AND the configured delay is applied between batches
+
+#### Scenario: Oversized request falls back
+
+- GIVEN the active provider returns HTTP 413
+- AND a fallback provider exists
+- WHEN generation is attempted
+- THEN the engine retries through the fallback chain instead of failing the review immediately

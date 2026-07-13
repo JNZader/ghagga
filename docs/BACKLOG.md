@@ -34,30 +34,29 @@ GITLAB_PAT=… GITLAB_E2E_PROJECT=group/proj GITLAB_E2E_MR=<open iid> \
 If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardened,
 so the risk is low). (Deferred here pending the PAT + throwaway MR.)
 
-### BL-ACTION-BUNDLE-REBUILD — rebuild `apps/action/dist` to pick up the SARIF-stdout fix (#4)
-
-The GitHub Action consumes a **manually-committed** pre-built bundle:
-`action.yml` (`runs.main: 'apps/action/dist/index.js'`) points at the committed
-`apps/action/dist/index.js`, and `apps/action/.gitignore` deliberately
-un-ignores `dist/` ("GitHub Actions requires dist/ to be committed"). The bundle
-inlines `ghagga-core` via `ncc`, so it still carries the OLD core static-analysis
-diagnostics (`console.log`) that the #4 fix (BL-SARIF-STDOUT, commit `fa934d8`)
-moved to stderr. **The Action consumer therefore still pollutes stdout** despite
-the source fix.
-
-This is the manually-committed-stale-artifact case, NOT auto-rebuilt:
-`publish.yml` (`on: release`) runs `pnpm turbo build` (which DOES regenerate
-`dist` via the action's `ncc build` script) but ONLY to publish the npm packages
-— it does **not commit the rebuilt `dist` back to the repo**, and no other
-workflow re-commits it. So the bundle the Action runs (`JNZader/ghagga@v…` →
-committed `dist`) stays stale until someone rebuilds and commits it.
-
-FIX: before the next Action release, run `pnpm --filter @ghagga/action build`
-(`ncc build src/index.ts -o dist …`) and commit the regenerated
-`apps/action/dist/`. (Deferred here per the no-build rule.) Optionally, codify a
-release step that rebuilds + commits `dist` so it can't drift again.
-
 ## RESOLVED
+
+### BL-ACTION-BUNDLE-REBUILD — rebuild `apps/action/dist` before the next release
+
+**Status: RESOLVED** on `chore/release-readiness-closeout` by running
+`pnpm --filter @ghagga/action build` with TypeScript 6.0.3 and
+`@vercel/ncc` 0.44.1.
+
+The committed Action bundle already contained the SARIF stdout fix from
+`fa934d8`, but it had not been rebuilt after the semantic-memory series
+(#293-#300, planned in #291). The regenerated `apps/action/dist/index.js` now
+contains both contracts:
+
+- static-analysis progress and diagnostics are routed to stderr, preserving
+  machine-readable SARIF/JSON on stdout; and
+- the Action includes the current semantic-memory provider/configuration and
+  storage code while continuing to exclude the optional local
+  `@xenova/transformers` dependency.
+
+`action.yml` still intentionally consumes the committed pre-built bundle. The
+release workflow builds packages for publication but does not commit generated
+artifacts, so future source changes that affect the Action still require an
+explicit bundle rebuild before release.
 
 ### BL-SARIF-STDOUT — static-analysis tools write to stdout, corrupting `--output sarif`
 

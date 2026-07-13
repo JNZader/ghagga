@@ -1078,3 +1078,42 @@ The Settings page MUST display a tool grid showing all registered tools with ena
 - THEN the tool grid MUST be read-only (non-interactive toggles)
 - AND each tool MUST show an "Inherited" badge
 - AND the state MUST reflect the global settings
+
+
+## Section 6: CLI Bridge Credentials and Model Selection
+
+### 6.1 Tool and Model Contract
+
+A CLI Bridge provider-chain entry MUST support a CLI tool selection and an
+optional `cliModel`. OpenCode entries MUST provide a model in `provider/model`
+format; tools that do not support explicit model selection MUST ignore or strip
+`cliModel`. The legacy `claude` tool value MUST remain readable through its
+OpenCode-compatible migration path.
+
+#### Scenario: OpenCode model is saved
+
+- GIVEN a CLI Bridge entry selects OpenCode
+- WHEN the user saves `anthropic/claude-sonnet-4-5`
+- THEN the API validates the provider/model shape
+- AND the model is persisted and returned with that entry
+
+### 6.2 Credential Isolation
+
+CLI Bridge credentials MUST remain encrypted at rest and MUST be injected only
+into the subprocess environment variable required by the selected tool/model.
+The subprocess environment MUST be built from an allowlist so unrelated server
+credentials are not inherited. A stored credential MAY fall back to the server
+environment only when the selected tool's documented fallback permits it.
+
+#### Scenario: OpenCode receives one credential
+
+- GIVEN an OpenCode model whose provider prefix maps to one API-key variable
+- WHEN the review process launches OpenCode
+- THEN only that resolved credential is injected
+- AND unrelated API keys and service secrets are absent from the subprocess environment
+
+#### Scenario: Tool selection changes
+
+- GIVEN a CLI Bridge entry has a model and credential for one tool
+- WHEN the selected tool changes
+- THEN incompatible model and credential state is reset before save
