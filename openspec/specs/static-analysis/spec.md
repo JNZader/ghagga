@@ -203,7 +203,7 @@ The system MUST define a `ToolCategory` union type categorizing tool purposes.
 
 The system MUST define a `ToolName` type as a string union derived from the registry's registered tool names.
 
-`ToolName` MUST include at minimum: `'semgrep' | 'trivy' | 'cpd' | 'gitleaks' | 'shellcheck' | 'markdownlint' | 'lizard' | 'ruff' | 'bandit' | 'golangci-lint' | 'biome' | 'pmd' | 'psalm' | 'clippy' | 'hadolint'`.
+`ToolName` MUST include at minimum: `'semgrep' | 'trivy' | 'cpd' | 'gitleaks' | 'shellcheck' | 'markdownlint' | 'lizard' | 'ruff' | 'bandit' | 'golangci-lint' | 'biome' | 'pmd' | 'psalm' | 'clippy' | 'hadolint' | 'zizmor'`.
 
 #### Scenario: ToolName used as Record key
 
@@ -305,3 +305,26 @@ The system MUST cap the total number of static analysis findings injected into L
 - WHEN findings are formatted for LLM prompt injection
 - THEN all 50 findings MUST be included
 - AND no truncation message MUST appear
+
+
+### Requirement: Zizmor GitHub Actions Security Analysis
+
+The registry MUST provide an opt-in/auto-detected `zizmor` tool for changed
+files under `.github/workflows/`. The tool MUST execute with SARIF output,
+normalize SARIF locations and severity into review findings, elevate designated
+high-impact GitHub Actions rules to critical, and degrade to a non-blocking tool
+error when the binary is unavailable or output cannot be parsed.
+
+#### Scenario: Workflow findings are normalized
+
+- GIVEN one or more changed GitHub Actions workflow files
+- AND the zizmor binary is available
+- WHEN static analysis runs
+- THEN zizmor executes once for the relevant workflow paths
+- AND each SARIF result is converted into a review finding with rule, message, file, line, and mapped severity
+
+#### Scenario: No workflow files changed
+
+- GIVEN the diff contains no files under `.github/workflows/`
+- WHEN tool auto-detection runs
+- THEN zizmor is skipped
