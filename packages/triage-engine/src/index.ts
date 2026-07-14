@@ -35,3 +35,23 @@ export {
   type ForgeIssue,
   type ForgeIssueFilter,
 } from './forge/index.js';
+
+// ─── LOCATE ─────────────────────────────────────────────────────
+
+export {
+  DEFAULT_STOPWORDS,
+  type ExpandOptions,
+  expand,
+  extractKeywords,
+  firstHitLine,
+  GRAPH_RESOLVABLE_LANGUAGES,
+  type KeywordExtractionInput,
+  type LocateIssueInput,
+  type LocateResult,
+  locate,
+  type RerankIssueInput,
+  rerankSeed,
+  type ScoredCandidate,
+  scoreCandidates,
+  walkCodeScope,
+} from './locate/index.js';
