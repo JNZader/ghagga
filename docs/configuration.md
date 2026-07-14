@@ -185,6 +185,36 @@ In **SaaS/server mode**, GitHub Models needs a PAT with `models:read` on that pr
 
 Provider chains are configured per-repo or globally (see Global Settings).
 
+### Per-voice cross-engine routing (CLI)
+
+In **CLI mode**, add a `providerChain` array to `.ghagga.json` to route each multi-voice reviewer to a *different* engine through a running [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge) instance. `consensus` mode (3 votes: for/against/neutral) and `fan-out` mode (N lenses) round-robin each voice across the chain entries — instead of every voice hammering the same engine, you get genuinely training-diverse review (e.g. Claude Sonnet + Claude Opus + Codex GPT-5.5 voting independently).
+
+```json
+{
+  "provider": "gateway",
+  "mode": "consensus",
+  "providerChain": [
+    { "provider": "gateway", "model": "claude-sonnet-4-6", "targetProvider": "cli-claude" },
+    { "provider": "gateway", "model": "claude-opus-4-6", "targetProvider": "cli-claude" },
+    { "provider": "gateway", "model": "gpt-5.5", "targetProvider": "codex-cli" }
+  ]
+}
+```
+
+Each entry:
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `provider` | yes | Must be `"gateway"` — cross-engine routing only works through the bridge. |
+| `model` | yes | Model identifier sent to the bridge (e.g. `"claude-sonnet-4-6"`, `"gpt-5.5"`). |
+| `targetProvider` | no | Bridge-side provider id (e.g. `"cli-claude"`, `"codex-cli"`) — short-circuits the bridge's model-based routing and forces that exact provider regardless of `model` fuzzy-matching. |
+| `gatewayUrl` | no | Overrides the gateway base URL for this entry (defaults to `GHAGGA_GATEWAY_URL` / the first entry's URL). |
+| `cliModel` | no | Only meaningful for `cli-bridge` provider entries, not `gateway`. |
+
+**Requirements**: `--provider gateway` (or `"provider": "gateway"` in the config) and a running mcp-llm-bridge instance the CLI's token can reach. `apiKey` is **never** stored in `.ghagga.json` — the gateway token is resolved the same way as the flat `provider`/`model` path (`--api-key` flag, `GHAGGA_API_KEY` env var, or the token saved by `ghagga login`) and applied to every chain entry.
+
+An invalid `providerChain` entry (wrong shape, missing `model`, `provider` other than `"gateway"`) fails the review with a clear error rather than silently falling back — misrouted multi-voice review is worse than no review. When `providerChain` is absent, behavior is unchanged: `simple`/`workflow`/`consensus`/`fan-out` modes all use the single flat `provider`/`model`.
+
 ## Gateway Mode (mcp-llm-bridge)
 
 For server deployments, you can delegate all LLM calls to a running [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge) instance instead of managing provider credentials directly in GHAGGA.

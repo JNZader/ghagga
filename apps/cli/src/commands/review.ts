@@ -14,6 +14,7 @@ import type {
   MemoryStorage,
   ProgressCallback,
   ProgressEvent,
+  ProviderChainEntry,
   ReviewMode,
   ReviewResult,
   ReviewSettings,
@@ -115,6 +116,30 @@ export interface ReviewOptions {
   lensDir?: string;
 }
 
+/**
+ * A single entry in the `.ghagga.json` `providerChain` array — routes ONE
+ * multi-voice reviewer (consensus vote / fan-out lens) to a specific
+ * cross-engine target via mcp-llm-bridge. Mirrors `ghagga-core`'s
+ * `ProviderChainEntry`, minus `apiKey`: the gateway token is resolved at
+ * runtime (CLI `--api-key` / stored login token), never stored in plaintext
+ * in the config file.
+ */
+interface GhaggaConfigProviderChainEntry {
+  /** Only 'gateway' entries are meaningful for cross-engine routing. */
+  provider: 'gateway';
+  /** Model identifier passed to the bridge (e.g. "claude-sonnet-4-6"). */
+  model: string;
+  /**
+   * Bridge-side provider id to route to (e.g. 'cli-claude', 'codex-cli').
+   * Short-circuits the bridge's model-based routing.
+   */
+  targetProvider?: string;
+  /** Gateway base URL. Defaults to the first entry's / flat gateway config when omitted. */
+  gatewayUrl?: string;
+  /** OpenCode model in `provider/model` format (cli-bridge only — unused for gateway). */
+  cliModel?: string;
+}
+
 interface GhaggaConfig {
   mode?: string;
   provider?: string;
@@ -130,6 +155,12 @@ interface GhaggaConfig {
   enabledTools?: string[];
   // Pluggable review lenses (fan-out mode)
   lenses?: string[];
+  /**
+   * Per-voice cross-engine provider chain (BL-CLI-PROVIDER-CHAIN). When set,
+   * consensus (3-vote) and fan-out (N-lens) modes round-robin each voice
+   * across these gateway entries instead of hammering a single engine.
+   */
+  providerChain?: GhaggaConfigProviderChainEntry[];
 }
 
 // ─── Main Command ───────────────────────────────────────────────
@@ -221,6 +252,11 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
 
     // Step 3: Merge settings (CLI options take priority over config file)
     const settings = mergeSettings(options, fileConfig);
+
+    // Step 3.5: Build the per-voice cross-engine provider chain, if configured
+    // (BL-CLI-PROVIDER-CHAIN). Undefined when absent — regression-safe, the
+    // pipeline falls back to the flat provider/model exactly as before.
+    const providerChain = buildProviderChain(fileConfig, options.apiKey);
 
     // Step 4: Show progress
     if (!options.outputFormat) {
@@ -340,6 +376,9 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
       enhance: options.enhance,
       // --quick: disable AI review, use static analysis only
       ...(options.quick ? { aiReviewEnabled: false } : {}),
+      // Per-voice cross-engine routing (BL-CLI-PROVIDER-CHAIN) — undefined
+      // when `.ghagga.json` has no providerChain, unchanged flat-provider path.
+      ...(providerChain ? { providerChain } : {}),
     });
 
     // Step 5.5: Persist memory to disk
@@ -740,6 +779,45 @@ function getGitDiff(repoPath: string): string {
 // ─── Config File ────────────────────────────────────────────────
 
 /**
+ * Validate the shape of a `.ghagga.json` `providerChain` array. Throws a
+ * descriptive `Error` on the first invalid entry — provider misrouting is
+ * high-stakes (silently reviewing with the wrong engine), so this fails
+ * loudly rather than the soft-warn-and-continue behavior used for a
+ * generally malformed config file.
+ */
+function validateProviderChain(chain: unknown): asserts chain is GhaggaConfigProviderChainEntry[] {
+  if (!Array.isArray(chain)) {
+    throw new Error('providerChain must be an array');
+  }
+
+  chain.forEach((rawEntry, index) => {
+    if (typeof rawEntry !== 'object' || rawEntry === null) {
+      throw new Error(`providerChain[${index}] must be an object`);
+    }
+
+    const entry = rawEntry as Record<string, unknown>;
+
+    if (entry.provider !== 'gateway') {
+      throw new Error(
+        `providerChain[${index}].provider must be "gateway" (got ${JSON.stringify(entry.provider)})`,
+      );
+    }
+    if (typeof entry.model !== 'string' || entry.model.length === 0) {
+      throw new Error(`providerChain[${index}].model must be a non-empty string`);
+    }
+    if (entry.targetProvider !== undefined && typeof entry.targetProvider !== 'string') {
+      throw new Error(`providerChain[${index}].targetProvider must be a string`);
+    }
+    if (entry.gatewayUrl !== undefined && typeof entry.gatewayUrl !== 'string') {
+      throw new Error(`providerChain[${index}].gatewayUrl must be a string`);
+    }
+    if (entry.cliModel !== undefined && typeof entry.cliModel !== 'string') {
+      throw new Error(`providerChain[${index}].cliModel must be a string`);
+    }
+  });
+}
+
+/**
  * Load and parse an optional .ghagga.json config file.
  */
 function loadConfigFile(repoPath: string, configPath?: string): GhaggaConfig {
@@ -749,14 +827,57 @@ function loadConfigFile(repoPath: string, configPath?: string): GhaggaConfig {
     return {};
   }
 
+  let parsed: GhaggaConfig;
   try {
     const raw = readFileSync(filePath, 'utf-8');
-    return JSON.parse(raw) as GhaggaConfig;
+    parsed = JSON.parse(raw) as GhaggaConfig;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     tui.log.warn(`⚠️  Could not parse config file: ${message}`);
     return {};
   }
+
+  if (parsed.providerChain !== undefined) {
+    try {
+      validateProviderChain(parsed.providerChain);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      tui.log.error(`❌ Invalid .ghagga.json providerChain: ${message}`);
+      process.exit(1);
+      return {};
+    }
+  }
+
+  return parsed;
+}
+
+/**
+ * Map a validated `.ghagga.json` providerChain into `ghagga-core`'s
+ * `ProviderChainEntry[]` for `ReviewInput.providerChain` — the piece that
+ * closes the CLI's gap in per-voice cross-engine routing (consensus/fan-out
+ * modes round-robin each voice across these gateway entries, see
+ * `resolveGenerateTextFns` in `packages/core/src/pipeline/providers.ts`).
+ *
+ * `apiKey` is NEVER read from the config file (never stored in plaintext) —
+ * it is filled at runtime from the resolved gateway token (`options.apiKey`,
+ * itself CLI flag > env var > stored login token, see `apps/cli/src/index.ts`).
+ */
+function buildProviderChain(
+  fileConfig: GhaggaConfig,
+  apiKey: string | undefined,
+): ProviderChainEntry[] | undefined {
+  if (!fileConfig.providerChain || fileConfig.providerChain.length === 0) {
+    return undefined;
+  }
+
+  return fileConfig.providerChain.map((entry) => ({
+    provider: entry.provider,
+    model: entry.model,
+    apiKey: apiKey ?? '',
+    ...(entry.targetProvider !== undefined ? { targetProvider: entry.targetProvider } : {}),
+    ...(entry.gatewayUrl !== undefined ? { gatewayUrl: entry.gatewayUrl } : {}),
+    ...(entry.cliModel !== undefined ? { cliModel: entry.cliModel } : {}),
+  }));
 }
 
 // ─── Settings Merge ─────────────────────────────────────────────
