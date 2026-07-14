@@ -632,6 +632,110 @@ describe('reviewCommand — functional tests', () => {
     expect(settings.customRules).toEqual(['/rules/custom.yml']);
   });
 
+  it('populates ReviewInput.providerChain from .ghagga.json providerChain (cross-engine routing)', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        providerChain: [
+          {
+            provider: 'gateway',
+            model: 'claude-sonnet-4-6',
+            targetProvider: 'cli-claude',
+          },
+          {
+            provider: 'gateway',
+            model: 'claude-opus-4-6',
+            targetProvider: 'cli-claude',
+          },
+          {
+            provider: 'gateway',
+            model: 'gpt-5.5',
+            targetProvider: 'codex-cli',
+            gatewayUrl: 'http://localhost:3001',
+          },
+        ],
+      }),
+    );
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ apiKey: 'gw-token' }));
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const providerChain = callArgs.providerChain as Array<Record<string, unknown>>;
+
+    expect(providerChain).toHaveLength(3);
+    expect(providerChain[0]).toMatchObject({
+      provider: 'gateway',
+      model: 'claude-sonnet-4-6',
+      targetProvider: 'cli-claude',
+      apiKey: 'gw-token',
+    });
+    expect(providerChain[1]).toMatchObject({
+      provider: 'gateway',
+      model: 'claude-opus-4-6',
+      targetProvider: 'cli-claude',
+      apiKey: 'gw-token',
+    });
+    expect(providerChain[2]).toMatchObject({
+      provider: 'gateway',
+      model: 'gpt-5.5',
+      targetProvider: 'codex-cli',
+      gatewayUrl: 'http://localhost:3001',
+      apiKey: 'gw-token',
+    });
+  });
+
+  it('leaves ReviewInput.providerChain undefined when .ghagga.json has no providerChain (regression-safe)', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ reviewLevel: 'strict' }));
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    expect(callArgs.providerChain).toBeUndefined();
+  });
+
+  it('rejects a malformed providerChain entry with a clear error and exits 1', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        providerChain: [{ provider: 'anthropic', model: 'claude-sonnet-4-6' }],
+      }),
+    );
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('providerChain'));
+  });
+
+  it('rejects a providerChain entry missing model with a clear error and exits 1', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        providerChain: [{ provider: 'gateway' }],
+      }),
+    );
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('providerChain'));
+  });
+
   it('should handle non-Error thrown objects in catch block', async () => {
     mockExecSync.mockReturnValue('diff' as never);
     mockReviewPipeline.mockRejectedValue('string error');
