@@ -139,6 +139,25 @@ describe('cli-bridge', () => {
       expect(OPENCODE_ENV_BY_PREFIX).toHaveProperty('groq', 'GROQ_API_KEY');
       expect(OPENCODE_ENV_BY_PREFIX).toHaveProperty('openrouter', 'OPENROUTER_API_KEY');
     });
+
+    it('contains the opencode-go prefix mapped to no credential (keyless, like free-tier opencode)', () => {
+      expect(OPENCODE_ENV_BY_PREFIX).toHaveProperty('opencode-go', '');
+    });
+
+    it('keys snapshot includes opencode-go alongside all prior prefixes (no prefix silently dropped)', () => {
+      expect(Object.keys(OPENCODE_ENV_BY_PREFIX).sort()).toEqual(
+        [
+          'anthropic',
+          'github-copilot',
+          'google',
+          'groq',
+          'openai',
+          'opencode',
+          'opencode-go',
+          'openrouter',
+        ].sort(),
+      );
+    });
   });
 
   describe('resolveCredentialEnvVar', () => {
@@ -518,6 +537,42 @@ describe('cli-bridge', () => {
     it('throws for valid format but unsupported prefix', () => {
       expect(() => validateCliModel('azure/gpt-4')).toThrow(CLIConfigurationError);
       expect(() => validateCliModel('azure/gpt-4')).toThrow('Unsupported OpenCode provider prefix');
+    });
+
+    it('accepts opencode-go/<model> (triage-engine cli-bridge extension)', () => {
+      expect(() => validateCliModel('opencode-go/kimi-k2.7-code')).not.toThrow();
+    });
+
+    it('still throws for a truly unknown prefix after the opencode-go extension', () => {
+      expect(() => validateCliModel('unknown-vendor/some-model')).toThrow(CLIConfigurationError);
+      expect(() => validateCliModel('unknown-vendor/some-model')).toThrow(
+        'Unsupported OpenCode provider prefix',
+      );
+    });
+  });
+
+  describe('opencode-go credential isolation (triage-engine regression guard)', () => {
+    it('resolveCredentialEnvVar returns empty string (no credential) for opencode-go prefix', () => {
+      expect(resolveCredentialEnvVar('opencode', 'opencode-go/kimi-k2.7-code')).toBe('');
+    });
+
+    it('buildSubprocessEnv for opencode-go injects NO extra credential — env matches the SAFE_ENV_VARS baseline', () => {
+      // Baseline: env built with no credential at all.
+      const baselineEnv = buildSubprocessEnv();
+
+      // opencode-go's resolved credential env name is '' (falsy) — buildSubprocessEnv's
+      // `if (credentialEnvName && credentialValue)` guard must skip injection entirely.
+      const credentialEnvName = resolveCredentialEnvVar('opencode', 'opencode-go/kimi-k2.7-code');
+      const opencodeGoEnv = buildSubprocessEnv(credentialEnvName, undefined);
+
+      // Diff-snapshot: same key set, same values — no key was added by the opencode-go path.
+      expect(Object.keys(opencodeGoEnv).sort()).toEqual(Object.keys(baselineEnv).sort());
+      expect(opencodeGoEnv).toEqual(baselineEnv);
+    });
+
+    it('does not add an empty-string-named key to the subprocess env for opencode-go', () => {
+      const env = buildSubprocessEnv('', undefined);
+      expect(Object.prototype.hasOwnProperty.call(env, '')).toBe(false);
     });
   });
 

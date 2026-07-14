@@ -39,6 +39,7 @@ const CLI_MODEL_REGEX = /^[^/]+\/.+$/;
  */
 export const OPENCODE_ENV_BY_PREFIX: Record<string, string> = {
   opencode: '', // Free models — no API key needed
+  'opencode-go': '', // opencode-go provider (Chinese-lab family models) — auth via the opencode CLI's own session, no credential env var injected
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   google: 'GEMINI_API_KEY',
