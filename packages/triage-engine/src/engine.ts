@@ -1,9 +1,9 @@
 /**
  * Engine facade — the single entry point CLI/web wiring calls into. Ties
- * together forge -> locate -> triage -> queue exactly as design.md's Data
- * Flow diagram describes:
+ * together forge -> locate -> reproduce (best-effort, auto-wired) -> triage
+ * -> queue exactly as design.md's Data Flow diagram describes:
  *
- *   forge.getIssue -> locate -> triage.run -> queue.save (PENDING_APPROVAL)
+ *   forge.getIssue -> locate -> [reproduce] -> triage.run -> queue.save (PENDING_APPROVAL)
  *   human review (CLI/web) -> approveIssue -> forge.postComment (POSTED)
  *
  * SECURITY: `triageIssue`/`triageNew` NEVER call `forge.postComment`.
@@ -11,16 +11,26 @@
  * delegates to `queue/approval.ts`'s `approveAndPost`, which itself is the
  * only caller of `ForgeAdapter.postComment` (see design.md module
  * boundaries: "serve+CLI call queue; NEVER call forge.post directly").
+ *
+ * REPRODUCE is best-effort and auto-wired: when `config.app` is set, a
+ * `reproduceGenerateFn` is provided, and a route can be extracted from the
+ * issue body (see `reproduce/route.ts`), `triageIssue` drives the live app
+ * via `reproduce()` before triage runs. A failed/skipped reproduction never
+ * blocks triage — it just proceeds without evidence (see `autoReproduce`
+ * below). An explicitly-passed `reproEvidence` argument (including an
+ * explicit `null`) always overrides auto-reproduction.
  */
 
 import type { GenerateTextFn } from 'ghagga-core';
 import type { TriageConfig } from './config/schema.js';
 import { createForgeAdapter } from './forge/index.js';
-import type { ForgeAdapter, ForgeIssueFilter } from './forge/port.js';
+import type { ForgeAdapter, ForgeIssue, ForgeIssueFilter } from './forge/port.js';
 import { locate } from './locate/index.js';
 import { type ApprovalResult, approveAndPost, rejectDraft } from './queue/approval.js';
 import { buildDraft, editDraftReply, getDraft, upsertDraft } from './queue/draft.js';
 import { defaultQueuePath, loadQueue, type Queue, saveQueue } from './queue/store.js';
+import { type ReproduceOptions, reproduce } from './reproduce/index.js';
+import { extractRouteFromIssueBody } from './reproduce/route.js';
 import { runTriage } from './triage/run.js';
 import type { IssueDraft } from './types/draft.js';
 import type { ReproEvidence } from './types/evidence.js';
@@ -35,6 +45,14 @@ export interface EngineOptions {
   analysisGenerateFn: GenerateTextFn;
   /** generateFn used for the TRIAGE stage-4 client-reply call. Defaults to analysisGenerateFn. */
   clientReplyGenerateFn?: GenerateTextFn;
+  /**
+   * generateFn used for REPRODUCE's agentic action loop. Auto-reproduction
+   * is skipped entirely when this is absent, even if `config.app` is set —
+   * see module doc above.
+   */
+  reproduceGenerateFn?: GenerateTextFn;
+  /** Extra REPRODUCE options (maxSteps/headless/viewport/credentials/...) merged over the extracted route. */
+  reproduceOptions?: Partial<Omit<ReproduceOptions, 'route'>>;
   /** Defaults to `defaultQueuePath(config.repo)` when not provided. */
   queuePath?: string;
 }
@@ -48,8 +66,50 @@ function resolveQueuePath(options: Pick<EngineOptions, 'config' | 'queuePath'>):
 }
 
 /**
- * Triages one issue end-to-end: fetch -> LOCATE -> TRIAGE -> persist a
- * PENDING_APPROVAL draft. Overwrites any previous draft for the same issue.
+ * Best-effort REPRODUCE stage: runs ONLY when `config.app` is set, a
+ * `reproduceGenerateFn` was provided, AND a route can be extracted from the
+ * issue body. Any failure (browser missing, login fails, app unreachable,
+ * navigation timeout, ...) is caught and logged as a warning — reproduction
+ * is a nice-to-have, never a gate on triage (design.md decision 5: absence
+ * of a repro is signal, not an error).
+ */
+async function autoReproduce(
+  options: EngineOptions,
+  issue: Pick<ForgeIssue, 'title' | 'description'>,
+): Promise<ReproEvidence | null> {
+  if (!options.config.app || !options.reproduceGenerateFn) {
+    return null;
+  }
+
+  const route = extractRouteFromIssueBody(issue.description);
+  if (!route) {
+    return null;
+  }
+
+  try {
+    return await reproduce(
+      { title: issue.title, body: issue.description },
+      options.config,
+      options.reproduceGenerateFn,
+      { route, ...options.reproduceOptions },
+    );
+  } catch (error) {
+    console.warn(
+      `[ghagga-triage-engine] REPRODUCE failed — proceeding without reproduction evidence: ${
+        (error as Error).message
+      }`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Triages one issue end-to-end: fetch -> LOCATE -> [REPRODUCE, best-effort]
+ * -> TRIAGE -> persist a PENDING_APPROVAL draft. Overwrites any previous
+ * draft for the same issue.
+ *
+ * `reproEvidence` (including an explicit `null`) always overrides
+ * auto-reproduction — see module doc above.
  */
 export async function triageIssue(
   options: EngineOptions,
@@ -60,6 +120,10 @@ export async function triageIssue(
   const queuePath = resolveQueuePath(options);
 
   const issue = await forge.getIssue(iid);
+
+  const evidence =
+    reproEvidence !== undefined ? reproEvidence : await autoReproduce(options, issue);
+
   const locateResult = await locate(
     { title: issue.title, body: issue.description, labels: issue.labels },
     options.config,
@@ -81,7 +145,7 @@ export async function triageIssue(
     contextFiles: locateResult.contextFiles,
     files: locateResult.files,
     keywords: locateResult.keywords,
-    reproEvidence,
+    reproEvidence: evidence,
     analysisGenerateFn: options.analysisGenerateFn,
     clientReplyGenerateFn: options.clientReplyGenerateFn,
   });
@@ -91,7 +155,7 @@ export async function triageIssue(
     repo: options.config.repo,
     report: triageResult.technicalAnalysis,
     clientReply: triageResult.clientReply,
-    reproductionEvidence: reproEvidence,
+    reproductionEvidence: evidence,
   });
 
   const queue = upsertDraft(loadQueue(queuePath), draft);

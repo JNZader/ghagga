@@ -24,6 +24,13 @@ import {
 } from './engine.js';
 import type { ForgeAdapter, ForgeIssue } from './forge/port.js';
 import { loadQueue, saveQueue } from './queue/store.js';
+import { reproduce } from './reproduce/index.js';
+import type { ReproEvidence } from './types/evidence.js';
+
+vi.mock('./reproduce/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./reproduce/index.js')>();
+  return { ...actual, reproduce: vi.fn() };
+});
 
 function makeConfig(): TriageConfig {
   return {
@@ -205,5 +212,156 @@ describe('engine facade', () => {
 
     expect(rejected.status).toBe('REJECTED');
     expect(forge.postComment).not.toHaveBeenCalled();
+  });
+});
+
+describe('triageIssue auto-reproduction wiring', () => {
+  let dir: string;
+  let queuePath: string;
+  let forge: ForgeAdapter & { postComment: ReturnType<typeof vi.fn> };
+  let options: EngineOptions;
+  const mockedReproduce = vi.mocked(reproduce);
+
+  const FAKE_EVIDENCE: ReproEvidence = {
+    reproduced: true,
+    steps: ['navigated to /app/alertas', 'error captured after action — bug REPRODUCED'],
+    consoleErrors: ['TypeError: x is not a function'],
+    netFails: [],
+    uiErrors: [],
+  };
+
+  function makeConfigWithApp(): TriageConfig {
+    return {
+      forge: 'gitlab',
+      repo: 'acme/widgets',
+      codeRoot: '/tmp/does-not-exist-ghagga-triage',
+      language: 'go',
+      graphExpand: false,
+      models: { rerank: 'x', analysis: 'y' },
+      clientReplyPolicy: { language: 'es' },
+      app: { baseURL: 'https://app.example.test', loginRecipe: { kind: 'none' } },
+    };
+  }
+
+  function makeIssueWithRoute(iid: string): ForgeIssue {
+    return {
+      iid,
+      title: `Issue ${iid}`,
+      description: 'Algo se rompió.\n\nMódulo: Alertas · Ruta: /app/alertas',
+      labels: [],
+      url: `https://example.test/issues/${iid}`,
+      comments: [],
+    };
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ghagga-triage-engine-repro-'));
+    queuePath = join(dir, 'queue.json');
+    mockedReproduce.mockReset();
+    mockedReproduce.mockResolvedValue(FAKE_EVIDENCE);
+    forge = {
+      listIssues: vi.fn(async () => [makeIssueWithRoute('1')]),
+      getIssue: vi.fn(async (iid: string) => makeIssueWithRoute(iid)),
+      postComment: vi.fn(async () => undefined),
+    };
+    options = {
+      config: makeConfigWithApp(),
+      forge,
+      rerankGenerateFn: vi.fn(async () => ({
+        text: '1',
+        tokensUsed: 0,
+        provider: 'cli-bridge',
+        model: 'r',
+      })),
+      analysisGenerateFn: scriptedGenerateFn(TRIAGE_RESPONSE, 'Estamos revisando tu consulta.'),
+      reproduceGenerateFn: vi.fn(async () => ({
+        text: '{"action":"done"}',
+        tokensUsed: 0,
+        provider: 'cli-bridge',
+        model: 'repro',
+      })),
+      queuePath,
+    };
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('calls reproduce() with the extracted route and threads its evidence into the draft', async () => {
+    const draft = await triageIssue(options, '42');
+
+    expect(mockedReproduce).toHaveBeenCalledTimes(1);
+    const call = mockedReproduce.mock.calls.at(0);
+    expect(call).toBeDefined();
+    const [issueArg, configArg, generateFnArg, reproOptionsArg] = call ?? [];
+    expect(issueArg).toMatchObject({ title: 'Issue 42' });
+    expect(configArg).toBe(options.config);
+    expect(generateFnArg).toBe(options.reproduceGenerateFn);
+    expect(reproOptionsArg).toMatchObject({ route: '/app/alertas' });
+
+    expect(draft.reproductionEvidence).toEqual(FAKE_EVIDENCE);
+  });
+
+  it('skips reproduce() when config.app is not set (regression: current behavior preserved)', async () => {
+    options.config = { ...options.config, app: undefined };
+
+    const draft = await triageIssue(options, '42');
+
+    expect(mockedReproduce).not.toHaveBeenCalled();
+    expect(draft.reproductionEvidence).toBeNull();
+  });
+
+  it('skips reproduce() when no route can be extracted from the issue body', async () => {
+    forge.getIssue = vi.fn(async (iid: string) => ({
+      ...makeIssueWithRoute(iid),
+      description: 'No widget metadata in this body at all.',
+    }));
+
+    const draft = await triageIssue(options, '42');
+
+    expect(mockedReproduce).not.toHaveBeenCalled();
+    expect(draft.reproductionEvidence).toBeNull();
+  });
+
+  it('skips reproduce() when no reproduceGenerateFn is provided', async () => {
+    options.reproduceGenerateFn = undefined;
+
+    const draft = await triageIssue(options, '42');
+
+    expect(mockedReproduce).not.toHaveBeenCalled();
+    expect(draft.reproductionEvidence).toBeNull();
+  });
+
+  it('proceeds with the triage (no throw) when reproduce() rejects — evidence is absent, not fatal', async () => {
+    mockedReproduce.mockRejectedValueOnce(new Error('chromium launch failed'));
+
+    const draft = await triageIssue(options, '42');
+
+    expect(draft.status).toBe('PENDING_APPROVAL');
+    expect(draft.reproductionEvidence).toBeNull();
+    expect(forge.postComment).not.toHaveBeenCalled();
+  });
+
+  it('an explicitly-passed reproEvidence argument wins over auto-reproduction', async () => {
+    const explicit: ReproEvidence = {
+      reproduced: false,
+      steps: ['manual step'],
+      consoleErrors: [],
+      netFails: [],
+      uiErrors: [],
+    };
+
+    const draft = await triageIssue(options, '42', explicit);
+
+    expect(mockedReproduce).not.toHaveBeenCalled();
+    expect(draft.reproductionEvidence).toEqual(explicit);
+  });
+
+  it('an explicit null reproEvidence argument also wins over auto-reproduction', async () => {
+    const draft = await triageIssue(options, '42', null);
+
+    expect(mockedReproduce).not.toHaveBeenCalled();
+    expect(draft.reproductionEvidence).toBeNull();
   });
 });

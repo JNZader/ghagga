@@ -83,6 +83,7 @@ export {
   captureScopedSnapshot,
   captureUIErrors,
   executeAction,
+  extractRouteFromIssueBody,
   isChromiumAvailable,
   PlaywrightNotInstalledError,
   parseAction,

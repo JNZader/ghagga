@@ -21,5 +21,6 @@ export type { LoginContext, LoginLocator, LoginPage, LoginResult } from './login
 export { runLoginRecipe } from './login.js';
 export type { ReproAction } from './parse-action.js';
 export { parseAction } from './parse-action.js';
+export { extractRouteFromIssueBody } from './route.js';
 export type { SnapshotLocator, SnapshotPage } from './snapshot.js';
 export { captureScopedSnapshot } from './snapshot.js';
