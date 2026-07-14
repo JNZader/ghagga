@@ -22,3 +22,16 @@ export {
 export type { DraftStatus, IssueDraft } from './types/draft.js';
 export type { NetworkFailure, ReproEvidence } from './types/evidence.js';
 export { approveDraft, type PostableReply } from './types/postable.js';
+
+// ─── Forge Adapter ──────────────────────────────────────────────
+
+export {
+  createForgeAdapter,
+  createGitHubAdapter,
+  createGitLabAdapter,
+  type ForgeAdapter,
+  type ForgeAdapterConfig,
+  type ForgeComment,
+  type ForgeIssue,
+  type ForgeIssueFilter,
+} from './forge/index.js';
