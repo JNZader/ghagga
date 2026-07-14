@@ -90,6 +90,9 @@ importers:
       ghagga-core:
         specifier: workspace:*
         version: link:../../packages/core
+      ghagga-triage-engine:
+        specifier: workspace:*
+        version: link:../../packages/triage-engine
     devDependencies:
       '@types/node':
         specifier: ^25.9.1
@@ -5671,7 +5674,7 @@ snapshots:
       obug: 2.1.3
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.3)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2))
+      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.8.2))
 
   '@vitest/expect@4.1.9':
     dependencies:

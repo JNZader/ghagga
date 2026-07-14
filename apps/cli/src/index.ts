@@ -38,6 +38,7 @@ import { logoutCommand } from './commands/logout.js';
 import { memoryCommand } from './commands/memory/index.js';
 import { reviewCommand } from './commands/review.js';
 import { statusCommand } from './commands/status.js';
+import { triageCommand } from './commands/triage.js';
 import { getStoredToken, loadConfig } from './lib/config.js';
 import { isLegacyProvider } from './lib/providers.js';
 import * as tui from './ui/tui.js';
@@ -329,6 +330,10 @@ program
 // ─── Memory ─────────────────────────────────────────────────────
 
 program.addCommand(memoryCommand);
+
+// ─── Triage ─────────────────────────────────────────────────────
+
+program.addCommand(triageCommand);
 
 // ─── Dismiss ─────────────────────────────────────────────────────
 

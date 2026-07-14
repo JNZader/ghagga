@@ -52,6 +52,7 @@
     "chalk": "^5.6.0",
     "fts5-sql-bundle": "^1.0.2",
     "ghagga-core": "workspace:*",
+    "ghagga-triage-engine": "workspace:*",
     "commander": "^15.0.0",
     "dotenv": "^17.4.2"
   },

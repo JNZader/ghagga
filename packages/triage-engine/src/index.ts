@@ -4,8 +4,13 @@
  * Config-driven code-aware issue triage and reproduction engine. See
  * design.md for the full pipeline: config -> forge -> locate -> reproduce
  * (optional) -> triage (wraps ghagga-core runIssueTriage + client-reply
- * generation) -> queue (human-approval gate) -> forge post-back. `queue/`
- * (persistence/approval flow) and CLI/web wiring land in a later PR.
+ * generation) -> queue (human-approval gate) -> forge post-back.
+ *
+ * `engine.ts` is the single facade CLI/web wiring calls into
+ * (triageIssue/triageNew/approveIssue/rejectIssue/listQueue/showDraft/
+ * editDraft). `web/serve.ts` is the native-http local review UI. Actual CLI
+ * command registration lives in `apps/cli` (ghagga-triage-engine has no CLI
+ * framework dependency).
  */
 
 // ─── Config ─────────────────────────────────────────────────────
@@ -101,3 +106,40 @@ export {
   type TriageRunInput,
   type TriageRunResult,
 } from './triage/index.js';
+
+// ─── QUEUE ──────────────────────────────────────────────────────
+
+export {
+  type ApprovalResult,
+  approveAndPost,
+  type BuildDraftInput,
+  buildDraft,
+  defaultQueuePath,
+  draftId,
+  editDraftReply,
+  getDraft,
+  loadQueue,
+  type Queue,
+  type QueuePathOptions,
+  rejectDraft,
+  repoSlug,
+  saveQueue,
+  upsertDraft,
+} from './queue/index.js';
+
+// ─── ENGINE FACADE ──────────────────────────────────────────────
+
+export {
+  approveIssue,
+  type EngineOptions,
+  editDraft,
+  listQueue,
+  rejectIssue,
+  showDraft,
+  triageIssue,
+  triageNew,
+} from './engine.js';
+
+// ─── WEB REVIEW UI ──────────────────────────────────────────────
+
+export { createTriageRequestHandler, renderQueuePage, startTriageServer } from './web/serve.js';
