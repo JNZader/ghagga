@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture App</title>
+</head>
+<body>
+  <div id="login-view">
+    <h1>Ingresar</h1>
+    <label for="email">Email</label>
+    <input id="email" />
+    <label for="password">Contraseña</label>
+    <input id="password" type="password" />
+    <button type="button" id="login-btn">Iniciar sesión</button>
+  </div>
+
+  <main id="app-view" hidden>
+    <h1>Parámetros</h1>
+    <table>
+      <tbody>
+        <tr aria-label="Fila pH">
+          <td>pH</td>
+          <td>7.0</td>
+          <td><button type="button" data-row="pH">&#9998;</button></td>
+        </tr>
+        <tr aria-label="Fila OD">
+          <td>OD</td>
+          <td>5.0</td>
+          <td><button type="button" data-row="OD">&#9998;</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+
+  <dialog id="edit-dialog">
+    <h2 id="edit-dialog-title">Editar</h2>
+    <label id="new-value-label" for="new-value">Nuevo valor</label>
+    <input id="new-value" />
+    <button type="button" id="save-btn">Guardar</button>
+  </dialog>
+
+  <script>
+    document.getElementById('login-btn').addEventListener('click', () => {
+      document.getElementById('login-view').hidden = true;
+      document.getElementById('app-view').hidden = false;
+    });
+
+    document.querySelectorAll('button[data-row]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.dataset.row;
+        document.getElementById('edit-dialog-title').textContent = `Editar ${row}`;
+        const label = `Nuevo valor de ${row}`;
+        document.getElementById('new-value-label').textContent = label;
+        document.getElementById('new-value').setAttribute('aria-label', label);
+        document.getElementById('new-value').value = '';
+        document.getElementById('edit-dialog').showModal();
+      });
+    });
+
+    document.getElementById('save-btn').addEventListener('click', () => {
+      const val = Number(document.getElementById('new-value').value);
+      if (Number.isNaN(val) || val < 0 || val > 14) {
+        console.error('Validation failed: value out of range');
+        const alertEl = document.createElement('div');
+        alertEl.setAttribute('role', 'alert');
+        alertEl.textContent = 'Error: el valor debe estar entre 0 y 14';
+        document.body.appendChild(alertEl);
+      } else {
+        document.getElementById('edit-dialog').close();
+      }
+    });
+  </script>
+</body>
+</html>

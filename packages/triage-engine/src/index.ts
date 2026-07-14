@@ -55,3 +55,33 @@ export {
   scoreCandidates,
   walkCodeScope,
 } from './locate/index.js';
+
+// ─── REPRODUCE ──────────────────────────────────────────────────
+
+export type {
+  AttachedEvidence,
+  EvidenceCapablePage,
+  ExecutableLocator,
+  ExecutablePage,
+  LoginContext,
+  LoginLocator,
+  LoginPage,
+  LoginResult,
+  ReproAction,
+  SnapshotLocator,
+  SnapshotPage,
+} from './reproduce/index.js';
+export {
+  attachEvidenceListeners,
+  buildActionLocator,
+  captureScopedSnapshot,
+  captureUIErrors,
+  executeAction,
+  isChromiumAvailable,
+  PlaywrightNotInstalledError,
+  parseAction,
+  type ReproduceIssueInput,
+  type ReproduceOptions,
+  reproduce,
+  runLoginRecipe,
+} from './reproduce/index.js';
