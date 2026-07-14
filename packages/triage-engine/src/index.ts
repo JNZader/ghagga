@@ -2,9 +2,10 @@
  * ghagga-triage-engine — Public API
  *
  * Config-driven code-aware issue triage and reproduction engine. See
- * design.md for the full pipeline; this PR ships only the foundation:
- * config schema/loader + shared types (ReproEvidence, IssueDraft,
- * PostableReply). forge/locate/reproduce/triage/queue land in later PRs.
+ * design.md for the full pipeline: config -> forge -> locate -> reproduce
+ * (optional) -> triage (wraps ghagga-core runIssueTriage + client-reply
+ * generation) -> queue (human-approval gate) -> forge post-back. `queue/`
+ * (persistence/approval flow) and CLI/web wiring land in a later PR.
  */
 
 // ─── Config ─────────────────────────────────────────────────────
@@ -85,3 +86,18 @@ export {
   reproduce,
   runLoginRecipe,
 } from './reproduce/index.js';
+
+// ─── TRIAGE ─────────────────────────────────────────────────────
+
+export {
+  buildClientReplySystemPrompt,
+  buildCodeContext,
+  type ClientReplyInput,
+  DEFAULT_JARGON_BAN,
+  formatReproEvidence,
+  generateClientReply,
+  runTriage,
+  type TriageIssueInput,
+  type TriageRunInput,
+  type TriageRunResult,
+} from './triage/index.js';

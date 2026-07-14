@@ -18,6 +18,12 @@
  *   4. `UNTRUSTED_CONTENT_POLICY` is in the system prompt (`ISSUE_TRIAGE_SYSTEM`).
  *   5. Oversized issue bodies are capped by `wrapUntrustedDescription`'s internal
  *      `capUntrusted` so a giant payload cannot blow context / cost.
+ *   6. Optional reproduction evidence (captured by driving the LIVE target app —
+ *      console errors, network failures, on-screen error text) is fenced
+ *      SEPARATELY via `wrapUntrustedReproEvidence` (<REPRO_EVIDENCE>, no inner
+ *      code fence) — it is just as attacker-influenceable as the issue text
+ *      itself (a crafted error message/response body can carry the same
+ *      injection payloads) and gets identical defang + length-cap treatment.
  *
  * The agent only PRODUCES a draft (classification + hypotheses + plan + cited
  * report + numeric confidence). It NEVER posts. The confidence THRESHOLD gating
@@ -32,6 +38,7 @@ import {
   ISSUE_TRIAGE_SYSTEM,
   sanitizeLabel,
   wrapUntrustedDescription,
+  wrapUntrustedReproEvidence,
 } from './prompts.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -77,6 +84,19 @@ export interface IssueTriageInput {
    * it is accepted as input. Fenced via `buildMemoryContext`.
    */
   memoryContext: string | null;
+  /**
+   * Pre-formatted reproduction evidence from the REPRODUCE stage (console
+   * errors, network failures, on-screen error text captured by driving the
+   * LIVE target app) — semantically distinct from `memoryContext` ("we drove
+   * the live app" vs. dedup context from prior issues). Attacker-influenceable
+   * (target-app output) — fenced via `wrapUntrustedReproEvidence` inside a
+   * dedicated `<REPRO_EVIDENCE>` tag, separate from `<USER_DESCRIPTION>`.
+   * OPTIONAL — absent/null preserves existing behavior exactly (no fence
+   * emitted). A non-reproduction is still meaningful signal and SHOULD be
+   * passed as a formatted string (e.g. "reproduced: false — action
+   * succeeded, no error"), not omitted.
+   */
+  reproductionEvidence?: string | null;
   /** Provider id — carried for progress/metadata (caller resolves the backend). */
   provider: LLMProvider;
   /** Model id — carried for progress/metadata. */
@@ -258,10 +278,18 @@ function buildIssuePrompt(input: IssueTriageInput): string {
       : '';
   const untrustedIssue = `Title: ${input.issueTitle}\n\n${input.issueBody}${commentsText}`;
 
+  // Reproduction evidence, when present, is a SEPARATE untrusted fence — it is
+  // captured from the live target app, not the issue text, and design.md
+  // decision 5 keeps it semantically distinct from the issue description.
+  const reproBlock = input.reproductionEvidence
+    ? wrapUntrustedReproEvidence(input.reproductionEvidence)
+    : '';
+
   return [
     'Analyze the following GitHub issue and produce a triage draft per your instructions.',
     labelLine,
     wrapUntrustedDescription(untrustedIssue),
+    reproBlock,
   ]
     .filter(Boolean)
     .join('\n\n');
