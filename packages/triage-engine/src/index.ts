@@ -1,0 +1,24 @@
+/**
+ * ghagga-triage-engine — Public API
+ *
+ * Config-driven code-aware issue triage and reproduction engine. See
+ * design.md for the full pipeline; this PR ships only the foundation:
+ * config schema/loader + shared types (ReproEvidence, IssueDraft,
+ * PostableReply). forge/locate/reproduce/triage/queue land in later PRs.
+ */
+
+// ─── Config ─────────────────────────────────────────────────────
+
+export { loadConfig, type ResolveConfigPathOptions, resolveConfigPath } from './config/load.js';
+export {
+  type LoginRecipe,
+  type LoginStep,
+  type TriageConfig,
+  TriageConfigSchema,
+} from './config/schema.js';
+
+// ─── Shared Types ───────────────────────────────────────────────
+
+export type { DraftStatus, IssueDraft } from './types/draft.js';
+export type { NetworkFailure, ReproEvidence } from './types/evidence.js';
+export { approveDraft, type PostableReply } from './types/postable.js';
