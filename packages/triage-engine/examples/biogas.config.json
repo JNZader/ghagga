@@ -1,0 +1,73 @@
+{
+  "forge": "gitlab",
+  "repo": "JNZader/biogas-platform-feedback",
+  "codeRoot": "/absolute/path/to/your/checkout/of/biogas-platform-develop/monorepo",
+  "language": "go",
+  "graphExpand": false,
+  "moduleMap": {
+    "alertas": [
+      "apps/backend/internal/alerts",
+      "apps/backend/internal/scheduler",
+      "apps/backend/verticals/biogas"
+    ]
+  },
+  "synonyms": {
+    "umbral": ["threshold", "limit"],
+    "umbrales": ["threshold", "limit"],
+    "alerta": ["alert"],
+    "alertas": ["alert"],
+    "parametro": ["parameter", "param"],
+    "parametros": ["parameter", "param"],
+    "energia": ["energy", "power", "mwh"],
+    "consumo": ["consumption", "consumo"],
+    "sustrato": ["substrate"],
+    "sustratos": ["substrate"],
+    "documento": ["document", "file", "upload"],
+    "eliminar": ["delete", "remove"],
+    "guardar": ["save", "store"],
+    "cambiar": ["update", "edit", "set"]
+  },
+  "stopwords": [
+    "quise",
+    "cambiar",
+    "sale",
+    "que",
+    "con",
+    "los",
+    "las",
+    "una",
+    "para",
+    "pero",
+    "por",
+    "del",
+    "the",
+    "and",
+    "me",
+    "a",
+    "y",
+    "de",
+    "el",
+    "en",
+    "un",
+    "se",
+    "si",
+    "ruta",
+    "modulo",
+    "módulo",
+    "viewport",
+    "app",
+    "esta",
+    "este",
+    "como",
+    "hay"
+  ],
+  "models": {
+    "rerank": "opencode/north-mini-code-free",
+    "analysis": "opencode-go/kimi-k2.7-code",
+    "reproduce": "opencode-go/kimi-k2.7-code"
+  },
+  "clientReplyPolicy": {
+    "language": "es",
+    "jargonBan": ["traceback", "stack trace", "endpoint", "API", "log", "ID", "archivo", "backend"]
+  }
+}

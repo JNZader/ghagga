@@ -1,0 +1,11 @@
+# Playwright storage-state artifacts (loginRecipe.kind === 'storageState') —
+# a saved session token, never commit it.
+**/*.storageState.json
+
+# Local queue store (~/.ghagga-triage/<repo-slug>/queue.json) if ever
+# resolved relative to this package during local dev.
+.ghagga-triage/
+
+# Local reproduction screenshots/evidence artifacts.
+*.repro-evidence.json
+*.repro-evidence.png
