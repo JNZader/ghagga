@@ -63,3 +63,7 @@ export { buildCallChainFromDiff } from './call-chain.js';
 
 export type { ReverseDependencyMap, ReverseDepsResult } from './reverse-deps.js';
 export { buildReverseDependencyMap, findDependents } from './reverse-deps.js';
+
+// ─── SCIP Graph Mapper ──────────────────────────────────────────
+
+export { buildGraphFromScip, parseScipIndex } from './scip/builder.js';

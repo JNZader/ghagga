@@ -326,6 +326,7 @@ export type {
 
 export {
   buildGraph,
+  buildGraphFromScip,
   buildGraphIncremental,
   buildReverseIndex,
   computeBlastRadius,
@@ -343,6 +344,7 @@ export {
   MAX_GRAPH_SIZE_BYTES,
   NullGraphLoader,
   PreloadedGraphLoader,
+  parseScipIndex,
   resolveImportPath,
   TEST_FILE_PATTERNS,
   validateGraph,
