@@ -99,6 +99,25 @@ describe('TriageConfigSchema', () => {
     });
   });
 
+  describe('models.reproduce (optional)', () => {
+    it('parses a config with no models.reproduce field (backward-compatible)', () => {
+      const result = TriageConfigSchema.parse(baseValidConfig);
+
+      expect(result.models.reproduce).toBeUndefined();
+    });
+
+    it('parses a config with models.reproduce set', () => {
+      const config = {
+        ...baseValidConfig,
+        models: { ...baseValidConfig.models, reproduce: 'opencode-go/kimi-k2.7-code' },
+      };
+
+      const result = TriageConfigSchema.parse(config);
+
+      expect(result.models.reproduce).toBe('opencode-go/kimi-k2.7-code');
+    });
+  });
+
   describe('loginRecipe discriminated union', () => {
     it('accepts kind: none with no extra fields', () => {
       const config = {

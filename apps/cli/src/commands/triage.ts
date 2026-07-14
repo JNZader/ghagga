@@ -28,9 +28,9 @@ import {
 import * as tui from '../ui/tui.js';
 
 /**
- * Default model for the (opt-in) live-app reproduction agentic loop. The
- * triage config has no dedicated `models.reproduce` field yet, so this is a
- * hardcoded default matching the model used during the reproduce() PoC.
+ * Fallback model for the (opt-in) live-app reproduction agentic loop, used
+ * when the config's `models.reproduce` field is absent. Matches the model
+ * used during the reproduce() PoC.
  */
 const DEFAULT_REPRODUCE_MODEL = 'opencode-go/kimi-k2.7-code';
 
@@ -61,7 +61,7 @@ function resolveEngineOptions(
       ? {
           reproduceGenerateFn: createCLIBridgeGenerateFn({
             preferredCLI: 'opencode',
-            cliModel: DEFAULT_REPRODUCE_MODEL,
+            cliModel: config.models?.reproduce ?? DEFAULT_REPRODUCE_MODEL,
           }),
         }
       : {}),

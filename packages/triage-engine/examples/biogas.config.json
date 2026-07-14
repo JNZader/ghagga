@@ -63,7 +63,8 @@
   ],
   "models": {
     "rerank": "opencode/north-mini-code-free",
-    "analysis": "opencode-go/kimi-k2.7-code"
+    "analysis": "opencode-go/kimi-k2.7-code",
+    "reproduce": "opencode-go/kimi-k2.7-code"
   },
   "clientReplyPolicy": {
     "language": "es",

@@ -111,6 +111,34 @@ describe('ghagga triage command', () => {
     expect(options.reproduceGenerateFn).toBeTypeOf('function');
   });
 
+  it('"triage <iid> --reproduce" uses config.models.reproduce as cliModel when set', async () => {
+    mockLoadConfig.mockReturnValue({
+      ...BASE_CONFIG,
+      models: { ...BASE_CONFIG.models, reproduce: 'configured/reproduce-model' },
+    });
+    mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+    const triageCommand = await loadCommand();
+
+    await triageCommand.parseAsync(['triage', '42', '--reproduce'], { from: 'user' });
+
+    const { createCLIBridgeGenerateFn } = await import('ghagga-core');
+    expect(createCLIBridgeGenerateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ cliModel: 'configured/reproduce-model' }),
+    );
+  });
+
+  it('"triage <iid> --reproduce" falls back to the default model when config.models.reproduce is absent', async () => {
+    mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+    const triageCommand = await loadCommand();
+
+    await triageCommand.parseAsync(['triage', '42', '--reproduce'], { from: 'user' });
+
+    const { createCLIBridgeGenerateFn } = await import('ghagga-core');
+    expect(createCLIBridgeGenerateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ cliModel: 'opencode-go/kimi-k2.7-code' }),
+    );
+  });
+
   it('"triage --new --reproduce" ignores --reproduce (too slow/costly across many issues) and warns', async () => {
     mockTriageNew.mockResolvedValue([]);
     const triageCommand = await loadCommand();

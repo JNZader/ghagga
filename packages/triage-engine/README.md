@@ -56,7 +56,7 @@ behavior:
 | `stopwords` | `string[]` | Overrides the built-in default stopword set |
 | `language` | `'go' \| 'ts' \| 'js' \| 'py' \| 'rust' \| 'java'` | Default `'go'` |
 | `graphExpand` | `boolean` | Use ghagga-core's `buildGraph`/`computeBlastRadius` for EXPAND instead of dir-sibling. **Only `ts`/`js` actually resolve seed→dependents today** (see caveat below) — default `false` |
-| `models` | `{ rerank: string; analysis: string }` | Model ids passed to `createCLIBridgeGenerateFn` (`preferredCLI: 'opencode'`) |
+| `models` | `{ rerank: string; analysis: string; reproduce?: string }` | Model ids passed to `createCLIBridgeGenerateFn` (`preferredCLI: 'opencode'`). `reproduce` is optional — the CLI's `--reproduce` flag falls back to a hardcoded default (`opencode-go/kimi-k2.7-code`) when it is unset |
 | `app` | `{ baseURL: string; loginRecipe: LoginRecipe }` (optional) | Enables the REPRODUCE stage |
 | `clientReplyPolicy` | `{ language: string; jargonBan?: string[] }` (optional) | Client-reply language + banned jargon terms |
 

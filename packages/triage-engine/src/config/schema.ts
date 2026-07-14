@@ -44,6 +44,7 @@ export const TriageConfigSchema = z.object({
   models: z.object({
     rerank: z.string().min(1),
     analysis: z.string().min(1),
+    reproduce: z.string().min(1).optional(),
   }),
   app: z
     .object({
