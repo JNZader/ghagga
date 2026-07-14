@@ -91,6 +91,40 @@ describe('ghagga triage command', () => {
     expect(mockTriageIssue).not.toHaveBeenCalled();
   });
 
+  it('"triage <iid>" without --reproduce does NOT add reproduceGenerateFn to EngineOptions', async () => {
+    mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+    const triageCommand = await loadCommand();
+
+    await triageCommand.parseAsync(['triage', '42'], { from: 'user' });
+
+    const [options] = mockTriageIssue.mock.calls[0] as [{ reproduceGenerateFn?: unknown }];
+    expect(options.reproduceGenerateFn).toBeUndefined();
+  });
+
+  it('"triage <iid> --reproduce" adds a reproduceGenerateFn to EngineOptions', async () => {
+    mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+    const triageCommand = await loadCommand();
+
+    await triageCommand.parseAsync(['triage', '42', '--reproduce'], { from: 'user' });
+
+    const [options] = mockTriageIssue.mock.calls[0] as [{ reproduceGenerateFn?: unknown }];
+    expect(options.reproduceGenerateFn).toBeTypeOf('function');
+  });
+
+  it('"triage --new --reproduce" ignores --reproduce (too slow/costly across many issues) and warns', async () => {
+    mockTriageNew.mockResolvedValue([]);
+    const triageCommand = await loadCommand();
+
+    await triageCommand.parseAsync(['triage', '--new', '--reproduce'], { from: 'user' });
+
+    expect(mockTriageNew).toHaveBeenCalledTimes(1);
+    const [options] = mockTriageNew.mock.calls[0] as [{ reproduceGenerateFn?: unknown }];
+    expect(options.reproduceGenerateFn).toBeUndefined();
+
+    const tui = await import('../ui/tui.js');
+    expect(tui.log.warn).toHaveBeenCalledWith(expect.stringContaining('--reproduce'));
+  });
+
   it('dispatches "list" to listQueue', async () => {
     mockListQueue.mockReturnValue({});
     const triageCommand = await loadCommand();

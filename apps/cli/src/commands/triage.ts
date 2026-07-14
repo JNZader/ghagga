@@ -27,8 +27,24 @@ import {
 } from 'ghagga-triage-engine';
 import * as tui from '../ui/tui.js';
 
-/** Resolves the TriageConfig + generateFns from `--config` (or its defaults). */
-function resolveEngineOptions(configPath?: string): EngineOptions {
+/**
+ * Default model for the (opt-in) live-app reproduction agentic loop. The
+ * triage config has no dedicated `models.reproduce` field yet, so this is a
+ * hardcoded default matching the model used during the reproduce() PoC.
+ */
+const DEFAULT_REPRODUCE_MODEL = 'opencode-go/kimi-k2.7-code';
+
+/**
+ * Resolves the TriageConfig + generateFns from `--config` (or its defaults).
+ *
+ * `reproduce: true` additionally wires a `reproduceGenerateFn`, which makes
+ * `triageIssue` attempt a live-app reproduction (browser + LLM agentic loop)
+ * before triaging. Opt-in only — see the `--reproduce` flag on `triage <iid>`.
+ */
+function resolveEngineOptions(
+  configPath?: string,
+  opts: { reproduce?: boolean } = {},
+): EngineOptions {
   const path = resolveConfigPath({ explicitPath: configPath });
   const config = loadConfig(path);
   return {
@@ -41,6 +57,14 @@ function resolveEngineOptions(configPath?: string): EngineOptions {
       preferredCLI: 'opencode',
       cliModel: config.models.analysis,
     }),
+    ...(opts.reproduce
+      ? {
+          reproduceGenerateFn: createCLIBridgeGenerateFn({
+            preferredCLI: 'opencode',
+            cliModel: DEFAULT_REPRODUCE_MODEL,
+          }),
+        }
+      : {}),
   };
 }
 
@@ -59,10 +83,22 @@ triageCommand
   .command('triage [iid]')
   .description('Triage one issue by iid, or every new issue not already queued with --new')
   .option('--new', 'Triage every issue returned by the forge that is not already queued')
-  .action(async (iid: string | undefined, opts: { new?: boolean }) => {
-    const options = resolveEngineOptions(triageCommand.opts().config);
+  .option(
+    '--reproduce',
+    'Attempt a live-app reproduction before triaging this issue (single-issue only: ' +
+      'launches a browser + costs LLM calls, so it is ignored with --new)',
+  )
+  .action(async (iid: string | undefined, opts: { new?: boolean; reproduce?: boolean }) => {
+    const configPath = triageCommand.opts().config;
 
     if (opts.new) {
+      if (opts.reproduce) {
+        tui.log.warn(
+          '--reproduce is ignored with --new (too slow/costly across many issues). ' +
+            'Reproduce per-issue instead: ghagga triage triage <iid> --reproduce',
+        );
+      }
+      const options = resolveEngineOptions(configPath);
       const drafts = await triageNew(options);
       tui.log.success(`Triaged ${drafts.length} new issue(s).`);
       return;
@@ -74,6 +110,7 @@ triageCommand
       return;
     }
 
+    const options = resolveEngineOptions(configPath, { reproduce: opts.reproduce });
     const draft = await triageIssue(options, iid);
     tui.log.success(`#${iid} triaged -> ${draft.status} (queued for review).`);
   });
