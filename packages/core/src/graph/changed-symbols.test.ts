@@ -281,4 +281,61 @@ diff --git a/src/unknown.ts b/src/unknown.ts
     const result = computeChangedSymbolsComplete(diff, graph);
     expect(result.get('src/unknown.ts')?.hasUnattributedChanges).toBe(true);
   });
+
+  it('LANDMINE (D7): a pure rename (no hunks) sets hasUnattributedChanges — a path move is a structural change, not symbol-attributable', () => {
+    const graph = makeGraph({
+      'src/new.ts': {
+        hash: 'h',
+        language: 'typescript',
+        imports: [],
+        exports: ['X'],
+        symbolRanges: { X: [1, 5] },
+        calls: [],
+        isTest: false,
+      },
+    });
+
+    const diff = `
+diff --git a/src/old.ts b/src/new.ts
+similarity index 100%
+rename from src/old.ts
+rename to src/new.ts
+`;
+
+    const result = computeChangedSymbolsComplete(diff, graph);
+    expect(result.get('src/new.ts')?.hasUnattributedChanges).toBe(true);
+  });
+
+  it('LANDMINE (D7): a rename WITH content changes sets hasUnattributedChanges AND still processes the hunk', () => {
+    const graph = makeGraph({
+      'src/new2.ts': {
+        hash: 'h',
+        language: 'typescript',
+        imports: [],
+        exports: ['X'],
+        symbolRanges: { X: [1, 3] },
+        calls: [],
+        isTest: false,
+      },
+    });
+
+    const diff = `
+diff --git a/src/old2.ts b/src/new2.ts
+similarity index 90%
+rename from src/old2.ts
+rename to src/new2.ts
+--- a/src/old2.ts
++++ b/src/new2.ts
+@@ -1,3 +1,3 @@
+ export function X() {
+-  return 1;
++  return 2;
+ }
+`;
+
+    const result = computeChangedSymbolsComplete(diff, graph);
+    const entry = result.get('src/new2.ts');
+    expect(entry?.hasUnattributedChanges).toBe(true);
+    expect(entry?.changedSymbols.has('X')).toBe(true);
+  });
 });

@@ -27,10 +27,13 @@ export interface ChangedSymbolsResult {
    * `true` when at least one changed line in this file could NOT be
    * attributed to a known symbol range — a top-level statement, an
    * import, a line in a file with no `symbolRanges` data, a deletion in a
-   * fully-removed symbol, or a deleted/binary/renamed file with no
-   * addressable post-image content (D7). Callers MUST treat this as
-   * "insufficient data" and fall back to conservative reporting — NEVER
-   * claim a symbol/file is unaffected when this is `true`.
+   * fully-removed symbol, a deleted/binary file with no addressable
+   * post-image content, or a renamed file (the path move itself is a
+   * structural change that affects importers via the path, not a symbol
+   * range — set regardless of whether the rename also carries a content
+   * hunk) (D7). Callers MUST treat this as "insufficient data" and fall
+   * back to conservative reporting — NEVER claim a symbol/file is
+   * unaffected when this is `true`.
    */
   hasUnattributedChanges: boolean;
 }
@@ -99,6 +102,16 @@ export function computeChangedSymbolsComplete(
     if (file.isDeleted || file.isBinary || file.newPath === null) {
       entry.hasUnattributedChanges = true;
       continue;
+    }
+
+    // D7 (LANDMINE): a rename. The path move itself is a structural change
+    // that is NOT symbol-attributable (it affects importers via the path,
+    // not a symbol range) — mark conservative REGARDLESS of whether the
+    // rename also carries a content hunk (still fall through below so any
+    // hunk is processed normally; the rename flag alone forces the
+    // conservative "unattributed" signal).
+    if (file.isRename) {
+      entry.hasUnattributedChanges = true;
     }
 
     const node = graph.nodes[path];
