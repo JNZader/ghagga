@@ -70,8 +70,17 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Setup
         uses: ./.github/actions/setup
-      - name: Audit production dependencies
-        run: pnpm audit --prod --audit-level=high
+      - name: Audit production dependencies (OSV)
+        run: |
+          # npm retired the endpoint pnpm audit uses (HTTP 410 on
+          # /-/npm/v1/security/audits, pnpm 9.x never migrated to the bulk
+          # endpoint), so `pnpm audit` fails unconditionally. Use OSV.dev, which
+          # scans the pnpm lockfile directly. Advisory-only (job is
+          # continue-on-error): findings are surfaced, never block the merge.
+          curl -sSfL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_amd64"
+          chmod +x osv-scanner
+          ./osv-scanner --lockfile=pnpm-lock.yaml \
+            || echo "::warning::OSV advisories found (advisory-only, non-blocking) — review the report above and address separately"
 
   # ── Typecheck & Build ──────────────────────────────────────
   check:

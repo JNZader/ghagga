@@ -282,6 +282,44 @@ Options:
 
 The health command inherits `--output json` from global options for CI integration. See [Health Check](health.md) for full details.
 
+### `ghagga index [path]`
+
+Build the dependency graph consumed by blast-radius and review (`.ghagga/graph.json`).
+
+By default this uses a **SCIP-backed backend** for compiler-grade cross-file resolution. SCIP indexing is currently **Go-first**: it requires both `go` and [`scip-go`](https://github.com/scip-code/scip-go) on `PATH`.
+
+```bash
+# Install the scip-go toolchain (one-time)
+go install github.com/scip-code/scip-go/cmd/scip-go@latest
+
+# Index the current repository
+ghagga index
+
+# Index a specific directory
+ghagga index ./services/api
+
+# Write the graph to a custom location
+ghagga index --out .ghagga/graph.json
+```
+
+When run, `ghagga index`:
+
+1. Detects whether `go` and `scip-go` are both on `PATH`.
+2. If present, runs `scip-go` in the target directory to produce `index.scip`, parses it, and maps it to the same `.ghagga/graph.json` v1 schema consumed by `blast-radius` and `review` — including cross-file edges the regex extractor can't resolve (e.g. Go's full-module-path imports).
+3. If absent, exits with a non-zero code and installation instructions, **without touching any existing `.ghagga/graph.json`** — unless `--fallback-regex` is passed (see below).
+
+Options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `[path]` | `.` | Path to the repository to index |
+| `--out <path>` | `.ghagga/graph.json` | Output path for the graph, relative to the target repo |
+| `--fallback-regex` | off | When the SCIP toolchain is absent, use the regex-based indexer instead of failing. Note: the regex path only resolves relative imports and cannot follow module-path imports (Go, Java, etc.) |
+
+Non-Go languages and the `scip` CLI toolchain (scip-typescript, scip-python, scip-java) are deferred to a follow-up; `--fallback-regex` is the interim path for non-Go repos or environments without the Go toolchain.
+
+The resulting `.ghagga/graph.json` is the same file format read by `blast-radius` and `review` — no other command needs to change to benefit from a SCIP-produced graph.
+
 ---
 
 ## Review Command Options

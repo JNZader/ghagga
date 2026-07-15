@@ -33,6 +33,7 @@ import { dismissCommand } from './commands/dismiss.js';
 import { feedbackCommand } from './commands/feedback.js';
 import { healthCommand } from './commands/health.js';
 import { hooksCommand } from './commands/hooks/index.js';
+import { indexCommand } from './commands/index-cmd.js';
 import { loginCommand } from './commands/login.js';
 import { logoutCommand } from './commands/logout.js';
 import { memoryCommand } from './commands/memory/index.js';
@@ -371,6 +372,21 @@ program
       output: options.output,
       save: options.save ?? false,
     });
+  });
+
+// ─── Index ──────────────────────────────────────────────────────
+
+program
+  .command('index')
+  .description('Build the dependency graph consumed by blast-radius/review (.ghagga/graph.json)')
+  .argument('[path]', 'Path to the repository', '.')
+  .option('--out <path>', 'Output path for graph.json, relative to the target repo')
+  .option(
+    '--fallback-regex',
+    'Use the regex-based indexer when the SCIP toolchain (go + scip-go) is absent',
+  )
+  .action(async (path: string, options: { out?: string; fallbackRegex?: boolean }) => {
+    await indexCommand(path, options);
   });
 
 // ─── Memory ─────────────────────────────────────────────────────

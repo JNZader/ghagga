@@ -258,7 +258,13 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^3.0.5
         version: 3.0.7(zod@4.4.3)
+      '@bufbuild/protobuf':
+        specifier: ^2.10.1
+        version: 2.12.1
       '@cursorless/tree-sitter-wasms':
+        specifier: ^0.9.0
+        version: 0.9.0
+      '@scip-code/scip':
         specifier: ^0.9.0
         version: 0.9.0
       ai:
@@ -721,6 +727,9 @@ packages:
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
+
+  '@bufbuild/protobuf@2.12.1':
+    resolution: {integrity: sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==}
 
   '@changesets/apply-release-plan@7.1.1':
     resolution: {integrity: sha512-9qPCm/rLx/xoOFXIHGB229+4GOL76S4MC+7tyOuTsR6+1jYlfFDQORdvwR5hDA6y4FL2BPt3qpbcQIS+dW85LA==}
@@ -1621,6 +1630,9 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@scip-code/scip@0.9.0':
+    resolution: {integrity: sha512-9ctqUkzIc46tSSarvGhp/yMyPGHGzXgVePMa8NlwKAkbHBvHYURUG42Q9ga0poofa1rV1wazZOe4g3UT+ObWoQ==}
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -4607,6 +4619,8 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
+  '@bufbuild/protobuf@2.12.1': {}
+
   '@changesets/apply-release-plan@7.1.1':
     dependencies:
       '@changesets/config': 3.1.4
@@ -5383,6 +5397,10 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@scip-code/scip@0.9.0':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
 
   '@sec-ant/readable-stream@0.4.1': {}
 
