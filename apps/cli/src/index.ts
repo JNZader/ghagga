@@ -117,6 +117,10 @@ program
   .option('--enable-tool <name>', 'Force-enable a specific tool (repeatable)', collect, [])
   .option('--list-tools', 'List all available analysis tools and exit')
   .option('--no-memory', 'Disable review memory')
+  .option(
+    '--no-blast-radius',
+    'Disable blast-radius filtering (auto-enabled when .ghagga/graph.json exists)',
+  )
   .option('-c, --config <path>', 'Path to .ghagga.json config file')
   .option('-v, --verbose', 'Show detailed progress during review')
   .option('--staged', 'Review only staged changes (for pre-commit hooks)')
@@ -311,6 +315,7 @@ program
       trivy: options.trivy,
       cpd: options.cpd,
       memory: options.memory,
+      blastRadius: options.blastRadius,
       memoryBackend: options.memoryBackend as 'sqlite' | 'engram' | undefined,
       config: options.config,
       verbose: options.verbose ?? false,
@@ -428,6 +433,8 @@ interface ReviewCommandOptions {
   trivy: boolean;
   cpd: boolean;
   memory: boolean;
+  /** `--no-blast-radius` sets this to `false`; absent flag leaves it `true` (Commander negated-option default). */
+  blastRadius: boolean;
   memoryBackend?: string;
   config?: string;
   verbose: boolean;

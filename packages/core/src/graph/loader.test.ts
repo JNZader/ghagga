@@ -2,13 +2,26 @@
  * Unit tests for graph loaders.
  *
  * Tests GitHubApiGraphLoader with mocked fetch, NullGraphLoader,
- * and PreloadedGraphLoader.
+ * PreloadedGraphLoader, and FilesystemGraphLoader.
+ *
+ * FilesystemGraphLoader is tested against a REAL temp dir (mkdtempSync) —
+ * NOT mocked fs — so its actual statSync/readFileSync path is exercised
+ * (hardened pattern: a mock must never paper over production read/parse
+ * behavior).
  */
 
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GitHubApiGraphLoader, NullGraphLoader, PreloadedGraphLoader } from './loader.js';
+import {
+  FilesystemGraphLoader,
+  GitHubApiGraphLoader,
+  NullGraphLoader,
+  PreloadedGraphLoader,
+} from './loader.js';
 import type { DependencyGraph, GraphMetadata } from './schema.js';
-import { GRAPH_VERSION } from './schema.js';
+import { GRAPH_VERSION, MAX_GRAPH_SIZE_BYTES } from './schema.js';
 
 // ─── Test Fixtures ──────────────────────────────────────────────
 
@@ -193,5 +206,136 @@ describe('PreloadedGraphLoader', () => {
     const result = await loader.loadMetadata();
 
     expect(result).toBeNull();
+  });
+});
+
+// ─── FilesystemGraphLoader ──────────────────────────────────────
+
+describe('FilesystemGraphLoader', () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = mkdtempSync(join(tmpdir(), 'ghagga-fs-graph-loader-'));
+    mkdirSync(join(repoRoot, '.ghagga'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  function writeGraphFile(content: string): void {
+    writeFileSync(join(repoRoot, '.ghagga', 'graph.json'), content);
+  }
+
+  function writeMetadataFile(content: string): void {
+    writeFileSync(join(repoRoot, '.ghagga', 'metadata.json'), content);
+  }
+
+  describe('load()', () => {
+    it('returns the DependencyGraph when graph.json is valid', async () => {
+      writeGraphFile(JSON.stringify(VALID_GRAPH));
+
+      const loader = new FilesystemGraphLoader(repoRoot);
+      const result = await loader.load();
+
+      expect(result).not.toBeNull();
+      expect(result?.version).toBe(GRAPH_VERSION);
+      expect(result?.nodes['src/index.ts']).toBeDefined();
+    });
+
+    it('returns null when graph.json is absent (no callbacks fired)', async () => {
+      const onOversize = vi.fn();
+      const onMalformed = vi.fn();
+
+      const loader = new FilesystemGraphLoader(repoRoot, { onOversize, onMalformed });
+      const result = await loader.load();
+
+      expect(result).toBeNull();
+      expect(onOversize).not.toHaveBeenCalled();
+      expect(onMalformed).not.toHaveBeenCalled();
+    });
+
+    it('returns null and calls onMalformed when graph.json fails JSON.parse', async () => {
+      writeGraphFile('not json {{{');
+      const onMalformed = vi.fn();
+
+      const loader = new FilesystemGraphLoader(repoRoot, { onMalformed });
+      const result = await loader.load();
+
+      expect(result).toBeNull();
+      expect(onMalformed).toHaveBeenCalledTimes(1);
+      expect(onMalformed).toHaveBeenCalledWith(expect.any(String));
+    });
+
+    it('returns null and calls onMalformed when graph.json fails validateGraph (wrong version)', async () => {
+      writeGraphFile(JSON.stringify({ ...VALID_GRAPH, version: 999 }));
+      const onMalformed = vi.fn();
+
+      const loader = new FilesystemGraphLoader(repoRoot, { onMalformed });
+      const result = await loader.load();
+
+      expect(result).toBeNull();
+      expect(onMalformed).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns null and calls onOversize (distinct from onMalformed) when graph.json exceeds MAX_GRAPH_SIZE_BYTES', async () => {
+      // Write a well-formed-but-oversized graph.json by padding a string field.
+      const bigGraph = {
+        ...VALID_GRAPH,
+        rootDir: '.'.padEnd(MAX_GRAPH_SIZE_BYTES + 1024, 'x'),
+      };
+      writeGraphFile(JSON.stringify(bigGraph));
+      const onOversize = vi.fn();
+      const onMalformed = vi.fn();
+
+      const loader = new FilesystemGraphLoader(repoRoot, { onOversize, onMalformed });
+      const result = await loader.load();
+
+      expect(result).toBeNull();
+      expect(onOversize).toHaveBeenCalledTimes(1);
+      expect(onOversize).toHaveBeenCalledWith(expect.any(Number), MAX_GRAPH_SIZE_BYTES);
+      expect(onMalformed).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when no callbacks are supplied (malformed graph)', async () => {
+      writeGraphFile('not json {{{');
+      const loader = new FilesystemGraphLoader(repoRoot);
+      await expect(loader.load()).resolves.toBeNull();
+    });
+  });
+
+  describe('loadMetadata()', () => {
+    it('returns GraphMetadata when metadata.json is valid', async () => {
+      writeMetadataFile(JSON.stringify(VALID_METADATA));
+
+      const loader = new FilesystemGraphLoader(repoRoot);
+      const result = await loader.loadMetadata();
+
+      expect(result).not.toBeNull();
+      expect(result?.lastIndexedCommit).toBe('abc123def456');
+    });
+
+    it('returns null when metadata.json is absent', async () => {
+      const loader = new FilesystemGraphLoader(repoRoot);
+      const result = await loader.loadMetadata();
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when metadata.json is malformed (no throw)', async () => {
+      writeMetadataFile('not json {{{');
+
+      const loader = new FilesystemGraphLoader(repoRoot);
+      await expect(loader.loadMetadata()).resolves.toBeNull();
+    });
+
+    it('returns null when metadata.json fails validateMetadata', async () => {
+      writeMetadataFile(JSON.stringify({ foo: 'bar' }));
+
+      const loader = new FilesystemGraphLoader(repoRoot);
+      const result = await loader.loadMetadata();
+
+      expect(result).toBeNull();
+    });
   });
 });

@@ -30,6 +30,19 @@ vi.mock('node:fs', async (importOriginal) => {
   };
 });
 
+// `resolveGitHead` shells out via `execFileSync('git', ['rev-parse', 'HEAD'])`.
+// Mocked so tests never depend on the real git state of the checkout the
+// suite runs in (and to deterministically exercise the non-git fallback).
+const mockExecFileSync = vi.fn();
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    execFileSync: (...args: unknown[]) => mockExecFileSync(...args),
+  };
+});
+
 vi.mock('../ui/tui.js', () => ({
   log: {
     info: vi.fn(),
@@ -63,6 +76,16 @@ const FIXTURE_DIR = resolve(
 );
 const FIXTURE_SCIP_PATH = join(FIXTURE_DIR, 'index.scip');
 
+/** Minimal typed shape for parsing a serialized `graph.json` in assertions. */
+interface ParsedGraphFixture {
+  version: number;
+  nodes: Record<string, { language: string }>;
+}
+
+function parseGraphFixture(contents: unknown): ParsedGraphFixture {
+  return JSON.parse(contents as string) as ParsedGraphFixture;
+}
+
 function makeEntry(
   overrides: Partial<IndexerEntry> & Pick<IndexerEntry, 'bin' | 'languages'>,
 ): IndexerEntry {
@@ -82,6 +105,7 @@ describe('indexCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExistsSync.mockReturnValue(false);
+    mockExecFileSync.mockReturnValue('abc123def456\n');
   });
 
   describe('single detected+available language', () => {
@@ -93,7 +117,7 @@ describe('indexCommand', () => {
       await indexCommand(FIXTURE_DIR, {});
 
       expect(runSpy).toHaveBeenCalledWith(FIXTURE_DIR);
-      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
       const [outPath, contents] = mockWriteFileSync.mock.calls[0];
       expect(String(outPath)).toContain('.ghagga/graph.json');
 
@@ -124,7 +148,7 @@ describe('indexCommand', () => {
         (c) => c[0] as string,
       );
       expect(warnMessages.some((m) => m.includes('rust') && m.includes('rustup'))).toBe(true);
-      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
       expect(tui.log.success).toHaveBeenCalled();
     });
 
@@ -147,7 +171,7 @@ describe('indexCommand', () => {
         (c) => c[0] as string,
       );
       expect(warnMessages.some((m) => m.includes('php') && m.includes('segfault'))).toBe(true);
-      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
       expect(tui.log.success).toHaveBeenCalled();
     });
   });
@@ -197,7 +221,7 @@ describe('indexCommand', () => {
 
       await indexCommand(FIXTURE_DIR, { fallbackRegex: true });
 
-      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
       const [outPath, contents] = mockWriteFileSync.mock.calls[0];
       expect(String(outPath)).toContain('.ghagga/graph.json');
 
@@ -247,11 +271,78 @@ describe('indexCommand', () => {
       expect(entryB.run).toHaveBeenCalledWith(FIXTURE_DIR);
       // Both entries' distinct returned scipPaths were read independently —
       // the dispatcher never reused/mutated a single shared variable.
-      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
       const [, contents] = mockWriteFileSync.mock.calls[0];
       const graph = JSON.parse(contents as string);
       expect(graph.version).toBe(GRAPH_VERSION);
       expect(Object.keys(graph.nodes).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('metadata.json (design v2 D1/B-003)', () => {
+    it('writes metadata.json AFTER graph.json, with languages derived from graph.nodes (not dispatch)', async () => {
+      const runSpy = vi.fn().mockResolvedValue(FIXTURE_SCIP_PATH);
+      const entry = makeEntry({ bin: 'scip-go', languages: ['go'], run: runSpy });
+      mockDetectPresentLanguages.mockReturnValue([entry]);
+      mockExecFileSync.mockReturnValue('deadbeef1234\n');
+
+      await indexCommand(FIXTURE_DIR, {});
+
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
+      const [graphPath] = mockWriteFileSync.mock.calls[0];
+      const [metadataPath, metadataContents] = mockWriteFileSync.mock.calls[1];
+      expect(String(graphPath)).toContain('.ghagga/graph.json');
+      expect(String(metadataPath)).toContain('.ghagga/metadata.json');
+
+      const graph = parseGraphFixture(mockWriteFileSync.mock.calls[0][1]);
+      const metadata = JSON.parse(metadataContents as string);
+
+      expect(metadata.lastIndexedCommit).toBe('deadbeef1234');
+      expect(metadata.schemaVersion).toBe(GRAPH_VERSION);
+      expect(metadata.graphVersion).toBe(graph.version);
+      expect(metadata.fileCount).toBe(Object.keys(graph.nodes).length);
+      // Derived from graph.nodes contents, NOT dispatch's indexedLanguages —
+      // both happen to include 'go' here, but the derivation source matters
+      // (see the regex-fallback case below, where indexedLanguages is []).
+      const graphLanguages = [...new Set(Object.values(graph.nodes).map((n) => n.language))];
+      expect(metadata.languages.sort()).toEqual(graphLanguages.sort());
+    });
+
+    it('git HEAD resolution failure (non-git repo) degrades to an empty lastIndexedCommit, does not throw', async () => {
+      const runSpy = vi.fn().mockResolvedValue(FIXTURE_SCIP_PATH);
+      const entry = makeEntry({ bin: 'scip-go', languages: ['go'], run: runSpy });
+      mockDetectPresentLanguages.mockReturnValue([entry]);
+      mockExecFileSync.mockImplementation(() => {
+        throw new Error('not a git repository');
+      });
+
+      await indexCommand(FIXTURE_DIR, {});
+
+      const [, metadataContents] = mockWriteFileSync.mock.calls[1];
+      const metadata = JSON.parse(metadataContents as string);
+      expect(metadata.lastIndexedCommit).toBe('');
+    });
+
+    it('regex fallback: metadata.languages is derived from graph.nodes, not the empty dispatch indexedLanguages (CRITICAL-1)', async () => {
+      const missingEntry = makeEntry({
+        bin: 'rust-analyzer',
+        languages: ['rust'],
+        toolchainCheck: () => false,
+      });
+      mockDetectPresentLanguages.mockReturnValue([missingEntry]);
+
+      await indexCommand(FIXTURE_DIR, { fallbackRegex: true });
+
+      expect(mockWriteFileSync).toHaveBeenCalledTimes(2);
+      const [, metadataContents] = mockWriteFileSync.mock.calls[1];
+      const metadata = JSON.parse(metadataContents as string);
+      // Regex-fallback's dispatch indexedLanguages is [] — but the graph's
+      // nodes carry real languages, so metadata.languages must NOT be empty
+      // when the built graph actually has nodes of a known language.
+      const graph = parseGraphFixture(mockWriteFileSync.mock.calls[0][1]);
+      const graphLanguages = [...new Set(Object.values(graph.nodes).map((n) => n.language))];
+      expect(metadata.languages.sort()).toEqual(graphLanguages.sort());
+      expect(metadata.skippedLanguages).toContain('rust');
     });
   });
 });

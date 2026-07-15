@@ -122,6 +122,21 @@ vi.mock('ghagga-core', () => {
 
   return {
     reviewPipeline: vi.fn(),
+    // Blast-radius wire-up (sdd/scip-graph-wireup): a real class so
+    // `new FilesystemGraphLoader(...)` never throws; `load()` defaults to
+    // null (no graph) unless an individual test overrides the instance.
+    FilesystemGraphLoader: class {
+      async load() {
+        return null;
+      }
+      async loadMetadata() {
+        return null;
+      }
+    },
+    detectLanguage: vi.fn().mockReturnValue(undefined),
+    GRAPH_VERSION: 1,
+    isGraphStale: vi.fn().mockReturnValue(false),
+    parseDiffFiles: vi.fn().mockReturnValue([]),
     formatReviewComment: vi.fn().mockReturnValue('<!-- ghagga-review -->\nbody'),
     formatBoxSummary: vi.fn().mockReturnValue([]),
     REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',

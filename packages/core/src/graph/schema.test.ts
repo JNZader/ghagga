@@ -237,8 +237,8 @@ describe('constants', () => {
     expect(GRAPH_VERSION).toBe(1);
   });
 
-  it('MAX_GRAPH_SIZE_BYTES is 5 MB', () => {
-    expect(MAX_GRAPH_SIZE_BYTES).toBe(5 * 1024 * 1024);
+  it('MAX_GRAPH_SIZE_BYTES is 20 MB', () => {
+    expect(MAX_GRAPH_SIZE_BYTES).toBe(20 * 1024 * 1024);
   });
 
   it('MAX_BLAST_RADIUS_FILES is 50', () => {
