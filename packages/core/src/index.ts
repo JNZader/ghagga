@@ -324,6 +324,7 @@ export type {
   GraphNode,
   ImportInfo,
   Index,
+  MergeScipIndexesInput,
   MergeScipIndexesResult,
   RegexSupportedLanguage,
   ScipOnlyLanguage,

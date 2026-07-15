@@ -82,5 +82,5 @@ export { buildGraphFromScip, parseScipIndex } from './scip/builder.js';
 
 // ─── SCIP Multi-Index Merge ──────────────────────────────────────
 
-export type { MergeScipIndexesResult } from './scip/merge.js';
+export type { MergeScipIndexesInput, MergeScipIndexesResult } from './scip/merge.js';
 export { mergeScipIndexes } from './scip/merge.js';

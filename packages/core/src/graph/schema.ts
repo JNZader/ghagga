@@ -175,7 +175,16 @@ export const TEST_FILE_PATTERNS: RegExp[] = [
   /Test\.php$/,
 ];
 
-/** Directories excluded from graph indexing */
+/**
+ * Directories excluded from graph indexing.
+ *
+ * `.worktrees`, `.ghagga`, and `.tools` were added for nested marker
+ * detection (D2): once the marker walk descends beyond repo root, it can
+ * hit git worktree checkouts, ghagga's own output dir, and vendored-tool
+ * directories (e.g. a `.tools/codeql/` with 100k+ files) that fan out
+ * horizontally at shallow depth — a depth bound alone doesn't stop those,
+ * so they need an explicit name exclusion (defense in depth).
+ */
 export const EXCLUDED_DIRS = new Set([
   'node_modules',
   'vendor',
@@ -186,6 +195,9 @@ export const EXCLUDED_DIRS = new Set([
   'dist',
   '.next',
   '.turbo',
+  '.worktrees',
+  '.ghagga',
+  '.tools',
 ]);
 
 /** Map from file extension to supported language */

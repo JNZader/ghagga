@@ -14,7 +14,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { SupportedLanguage } from 'ghagga-core';
+import { EXCLUDED_DIRS, type SupportedLanguage } from 'ghagga-core';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -30,11 +30,16 @@ export interface IndexerEntry {
   /** True when the indexer binary (and any required toolchain) is on PATH. */
   toolchainCheck(): boolean;
   /**
-   * Run the indexer against `dir`, producing an isolated `.scip` file
-   * (D2: `.ghagga/scip/<bin>.scip`) and returning its absolute path.
+   * Run the indexer against `dir`, writing its SCIP output to `outPath`
+   * (an absolute path chosen by the DISPATCHER — D3: centralized under
+   * `<repoPath>/.ghagga/scip/`, disambiguated per marker directory) and
+   * returning `outPath`. Entries never compute their own output path —
+   * once runs multiply (one dir → many possible marker dirs per entry),
+   * the dispatcher owns the output namespace to avoid same-bin collisions
+   * (e.g. two `scip-python` runs both wanting `scip-python.scip`).
    * Throws on runtime failure — the dispatcher catches and degrades.
    */
-  run(dir: string): string;
+  run(dir: string, outPath: string): string;
   /** Human-readable install instructions, shown when the toolchain is absent. */
   installHint: string;
   maturity: IndexerMaturity;
@@ -72,8 +77,7 @@ const goEntry: IndexerEntry = {
   toolchainCheck(): boolean {
     return commandExists('go') && commandExists('scip-go');
   },
-  run(dir: string): string {
-    const outPath = scipOutputPath(dir, 'scip-go');
+  run(dir: string, outPath: string): string {
     const producedPath = join(dir, 'index.scip');
     // Guard against a stale root-level `index.scip` from a prior manual
     // `scip-go` run being mistaken for output from THIS run.
@@ -81,7 +85,7 @@ const goEntry: IndexerEntry = {
       rmSync(producedPath);
     }
     // scip-go always writes `index.scip` in its cwd — no native --output
-    // flag — so run in cwd then move to the isolated per-indexer path (D2
+    // flag — so run in cwd then move to the dispatcher-chosen path (D2/D3
     // run-then-move fallback).
     execFileSync('scip-go', [], { cwd: dir, stdio: 'inherit' });
     if (!existsSync(producedPath)) {
@@ -108,8 +112,7 @@ const tsEntry: IndexerEntry = {
   toolchainCheck(): boolean {
     return commandExists('scip-typescript');
   },
-  run(dir: string): string {
-    const outPath = scipOutputPath(dir, 'scip-typescript');
+  run(dir: string, outPath: string): string {
     mkdirSync(dirname(outPath), { recursive: true });
     // scip-typescript supports a native --output flag, unlike scip-go — no
     // run-then-move needed (D2: still isolated, just directly).
@@ -141,8 +144,7 @@ const pythonEntry: IndexerEntry = {
   toolchainCheck(): boolean {
     return commandExists('scip-python');
   },
-  run(dir: string): string {
-    const outPath = scipOutputPath(dir, 'scip-python');
+  run(dir: string, outPath: string): string {
     mkdirSync(dirname(outPath), { recursive: true });
     // scip-python also supports a native --output flag.
     execFileSync('scip-python', ['index', '--cwd', dir, '--output', outPath], {
@@ -169,8 +171,7 @@ const rustEntry: IndexerEntry = {
   toolchainCheck(): boolean {
     return commandExists('rust-analyzer');
   },
-  run(dir: string): string {
-    const outPath = scipOutputPath(dir, 'rust-analyzer');
+  run(dir: string, outPath: string): string {
     mkdirSync(dirname(outPath), { recursive: true });
     // rust-analyzer's `scip` subcommand also supports a native --output flag.
     execFileSync('rust-analyzer', ['scip', dir, '--output', outPath], {
@@ -201,8 +202,7 @@ const javaEntry: IndexerEntry = {
   toolchainCheck(): boolean {
     return commandExists('scip-java') && (commandExists('gradle') || commandExists('mvn'));
   },
-  run(dir: string): string {
-    const outPath = scipOutputPath(dir, 'scip-java');
+  run(dir: string, outPath: string): string {
     mkdirSync(dirname(outPath), { recursive: true });
     // scip-java's `index` command supports a native --output flag (unlike
     // scip-go/scip-php) — it auto-detects Gradle vs Maven in `dir` and shells
@@ -232,8 +232,7 @@ const csharpEntry: IndexerEntry = {
   toolchainCheck(): boolean {
     return commandExists('scip-dotnet') && commandExists('dotnet');
   },
-  run(dir: string): string {
-    const outPath = scipOutputPath(dir, 'scip-dotnet');
+  run(dir: string, outPath: string): string {
     mkdirSync(dirname(outPath), { recursive: true });
     // scip-dotnet's `index` command supports a native --output flag plus
     // --working-directory (its own project/solution auto-discovery arg is
@@ -265,8 +264,7 @@ const phpEntry: IndexerEntry = {
   toolchainCheck(): boolean {
     return commandExists('scip-php');
   },
-  run(dir: string): string {
-    const outPath = scipOutputPath(dir, 'scip-php');
+  run(dir: string, outPath: string): string {
     const producedPath = join(dir, 'index.scip');
     // Guard against a stale root-level `index.scip` from a prior manual run
     // (same rationale as goEntry).
@@ -322,23 +320,104 @@ function markerPresent(marker: string, present: Set<string>, rootEntries: string
   return present.has(marker);
 }
 
+// ─── Nested Marker Walk (D1, D2) ──────────────────────────────────
+
+/** One `{indexer entry, marker directory}` pair discovered by the marker walk. */
+export interface MarkerDirPair {
+  entry: IndexerEntry;
+  /** Absolute path to the directory the marker was found in. */
+  dir: string;
+}
+
+export interface DetectMarkerDirectoriesOptions {
+  /** Maximum depth (repo root = 0) the walk descends to. Default `DEFAULT_MARKER_DEPTH`. */
+  maxDepth?: number;
+  /** Directory names to skip, IN ADDITION TO `EXCLUDED_DIRS`. */
+  extraExcludedDirs?: Set<string>;
+}
+
+/**
+ * Default marker-walk depth bound (D2). biogas-scale monorepos put
+ * `apps/*` and `services/*` marker dirs at depth 2; depth 4 gives headroom
+ * for `packages/x/y`-shaped nesting while bounding pathological repos'
+ * walk time. Configurable via `opts.maxDepth`.
+ */
+export const DEFAULT_MARKER_DEPTH = 4;
+
+/**
+ * Walk `repoPath` depth-bounded (default `DEFAULT_MARKER_DEPTH`), evaluating
+ * every `INDEXER_REGISTRY` entry's markers against EVERY visited directory's
+ * entries (not just repo root) — reusing `markerPresent` per dir. Skips
+ * `EXCLUDED_DIRS` (plus `opts.extraExcludedDirs`). Root = depth 0.
+ *
+ * One pair is emitted per (entry that matches, directory) — this is how
+ * multi-lang-per-dir and same-lang-multi-dir both fall out naturally,
+ * deduped structurally (a Set keyed by `bin:dir`) so an entry with multiple
+ * matching markers in the same dir (e.g. `package.json` + `tsconfig.json`)
+ * still yields exactly one pair for that dir.
+ *
+ * Does not check toolchain availability — that remains the dispatcher's job.
+ */
+export function detectMarkerDirectories(
+  repoPath: string,
+  opts: DetectMarkerDirectoriesOptions = {},
+): MarkerDirPair[] {
+  const maxDepth = opts.maxDepth ?? DEFAULT_MARKER_DEPTH;
+  const excluded = opts.extraExcludedDirs
+    ? new Set<string>([...EXCLUDED_DIRS, ...opts.extraExcludedDirs])
+    : EXCLUDED_DIRS;
+
+  const pairs: MarkerDirPair[] = [];
+  const seen = new Set<string>();
+
+  function walk(dir: string, depth: number): void {
+    let dirents: import('node:fs').Dirent[];
+    try {
+      dirents = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const names = dirents.map((d) => d.name);
+    const present = new Set(names);
+
+    for (const entry of INDEXER_REGISTRY) {
+      if (!entry.markers.some((marker) => markerPresent(marker, present, names))) continue;
+      const key = `${entry.bin}:${dir}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ entry, dir });
+    }
+
+    if (depth >= maxDepth) return;
+
+    for (const dirent of dirents) {
+      if (!dirent.isDirectory()) continue;
+      if (excluded.has(dirent.name)) continue;
+      walk(join(dir, dirent.name), depth + 1);
+    }
+  }
+
+  walk(repoPath, 0);
+  return pairs;
+}
+
 /**
  * Detect which registry entries are "present" in `repoPath`, based on
- * marker files at the repo root (any one marker present → detected).
+ * marker files at the repo root only (depth 0 wrapper over
+ * `detectMarkerDirectories`, kept for back-compat with callers that only
+ * care about "which languages", not "in which directories").
  * Does not check toolchain availability — that's a separate step so the
  * dispatcher can warn about missing toolchains for detected-but-unavailable
  * languages instead of silently skipping them.
  */
 export function detectPresentLanguages(repoPath: string): IndexerEntry[] {
-  let rootEntries: string[];
-  try {
-    rootEntries = readdirSync(repoPath);
-  } catch {
-    return [];
+  const pairs = detectMarkerDirectories(repoPath, { maxDepth: 0 });
+  const entries: IndexerEntry[] = [];
+  const seen = new Set<IndexerEntry>();
+  for (const { entry } of pairs) {
+    if (seen.has(entry)) continue;
+    seen.add(entry);
+    entries.push(entry);
   }
-  const present = new Set(rootEntries);
-
-  return INDEXER_REGISTRY.filter((entry) =>
-    entry.markers.some((marker) => markerPresent(marker, present, rootEntries)),
-  );
+  return entries;
 }
