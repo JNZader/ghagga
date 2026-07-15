@@ -286,13 +286,28 @@ The health command inherits `--output json` from global options for CI integrati
 
 Build the dependency graph consumed by blast-radius and review (`.ghagga/graph.json`).
 
-By default this uses a **SCIP-backed backend** for compiler-grade cross-file resolution. SCIP indexing is currently **Go-first**: it requires both `go` and [`scip-go`](https://github.com/scip-code/scip-go) on `PATH`.
+By default this uses a **SCIP-backed backend** for compiler-grade cross-file resolution, covering 8 languages across per-language maturity tiers:
+
+| Maturity | Languages | Indexer(s) | Notes |
+|----------|-----------|------------|-------|
+| `stable` | Go, TypeScript/JavaScript, Rust | `scip-go`, `scip-typescript`, `rust-analyzer` | Captured fixtures, validated in CI |
+| `stable`\* | Python | `scip-python` | Entry shipped; fixture capture is deferred — scip-python 0.6.6 emits 0 documents in some environments |
+| `heavy` | Java, Kotlin | `scip-java` (shared indexer) | Needs a Maven or Gradle build in the target repo; Kotlin support is Gradle-only |
+| `experimental` | C# | `scip-dotnet` | Immature upstream indexer (0.2.x) |
+| `experimental` | PHP | `scip-php` | Solo-maintained upstream indexer |
+
+\* Registered and dispatched like any other stable entry — only the fixture capture for the test suite is deferred, not the runtime support.
+
+`ghagga index` auto-detects which languages are present in the target repo via marker files (`go.mod`, `package.json`/`tsconfig.json`, `pyproject.toml`/`requirements.txt`/`setup.py`, `Cargo.toml`, `pom.xml`/`build.gradle`/`build.gradle.kts`, `*.csproj`/`*.sln`, `composer.json`), checks each detected language's toolchain, runs every available indexer to an isolated `.scip` output, and merges the results into ONE graph. A missing indexer/toolchain for a detected language **warns and skips that language** rather than aborting the whole run.
 
 ```bash
-# Install the scip-go toolchain (one-time)
+# Install one or more indexer toolchains (one-time, only for the languages you use)
 go install github.com/scip-code/scip-go/cmd/scip-go@latest
+npm install -g @sourcegraph/scip-typescript
+npm install -g @sourcegraph/scip-python
+rustup component add rust-analyzer
 
-# Index the current repository
+# Index the current repository (multi-language: indexes every detected+available language)
 ghagga index
 
 # Index a specific directory
@@ -304,9 +319,11 @@ ghagga index --out .ghagga/graph.json
 
 When run, `ghagga index`:
 
-1. Detects whether `go` and `scip-go` are both on `PATH`.
-2. If present, runs `scip-go` in the target directory to produce `index.scip`, parses it, and maps it to the same `.ghagga/graph.json` v1 schema consumed by `blast-radius` and `review` — including cross-file edges the regex extractor can't resolve (e.g. Go's full-module-path imports).
-3. If absent, exits with a non-zero code and installation instructions, **without touching any existing `.ghagga/graph.json`** — unless `--fallback-regex` is passed (see below).
+1. Detects which supported languages are present via marker files.
+2. For each detected language, checks whether its indexer binary (and any required toolchain, e.g. `gradle`/`mvn` for Java) is on `PATH`.
+3. Runs every available indexer to an isolated per-indexer `.scip` output, parses and merges them, and maps the result to the same `.ghagga/graph.json` v1 schema consumed by `blast-radius` and `review` — including cross-file (and cross-language) edges the regex extractor can't resolve (e.g. Go's full-module-path imports, or a Java file referencing a Kotlin symbol).
+4. If a detected language's toolchain is missing or its indexer crashes at runtime, that language is skipped with a warning (and its install hint) — the run continues with whatever languages succeeded.
+5. If NO detected language could be indexed via SCIP, exits with a non-zero code and per-language failure reasons, **without touching any existing `.ghagga/graph.json`** — unless `--fallback-regex` is passed (see below).
 
 Options:
 
@@ -314,9 +331,19 @@ Options:
 |--------|---------|-------------|
 | `[path]` | `.` | Path to the repository to index |
 | `--out <path>` | `.ghagga/graph.json` | Output path for the graph, relative to the target repo |
-| `--fallback-regex` | off | When the SCIP toolchain is absent, use the regex-based indexer instead of failing. Note: the regex path only resolves relative imports and cannot follow module-path imports (Go, Java, etc.) |
+| `--fallback-regex` | off | When no detected language could be SCIP-indexed, use the regex-based indexer instead of failing. Note: the regex path only resolves relative imports and cannot follow module-path imports (Go, Java, etc.) |
 
-Non-Go languages and the `scip` CLI toolchain (scip-typescript, scip-python, scip-java) are deferred to a follow-up; `--fallback-regex` is the interim path for non-Go repos or environments without the Go toolchain.
+### Per-language install hints
+
+| Language(s) | Indexer | Install |
+|-------------|---------|---------|
+| Go | `scip-go` | `go install github.com/scip-code/scip-go/cmd/scip-go@latest` |
+| TypeScript/JavaScript | `scip-typescript` | `npm install -g @sourcegraph/scip-typescript` |
+| Python | `scip-python` | `npm install -g @sourcegraph/scip-python` |
+| Rust | `rust-analyzer` | `rustup component add rust-analyzer` |
+| Java, Kotlin | `scip-java` | `curl -fLo coursier https://git.io/coursier-cli && chmod +x coursier && ./coursier bootstrap --standalone -o scip-java org.scip-code:scip-java:latest.stable --main org.scip_code.scip_java.ScipJava` (requires a JDK 17+ host JVM and a Gradle or Maven build in the target repo — Kotlin support is Gradle-only) |
+| C# | `scip-dotnet` | `dotnet tool install --global scip-dotnet` (requires .NET 8.0+ SDK; experimental indexer) |
+| PHP | `scip-php` | `composer require --dev davidrjenni/scip-php && composer dump-autoload` (requires a `composer.json` with autoload psr-4/classmap entries covering the sources to index; experimental, solo-maintained indexer) |
 
 The resulting `.ghagga/graph.json` is the same file format read by `blast-radius` and `review` — no other command needs to change to benefit from a SCIP-produced graph.
 
