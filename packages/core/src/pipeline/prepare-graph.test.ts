@@ -294,3 +294,164 @@ describe('buildCallChainContext — Symbol Impact block (Slice 2)', () => {
     expect(context).toContain('## Symbol Impact');
   });
 });
+
+// ─── scip-symbol-ranges: complete changed-symbol detection (D5) ────
+
+describe('buildCallChainContext — Symbol Impact with symbolRanges (scip-symbol-ranges)', () => {
+  const BODY_ONLY_DIFF = `
+diff --git a/src/b.ts b/src/b.ts
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -1,3 +1,3 @@
+ export function X() {
+-  return 1;
++  return 42;
+ }
+`;
+
+  function graphWithRanges(): DependencyGraph {
+    return {
+      version: GRAPH_VERSION,
+      rootDir: '.',
+      nodes: {
+        'src/a.ts': {
+          hash: 'h1',
+          language: 'typescript',
+          imports: ['src/b.ts'],
+          importSymbols: { 'src/b.ts': ['X', 'Y'] },
+          exports: [],
+          calls: [],
+          isTest: false,
+        },
+        'src/b.ts': {
+          hash: 'h2',
+          language: 'typescript',
+          imports: [],
+          exports: ['X', 'Y'],
+          // Body of X spans lines [1,3]; the diff only touches the body,
+          // not the signature — the declaration-level extractor is BLIND
+          // to this (asserted below), the range-based mapper is not.
+          symbolRanges: { X: [1, 3], Y: [10, 12] },
+          calls: [],
+          isTest: false,
+        },
+      },
+    };
+  }
+
+  it('GOLDEN (anti-no-op gate, task 2.1/3.1): the OLD declaration-level extractor is blind to a body-only change (fail-before proof)', async () => {
+    const { extractChangedSymbolsFromDiff } = await import('../graph/call-chain.js');
+    const changed = extractChangedSymbolsFromDiff(BODY_ONLY_DIFF);
+    const symbols = changed.get('src/b.ts');
+    // The declaration-level parser finds NOTHING for a pure body edit —
+    // this is the no-op this SDD fixes.
+    expect(symbols === undefined || !symbols.has('X')).toBe(true);
+  });
+
+  it('GOLDEN (anti-no-op gate, task 2.1/3.1): with symbolRanges present, Symbol Impact now reports the body-only change as "changed: X" (pass-after proof)', async () => {
+    const graph = graphWithRanges();
+    const input = makeInput();
+
+    const { context } = await runStep({
+      input,
+      fileList: ['src/b.ts'],
+      filteredDiff: BODY_ONLY_DIFF,
+      graph,
+    });
+
+    expect(context).toContain('## Symbol Impact');
+    const line = context.split('\n').find((l) => l.includes('src/a.ts uses'));
+    expect(line).toBeDefined();
+    expect(line).toContain('changed: X');
+    // Y (untouched) must NOT be reported as changed.
+    expect(line).not.toMatch(/changed: [^)]*\bY\b/);
+  });
+
+  it('a signature-line change is still detected via symbolRanges (not just body-only)', async () => {
+    const graph = graphWithRanges();
+    const diff = `
+diff --git a/src/b.ts b/src/b.ts
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -1,3 +1,3 @@
+-export function X() {
++export function X(arg) {
+   return 1;
+ }
+`;
+    const { context } = await runStep({
+      input: makeInput(),
+      fileList: ['src/b.ts'],
+      filteredDiff: diff,
+      graph,
+    });
+
+    const line = context.split('\n').find((l) => l.includes('src/a.ts uses'));
+    expect(line).toContain('changed: X');
+  });
+
+  it('hasUnattributedChanges=true falls back to the conservative "unknown" phrasing, never claims unaffected (D5 requirement)', async () => {
+    const graph = graphWithRanges();
+    // Deletion-only hunk (D7 landmine) — hasUnattributedChanges must be true.
+    const diff = `
+diff --git a/src/b.ts b/src/b.ts
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -5,2 +4,0 @@
+-  const local = 1;
+-  const local2 = 2;
+`;
+    const { context } = await runStep({
+      input: makeInput(),
+      fileList: ['src/b.ts'],
+      filteredDiff: diff,
+      graph,
+    });
+
+    expect(context).toContain('## Symbol Impact');
+    const line = context.split('\n').find((l) => l.includes('src/a.ts uses'));
+    expect(line).toBeDefined();
+    expect(line).toContain('changed symbols: unknown');
+    expect(line?.toLowerCase()).not.toContain('unaffected');
+  });
+
+  it('a graph WITHOUT symbolRanges anywhere still uses the D5 fallback (no regression, byte-identical wording)', async () => {
+    // Same shape as the pre-scip-symbol-ranges test above (no symbolRanges
+    // field at all) — must behave exactly as before.
+    const graph: DependencyGraph = {
+      version: GRAPH_VERSION,
+      rootDir: '.',
+      nodes: {
+        'src/a.ts': {
+          hash: 'h1',
+          language: 'typescript',
+          imports: ['src/b.ts'],
+          importSymbols: { 'src/b.ts': ['X', 'Y'] },
+          exports: [],
+          calls: [],
+          isTest: false,
+        },
+        'src/b.ts': {
+          hash: 'h2',
+          language: 'typescript',
+          imports: [],
+          exports: ['X', 'Y'],
+          calls: [],
+          isTest: false,
+        },
+      },
+    };
+
+    const { context } = await runStep({
+      input: makeInput(),
+      fileList: ['src/b.ts'],
+      filteredDiff: BODY_ONLY_DIFF,
+      graph,
+    });
+
+    // No symbolRanges anywhere → falls back to extractChangedSymbolsFromDiff,
+    // which is blind to a body-only change — matches the pre-fix behavior.
+    const line = context.split('\n').find((l) => l.includes('src/a.ts uses'));
+    expect(line).toContain('changed symbols: unknown');
+  });
+});

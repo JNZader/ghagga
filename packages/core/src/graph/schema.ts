@@ -113,6 +113,21 @@ export interface GraphNode {
 
   /** True if file matches test patterns */
   isTest: boolean;
+
+  /**
+   * Per-symbol full-body source line-range, 1-based INCLUSIVE, keyed by
+   * the SAME displayName space as `importSymbols` VALUES and `exports` —
+   * i.e. `symbolRanges[name]` uses the same identifier a downstream
+   * consumer compares against `importSymbols[target]` entries. Additive/
+   * optional — populated ONLY by the SCIP builder, from Definition-role
+   * occurrences' `enclosingRange`/`typedEnclosingRange` (TS/JS/Rust/Java
+   * dense, Go partial, C#/PHP absent — see graph/scip/builder.ts D2/D6).
+   * The regex-based builder NEVER populates this field. A symbol with no
+   * captured range is simply omitted from this map (never fabricated) —
+   * its changes cannot be attributed downstream and degrade
+   * conservatively (`hasUnattributedChanges`, see graph/changed-symbols.ts).
+   */
+  symbolRanges?: Record<string, [number, number]>;
 }
 
 // ─── Metadata ───────────────────────────────────────────────────
@@ -316,6 +331,17 @@ export function validateGraph(json: unknown): DependencyGraph | null {
     }
     if (node.reExportsAll !== undefined && !Array.isArray(node.reExportsAll)) {
       return null;
+    }
+    // symbolRanges is additive/optional — permissive spot-check only: when
+    // present, must be a plain object whose values are [number, number]
+    // tuples. Absence is always valid (older producers, regex-built
+    // graphs, files with no captured ranges).
+    if (node.symbolRanges !== undefined) {
+      if (typeof node.symbolRanges !== 'object' || node.symbolRanges === null) return null;
+      for (const value of Object.values(node.symbolRanges as Record<string, unknown>)) {
+        if (!Array.isArray(value) || value.length !== 2) return null;
+        if (typeof value[0] !== 'number' || typeof value[1] !== 'number') return null;
+      }
     }
   }
 

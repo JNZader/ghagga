@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { create } from '@bufbuild/protobuf';
-import type { Index } from '@scip-code/scip';
+import type { Index, Occurrence } from '@scip-code/scip';
 import {
   DocumentSchema,
   IndexSchema,
@@ -272,5 +272,182 @@ describe('buildGraphFromScip — onUnmappedDoc callback (D5)', () => {
     expect(graph.nodes['Program.cs']?.language).toBe('csharp');
     expect(graph.nodes['index.php']?.language).toBe('php');
     expect(onUnmappedDoc).not.toHaveBeenCalled();
+  });
+});
+
+// ─── symbolRanges capture (scip-symbol-ranges D1/D2/D6) ────────────
+
+describe('buildGraphFromScip — symbolRanges capture', () => {
+  function defOccurrence(
+    symbol: string,
+    extra: {
+      enclosingRange?: number[];
+      typedEnclosingRange?: Occurrence['typedEnclosingRange'];
+    } = {},
+  ) {
+    return create(OccurrenceSchema, { symbol, symbolRoles: 1, ...extra });
+  }
+
+  it('captures a range from flat enclosingRange (go/ts/rust form) and converts 0-based-exclusive → 1-based-inclusive', () => {
+    const symbol = 'scip-ts npm pkg 0000 `mod`/Foo#';
+    const doc = create(DocumentSchema, {
+      relativePath: 'foo.ts',
+      language: 'typescript',
+      symbols: [create(SymbolInformationSchema, { symbol, displayName: 'Foo' })],
+      // SCIP 0-based, end-EXCLUSIVE: startLine=3, endLine=6, endChar=0.
+      occurrences: [defOccurrence(symbol, { enclosingRange: [3, 0, 6, 0] })],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    // D6: start1 = 3+1 = 4; endChar===0 → end1 = 6 (not 7).
+    expect(graph.nodes['foo.ts']?.symbolRanges).toEqual({ Foo: [4, 6] });
+  });
+
+  it('BOUNDARY (LANDMINE 1.7): endChar > 0 shifts end1 by exactly one line vs endChar === 0 — proves the off-by-one conversion is exact', () => {
+    const symbolZero = 'scip-ts npm pkg 0000 `mod`/ZeroEnd#';
+    const symbolNonZero = 'scip-ts npm pkg 0000 `mod`/NonZeroEnd#';
+    const doc = create(DocumentSchema, {
+      relativePath: 'boundary.ts',
+      language: 'typescript',
+      symbols: [
+        create(SymbolInformationSchema, { symbol: symbolZero, displayName: 'ZeroEnd' }),
+        create(SymbolInformationSchema, { symbol: symbolNonZero, displayName: 'NonZeroEnd' }),
+      ],
+      occurrences: [
+        // endChar === 0 → last in-range line is scipEndLine itself.
+        defOccurrence(symbolZero, { enclosingRange: [3, 0, 6, 0] }),
+        // endChar > 0 → last in-range line is scipEndLine + 1.
+        defOccurrence(symbolNonZero, { enclosingRange: [3, 0, 6, 10] }),
+      ],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    expect(graph.nodes['boundary.ts']?.symbolRanges).toEqual({
+      ZeroEnd: [4, 6],
+      NonZeroEnd: [4, 7],
+    });
+  });
+
+  it('captures a range from typedEnclosingRange multiLineEnclosingRange (java form)', () => {
+    const symbol = 'scip-java maven g:a:1.0 `mod`/Bar#';
+    const doc = create(DocumentSchema, {
+      relativePath: 'Bar.java',
+      language: 'java',
+      symbols: [create(SymbolInformationSchema, { symbol, displayName: 'Bar' })],
+      occurrences: [
+        defOccurrence(symbol, {
+          typedEnclosingRange: {
+            case: 'multiLineEnclosingRange',
+            value: { startLine: 1, startCharacter: 0, endLine: 4, endCharacter: 0 },
+          },
+        }),
+      ],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    expect(graph.nodes['Bar.java']?.symbolRanges).toEqual({ Bar: [2, 4] });
+  });
+
+  it('captures a range from typedEnclosingRange singleLineEnclosingRange', () => {
+    const symbol = 'scip-java maven g:a:1.0 `mod`/Baz#';
+    const doc = create(DocumentSchema, {
+      relativePath: 'Baz.java',
+      language: 'java',
+      symbols: [create(SymbolInformationSchema, { symbol, displayName: 'Baz' })],
+      occurrences: [
+        defOccurrence(symbol, {
+          typedEnclosingRange: {
+            case: 'singleLineEnclosingRange',
+            value: { line: 9, startCharacter: 0, endCharacter: 20 },
+          },
+        }),
+      ],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    // Single-line: startLine === endLine === 9 (0-based); endChar=20 > 0 → end1 = 10.
+    expect(graph.nodes['Baz.java']?.symbolRanges).toEqual({ Baz: [10, 10] });
+  });
+
+  it('omits symbolRanges when NEITHER enclosingRange nor typedEnclosingRange is present (never fabricated)', () => {
+    const symbol = 'scip-csharp nuget pkg 1.0 `mod`/Qux#';
+    const doc = create(DocumentSchema, {
+      relativePath: 'Qux.cs',
+      language: 'csharp',
+      symbols: [create(SymbolInformationSchema, { symbol, displayName: 'Qux' })],
+      occurrences: [defOccurrence(symbol)],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    expect(graph.nodes['Qux.cs']?.symbolRanges).toBeUndefined();
+  });
+
+  it('unions the min-start..max-end range on displayName collision (overloads)', () => {
+    const symbolA = 'scip-ts npm pkg 0000 `mod`/Run#A.';
+    const symbolB = 'scip-ts npm pkg 0000 `mod`/Run#B.';
+    const doc = create(DocumentSchema, {
+      relativePath: 'overload.ts',
+      language: 'typescript',
+      symbols: [
+        create(SymbolInformationSchema, { symbol: symbolA, displayName: 'Run' }),
+        create(SymbolInformationSchema, { symbol: symbolB, displayName: 'Run' }),
+      ],
+      occurrences: [
+        defOccurrence(symbolA, { enclosingRange: [1, 0, 3, 0] }), // → [2, 3]
+        defOccurrence(symbolB, { enclosingRange: [10, 0, 15, 0] }), // → [11, 15]
+      ],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    // Union of the two disjoint ranges: min(2,11)..max(3,15) = [2, 15].
+    expect(graph.nodes['overload.ts']?.symbolRanges).toEqual({ Run: [2, 15] });
+  });
+
+  it('produces a graph WITH symbolRanges that still passes v1 validateGraph()', () => {
+    const symbol = 'scip-ts npm pkg 0000 `mod`/Foo#';
+    const doc = create(DocumentSchema, {
+      relativePath: 'foo.ts',
+      language: 'typescript',
+      symbols: [create(SymbolInformationSchema, { symbol, displayName: 'Foo' })],
+      occurrences: [defOccurrence(symbol, { enclosingRange: [3, 0, 6, 0] })],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    expect(validateGraph(graph)).not.toBeNull();
   });
 });
