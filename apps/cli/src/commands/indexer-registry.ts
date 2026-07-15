@@ -189,6 +189,10 @@ const rustEntry: IndexerEntry = {
 
 // ─── Java/Kotlin Entry ────────────────────────────────────────────
 
+// Coordinate VERIFIED 2026-07-15 against Maven Central: `org.scip-code:scip-java`
+// resolves (latest 0.13.1); the older `com.sourcegraph:scip-java` is 404 (only
+// the Scala-suffixed `com.sourcegraph:scip-java_2.13` @ 0.12.x exists). The hint
+// below is correct — closes the BL-SCIP-JAVA-INSTALL-HINT "possibly-wrong" concern.
 const SCIP_JAVA_INSTALL_HINT =
   'curl -fLo coursier https://git.io/coursier-cli && chmod +x coursier && ' +
   './coursier bootstrap --standalone -o scip-java org.scip-code:scip-java:latest.stable ' +
