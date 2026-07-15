@@ -8,12 +8,17 @@
  * real indexer against a tiny two-file sample with one cross-file
  * reference (see test/fixtures/scip-<lang>-sample/).
  *
- * Python (scip-python 0.6.6) is SKIPPED: the indexer ran successfully
- * (exit 0, no errors) against multiple fixture shapes (pyproject.toml,
- * pyrightconfig.json, with/without a git repo, with/without a venv,
- * single-file and package forms) but emitted 0 documents every time —
- * see apply-progress notes. The Python registry entry itself still ships;
- * only the fixture capture is deferred.
+ * Python (scip-python 0.6.6) is SKIPPED — UPSTREAM-BLOCKED, not a config gap.
+ * Re-verified 2026-07-15: `scip-python index` fatally crashes with
+ * `TypeError: Cannot read properties of undefined (reading 'indexOf')` in
+ * `normalizeNameOrVersion` (ScipSymbol.ts:23) and writes a 54-byte empty
+ * index — an upstream bug triggered on Python 3.14.x (this host runs
+ * 3.14.6). 0.6.6 is the LATEST published version on npm
+ * (`@sourcegraph/scip-python`), so there is no newer release to upgrade to;
+ * the only real fixes are an upstream patch or a Python downgrade, both out
+ * of our control. The Python registry entry still ships (degrades
+ * gracefully); only the fixture capture is deferred. Backlog:
+ * BL-SCIP-PYTHON-FIXTURE.
  */
 
 import { readFileSync } from 'node:fs';
