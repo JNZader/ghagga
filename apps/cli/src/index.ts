@@ -389,6 +389,18 @@ program
       'Rust (captured fixtures, CI-validated); Python is stable (entry shipped, fixture capture ' +
       'deferred — scip-python 0.6.6 emits 0 docs in some environments); heavy — Java, Kotlin ' +
       '(scip-java needs a Maven/Gradle build); experimental — C# (scip-dotnet), PHP (scip-php). ' +
+      'Detects language markers at ANY depth (default 4 levels below repo root; no CLI override ' +
+      'yet — a --marker-depth flag is a tracked follow-up), not just repo root — each marker ' +
+      'directory is indexed independently and merged into one repo-relative graph (a Go marker ' +
+      'in apps/backend and another in services/worker both get indexed; two same-language marker ' +
+      "dirs never clobber each other's output). Vendored-tool directories (.tools, .ghagga, " +
+      '.worktrees, node_modules, vendor, .git, etc.) are always skipped. A marker nested deeper ' +
+      'than the depth bound is silently not detected — this is a known limitation, not a bug. ' +
+      'Per-marker-directory indexer runs are capped at 25 by ' +
+      'default (cheaper/stabler indexers run first, root-first within a maturity tier) — beyond ' +
+      'the cap, a warning names the skipped directories. scip-typescript is the one exception: ' +
+      'its own --infer-tsconfig walk already recursively discovers every nested TS/JS package ' +
+      'from repo root, so it always runs ONCE at repo root rather than once per nested marker dir. ' +
       'A missing indexer/toolchain for a detected language warns and skips it rather than failing ' +
       'the whole run; use --fallback-regex as the escape hatch when no language could be SCIP-indexed.',
   )

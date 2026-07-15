@@ -29,7 +29,10 @@ describe('mergeScipIndexes + buildGraphFromScip (real multi-language fixtures)',
     const goIndex = loadFixture('scip-go-sample');
     const tsIndex = loadFixture('scip-ts-sample');
 
-    const { index: merged, duplicatePaths } = mergeScipIndexes([goIndex, tsIndex]);
+    const { index: merged, duplicatePaths } = mergeScipIndexes([
+      { index: goIndex, pathPrefix: '' },
+      { index: tsIndex, pathPrefix: '' },
+    ]);
     expect(duplicatePaths).toEqual([]);
 
     const graph = buildGraphFromScip(merged);
@@ -54,7 +57,10 @@ describe('mergeScipIndexes + buildGraphFromScip (real multi-language fixtures)',
     const goIndex = loadFixture('scip-go-sample');
     const rustIndex = loadFixture('scip-rust-sample');
 
-    const { index: merged, duplicatePaths } = mergeScipIndexes([goIndex, rustIndex]);
+    const { index: merged, duplicatePaths } = mergeScipIndexes([
+      { index: goIndex, pathPrefix: '' },
+      { index: rustIndex, pathPrefix: '' },
+    ]);
     expect(duplicatePaths).toEqual([]);
 
     const graph = buildGraphFromScip(merged);
@@ -75,7 +81,11 @@ describe('mergeScipIndexes + buildGraphFromScip (real multi-language fixtures)',
     const tsIndex = loadFixture('scip-ts-sample');
     const rustIndex = loadFixture('scip-rust-sample');
 
-    const { index: merged, duplicatePaths } = mergeScipIndexes([goIndex, tsIndex, rustIndex]);
+    const { index: merged, duplicatePaths } = mergeScipIndexes([
+      { index: goIndex, pathPrefix: '' },
+      { index: tsIndex, pathPrefix: '' },
+      { index: rustIndex, pathPrefix: '' },
+    ]);
     expect(duplicatePaths).toEqual([]);
 
     const graph = buildGraphFromScip(merged);

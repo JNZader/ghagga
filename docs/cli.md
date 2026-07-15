@@ -300,6 +300,17 @@ By default this uses a **SCIP-backed backend** for compiler-grade cross-file res
 
 `ghagga index` auto-detects which languages are present in the target repo via marker files (`go.mod`, `package.json`/`tsconfig.json`, `pyproject.toml`/`requirements.txt`/`setup.py`, `Cargo.toml`, `pom.xml`/`build.gradle`/`build.gradle.kts`, `*.csproj`/`*.sln`, `composer.json`), checks each detected language's toolchain, runs every available indexer to an isolated `.scip` output, and merges the results into ONE graph. A missing indexer/toolchain for a detected language **warns and skips that language** rather than aborting the whole run.
 
+#### Nested marker detection
+
+Marker files are detected at **any depth** below repo root, not just repo root itself — a monorepo with `apps/backend/go.mod` and `services/worker/go.mod` (and no root-level `go.mod`) gets BOTH indexed, as does a repo mixing a root-level `package.json` with a nested `pyproject.toml`. This matters because most indexers (Go, Rust, Java, C#, PHP) cannot self-discover nested modules from an ancestor working directory — `ghagga index` runs each of them once **per marker directory found**, then merges all runs into one repo-relative graph.
+
+- **Depth bound**: the walk descends up to **4 levels** below repo root by default (covers `apps/*/`, `services/*/`, and one level of `packages/x/y`-style nesting). A marker nested deeper than that is silently not detected — this is a known limitation. There is no CLI flag to override the depth yet (tracked as a follow-up); it's configurable at the API level via `detectMarkerDirectories(repoPath, { maxDepth })`.
+- **Excluded directories**: the walk always skips `node_modules`, `vendor`, `.git`, `__pycache__`, `target`, `build`, `dist`, `.next`, `.turbo`, `.worktrees`, `.ghagga`, and `.tools` — this is what keeps a `.tools/codeql/` with 100k+ files, or a `.worktrees/` full of parallel git checkouts, from blowing up the walk.
+- **Output isolation**: two marker directories of the SAME indexer (e.g. Python markers in both `apps/ml-service` and `services/ai-assistant`) never clobber each other's `.scip` output — each nested run gets a directory-disambiguated output path, and the merge step disambiguates identically-named documents (e.g. two `main.py`) by their source subdirectory before building the graph.
+- **Run-count cap**: per-marker-directory indexer runs are capped at **25** by default, but this cap applies ONLY to **nested** marker directories — root-level markers (e.g. a root `pom.xml` or `*.csproj`) are NEVER dropped and always run, no matter how many nested markers are found. Nested runs are sorted `stable` → `heavy` → `experimental` maturity, then depth ascending, BEFORE capping — so cheap, reliable indexers never get crowded out by expensive/immature ones, and a pathological monorepo degrades predictably rather than hanging. Beyond the cap, a warning names exactly which nested marker directories were skipped.
+- **scip-typescript is the one exception**: unlike every other indexer, `scip-typescript --infer-tsconfig` already recursively discovers and indexes every nested TS/JS package when run once from repo root (verified empirically — it resolves cross-package project-reference imports correctly and emits clean repo-relative paths, even with no tsconfig.json at repo root at all). So TypeScript/JavaScript always runs exactly ONCE, at repo root, regardless of how many nested `package.json`/`tsconfig.json` marker directories were found — running it again per nested directory would double-index for no benefit.
+- **Per-directory graceful degradation**: a runtime failure of an indexer in ONE marker directory warns and skips only that directory — it does not abort indexing of the other marker directory (same language) or any other language.
+
 ```bash
 # Install one or more indexer toolchains (one-time, only for the languages you use)
 go install github.com/scip-code/scip-go/cmd/scip-go@latest
@@ -319,11 +330,11 @@ ghagga index --out .ghagga/graph.json
 
 When run, `ghagga index`:
 
-1. Detects which supported languages are present via marker files.
-2. For each detected language, checks whether its indexer binary (and any required toolchain, e.g. `gradle`/`mvn` for Java) is on `PATH`.
-3. Runs every available indexer to an isolated per-indexer `.scip` output, parses and merges them, and maps the result to the same `.ghagga/graph.json` v1 schema consumed by `blast-radius` and `review` — including cross-file (and cross-language) edges the regex extractor can't resolve (e.g. Go's full-module-path imports, or a Java file referencing a Kotlin symbol).
-4. If a detected language's toolchain is missing or its indexer crashes at runtime, that language is skipped with a warning (and its install hint) — the run continues with whatever languages succeeded.
-5. If NO detected language could be indexed via SCIP, exits with a non-zero code and per-language failure reasons, **without touching any existing `.ghagga/graph.json`** — unless `--fallback-regex` is passed (see below).
+1. Walks the repo (depth-bounded, exclusion-aware — see [Nested marker detection](#nested-marker-detection)) to find every `{indexer, marker directory}` pair, not just markers at repo root.
+2. For each unique indexer found, checks once whether its binary (and any required toolchain, e.g. `gradle`/`mvn` for Java) is on `PATH` — a missing toolchain skips ALL of that indexer's marker directories with a single warning.
+3. Runs every available indexer once per marker directory, to a directory-disambiguated isolated `.scip` output (scip-typescript is the exception — always once, at repo root), parses and merges all runs — path-prefixing each document by its source marker directory — and maps the result to the same `.ghagga/graph.json` v1 schema consumed by `blast-radius` and `review` — including cross-file (and cross-language) edges the regex extractor can't resolve (e.g. Go's full-module-path imports, or a Java file referencing a Kotlin symbol).
+4. If a detected language's toolchain is missing, or an indexer crashes at runtime in ONE marker directory, that directory is skipped with a warning (and, for missing toolchains, the install hint) — the run continues with whatever marker directories succeeded, including other directories of the SAME language.
+5. If NO marker directory could be indexed via SCIP, exits with a non-zero code and per-directory failure reasons, **without touching any existing `.ghagga/graph.json`** — unless `--fallback-regex` is passed (see below).
 
 Options:
 

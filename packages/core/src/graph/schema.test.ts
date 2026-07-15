@@ -271,6 +271,12 @@ describe('constants', () => {
     expect(EXCLUDED_DIRS.has('build')).toBe(true);
   });
 
+  it('EXCLUDED_DIRS includes nested-marker-detection additions (.worktrees, .ghagga, .tools)', () => {
+    expect(EXCLUDED_DIRS.has('.worktrees')).toBe(true);
+    expect(EXCLUDED_DIRS.has('.ghagga')).toBe(true);
+    expect(EXCLUDED_DIRS.has('.tools')).toBe(true);
+  });
+
   it('TEST_FILE_PATTERNS has patterns for all 6 languages', () => {
     // Each language has at least one test pattern
     expect(TEST_FILE_PATTERNS.length).toBeGreaterThanOrEqual(6);
