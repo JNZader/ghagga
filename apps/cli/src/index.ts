@@ -378,12 +378,20 @@ program
 
 program
   .command('index')
-  .description('Build the dependency graph consumed by blast-radius/review (.ghagga/graph.json)')
+  .description(
+    'Build the dependency graph consumed by blast-radius/review (.ghagga/graph.json). ' +
+      'SCIP-backed cross-file resolution across 8 languages: stable — Go, TypeScript/JavaScript, ' +
+      'Rust (captured fixtures, CI-validated); Python is stable (entry shipped, fixture capture ' +
+      'deferred — scip-python 0.6.6 emits 0 docs in some environments); heavy — Java, Kotlin ' +
+      '(scip-java needs a Maven/Gradle build); experimental — C# (scip-dotnet), PHP (scip-php). ' +
+      'A missing indexer/toolchain for a detected language warns and skips it rather than failing ' +
+      'the whole run; use --fallback-regex as the escape hatch when no language could be SCIP-indexed.',
+  )
   .argument('[path]', 'Path to the repository', '.')
   .option('--out <path>', 'Output path for graph.json, relative to the target repo')
   .option(
     '--fallback-regex',
-    'Use the regex-based indexer when the SCIP toolchain (go + scip-go) is absent',
+    'Use the regex-based indexer when no detected language could be SCIP-indexed',
   )
   .action(async (path: string, options: { out?: string; fallbackRegex?: boolean }) => {
     await indexCommand(path, options);
