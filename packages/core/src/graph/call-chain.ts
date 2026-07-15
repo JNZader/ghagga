@@ -172,6 +172,14 @@ function extractTopLevelDeclaredSymbol(content: string): string | undefined {
  * Exported (was module-private) for reuse by the Symbol Impact review
  * context (`pipeline/prepare-graph.ts` step 2.6) — same diff-parsing logic,
  * different consumer.
+ *
+ * DEPRECATED (scip-symbol-ranges D5): this is a declaration-level LOWER
+ * BOUND — it only sees hunk-header context and top-level declaration
+ * lines, so a body-only change to a symbol whose signature didn't change
+ * is invisible to it. `pipeline/prepare-graph.ts` now prefers
+ * `graph/changed-symbols.ts`'s `computeChangedSymbolsComplete` whenever
+ * the graph has SCIP `symbolRanges`; this function is kept ONLY as the
+ * no-symbolRanges fallback (regex-built graphs, C#/PHP) — do not remove.
  */
 export function extractChangedSymbolsFromDiff(unifiedDiff: string): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>();

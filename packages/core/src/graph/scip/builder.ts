@@ -39,7 +39,13 @@
 
 import { createHash } from 'node:crypto';
 import { fromBinary } from '@bufbuild/protobuf';
-import { type Document, type Index, IndexSchema, SymbolRole } from '@scip-code/scip';
+import {
+  type Document,
+  type Index,
+  IndexSchema,
+  type Occurrence,
+  SymbolRole,
+} from '@scip-code/scip';
 import { detectLanguage } from '../builder.js';
 import {
   type DependencyGraph,
@@ -72,6 +78,49 @@ function isLocalSymbol(symbolId: string): boolean {
 
 function hasRole(roles: number, role: SymbolRole): boolean {
   return (roles & role) !== 0;
+}
+
+/**
+ * D6 (LANDMINE): convert SCIP's 0-based, end-EXCLUSIVE line convention to
+ * the graph's 1-based INCLUSIVE convention. `endChar === 0` means line
+ * `scipEndLine` holds no in-range content (the range ends exactly at the
+ * start of that line) — so the last inclusive 1-based line is `scipEndLine`
+ * itself, not `scipEndLine + 1`.
+ */
+function convertRange(
+  scipStartLine: number,
+  scipEndLine: number,
+  endChar: number,
+): [number, number] {
+  const start1 = scipStartLine + 1;
+  const end1 = endChar > 0 ? scipEndLine + 1 : scipEndLine;
+  return [start1, end1];
+}
+
+/**
+ * D2: capture a Definition occurrence's full-body enclosing range.
+ * Priority order (per spec): the deprecated flat `enclosingRange`
+ * (`[startLine, startChar, endLine, endChar]` — the only form go/ts/rust
+ * indexers in the wild emit) first, else `typedEnclosingRange` (java's
+ * `multiLineEnclosingRange`/`singleLineEnclosingRange` oneof). Neither
+ * present → `undefined` — the caller must NOT fabricate a range; that
+ * symbol's changes simply go unattributed downstream.
+ */
+function extractEnclosingRange(occ: Occurrence): [number, number] | undefined {
+  if (occ.enclosingRange.length === 4) {
+    const [startLine, , endLine, endChar] = occ.enclosingRange as [number, number, number, number];
+    return convertRange(startLine, endLine, endChar);
+  }
+
+  const typed = occ.typedEnclosingRange;
+  if (typed.case === 'multiLineEnclosingRange') {
+    return convertRange(typed.value.startLine, typed.value.endLine, typed.value.endCharacter);
+  }
+  if (typed.case === 'singleLineEnclosingRange') {
+    return convertRange(typed.value.line, typed.value.line, typed.value.endCharacter);
+  }
+
+  return undefined;
 }
 
 /** Map a SCIP `Document.language` string to a ghagga `SupportedLanguage`. */
@@ -148,6 +197,13 @@ export function buildGraphFromScip(
   // human-readable name for `importSymbols`. Only set when the indexer
   // supplies a non-empty displayName; falls back to the raw symbol id.
   const displayNameMap = new Map<string, string>();
+  // docPath -> (displayName -> [startLine, endLine]), 1-based inclusive
+  // (D6). Populated from Definition-occurrence enclosingRange/
+  // typedEnclosingRange (D2), keyed the SAME way as `exports`/
+  // `importSymbols` (D1) so downstream diff-line attribution can compare
+  // against those spaces directly. Emitted into `GraphNode.symbolRanges`
+  // once all documents are scanned (see the node-init loop below).
+  const rangesByDoc = new Map<string, Record<string, [number, number]>>();
   for (const doc of index.documents) {
     for (const symInfo of doc.symbols) {
       if (!symInfo.symbol || isLocalSymbol(symInfo.symbol)) continue;
@@ -159,12 +215,29 @@ export function buildGraphFromScip(
       }
     }
     // Reinforce with Definition-role occurrences, in case an indexer
-    // omits some defined symbols from Document.symbols.
+    // omits some defined symbols from Document.symbols. Also the capture
+    // point for symbolRanges (D2).
     for (const occ of doc.occurrences) {
       if (!occ.symbol || isLocalSymbol(occ.symbol)) continue;
       if (!hasRole(occ.symbolRoles, SymbolRole.Definition)) continue;
       if (!definitionMap.has(occ.symbol)) {
         definitionMap.set(occ.symbol, doc.relativePath);
+      }
+
+      const range = extractEnclosingRange(occ);
+      if (range) {
+        const displayName = displayNameMap.get(occ.symbol) || occ.symbol;
+        let ranges = rangesByDoc.get(doc.relativePath);
+        if (!ranges) {
+          ranges = {};
+          rangesByDoc.set(doc.relativePath, ranges);
+        }
+        const existing = ranges[displayName];
+        // D1: displayName collision (e.g. overloads) — union of
+        // min-start..max-end rather than overwriting.
+        ranges[displayName] = existing
+          ? [Math.min(existing[0], range[0]), Math.max(existing[1], range[1])]
+          : range;
       }
     }
   }
@@ -191,6 +264,12 @@ export function buildGraphFromScip(
       calls: [],
       isTest: isTestFile(doc.relativePath),
     };
+
+    const ranges = rangesByDoc.get(doc.relativePath);
+    if (ranges && Object.keys(ranges).length > 0) {
+      const node = nodes[doc.relativePath];
+      if (node) node.symbolRanges = ranges;
+    }
   }
 
   // Pass B: resolve reference occurrences to import edges.

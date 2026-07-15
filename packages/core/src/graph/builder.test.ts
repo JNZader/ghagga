@@ -137,6 +137,14 @@ describe('buildGraph', () => {
     expect(graph.nodes['src/a.ts']?.imports).toContain('src/b.ts');
   });
 
+  it('never populates symbolRanges (SCIP-only field, scip-symbol-ranges D2)', () => {
+    const files = makeFiles({
+      'src/a.ts': `function foo() {\n  return 1;\n}\n`,
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['src/a.ts']?.symbolRanges).toBeUndefined();
+  });
+
   it('detects correct language for each file', () => {
     const files = makeFiles({
       'main.py': 'def hello(): pass',

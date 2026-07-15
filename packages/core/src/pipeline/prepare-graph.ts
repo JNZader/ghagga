@@ -19,6 +19,7 @@
 
 import { computeBlastRadius } from '../graph/blast-radius.js';
 import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from '../graph/call-chain.js';
+import { computeChangedSymbolsComplete } from '../graph/changed-symbols.js';
 import { buildReverseDependencyMap, findDependents } from '../graph/reverse-deps.js';
 import type { BlastRadiusMetadata, DependencyGraph } from '../graph/schema.js';
 import { isGraphStale } from '../graph/schema.js';
@@ -155,18 +156,27 @@ export async function applyBlastRadius(
 
 /**
  * Build the additive `## Symbol Impact` block (Slice 2 of
- * symbol-precise-context). For each changed file B, walks every node A in
- * the graph whose `imports` includes B — the SAME resolved-path edge
- * `computeBlastRadius`/`buildReverseIndex` already traverse — and reports
- * which symbols A references from B (`A.importSymbols[B]`) against which
- * symbols the diff actually changed in B
- * (`extractChangedSymbolsFromDiff`).
+ * symbol-precise-context, upgraded by scip-symbol-ranges D5). For each
+ * changed file B, walks every node A in the graph whose `imports`
+ * includes B — the SAME resolved-path edge `computeBlastRadius`/
+ * `buildReverseIndex` already traverse — and reports which symbols A
+ * references from B (`A.importSymbols[B]`) against which symbols the
+ * diff actually changed in B.
+ *
+ * Changed-symbol source (D5): when ANY node in the graph carries
+ * `symbolRanges` (SCIP-only — see graph/scip/builder.ts), uses the
+ * COMPLETE line-range mapping (`computeChangedSymbolsComplete`), which
+ * also catches body-only changes to an unchanged signature. Otherwise
+ * falls back to the declaration-level `extractChangedSymbolsFromDiff`
+ * (D5 fallback) — output is BYTE-IDENTICAL to the pre-scip-symbol-ranges
+ * behavior when no graph in play has `symbolRanges`.
  *
  * STRICTLY ADDITIVE: never excludes a file, never claims "unaffected" when
- * the data is insufficient to know (barrel edges, missing symbol data).
- * Returns '' when the graph has NO `importSymbols` data anywhere (keeps
- * output byte-identical to pre-change context — no regression when no
- * symbol data exists in the graph, per spec).
+ * the data is insufficient to know (barrel edges, missing symbol data, or
+ * `hasUnattributedChanges` on the complete-mapping path). Returns '' when
+ * the graph has NO `importSymbols` data anywhere (keeps output
+ * byte-identical to pre-change context — no regression when no symbol
+ * data exists in the graph, per spec).
  */
 function buildSymbolImpactBlock(
   graph: import('../graph/schema.js').DependencyGraph,
@@ -178,7 +188,15 @@ function buildSymbolImpactBlock(
   );
   if (!anySymbolData) return '';
 
-  const changedByFile = extractChangedSymbolsFromDiff(filteredDiff);
+  // D5: prefer the complete (range-based) mapping whenever ANY node has
+  // symbolRanges; otherwise fall back to the old declaration-level
+  // extractor untouched, for byte-identical no-regression output.
+  const anyRanges = Object.values(graph.nodes).some(
+    (n) => n.symbolRanges && Object.keys(n.symbolRanges).length > 0,
+  );
+  const completeByFile = anyRanges ? computeChangedSymbolsComplete(filteredDiff, graph) : undefined;
+  const changedByFile = anyRanges ? undefined : extractChangedSymbolsFromDiff(filteredDiff);
+
   const changedFileSet = new Set(fileList);
   const lines: string[] = [];
 
@@ -195,8 +213,20 @@ function buildSymbolImpactBlock(
         continue;
       }
 
-      const changedSet = changedByFile.get(b);
       const usedList = used.join(', ');
+
+      let changedSet: Set<string> | undefined;
+      if (completeByFile) {
+        const complete = completeByFile.get(b);
+        // D5 spec: hasUnattributedChanges (or no entry at all) → MUST fall
+        // back to the existing conservative "unknown" reporting, never
+        // compute a partial hit from incomplete data.
+        changedSet =
+          !complete || complete.hasUnattributedChanges ? undefined : complete.changedSymbols;
+      } else {
+        changedSet = changedByFile?.get(b);
+      }
+
       if (!changedSet || changedSet.size === 0) {
         lines.push(
           `- ${aPath} uses {${usedList}} from ${b}; changed symbols: unknown (diff parsing found no symbol-level change markers for this file)`,

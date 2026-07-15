@@ -297,6 +297,88 @@ describe('validateGraph', () => {
     });
     expect(validateGraph(graph)).toBeNull();
   });
+
+  // ─── symbolRanges (additive/optional, scip-symbol-ranges D1) ───
+
+  it('accepts a node WITH symbolRanges (well-formed Record<string, [number, number]>)', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'src/index.ts': {
+          hash: 'abc123',
+          language: 'typescript',
+          imports: [],
+          exports: ['main'],
+          symbolRanges: { main: [1, 10], helper: [12, 20] },
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    const result = validateGraph(graph);
+    expect(result).not.toBeNull();
+    expect(result?.nodes['src/index.ts']?.symbolRanges).toEqual({
+      main: [1, 10],
+      helper: [12, 20],
+    });
+  });
+
+  it('accepts a node WITHOUT symbolRanges (absence is always valid — regex-built or older graphs)', () => {
+    const graph = makeValidGraph(); // makeValidGraph() nodes have no symbolRanges
+    const result = validateGraph(graph);
+    expect(result).not.toBeNull();
+    expect(result?.nodes['src/index.ts']?.symbolRanges).toBeUndefined();
+  });
+
+  it('rejects a node where symbolRanges is present but not an object', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'bad.ts': {
+          hash: 'abc',
+          language: 'typescript',
+          imports: [],
+          exports: [],
+          symbolRanges: 'not-an-object' as any,
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    expect(validateGraph(graph)).toBeNull();
+  });
+
+  it('rejects a node where a symbolRanges value is not a 2-element numeric tuple', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'bad.ts': {
+          hash: 'abc',
+          language: 'typescript',
+          imports: [],
+          exports: [],
+          symbolRanges: { main: [1] } as any,
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    expect(validateGraph(graph)).toBeNull();
+  });
+
+  it('rejects a node where a symbolRanges value has non-numeric entries', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'bad.ts': {
+          hash: 'abc',
+          language: 'typescript',
+          imports: [],
+          exports: [],
+          symbolRanges: { main: ['1', '10'] } as any,
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    expect(validateGraph(graph)).toBeNull();
+  });
 });
 
 // ─── validateMetadata ───────────────────────────────────────────
