@@ -126,9 +126,9 @@ describe('golden: symbol-precise-context — Slice 2 end-to-end differentiation 
   it('a MAX_GRAPH_SIZE_BYTES-only diff flags loader.ts as impacted and does NOT flag extractors/types.ts or extractors/index.ts', async () => {
     const graph = buildFixtureGraph();
 
-    // Hunk context intentionally omits "export" (see call-chain.ts's
-    // regex limitation — it captures the FIRST bare identifier in the
-    // hunk context, and "export" would win over the real symbol name).
+    // Hunk context omits "export" here purely for fixture brevity — the
+    // parser handles export-prefixed hunk contexts correctly (see the
+    // "changed line" tests in call-chain.test.ts).
     const diff = `
 --- a/src/graph/schema.ts
 +++ b/src/graph/schema.ts

@@ -106,7 +106,28 @@ const DECLARATION_KEYWORDS = new Set([
  * symbol is the token AFTER it. Otherwise the symbol is the first
  * non-modifier identifier (covers bare context lines like `someMethod(args)`).
  */
-function extractDeclaredSymbol(text: string): string | undefined {
+/**
+ * Matches the Go/Rust receiver-method declaration form:
+ *   func (r *Receiver) Method(...)
+ *   func (t Type) Value(...)
+ * The receiver group is skipped as a unit so the method name — not the
+ * receiver variable — is captured.
+ */
+const GO_RECEIVER_METHOD_RE = /^\s*(?:func|fn)\s*\([^)]*\)\s*([A-Za-z_$][A-Za-z0-9_$]*)/;
+
+/**
+ * Known residual limitations (deliberately not handled — lower-impact than
+ * the Go receiver-method case):
+ *  - `impl Display for MyStruct` currently extracts "Display" (the trait),
+ *    not "MyStruct" (the type being implemented).
+ *  - Generic bare declarations like `<T> T process` currently extract "T"
+ *    (the generic parameter), not "process".
+ * Same class of accepted residual as Java's `public static void main` -> "void".
+ */
+export function extractDeclaredSymbol(text: string): string | undefined {
+  const receiverMatch = text.match(GO_RECEIVER_METHOD_RE);
+  if (receiverMatch) return receiverMatch[1];
+
   const tokens = text.trim().match(/[A-Za-z_$][A-Za-z0-9_$]*/g);
   if (!tokens || tokens.length === 0) return undefined;
 

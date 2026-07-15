@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from './call-chain.js';
+import {
+  buildCallChainFromDiff,
+  extractChangedSymbolsFromDiff,
+  extractDeclaredSymbol,
+} from './call-chain.js';
 
 // ─── Sample Fixtures ─────────────────────────────────────────────
 
@@ -233,6 +237,38 @@ describe('extractChangedSymbolsFromDiff', () => {
     const symbols = result.get('src/lib.rs');
     expect(symbols).toContain('run');
     expect(symbols).not.toContain('pub');
+  });
+
+  // ─── R3-001: Go receiver methods must return the method name, not the receiver var ──
+
+  it('extractDeclaredSymbol("func (s *Service) Get() int") returns "Get", not "s"', () => {
+    expect(extractDeclaredSymbol('func (s *Service) Get() int')).toBe('Get');
+  });
+
+  it('extractDeclaredSymbol("func (r *Receiver) Method()") returns "Method", not "r"', () => {
+    expect(extractDeclaredSymbol('func (r *Receiver) Method()')).toBe('Method');
+  });
+
+  it('extractDeclaredSymbol("func (t Type) Value() string") returns "Value" (value receiver, no pointer)', () => {
+    expect(extractDeclaredSymbol('func (t Type) Value() string')).toBe('Value');
+  });
+
+  it('extractDeclaredSymbol("func Greet(name string) string") still returns "Greet" (free function, no regression)', () => {
+    expect(extractDeclaredSymbol('func Greet(name string) string')).toBe('Greet');
+  });
+
+  it('hunk context Go receiver method "func (s *Service) Get(id string) (*Item, error)" captures "Get", not "s"', () => {
+    const diff = `
+--- a/service.go
++++ b/service.go
+@@ -1,3 +1,3 @@ func (s *Service) Get(id string) (*Item, error)
+-func (s *Service) Get(id string) (*Item, error) { return s.repo.Get(id) }
++func (s *Service) Get(id string) (*Item, error) { return s.repo.GetByID(id) }
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    const symbols = result.get('service.go');
+    expect(symbols).toContain('Get');
+    expect(symbols).not.toContain('s');
   });
 
   it('hunk context bare "someMethod(args) {" captures "someMethod"', () => {
