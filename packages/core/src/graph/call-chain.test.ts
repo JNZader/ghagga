@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from './call-chain.js';
+import {
+  buildCallChainFromDiff,
+  extractChangedSymbolsFromDiff,
+  extractDeclaredSymbol,
+} from './call-chain.js';
 
 // ─── Sample Fixtures ─────────────────────────────────────────────
 
@@ -163,5 +167,192 @@ describe('extractChangedSymbolsFromDiff', () => {
   it('returns an empty map for an empty diff', () => {
     const result = extractChangedSymbolsFromDiff('');
     expect(result.size).toBe(0);
+  });
+
+  // ─── BUG 1: hunk-header symbol capture must skip modifier keywords ──
+
+  it('hunk context "export const MAX_GRAPH_SIZE_BYTES = " captures the const name, not "export"', () => {
+    const diff = `
+--- a/src/schema.ts
++++ b/src/schema.ts
+@@ -5,1 +5,1 @@ export const MAX_GRAPH_SIZE_BYTES =
+-export const MAX_GRAPH_SIZE_BYTES = 20 * 1024 * 1024;
++export const MAX_GRAPH_SIZE_BYTES = 25 * 1024 * 1024;
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    const symbols = result.get('src/schema.ts');
+    expect(symbols).toContain('MAX_GRAPH_SIZE_BYTES');
+    expect(symbols).not.toContain('export');
+  });
+
+  it('hunk context "export default function foo()" captures "foo"', () => {
+    const diff = `
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -1,3 +1,3 @@ export default function foo()
+-export default function foo() { return 1; }
++export default function foo() { return 2; }
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    expect(result.get('src/foo.ts')).toContain('foo');
+  });
+
+  it('hunk context Go "func Greet(name string) string" captures "Greet", not "func"', () => {
+    const diff = `
+--- a/main.go
++++ b/main.go
+@@ -1,3 +1,3 @@ func Greet(name string) string
+-func Greet(name string) string { return "hi " + name }
++func Greet(name string) string { return "hello " + name }
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    const symbols = result.get('main.go');
+    expect(symbols).toContain('Greet');
+    expect(symbols).not.toContain('func');
+  });
+
+  it('hunk context Python "def process(self)" captures "process", not "def"', () => {
+    const diff = `
+--- a/module.py
++++ b/module.py
+@@ -1,3 +1,3 @@ def process(self)
+-def process(self): return 1
++def process(self): return 2
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    const symbols = result.get('module.py');
+    expect(symbols).toContain('process');
+    expect(symbols).not.toContain('def');
+  });
+
+  it('hunk context Rust "pub fn run()" captures "run", not "pub"', () => {
+    const diff = `
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,3 @@ pub fn run()
+-pub fn run() { println!("1"); }
++pub fn run() { println!("2"); }
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    const symbols = result.get('src/lib.rs');
+    expect(symbols).toContain('run');
+    expect(symbols).not.toContain('pub');
+  });
+
+  // ─── R3-001: Go receiver methods must return the method name, not the receiver var ──
+
+  it('extractDeclaredSymbol("func (s *Service) Get() int") returns "Get", not "s"', () => {
+    expect(extractDeclaredSymbol('func (s *Service) Get() int')).toBe('Get');
+  });
+
+  it('extractDeclaredSymbol("func (r *Receiver) Method()") returns "Method", not "r"', () => {
+    expect(extractDeclaredSymbol('func (r *Receiver) Method()')).toBe('Method');
+  });
+
+  it('extractDeclaredSymbol("func (t Type) Value() string") returns "Value" (value receiver, no pointer)', () => {
+    expect(extractDeclaredSymbol('func (t Type) Value() string')).toBe('Value');
+  });
+
+  it('extractDeclaredSymbol("func Greet(name string) string") still returns "Greet" (free function, no regression)', () => {
+    expect(extractDeclaredSymbol('func Greet(name string) string')).toBe('Greet');
+  });
+
+  it('hunk context Go receiver method "func (s *Service) Get(id string) (*Item, error)" captures "Get", not "s"', () => {
+    const diff = `
+--- a/service.go
++++ b/service.go
+@@ -1,3 +1,3 @@ func (s *Service) Get(id string) (*Item, error)
+-func (s *Service) Get(id string) (*Item, error) { return s.repo.Get(id) }
++func (s *Service) Get(id string) (*Item, error) { return s.repo.GetByID(id) }
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    const symbols = result.get('service.go');
+    expect(symbols).toContain('Get');
+    expect(symbols).not.toContain('s');
+  });
+
+  it('hunk context bare "someMethod(args) {" captures "someMethod"', () => {
+    const diff = `
+--- a/src/thing.ts
++++ b/src/thing.ts
+@@ -1,3 +1,3 @@ someMethod(args) {
+-  someMethod(1);
++  someMethod(2);
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    expect(result.get('src/thing.ts')).toContain('someMethod');
+  });
+
+  // ─── BUG 2: changed-line detection must cover const/let/var/type/interface/enum ──
+
+  it('changed line "+export const RATE_LIMIT = 5" detects RATE_LIMIT', () => {
+    const diff = `
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -1,2 +1,2 @@
+-export const RATE_LIMIT = 3
++export const RATE_LIMIT = 5
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    expect(result.get('src/config.ts')).toContain('RATE_LIMIT');
+  });
+
+  it('changed line "+export type Foo = ..." detects Foo', () => {
+    const diff = `
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -1,2 +1,2 @@
+-export type Foo = string
++export type Foo = string | number
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    expect(result.get('src/types.ts')).toContain('Foo');
+  });
+
+  it('changed line "+export interface Bar {" detects Bar', () => {
+    const diff = `
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -1,2 +1,2 @@
+-export interface Bar {
++export interface Bar {
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    expect(result.get('src/types.ts')).toContain('Bar');
+  });
+
+  it('changed line function/class declarations still detected (no regression)', () => {
+    const fnDiff = `
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1,2 +1,2 @@
+-export function foo() {}
++export function foo(x: number) {}
+`;
+    expect(extractChangedSymbolsFromDiff(fnDiff).get('src/a.ts')).toContain('foo');
+
+    const clsDiff = `
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -1,2 +1,2 @@
+-export class Baz {}
++export class Baz { x = 1; }
+`;
+    expect(extractChangedSymbolsFromDiff(clsDiff).get('src/b.ts')).toContain('Baz');
+  });
+
+  it('does NOT falsely add a mid-expression "const local = helper()" as a top-level changed symbol', () => {
+    const diff = `
+--- a/src/c.ts
++++ b/src/c.ts
+@@ -1,3 +1,3 @@ export function wrapper()
+ export function wrapper() {
+-  const local = helper1();
++  const local = helper2();
+ }
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    const symbols = result.get('src/c.ts');
+    expect(symbols).not.toContain('local');
   });
 });
