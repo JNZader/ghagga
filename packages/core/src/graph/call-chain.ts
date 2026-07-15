@@ -65,6 +65,85 @@ const IMPORT_DEFAULT_RE = /import\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s*["'][^"'
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
+/** Leading modifier keywords that precede a declaration but are never the symbol name. */
+const MODIFIER_KEYWORDS = new Set([
+  'export',
+  'default',
+  'public',
+  'private',
+  'protected',
+  'static',
+  'async',
+  'pub',
+  'final',
+  'abstract',
+]);
+
+/** Keywords that introduce a declaration — the symbol name is the token AFTER these. */
+const DECLARATION_KEYWORDS = new Set([
+  'function',
+  'func',
+  'fn',
+  'class',
+  'const',
+  'let',
+  'var',
+  'def',
+  'type',
+  'interface',
+  'enum',
+  'impl',
+  'struct',
+  'trait',
+]);
+
+/**
+ * Extract the declared/referenced symbol name from a snippet of code
+ * (e.g. a diff hunk-header context or a bare changed line).
+ *
+ * Skips leading modifier keywords (export, default, pub, async, ...). If the
+ * next token is a declaration keyword (function, class, const, ...), the
+ * symbol is the token AFTER it. Otherwise the symbol is the first
+ * non-modifier identifier (covers bare context lines like `someMethod(args)`).
+ */
+function extractDeclaredSymbol(text: string): string | undefined {
+  const tokens = text.trim().match(/[A-Za-z_$][A-Za-z0-9_$]*/g);
+  if (!tokens || tokens.length === 0) return undefined;
+
+  let i = 0;
+  while (i < tokens.length && MODIFIER_KEYWORDS.has(tokens[i] as string)) i++;
+  if (i >= tokens.length) return undefined;
+
+  const token = tokens[i] as string;
+  if (DECLARATION_KEYWORDS.has(token)) {
+    return tokens[i + 1];
+  }
+  return token;
+}
+
+/** Regex alternation of DECLARATION_KEYWORDS, built once. */
+const DECLARATION_KEYWORDS_ALT = [...DECLARATION_KEYWORDS].join('|');
+
+/** Regex alternation of MODIFIER_KEYWORDS, built once. */
+const MODIFIER_KEYWORDS_ALT = [...MODIFIER_KEYWORDS].join('|');
+
+/**
+ * Matches a TOP-LEVEL declaration on a changed diff line: the line must
+ * start (no leading whitespace, beyond the +/- diff marker already
+ * stripped) with optional modifier keywords followed by a declaration
+ * keyword and a symbol name. Deliberately conservative — a `const local = …`
+ * indented inside a function body (leading whitespace present) will NOT
+ * match, avoiding false positives from mid-expression/nested declarations.
+ */
+const TOP_LEVEL_DECL_RE = new RegExp(
+  `^(?:(?:${MODIFIER_KEYWORDS_ALT})\\s+)*(?:${DECLARATION_KEYWORDS_ALT})\\s+([A-Za-z_$][A-Za-z0-9_$]*)`,
+);
+
+function extractTopLevelDeclaredSymbol(content: string): string | undefined {
+  const m = content.match(TOP_LEVEL_DECL_RE);
+  return m?.[1];
+}
+
 /**
  * Extract diff hunk context to find symbols that had +/- lines.
  * Returns the file path and approximate symbol name for each modified hunk.
@@ -94,19 +173,16 @@ export function extractChangedSymbolsFromDiff(unifiedDiff: string): Map<string, 
     if (line.startsWith('@@')) {
       const m = line.match(/@@ .* @@ (.+)/);
       if (m?.[1]) {
-        const ctx = m[1].trim();
-        // Extract first identifier from the hunk context
-        const idMatch = ctx.match(
-          /(?:function|class|const|let|var|async)?\s*([A-Za-z_$][A-Za-z0-9_$]*)/,
-        );
-        if (idMatch?.[1]) {
-          currentSymbol = idMatch[1];
+        const symbol = extractDeclaredSymbol(m[1]);
+        if (symbol) {
+          currentSymbol = symbol;
         }
       }
       continue;
     }
 
-    // Changed lines (+ or -) that declare a function/class
+    // Changed lines (+ or -) that declare a top-level function/class/const/
+    // let/var/type/interface/enum.
     if (
       (line.startsWith('+') || line.startsWith('-')) &&
       !line.startsWith('+++') &&
@@ -114,20 +190,10 @@ export function extractChangedSymbolsFromDiff(unifiedDiff: string): Map<string, 
     ) {
       const content = line.slice(1);
 
-      // Check for function declarations in changed lines
-      const fnMatch = content.match(
-        /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/,
-      );
-      if (fnMatch?.[1] && currentFile) {
-        result.get(currentFile)?.add(fnMatch[1]);
-        currentSymbol = fnMatch[1];
-      }
-
-      // Check for class declarations
-      const clsMatch = content.match(/(?:export\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
-      if (clsMatch?.[1] && currentFile) {
-        result.get(currentFile)?.add(clsMatch[1]);
-        currentSymbol = clsMatch[1];
+      const declMatch = extractTopLevelDeclaredSymbol(content);
+      if (declMatch && currentFile) {
+        result.get(currentFile)?.add(declMatch);
+        currentSymbol = declMatch;
       }
     }
   }
