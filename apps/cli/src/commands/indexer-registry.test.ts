@@ -213,14 +213,18 @@ describe('tsEntry.run (real fs, mocked execFileSync)', () => {
 
   it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
     const expectedOutPath = scipOutputPath(dir, 'scip-typescript');
+    // The mock does NOT create the isolated dir — scip-typescript writes
+    // straight to --output but requires the parent to pre-exist (verified live:
+    // ENOENT otherwise). So this writeFileSync only succeeds if production's own
+    // mkdirSync(dirname(outPath)) ran first. Delete that production line and
+    // this test fails — the real R1-001 regression guard, not a papered mock.
     execFileSyncMock.mockImplementation(() => {
-      // scip-typescript has a native --output flag, so it writes straight to
-      // the isolated path — no run-then-move.
-      mkdirSync(dirname(expectedOutPath), { recursive: true });
       writeFileSync(expectedOutPath, 'fake-scip-index');
       return Buffer.from('');
     });
 
+    // .ghagga/scip/ must NOT pre-exist going in — that's the point of the guard.
+    expect(existsSync(dirname(expectedOutPath))).toBe(false);
     const result = tsEntry.run(dir);
 
     expect(result).toBe(expectedOutPath);
@@ -247,12 +251,14 @@ describe('pythonEntry.run (real fs, mocked execFileSync)', () => {
 
   it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
     const expectedOutPath = scipOutputPath(dir, 'scip-python');
+    // Mock does NOT create the dir — production's mkdirSync must run first, or
+    // this writeFileSync throws ENOENT. Real regression guard for R1-001.
     execFileSyncMock.mockImplementation(() => {
-      mkdirSync(dirname(expectedOutPath), { recursive: true });
       writeFileSync(expectedOutPath, 'fake-scip-index');
       return Buffer.from('');
     });
 
+    expect(existsSync(dirname(expectedOutPath))).toBe(false);
     const result = pythonEntry.run(dir);
 
     expect(result).toBe(expectedOutPath);
@@ -274,12 +280,14 @@ describe('rustEntry.run (real fs, mocked execFileSync)', () => {
 
   it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
     const expectedOutPath = scipOutputPath(dir, 'rust-analyzer');
+    // Mock does NOT create the dir — production's mkdirSync must run first, or
+    // this writeFileSync throws ENOENT. Real regression guard for R1-001.
     execFileSyncMock.mockImplementation(() => {
-      mkdirSync(dirname(expectedOutPath), { recursive: true });
       writeFileSync(expectedOutPath, 'fake-scip-index');
       return Buffer.from('');
     });
 
+    expect(existsSync(dirname(expectedOutPath))).toBe(false);
     const result = rustEntry.run(dir);
 
     expect(result).toBe(expectedOutPath);
