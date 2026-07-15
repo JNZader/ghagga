@@ -20,6 +20,7 @@
 import { computeBlastRadius } from '../graph/blast-radius.js';
 import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from '../graph/call-chain.js';
 import { computeChangedSymbolsComplete } from '../graph/changed-symbols.js';
+import { isExactCommitFresh, narrowBySymbols } from '../graph/narrow-symbols.js';
 import { buildReverseDependencyMap, findDependents } from '../graph/reverse-deps.js';
 import type { BlastRadiusMetadata, DependencyGraph } from '../graph/schema.js';
 import { isGraphStale } from '../graph/schema.js';
@@ -104,6 +105,36 @@ export async function applyBlastRadius(
             graphStale: stale,
           };
         } else {
+          // Symbol-precise narrowing (scip-symbol-exclusion) — a PURE
+          // SUBTRACTIVE post-filter over `blastResult`, gated on THREE
+          // fail-closed pillars: the opt-in flag, a recognized `builtVia`,
+          // and Pillar 0 exact-commit freshness (`isExactCommitFresh`). ANY
+          // gate failing ⇒ zero narrowing, `blastResult.files` untouched —
+          // `computeBlastRadius`/`buildReverseIndex` themselves are NEVER
+          // modified (0-diff, D4).
+          let narrowedDependents = 0;
+          const builtVia = metadata?.builtVia;
+          if (
+            input.settings.enableSymbolExclusion &&
+            builtVia &&
+            isExactCommitFresh(metadata, input.currentHead)
+          ) {
+            const changedByFile = computeChangedSymbolsComplete(filteredDiff, graph);
+            const changedFileSet = new Set(fileList);
+            const excludedDependents = narrowBySymbols(
+              blastResult.dependents,
+              changedByFile,
+              graph,
+              builtVia,
+              blastResult.files,
+              changedFileSet,
+            );
+            for (const excludedPath of excludedDependents) {
+              blastResult.files.delete(excludedPath);
+            }
+            narrowedDependents = excludedDependents.size;
+          }
+
           // Filter to blast-radius files
           filteredFiles = filteredFiles.filter((f) => blastResult.files.has(f.path));
           filteredDiff = filteredFiles.map((f) => f.content).join('\n');
@@ -114,6 +145,7 @@ export async function applyBlastRadius(
               `  changed: ${blastResult.changedFiles.length}`,
               `  dependents: ${blastResult.dependents.length}`,
               `  tests: ${blastResult.testFiles.length}`,
+              ...(narrowedDependents > 0 ? [`  narrowed: ${narrowedDependents}`] : []),
             ].join('\n'),
           });
           blastRadiusMetadata = {
@@ -122,6 +154,7 @@ export async function applyBlastRadius(
             totalFiles: fileList.length,
             blastRadiusFiles: blastResult.files.size,
             graphStale: stale,
+            ...(narrowedDependents > 0 ? { narrowedDependents } : {}),
           };
         }
       } else {

@@ -412,6 +412,29 @@ describe('validateMetadata', () => {
   it('returns null when languages is not an array', () => {
     expect(validateMetadata({ ...makeValidMetadata(), languages: 'ts' })).toBeNull();
   });
+
+  // ─── builtVia (additive/optional, scip-symbol-exclusion D5) ────
+
+  it('accepts metadata WITH builtVia: "scip"', () => {
+    const meta = makeValidMetadata({ builtVia: 'scip' });
+    const result = validateMetadata(meta);
+    expect(result).not.toBeNull();
+    expect(result?.builtVia).toBe('scip');
+  });
+
+  it('accepts metadata WITH builtVia: "regex"', () => {
+    const meta = makeValidMetadata({ builtVia: 'regex' });
+    const result = validateMetadata(meta);
+    expect(result).not.toBeNull();
+    expect(result?.builtVia).toBe('regex');
+  });
+
+  it('accepts metadata WITHOUT builtVia (absence is always valid — older producers)', () => {
+    const meta = makeValidMetadata();
+    const result = validateMetadata(meta);
+    expect(result).not.toBeNull();
+    expect(result?.builtVia).toBeUndefined();
+  });
 });
 
 // ─── isGraphStale ───────────────────────────────────────────────

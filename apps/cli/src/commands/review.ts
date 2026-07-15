@@ -296,6 +296,11 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     // a second time (R4-001).
     let graphLoader: GraphLoader | undefined;
     let fileReader: ((filePath: string) => Promise<string | null>) | undefined;
+    // Populated below (reusing the SAME `git rev-parse HEAD` already
+    // computed for staleness checking) and threaded into `ReviewInput` as
+    // `currentHead` — the Pillar 0 freshness precondition for
+    // symbol-precise blast-radius narrowing (scip-symbol-exclusion D0).
+    let currentHead: string | undefined;
 
     if (settings.enableBlastRadius) {
       const filesystemGraphLoader = new FilesystemGraphLoader(repoPath, {
@@ -320,7 +325,6 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
         const graph = await filesystemGraphLoader.load();
         if (graph) {
           const metadata = await filesystemGraphLoader.loadMetadata();
-          let currentHead = '';
           try {
             currentHead = execSync('git rev-parse HEAD', {
               cwd: repoPath,
@@ -489,6 +493,11 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
       // the pre-existing `applyBlastRadius` gate (`enableBlastRadius && graphLoader`).
       ...(graphLoader ? { graphLoader } : {}),
       ...(fileReader ? { fileReader } : {}),
+      // Pillar 0 freshness precondition (scip-symbol-exclusion D0) — reuses
+      // the SAME `git rev-parse HEAD` already computed above for staleness
+      // checking. Undefined when blast-radius is disabled or HEAD couldn't
+      // be resolved (non-git repo) — narrowing degrades to a no-op.
+      ...(currentHead ? { currentHead } : {}),
     });
 
     // Step 5.5: Persist memory to disk

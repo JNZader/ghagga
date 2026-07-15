@@ -164,6 +164,18 @@ export interface GraphMetadata {
    * metadata/graph mismatch (e.g. stale metadata next to a rebuilt graph).
    */
   graphVersion?: number;
+
+  /**
+   * Which build path produced this graph: `'scip'` when at least one SCIP
+   * indexer succeeded for the run, `'regex'` when `--fallback-regex` was
+   * used (scip-symbol-exclusion D5). Builds are all-or-nothing per run, so
+   * a single graph-level field suffices — never per-node. Additive/
+   * optional for backward compatibility with older `metadata.json`
+   * producers; ABSENT or unrecognized MUST be treated as the most
+   * conservative case (no symbol-precise exclusion), never defaulted to
+   * either value.
+   */
+  builtVia?: 'scip' | 'regex';
 }
 
 export interface BlastRadiusMetadata {
@@ -184,6 +196,14 @@ export interface BlastRadiusMetadata {
 
   /** Whether the graph was stale (>7 days old) */
   graphStale?: boolean;
+
+  /**
+   * Number of direct (depth-1) dependents removed by symbol-precise
+   * narrowing (scip-symbol-exclusion), additive/optional. Absent or 0 when
+   * narrowing is disabled, not applicable (no `builtVia`/not
+   * exact-commit-fresh), or found nothing to narrow.
+   */
+  narrowedDependents?: number;
 }
 
 // ─── Graph Loader Interface ─────────────────────────────────────
