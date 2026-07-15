@@ -73,4 +73,34 @@ describe('computeBlastRadius — barrel-mediated dependency (load-bearing, proof
     expect(result.dependents).toContain('src/index.ts');
     expect(result.dependents).toContain('src/a.ts');
   });
+
+  // ─── Python __init__.py barrel (BL-SCIP-BARREL-PYTHON-RUST) ────
+  //
+  // Mirrors the TS/JS barrel tests above for Python's `__init__.py`
+  // package-barrel convention. Before this fix: `resolveImportPath` had no
+  // notion of `__init__.py` as an index file, AND Python's dotted
+  // relative-import syntax (`.sub`, `..sub`) was mishandled (treated as a
+  // literal path segment rather than package-relative traversal) — so
+  // NEITHER the barrel's own re-export edge NOR the consumer's absolute
+  // `from pkg import X` edge ever resolved to a real file. A consumer
+  // importing a symbol through the package barrel was silently dropped
+  // from `computeBlastRadius` when the true submodule changed.
+  it('Python package barrel: consumer importing via `pkg/__init__.py` is included when the true submodule changes', () => {
+    const files = makeFiles({
+      'pkg/sub.py': `def X():\n    return 1`,
+      'pkg/__init__.py': `from .sub import X`,
+      'consumer.py': `from pkg import X\nX()`,
+    });
+    const graph = buildGraph('.', files);
+
+    const result = computeBlastRadius(graph, ['pkg/sub.py']);
+
+    // Direct dependent (the barrel itself)
+    expect(result.dependents).toContain('pkg/__init__.py');
+    // The load-bearing assertion: consumer.py, which only imports THROUGH
+    // the barrel via an absolute dotted import, must be reached
+    // transitively.
+    expect(result.dependents).toContain('consumer.py');
+    expect(result.files.has('consumer.py')).toBe(true);
+  });
 });

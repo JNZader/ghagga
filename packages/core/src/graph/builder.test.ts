@@ -103,6 +103,42 @@ describe('resolveImportPath', () => {
     const result = resolveImportPath('src/main.ts', './utils.js', available);
     expect(result).toBe('src/utils.ts');
   });
+
+  // ─── Python barrel resolution (BL-SCIP-BARREL-PYTHON-RUST) ────
+
+  describe('Python __init__.py barrel + dotted-import resolution', () => {
+    const pyFiles = new Set(['pkg/__init__.py', 'pkg/sub.py', 'consumer.py', 'pkg/nested/mod.py']);
+
+    it('resolves a single-dot relative import (`from .sub import X`) from a package __init__.py to the submodule', () => {
+      const result = resolveImportPath('pkg/__init__.py', '.sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('resolves a single-dot relative import from a REGULAR module (not __init__.py) to a sibling submodule', () => {
+      const result = resolveImportPath('pkg/other.py', '.sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('resolves an absolute dotted package import (`from pkg import X`) to the package barrel __init__.py', () => {
+      const result = resolveImportPath('consumer.py', 'pkg', pyFiles);
+      expect(result).toBe('pkg/__init__.py');
+    });
+
+    it('resolves an absolute dotted submodule import (`import pkg.sub`) directly to the submodule file', () => {
+      const result = resolveImportPath('consumer.py', 'pkg.sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('resolves a two-dot relative import (`from ..sub import X`) up one package level', () => {
+      const result = resolveImportPath('pkg/nested/mod.py', '..sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('leaves a genuinely external/unresolvable absolute import UNCHANGED (graceful degradation, no fabrication)', () => {
+      const result = resolveImportPath('consumer.py', 'numpy', pyFiles);
+      expect(result).toBe('numpy');
+    });
+  });
 });
 
 // ─── buildGraph ─────────────────────────────────────────────────
@@ -375,6 +411,14 @@ describe('buildGraph importSymbols', () => {
   it('populates importSymbols for Rust `use crate::module::Item` (named symbols ARE extracted)', () => {
     const files = makeFiles({
       'src/lib.rs': `use crate::helper::Item;\nfn run() {}`,
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['src/lib.rs']?.importSymbols?.['crate::helper']).toEqual(['Item']);
+  });
+
+  it('populates importSymbols for Rust `pub use crate::module::Item` (re-export parity with plain `use`; BL-SCIP-BARREL-PYTHON-RUST)', () => {
+    const files = makeFiles({
+      'src/lib.rs': `pub use crate::helper::Item;`,
     });
     const graph = buildGraph('.', files);
     expect(graph.nodes['src/lib.rs']?.importSymbols?.['crate::helper']).toEqual(['Item']);

@@ -50,18 +50,118 @@ function hashContent(content: string): string {
 }
 
 /**
+ * Move one directory level up from a repo-relative dir path (`''`/`'.'` at
+ * the root, never past it). Used by the Python resolver below to walk
+ * package levels (relative-import dot count) and ancestor dirs (absolute
+ * import heuristic).
+ */
+function dirUp(dir: string): string {
+  if (dir === '' || dir === '.') return '';
+  const parent = path.posix.dirname(dir);
+  return parent === '.' ? '' : parent;
+}
+
+/**
+ * Try resolving a dotless, repo-relative Python module TARGET (already
+ * dot-converted to `/`) against `availableFiles`: as a `.py`/`.pyi` module
+ * file, then as a PACKAGE via its `__init__.py`/`__init__.pyi` barrel
+ * (BL-SCIP-BARREL-PYTHON-RUST — the gap this fixes: `__init__.py` was
+ * missing from index-file resolution entirely, on top of the dotted-import
+ * mishandling below), then as an exact match (rare). Returns `undefined`
+ * when nothing matches — the caller must NOT fabricate a path.
+ */
+function tryPythonTarget(target: string, availableFiles: Set<string>): string | undefined {
+  if (availableFiles.has(`${target}.py`)) return `${target}.py`;
+  if (availableFiles.has(`${target}.pyi`)) return `${target}.pyi`;
+  if (availableFiles.has(`${target}/__init__.py`)) return `${target}/__init__.py`;
+  if (availableFiles.has(`${target}/__init__.pyi`)) return `${target}/__init__.pyi`;
+  if (availableFiles.has(target)) return target;
+  return undefined;
+}
+
+/**
+ * Resolve a Python import specifier to a repo-relative file path.
+ *
+ * Two forms, both mishandled before this fix:
+ *
+ * - RELATIVE (`from .sub import X`, `from ..sub import Y`): the leading dot
+ *   COUNT is significant — one dot means "the importer's own containing
+ *   package" (its dirname, whether the importer is `__init__.py` or a
+ *   regular sibling module — both cases the dirname already IS the
+ *   package), each additional dot climbs one more package level. The
+ *   previous code passed the specifier through the TS-style `path.join`
+ *   resolver, which treated `.sub` as a literal path SEGMENT (`pkg/.sub`)
+ *   rather than "same dir, name sub" — never matching any real file.
+ * - ABSOLUTE (`from pkg import X`, `import pkg.sub`): previously short-
+ *   circuited by the non-relative-imports-return-as-is branch (correct for
+ *   `lodash`-style external packages in OTHER languages, wrong for Python's
+ *   dotted own-package imports). Resolved here root-relative first, then
+ *   against each ancestor directory of the importer — a heuristic
+ *   approximation of `sys.path` resolution with no project-config
+ *   awareness (a `src/`-layout repo or a non-root package dir declared only
+ *   in `pyproject.toml` can still miss; genuinely external packages, e.g.
+ *   `numpy`, correctly fall through unresolved and are returned unchanged).
+ */
+function resolvePythonImportPath(
+  importerPath: string,
+  importSpecifier: string,
+  availableFiles: Set<string>,
+): string {
+  const dotMatch = importSpecifier.match(/^\.+/);
+  const dotCount = dotMatch ? dotMatch[0].length : 0;
+  const rest = importSpecifier.slice(dotCount);
+  const restPath = rest ? rest.replace(/\./g, '/') : '';
+
+  if (dotCount > 0) {
+    let dir = path.posix.dirname(importerPath);
+    if (dir === '.') dir = '';
+    for (let i = 0; i < dotCount - 1; i++) {
+      dir = dirUp(dir);
+    }
+    const target = restPath ? path.posix.join(dir, restPath) : dir;
+    return tryPythonTarget(target, availableFiles) ?? target;
+  }
+
+  // Absolute dotted import: root-relative first, then each ancestor dir of
+  // the importer (nearest first).
+  const rootResolved = tryPythonTarget(restPath, availableFiles);
+  if (rootResolved) return rootResolved;
+
+  let dir = path.posix.dirname(importerPath);
+  if (dir === '.') dir = '';
+  while (dir !== '') {
+    const target = path.posix.join(dir, restPath);
+    const resolved = tryPythonTarget(target, availableFiles);
+    if (resolved) return resolved;
+    dir = dirUp(dir);
+  }
+
+  return importSpecifier;
+}
+
+/**
  * Resolve a relative import path to an absolute path within the project.
  *
  * Given the file doing the import and the import specifier, resolves
  * to a project-relative path. Only resolves relative imports (starting
  * with `.` or `..`). Non-relative imports (e.g., 'lodash') are returned
  * as-is since they refer to external packages.
+ *
+ * Python is special-cased (BL-SCIP-BARREL-PYTHON-RUST): both its relative
+ * (`.sub`/`..sub`) AND absolute (`pkg`/`pkg.sub`) dotted-module import forms
+ * are delegated to `resolvePythonImportPath` — see that function's doc
+ * comment for what's actually resolved vs. left as a documented heuristic
+ * gap. No other language's resolution changes.
  */
 export function resolveImportPath(
   importerPath: string,
   importSpecifier: string,
   availableFiles: Set<string>,
 ): string {
+  if (detectLanguage(importerPath) === 'python') {
+    return resolvePythonImportPath(importerPath, importSpecifier, availableFiles);
+  }
+
   // Non-relative imports → return as-is
   if (!importSpecifier.startsWith('.')) {
     return importSpecifier;
