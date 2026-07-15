@@ -74,6 +74,16 @@ describe('buildGraphFromScip', () => {
     expect(mainNode?.imports).toEqual(['pkg/greeting.go']);
   });
 
+  it('populates importSymbols on main.go for the resolved reference to pkg/greeting.go — imports unaffected', () => {
+    const index = loadFixtureIndex();
+    const graph = buildGraphFromScip(index);
+
+    const mainNode = graph.nodes['main.go'];
+    expect(mainNode?.imports).toEqual(['pkg/greeting.go']);
+    expect(mainNode?.importSymbols?.['pkg/greeting.go']).toBeDefined();
+    expect(mainNode?.importSymbols?.['pkg/greeting.go']).toEqual(expect.arrayContaining(['Greet']));
+  });
+
   it('produces a graph that passes v1 validateGraph()', () => {
     const index = loadFixtureIndex();
     const graph = buildGraphFromScip(index);
@@ -141,6 +151,70 @@ describe('buildGraphFromScip', () => {
     const graph = buildGraphFromScip(index);
     expect(graph.nodes['base.go']?.imports).toEqual([]);
     expect(validateGraph(graph)).not.toBeNull();
+  });
+});
+
+describe('buildGraphFromScip — importSymbols dedup (Slice 1b, 3vr regression guard)', () => {
+  it('keeps two distinct symbols with the SAME displayName as two separate importSymbols entries (dedup by occ.symbol identity, not displayName)', () => {
+    // Two distinct symbol ids in `target.go`, both named "Run" (e.g. two
+    // overloaded/differently-scoped `Run` — a realistic same-displayName
+    // collision). `caller.go` references BOTH. Deduping by displayName
+    // (the abandoned calls[] branch's bug) would collapse this to one
+    // entry; deduping by occ.symbol identity must keep both.
+    const symbolA = 'scip-go gomod example.com/synth 0000 `example.com/synth/target`/Run#A.';
+    const symbolB = 'scip-go gomod example.com/synth 0000 `example.com/synth/target`/Run#B.';
+
+    const targetDoc = create(DocumentSchema, {
+      relativePath: 'target.go',
+      language: 'go',
+      symbols: [
+        create(SymbolInformationSchema, { symbol: symbolA, displayName: 'Run' }),
+        create(SymbolInformationSchema, { symbol: symbolB, displayName: 'Run' }),
+      ],
+      occurrences: [
+        create(OccurrenceSchema, { symbol: symbolA, symbolRoles: 1 }), // Definition
+        create(OccurrenceSchema, { symbol: symbolB, symbolRoles: 1 }), // Definition
+      ],
+    });
+
+    const callerDoc = create(DocumentSchema, {
+      relativePath: 'caller.go',
+      language: 'go',
+      symbols: [],
+      occurrences: [
+        create(OccurrenceSchema, { symbol: symbolA, symbolRoles: 0 }), // reference
+        create(OccurrenceSchema, { symbol: symbolB, symbolRoles: 0 }), // reference
+      ],
+    });
+
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [targetDoc, callerDoc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    const callerNode = graph.nodes['caller.go'];
+
+    expect(callerNode?.imports).toEqual(['target.go']);
+    // imports:string[] stays a single entry (unaffected) — importSymbols
+    // carries BOTH distinct "Run" entries.
+    expect(callerNode?.importSymbols?.['target.go']).toHaveLength(2);
+    expect(callerNode?.importSymbols?.['target.go']).toEqual(['Run', 'Run']);
+    expect(validateGraph(graph)).not.toBeNull();
+  });
+
+  it('omits importSymbols when a document has no reference occurrences (omit-empty)', () => {
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [
+        create(DocumentSchema, { relativePath: 'lonely.go', language: 'go', symbols: [] }),
+      ],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    expect(graph.nodes['lonely.go']?.importSymbols).toBeUndefined();
   });
 });
 

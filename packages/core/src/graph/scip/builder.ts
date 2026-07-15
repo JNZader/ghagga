@@ -27,6 +27,14 @@
  * extraction is out of scope here). `SymbolInformation.relationships`
  * (implements/type-definition/etc.) are intentionally ignored: v1 only
  * models reference-based edges.
+ *
+ * Pass B additionally accumulates `importSymbols` (see schema.ts):
+ * alongside `importSet.add(targetPath)`, resolved reference occurrences are
+ * grouped into `Map<targetPath, Set<symbolId>>`, DEDUPED BY `occ.symbol`
+ * IDENTITY (not by rendered displayName — two distinct symbols that happen
+ * to render the same display name must stay as two separate entries). The
+ * displayName (from Pass A's `displayNameMap`, falling back to the raw
+ * symbol id) is only resolved at emit time.
  */
 
 import { createHash } from 'node:crypto';
@@ -136,11 +144,18 @@ export function buildGraphFromScip(
   // defined in each document (Document.symbols is authoritative per the
   // SCIP proto: "Symbols that are defined within this document").
   const definitionMap = new Map<string, string>();
+  // symbolId -> displayName, used at Pass-B emit time to render a
+  // human-readable name for `importSymbols`. Only set when the indexer
+  // supplies a non-empty displayName; falls back to the raw symbol id.
+  const displayNameMap = new Map<string, string>();
   for (const doc of index.documents) {
     for (const symInfo of doc.symbols) {
       if (!symInfo.symbol || isLocalSymbol(symInfo.symbol)) continue;
       if (!definitionMap.has(symInfo.symbol)) {
         definitionMap.set(symInfo.symbol, doc.relativePath);
+      }
+      if (symInfo.displayName && !displayNameMap.has(symInfo.symbol)) {
+        displayNameMap.set(symInfo.symbol, symInfo.displayName);
       }
     }
     // Reinforce with Definition-role occurrences, in case an indexer
@@ -184,6 +199,10 @@ export function buildGraphFromScip(
     if (!node) continue;
 
     const importSet = new Set<string>();
+    // targetPath -> Set<occ.symbol> — deduped by SYMBOL IDENTITY, not by
+    // displayName (the explicit fix for the 3vr dedup-by-displayName bug
+    // on the abandoned calls[] branch).
+    const symbolIdsByTarget = new Map<string, Set<string>>();
     for (const occ of doc.occurrences) {
       if (!occ.symbol || isLocalSymbol(occ.symbol)) continue;
       // Only reference occurrences (not the symbol's own definition) can
@@ -193,8 +212,23 @@ export function buildGraphFromScip(
       const targetPath = definitionMap.get(occ.symbol);
       if (!targetPath || targetPath === doc.relativePath) continue;
       importSet.add(targetPath);
+
+      let ids = symbolIdsByTarget.get(targetPath);
+      if (!ids) {
+        ids = new Set();
+        symbolIdsByTarget.set(targetPath, ids);
+      }
+      ids.add(occ.symbol);
     }
     node.imports = Array.from(importSet);
+
+    if (symbolIdsByTarget.size > 0) {
+      const importSymbols: Record<string, string[]> = {};
+      for (const [targetPath, symbolIds] of symbolIdsByTarget) {
+        importSymbols[targetPath] = Array.from(symbolIds, (id) => displayNameMap.get(id) ?? id);
+      }
+      node.importSymbols = importSymbols;
+    }
   }
 
   return {

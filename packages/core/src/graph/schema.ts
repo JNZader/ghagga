@@ -69,6 +69,18 @@ export interface GraphNode {
   /** Relative paths of files this file imports from */
   imports: string[];
 
+  /**
+   * Per-import-target referenced symbol names, keyed by the SAME resolved
+   * path space as `imports` (i.e. `importSymbols[target]` is only
+   * meaningful when `target` also appears in `imports`). Additive/optional
+   * — populated where the extractor/occurrence data provides named symbols
+   * (TS/JS/Java dense; Go mostly alias-only; Python/Rust absent). Empty or
+   * unknown symbol lists OMIT the key entirely rather than storing `[]`.
+   * NEVER used to alter `imports` or any blast-radius/analyzer behavior —
+   * strictly additive advisory data for the Symbol Impact review context.
+   */
+  importSymbols?: Record<string, string[]>;
+
   /** Exported symbol names (for cross-reference) */
   exports: string[];
 
@@ -263,6 +275,15 @@ export function validateGraph(json: unknown): DependencyGraph | null {
     if (!Array.isArray(node.exports)) return null;
     if (!Array.isArray(node.calls)) return null;
     if (typeof node.isTest !== 'boolean') return null;
+    // importSymbols is additive/optional — permissive spot-check only:
+    // when present it must be a plain object whose values are string
+    // arrays. Absence is always valid (older producers, non-TS builds).
+    if (node.importSymbols !== undefined) {
+      if (typeof node.importSymbols !== 'object' || node.importSymbols === null) return null;
+      for (const value of Object.values(node.importSymbols as Record<string, unknown>)) {
+        if (!Array.isArray(value)) return null;
+      }
+    }
   }
 
   return json as DependencyGraph;

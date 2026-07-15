@@ -13,7 +13,7 @@ import {
   isExcludedPath,
   resolveImportPath,
 } from './builder.js';
-import { GRAPH_VERSION } from './schema.js';
+import { GRAPH_VERSION, MAX_GRAPH_SIZE_BYTES } from './schema.js';
 
 // ─── Helper ─────────────────────────────────────────────────────
 
@@ -260,6 +260,140 @@ export class Service {}
     expect(graph.nodes['src/Main.kt']).toBeUndefined();
     expect(graph.nodes['src/Program.cs']).toBeUndefined();
     expect(graph.nodes['src/index.php']).toBeUndefined();
+  });
+});
+
+// ─── importSymbols (Slice 1a — regex builder) ────────────────────
+
+describe('buildGraph importSymbols', () => {
+  it('populates importSymbols keyed by the RESOLVED target path for named TS imports', () => {
+    const files = makeFiles({
+      'src/a.ts': `import { X, Y } from './b';`,
+      'src/b.ts': 'export const X = 1;\nexport const Y = 2;',
+    });
+    const graph = buildGraph('.', files);
+    const aNode = graph.nodes['src/a.ts'];
+    expect(aNode?.imports).toContain('src/b.ts');
+    expect(aNode?.importSymbols?.['src/b.ts']).toEqual(expect.arrayContaining(['X', 'Y']));
+    expect(aNode?.importSymbols?.['src/b.ts']).toHaveLength(2);
+  });
+
+  it('omits importSymbols for module-only imports without named symbols (Python `import x`, Rust wildcard `use`)', () => {
+    // NOTE: unlike a plain `import os`/module-only Rust `use`, Python's
+    // `from x import y` and Rust's `use crate::mod::Item` DO carry named
+    // symbols (see the dedicated tests below) — the omit-empty rule is
+    // per-edge, not per-language.
+    const files = makeFiles({
+      'scripts/deploy.py': `import os\ndef deploy(): pass`,
+      'src/lib.rs': `use std::io::*;\nfn run() {}`,
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['scripts/deploy.py']?.importSymbols).toBeUndefined();
+    expect(graph.nodes['src/lib.rs']?.importSymbols).toBeUndefined();
+  });
+
+  it('populates importSymbols for Python `from x import y, z` (named symbols ARE extracted)', () => {
+    const files = makeFiles({
+      'scripts/deploy.py': `from utils import helper, run\ndef deploy(): pass`,
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['scripts/deploy.py']?.importSymbols?.utils).toEqual(
+      expect.arrayContaining(['helper', 'run']),
+    );
+  });
+
+  it('populates importSymbols for Rust `use crate::module::Item` (named symbols ARE extracted)', () => {
+    const files = makeFiles({
+      'src/lib.rs': `use crate::helper::Item;\nfn run() {}`,
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['src/lib.rs']?.importSymbols?.['crate::helper']).toEqual(['Item']);
+  });
+
+  it('omits importSymbols for Go alias-only imports (no named symbols)', () => {
+    const files = makeFiles({
+      'cmd/main.go': `package main\nimport "fmt"\nfunc Main() { fmt.Println("hi") }`,
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['cmd/main.go']?.importSymbols).toBeUndefined();
+  });
+
+  it('does not alter imports:string[] when importSymbols is populated', () => {
+    const files = makeFiles({
+      'src/a.ts': `import { X } from './b';`,
+      'src/b.ts': 'export const X = 1;',
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['src/a.ts']?.imports).toEqual(['src/b.ts']);
+  });
+
+  it('merges symbols when multiple raw specifiers resolve to the same target', () => {
+    const files = makeFiles({
+      'src/a.ts': `import { X } from './b';\nimport { Y } from './b.ts';`,
+      'src/b.ts': 'export const X = 1;\nexport const Y = 2;',
+    });
+    const graph = buildGraph('.', files);
+    const symbols = graph.nodes['src/a.ts']?.importSymbols?.['src/b.ts'];
+    expect(symbols).toEqual(expect.arrayContaining(['X', 'Y']));
+  });
+});
+
+describe('buildGraphIncremental importSymbols', () => {
+  it('populates importSymbols keyed by resolved path via the incremental path', () => {
+    const existing = buildGraph(
+      '.',
+      makeFiles({
+        'src/b.ts': 'export const X = 1;\nexport const Y = 2;',
+      }),
+    );
+
+    const result = buildGraphIncremental(
+      existing,
+      makeFiles({ 'src/a.ts': `import { X, Y } from './b';` }),
+      [],
+    );
+
+    const aNode = result.nodes['src/a.ts'];
+    expect(aNode?.imports).toContain('src/b.ts');
+    expect(aNode?.importSymbols?.['src/b.ts']).toEqual(expect.arrayContaining(['X', 'Y']));
+  });
+
+  it('omits importSymbols for non-symbol extractors in the incremental path', () => {
+    const existing = buildGraph('.', makeFiles({ 'src/a.ts': 'export const a = 1;' }));
+    const result = buildGraphIncremental(
+      existing,
+      makeFiles({ 'scripts/deploy.py': `import os\ndef deploy(): pass` }),
+      [],
+    );
+    expect(result.nodes['scripts/deploy.py']?.importSymbols).toBeUndefined();
+  });
+});
+
+// ─── Graph-size sanity (Phase 4.3) ───────────────────────────────
+
+describe('importSymbols graph-size sanity', () => {
+  it('a moderately large TS-heavy graph with importSymbols populated stays well under MAX_GRAPH_SIZE_BYTES', () => {
+    const entries: Record<string, string> = {};
+    const fileCount = 500;
+    for (let i = 0; i < fileCount; i++) {
+      // Each file imports the previous 3 files by 2 named symbols each —
+      // realistic worst case for importSymbols density.
+      const deps = [i - 1, i - 2, i - 3].filter((n) => n >= 0);
+      const importLines = deps
+        .map((n) => `import { symA${n}, symB${n} } from './file${n}';`)
+        .join('\n');
+      entries[`file${i}.ts`] =
+        `${importLines}\nexport const symA${i} = 1;\nexport const symB${i} = 2;\n`;
+    }
+    const files = new Map(Object.entries(entries));
+    const graph = buildGraph('.', files);
+
+    const serializedSize = Buffer.byteLength(JSON.stringify(graph), 'utf-8');
+    expect(serializedSize).toBeLessThan(MAX_GRAPH_SIZE_BYTES);
+
+    // Sanity: importSymbols really is populated (not silently empty).
+    const populated = Object.values(graph.nodes).filter((n) => n.importSymbols);
+    expect(populated.length).toBeGreaterThan(0);
   });
 });
 

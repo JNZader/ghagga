@@ -68,8 +68,12 @@ const IMPORT_DEFAULT_RE = /import\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s*["'][^"'
 /**
  * Extract diff hunk context to find symbols that had +/- lines.
  * Returns the file path and approximate symbol name for each modified hunk.
+ *
+ * Exported (was module-private) for reuse by the Symbol Impact review
+ * context (`pipeline/prepare-graph.ts` step 2.6) — same diff-parsing logic,
+ * different consumer.
  */
-function extractChangedSymbolsFromDiff(unifiedDiff: string): Map<string, Set<string>> {
+export function extractChangedSymbolsFromDiff(unifiedDiff: string): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>();
   const lines = unifiedDiff.split('\n');
 

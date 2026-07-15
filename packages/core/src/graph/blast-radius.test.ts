@@ -351,3 +351,55 @@ describe('computeBlastRadius', () => {
     expect(result.dependents).not.toContain('c.ts');
   });
 });
+
+// ─── Regression guard: importSymbols is IGNORED (Phase 4) ─────────
+
+describe('importSymbols regression guard', () => {
+  /**
+   * `buildReverseIndex`/`computeBlastRadius` read ONLY `node.imports` and
+   * `node.calls`. This pins that adding the new additive `importSymbols`
+   * field never changes their output — the field must be byte-identical
+   * dead weight from their point of view.
+   */
+  it('buildReverseIndex is byte-identical with vs without importSymbols populated', () => {
+    const withoutField = makeTestGraph();
+    const withField: DependencyGraph = {
+      ...withoutField,
+      nodes: {
+        ...withoutField.nodes,
+        'a.ts': { ...withoutField.nodes['a.ts']!, importSymbols: { 'b.ts': ['X', 'Y'] } },
+        'c.ts': {
+          ...withoutField.nodes['c.ts']!,
+          importSymbols: { 'd.ts': ['Z'], 'e.ts': ['W'] },
+        },
+      },
+    };
+
+    const reverseA = buildReverseIndex(withoutField);
+    const reverseB = buildReverseIndex(withField);
+
+    const normalize = (m: Map<string, Set<string>>) =>
+      Object.fromEntries([...m.entries()].map(([k, v]) => [k, [...v].sort()]));
+    expect(normalize(reverseB)).toEqual(normalize(reverseA));
+  });
+
+  it('computeBlastRadius output is identical with vs without importSymbols populated', () => {
+    const withoutField = makeTestGraph();
+    const withField: DependencyGraph = {
+      ...withoutField,
+      nodes: {
+        ...withoutField.nodes,
+        'a.ts': { ...withoutField.nodes['a.ts']!, importSymbols: { 'b.ts': ['X'] } },
+      },
+    };
+
+    const resultA = computeBlastRadius(withoutField, ['d.ts']);
+    const resultB = computeBlastRadius(withField, ['d.ts']);
+
+    expect([...resultB.files].sort()).toEqual([...resultA.files].sort());
+    expect(resultB.dependents.sort()).toEqual(resultA.dependents.sort());
+    expect(resultB.testFiles.sort()).toEqual(resultA.testFiles.sort());
+    expect(resultB.depth).toBe(resultA.depth);
+    expect(resultB.exceededCap).toBe(resultA.exceededCap);
+  });
+});
