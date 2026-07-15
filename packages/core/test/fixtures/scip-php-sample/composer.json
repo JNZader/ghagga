@@ -1,0 +1,8 @@
+{
+  "name": "ghagga/scip-php-fixture-scratch",
+  "autoload": {
+    "psr-4": {
+      "ScipPhpSample\\": "src/"
+    }
+  }
+}
