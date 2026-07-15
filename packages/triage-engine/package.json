@@ -1,6 +1,6 @@
 {
   "name": "ghagga-triage-engine",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "description": "Config-driven code-aware issue triage and reproduction engine for GHAGGA",
