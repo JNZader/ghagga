@@ -114,6 +114,50 @@ import c from './c';
       const imports = typescriptExtractor.extractImports(content);
       expect(imports).toHaveLength(3);
     });
+
+    // ─── Re-export edges (D1) ────────────────────────────────────
+
+    it('named re-export produces an ImportInfo edge to the source', () => {
+      const content = `export { X, Y } from './b';`;
+      const imports = typescriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toContain('X');
+      expect(reexport?.symbols).toContain('Y');
+    });
+
+    it('multiline named re-export produces an ImportInfo edge to the source', () => {
+      const content = `export {\n  X,\n  Y\n} from './b';`;
+      const imports = typescriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toContain('X');
+      expect(reexport?.symbols).toContain('Y');
+    });
+
+    it('wildcard re-export produces an edge with empty symbols', () => {
+      const content = `export * from './b';`;
+      const imports = typescriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toEqual([]);
+    });
+
+    it('type-only re-export produces an ImportInfo edge to the source', () => {
+      const content = `export type { X } from './b';`;
+      const imports = typescriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toContain('X');
+    });
+
+    it('aliased named re-export strips the alias', () => {
+      const content = `export { X as Y } from './b';`;
+      const imports = typescriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toContain('X');
+    });
   });
 
   describe('exports', () => {
@@ -159,11 +203,64 @@ import c from './c';
       expect(exports).toContainEqual({ name: 'reviewQueue', kind: 'default' });
     });
 
-    it('extracts named re-exports', () => {
+    it('extracts local named exports (no from clause)', () => {
+      const content = `const X = 1;\nconst Y = 2;\nexport { X, Y };`;
+      const exports = typescriptExtractor.extractExports(content);
+      expect(exports).toContainEqual({ name: 'X', kind: 'variable' });
+      expect(exports).toContainEqual({ name: 'Y', kind: 'variable' });
+    });
+
+    // ─── Re-export mis-attribution guard (D2) ─────────────────────
+
+    it('named re-export is marked with `source` and NOT a bare local export', () => {
       const content = `export { buildReverseIndex, computeBlastRadius } from './blast-radius';`;
       const exports = typescriptExtractor.extractExports(content);
-      expect(exports).toContainEqual({ name: 'buildReverseIndex', kind: 'variable' });
-      expect(exports).toContainEqual({ name: 'computeBlastRadius', kind: 'variable' });
+      expect(exports).toContainEqual({
+        name: 'buildReverseIndex',
+        kind: 'variable',
+        source: './blast-radius',
+      });
+      expect(exports).toContainEqual({
+        name: 'computeBlastRadius',
+        kind: 'variable',
+        source: './blast-radius',
+      });
+      // Must NOT also appear as a bare (non-re-export) entry.
+      expect(exports).not.toContainEqual({ name: 'buildReverseIndex', kind: 'variable' });
+    });
+
+    it('barrel with ONLY a named re-export has no locally-defined exports', () => {
+      const content = `export { X } from './b';`;
+      const exports = typescriptExtractor.extractExports(content);
+      const localOnly = exports.filter((e) => e.source === undefined);
+      expect(localOnly).toHaveLength(0);
+    });
+
+    it('genuine local export is unaffected by re-export handling', () => {
+      const content = `export const Y = 1;\nexport { X } from './b';`;
+      const exports = typescriptExtractor.extractExports(content);
+      expect(exports).toContainEqual({ name: 'Y', kind: 'variable' });
+      const yEntry = exports.find((e) => e.name === 'Y');
+      expect(yEntry?.source).toBeUndefined();
+    });
+
+    it('type-only re-export is marked with `source` and kind "type"', () => {
+      const content = `export type { X } from './b';`;
+      const exports = typescriptExtractor.extractExports(content);
+      expect(exports).toContainEqual({ name: 'X', kind: 'type', source: './b' });
+    });
+
+    it('wildcard re-export records the source with a sentinel name', () => {
+      const content = `export * from './b';`;
+      const exports = typescriptExtractor.extractExports(content);
+      expect(exports).toContainEqual({ name: '*', kind: 'variable', source: './b' });
+    });
+
+    it('multiple wildcard re-exports from different sources are all recorded', () => {
+      const content = `export * from './b';\nexport * from './c';`;
+      const exports = typescriptExtractor.extractExports(content);
+      const wildcards = exports.filter((e) => e.name === '*');
+      expect(wildcards.map((w) => w.source).sort()).toEqual(['./b', './c']);
     });
   });
 });
@@ -197,6 +294,42 @@ describe('JavaScript extractor', () => {
       expect(req?.symbols).toContain('join');
       expect(req?.symbols).toContain('resolve');
     });
+
+    // ─── Re-export edges (D1, mirrors TypeScript) ─────────────────
+
+    it('named re-export produces an ImportInfo edge to the source', () => {
+      const content = `export { X, Y } from './b';`;
+      const imports = javascriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toContain('X');
+      expect(reexport?.symbols).toContain('Y');
+    });
+
+    it('multiline named re-export produces an ImportInfo edge to the source', () => {
+      const content = `export {\n  X,\n  Y\n} from './b';`;
+      const imports = javascriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toContain('X');
+      expect(reexport?.symbols).toContain('Y');
+    });
+
+    it('wildcard re-export produces an edge with empty symbols', () => {
+      const content = `export * from './b';`;
+      const imports = javascriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toEqual([]);
+    });
+
+    it('type-only re-export produces an ImportInfo edge to the source', () => {
+      const content = `export type { X } from './b';`;
+      const imports = javascriptExtractor.extractImports(content);
+      const reexport = imports.find((i) => i.source === './b');
+      expect(reexport).toBeDefined();
+      expect(reexport?.symbols).toContain('X');
+    });
   });
 
   describe('exports', () => {
@@ -223,6 +356,27 @@ describe('JavaScript extractor', () => {
       const content = `export function createServer() {}`;
       const exports = javascriptExtractor.extractExports(content);
       expect(exports).toContainEqual({ name: 'createServer', kind: 'function' });
+    });
+
+    // ─── Re-export mis-attribution guard (D2, mirrors TypeScript) ─
+
+    it('named re-export is marked with `source` and NOT a bare local export', () => {
+      const content = `export { X, Y } from './b';`;
+      const exports = javascriptExtractor.extractExports(content);
+      expect(exports).toContainEqual({ name: 'X', kind: 'variable', source: './b' });
+      expect(exports).not.toContainEqual({ name: 'X', kind: 'variable' });
+    });
+
+    it('type-only re-export is marked with `source` and kind "type"', () => {
+      const content = `export type { X } from './b';`;
+      const exports = javascriptExtractor.extractExports(content);
+      expect(exports).toContainEqual({ name: 'X', kind: 'type', source: './b' });
+    });
+
+    it('wildcard re-export records the source with a sentinel name', () => {
+      const content = `export * from './b';`;
+      const exports = javascriptExtractor.extractExports(content);
+      expect(exports).toContainEqual({ name: '*', kind: 'variable', source: './b' });
     });
   });
 });

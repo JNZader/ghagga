@@ -210,6 +210,68 @@ export class Service {}
     expect(exports).toContain('Service');
   });
 
+  // ─── Barrel re-export split (D3, D6) ───────────────────────────
+
+  it('buildGraph: barrel node.imports resolves the re-export source, and split fields are populated', () => {
+    const files = makeFiles({
+      'src/b.ts': `export const X = 1;`,
+      'src/index.ts': `export { X } from './b';`,
+    });
+    const graph = buildGraph('.', files);
+    const barrel = graph.nodes['src/index.ts'];
+    expect(barrel).toBeDefined();
+    expect(barrel?.imports).toContain('src/b.ts');
+    expect(barrel?.exports).toEqual([]);
+    expect(barrel?.reExportedSymbols).toEqual(['X']);
+  });
+
+  it('buildGraphIncremental: barrel node.imports resolves the re-export source, and split fields are populated (parity with buildGraph)', () => {
+    const files = makeFiles({
+      'src/b.ts': `export const X = 1;`,
+      'src/index.ts': `export { X } from './b';`,
+    });
+    const fullGraph = buildGraph('.', files);
+
+    // Rebuild incrementally from an empty base to prove the incremental
+    // path independently derives the same barrel edge + split (D6 parity
+    // — the classic "fix one path, miss the other" trap).
+    const emptyGraph = { version: GRAPH_VERSION, rootDir: '.', nodes: {} };
+    const incrementalGraph = buildGraphIncremental(emptyGraph, files, []);
+
+    const fullBarrel = fullGraph.nodes['src/index.ts'];
+    const incrementalBarrel = incrementalGraph.nodes['src/index.ts'];
+    expect(incrementalBarrel?.imports).toEqual(fullBarrel?.imports);
+    expect(incrementalBarrel?.exports).toEqual(fullBarrel?.exports);
+    expect(incrementalBarrel?.reExportedSymbols).toEqual(fullBarrel?.reExportedSymbols);
+    expect(incrementalBarrel?.imports).toContain('src/b.ts');
+    expect(incrementalBarrel?.reExportedSymbols).toEqual(['X']);
+  });
+
+  it('buildGraph: wildcard re-export resolves reExportsAll to the source path in BOTH builders', () => {
+    const files = makeFiles({
+      'src/b.ts': `export const X = 1;`,
+      'src/index.ts': `export * from './b';`,
+    });
+    const fullGraph = buildGraph('.', files);
+    const emptyGraph = { version: GRAPH_VERSION, rootDir: '.', nodes: {} };
+    const incrementalGraph = buildGraphIncremental(emptyGraph, files, []);
+
+    expect(fullGraph.nodes['src/index.ts']?.reExportsAll).toEqual(['src/b.ts']);
+    expect(incrementalGraph.nodes['src/index.ts']?.reExportsAll).toEqual(['src/b.ts']);
+    expect(fullGraph.nodes['src/index.ts']?.imports).toContain('src/b.ts');
+  });
+
+  it('a genuine local export in the barrel is unaffected by the split', () => {
+    const files = makeFiles({
+      'src/b.ts': `export const X = 1;`,
+      'src/index.ts': `export const Y = 2;\nexport { X } from './b';`,
+    });
+    const graph = buildGraph('.', files);
+    const barrel = graph.nodes['src/index.ts'];
+    expect(barrel?.exports).toEqual(['Y']);
+    expect(barrel?.reExportedSymbols).toEqual(['X']);
+  });
+
   it('handles parse errors gracefully (creates minimal node)', () => {
     // Content that might confuse regex — should still create a node
     const files = makeFiles({

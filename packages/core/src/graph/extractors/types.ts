@@ -19,11 +19,18 @@ export interface ImportInfo {
 }
 
 export interface ExportInfo {
-  /** Exported symbol name */
+  /** Exported symbol name (sentinel `'*'` for wildcard re-exports) */
   name: string;
 
   /** Kind of export */
   kind: 'function' | 'class' | 'variable' | 'type' | 'default';
+
+  /**
+   * Present ⇒ this is a re-export (`export ... from './source'`), not a
+   * locally-defined declaration. `source` is the raw (unresolved) module
+   * specifier. Additive/optional — absent for genuine local exports.
+   */
+  source?: string;
 }
 
 // ─── Extractor Interface ────────────────────────────────────────
