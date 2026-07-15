@@ -3,9 +3,10 @@
  *
  * Hand-rolled, not a scip-io orchestrator wrapper (D1): full control over
  * invocation flags, per-language degradation, and trivially mockable in
- * tests. Tier A ships ONLY the Go entry (refactored from the previous
- * Go-hardcoded `index-cmd.ts`); the other apigen-language entries land in
- * later PRs (Tier B/C/D) on top of this registry shape.
+ * tests. Tier A shipped the Go entry (refactored from the previous
+ * Go-hardcoded `index-cmd.ts`); Tier B (this PR) adds TS/JS, Python, and
+ * Rust. Tiers C/D (Java+Kotlin, C#, PHP) land in later PRs on top of this
+ * registry shape.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -94,14 +95,104 @@ const goEntry: IndexerEntry = {
   maturity: 'stable',
 };
 
+// ─── TypeScript/JavaScript Entry ─────────────────────────────────
+
+const SCIP_TYPESCRIPT_INSTALL_HINT = 'npm install -g @sourcegraph/scip-typescript';
+
+const tsEntry: IndexerEntry = {
+  bin: 'scip-typescript',
+  languages: ['typescript', 'javascript'],
+  markers: ['package.json', 'tsconfig.json'],
+  toolchainCheck(): boolean {
+    return commandExists('scip-typescript');
+  },
+  run(dir: string): string {
+    const outPath = scipOutputPath(dir, 'scip-typescript');
+    mkdirSync(dirname(outPath), { recursive: true });
+    // scip-typescript supports a native --output flag, unlike scip-go — no
+    // run-then-move needed (D2: still isolated, just directly).
+    execFileSync(
+      'scip-typescript',
+      ['index', '--cwd', dir, '--infer-tsconfig', '--output', outPath],
+      {
+        cwd: dir,
+        stdio: 'inherit',
+      },
+    );
+    if (!existsSync(outPath)) {
+      throw new Error(`scip-typescript did not produce an index at ${outPath}`);
+    }
+    return outPath;
+  },
+  installHint: SCIP_TYPESCRIPT_INSTALL_HINT,
+  maturity: 'stable',
+};
+
+// ─── Python Entry ─────────────────────────────────────────────────
+
+const SCIP_PYTHON_INSTALL_HINT = 'npm install -g @sourcegraph/scip-python';
+
+const pythonEntry: IndexerEntry = {
+  bin: 'scip-python',
+  languages: ['python'],
+  markers: ['pyproject.toml', 'requirements.txt', 'setup.py'],
+  toolchainCheck(): boolean {
+    return commandExists('scip-python');
+  },
+  run(dir: string): string {
+    const outPath = scipOutputPath(dir, 'scip-python');
+    mkdirSync(dirname(outPath), { recursive: true });
+    // scip-python also supports a native --output flag.
+    execFileSync('scip-python', ['index', '--cwd', dir, '--output', outPath], {
+      cwd: dir,
+      stdio: 'inherit',
+    });
+    if (!existsSync(outPath)) {
+      throw new Error(`scip-python did not produce an index at ${outPath}`);
+    }
+    return outPath;
+  },
+  installHint: SCIP_PYTHON_INSTALL_HINT,
+  maturity: 'stable',
+};
+
+// ─── Rust Entry ─────────────────────────────────────────────────
+
+const RUST_ANALYZER_INSTALL_HINT = 'rustup component add rust-analyzer';
+
+const rustEntry: IndexerEntry = {
+  bin: 'rust-analyzer',
+  languages: ['rust'],
+  markers: ['Cargo.toml'],
+  toolchainCheck(): boolean {
+    return commandExists('rust-analyzer');
+  },
+  run(dir: string): string {
+    const outPath = scipOutputPath(dir, 'rust-analyzer');
+    mkdirSync(dirname(outPath), { recursive: true });
+    // rust-analyzer's `scip` subcommand also supports a native --output flag.
+    execFileSync('rust-analyzer', ['scip', dir, '--output', outPath], {
+      cwd: dir,
+      stdio: 'inherit',
+    });
+    if (!existsSync(outPath)) {
+      throw new Error(`rust-analyzer did not produce an index at ${outPath}`);
+    }
+    return outPath;
+  },
+  installHint: RUST_ANALYZER_INSTALL_HINT,
+  maturity: 'stable',
+};
+
 // ─── Registry ───────────────────────────────────────────────────
 
 /**
- * Tier A: the Go entry only. Later PRs append entries for TS/JS, Python,
- * Rust, Java+Kotlin, C#, and PHP — the dispatcher (`index-cmd.ts`) and
- * `detectPresentLanguages` already generalize over N entries.
+ * Tier A shipped the Go entry only; Tier B (this PR) adds the mature
+ * languages — TS/JS, Python, Rust. Tiers C/D (Java+Kotlin, C#, PHP) land in
+ * later PRs — the dispatcher (`index-cmd.ts`) and `detectPresentLanguages`
+ * already generalize over N entries.
  */
-export const INDEXER_REGISTRY: IndexerEntry[] = [goEntry];
+export const INDEXER_REGISTRY: IndexerEntry[] = [goEntry, tsEntry, pythonEntry, rustEntry];
 
 // ─── Language Detection ─────────────────────────────────────────
 

@@ -9,7 +9,7 @@
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock only `execFileSync` — everything else (fs, path) stays real so
@@ -23,6 +23,13 @@ vi.mock('node:child_process', async (importOriginal) => {
 });
 
 import { detectPresentLanguages, INDEXER_REGISTRY, scipOutputPath } from './indexer-registry.js';
+
+/** Find an entry in INDEXER_REGISTRY covering `language`, asserting it exists. */
+function requireEntry(language: string) {
+  const entry = INDEXER_REGISTRY.find((e) => e.languages.includes(language as never));
+  if (!entry) throw new Error(`no registry entry for ${language}`);
+  return entry;
+}
 
 let dir: string;
 
@@ -46,6 +53,35 @@ describe('INDEXER_REGISTRY', () => {
     expect(typeof go?.run).toBe('function');
     expect(typeof go?.installHint).toBe('string');
     expect(go?.maturity).toBe('stable');
+  });
+});
+
+describe('INDEXER_REGISTRY — Tier B mature languages', () => {
+  it('contains a TS/JS entry backed by scip-typescript', () => {
+    const ts = requireEntry('typescript');
+    expect(ts.bin).toBe('scip-typescript');
+    expect(ts.languages).toEqual(['typescript', 'javascript']);
+    expect(ts.markers).toEqual(expect.arrayContaining(['package.json', 'tsconfig.json']));
+    expect(ts.maturity).toBe('stable');
+    expect(typeof ts.installHint).toBe('string');
+  });
+
+  it('contains a Python entry backed by scip-python', () => {
+    const py = requireEntry('python');
+    expect(py.bin).toBe('scip-python');
+    expect(py.languages).toEqual(['python']);
+    expect(py.markers).toEqual(
+      expect.arrayContaining(['pyproject.toml', 'requirements.txt', 'setup.py']),
+    );
+    expect(py.maturity).toBe('stable');
+  });
+
+  it('contains a Rust entry backed by rust-analyzer', () => {
+    const rust = requireEntry('rust');
+    expect(rust.bin).toBe('rust-analyzer');
+    expect(rust.languages).toEqual(['rust']);
+    expect(rust.markers).toEqual(expect.arrayContaining(['Cargo.toml']));
+    expect(rust.maturity).toBe('stable');
   });
 });
 
@@ -81,6 +117,50 @@ describe('detectPresentLanguages', () => {
     expect(detected).toHaveLength(detected.length);
     const goEntries = detected.filter((entry) => entry.languages.includes('go'));
     expect(goEntries).toHaveLength(1);
+  });
+
+  it('detects TS/JS via package.json', () => {
+    writeFileSync(join(dir, 'package.json'), '{}');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('typescript'))).toBe(true);
+  });
+
+  it('does not duplicate the TS/JS entry when both package.json and tsconfig.json are present', () => {
+    writeFileSync(join(dir, 'package.json'), '{}');
+    writeFileSync(join(dir, 'tsconfig.json'), '{}');
+    const detected = detectPresentLanguages(dir).filter((e) => e.languages.includes('typescript'));
+    expect(detected).toHaveLength(1);
+  });
+
+  it('detects Python via pyproject.toml', () => {
+    writeFileSync(join(dir, 'pyproject.toml'), '[project]\nname = "x"\n');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('python'))).toBe(true);
+  });
+
+  it('detects Python via requirements.txt', () => {
+    writeFileSync(join(dir, 'requirements.txt'), '');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('python'))).toBe(true);
+  });
+
+  it('detects Rust via Cargo.toml', () => {
+    writeFileSync(join(dir, 'Cargo.toml'), '[package]\nname = "x"\n');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('rust'))).toBe(true);
+  });
+
+  it('detects a poly-language repo with Go, TS, Python, and Rust markers all present', () => {
+    writeFileSync(join(dir, 'go.mod'), 'module example.com/x\n');
+    writeFileSync(join(dir, 'package.json'), '{}');
+    writeFileSync(join(dir, 'pyproject.toml'), '[project]\nname = "x"\n');
+    writeFileSync(join(dir, 'Cargo.toml'), '[package]\nname = "x"\n');
+    const detected = detectPresentLanguages(dir);
+    const languages = new Set(detected.flatMap((e) => e.languages));
+    expect(languages.has('go')).toBe(true);
+    expect(languages.has('typescript')).toBe(true);
+    expect(languages.has('python')).toBe(true);
+    expect(languages.has('rust')).toBe(true);
   });
 });
 
@@ -121,5 +201,98 @@ describe('goEntry.run (real fs, mocked execFileSync)', () => {
     const expectedOutPath = scipOutputPath(dir, 'scip-go');
     expect(result).toBe(expectedOutPath);
     expect(existsSync(expectedOutPath)).toBe(true);
+  });
+});
+
+describe('tsEntry.run (real fs, mocked execFileSync)', () => {
+  const tsEntry = requireEntry('typescript');
+
+  afterEach(() => {
+    execFileSyncMock.mockReset();
+  });
+
+  it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
+    const expectedOutPath = scipOutputPath(dir, 'scip-typescript');
+    execFileSyncMock.mockImplementation(() => {
+      // scip-typescript has a native --output flag, so it writes straight to
+      // the isolated path — no run-then-move.
+      mkdirSync(dirname(expectedOutPath), { recursive: true });
+      writeFileSync(expectedOutPath, 'fake-scip-index');
+      return Buffer.from('');
+    });
+
+    const result = tsEntry.run(dir);
+
+    expect(result).toBe(expectedOutPath);
+    expect(existsSync(expectedOutPath)).toBe(true);
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      'scip-typescript',
+      expect.arrayContaining(['index', '--output', expectedOutPath]),
+      expect.objectContaining({ cwd: dir }),
+    );
+  });
+
+  it('throws if scip-typescript does not produce an index at the isolated path', () => {
+    execFileSyncMock.mockImplementation(() => Buffer.from(''));
+    expect(() => tsEntry.run(dir)).toThrow(/did not produce an index/);
+  });
+});
+
+describe('pythonEntry.run (real fs, mocked execFileSync)', () => {
+  const pythonEntry = requireEntry('python');
+
+  afterEach(() => {
+    execFileSyncMock.mockReset();
+  });
+
+  it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
+    const expectedOutPath = scipOutputPath(dir, 'scip-python');
+    execFileSyncMock.mockImplementation(() => {
+      mkdirSync(dirname(expectedOutPath), { recursive: true });
+      writeFileSync(expectedOutPath, 'fake-scip-index');
+      return Buffer.from('');
+    });
+
+    const result = pythonEntry.run(dir);
+
+    expect(result).toBe(expectedOutPath);
+    expect(existsSync(expectedOutPath)).toBe(true);
+  });
+
+  it('throws if scip-python does not produce an index at the isolated path', () => {
+    execFileSyncMock.mockImplementation(() => Buffer.from(''));
+    expect(() => pythonEntry.run(dir)).toThrow(/did not produce an index/);
+  });
+});
+
+describe('rustEntry.run (real fs, mocked execFileSync)', () => {
+  const rustEntry = requireEntry('rust');
+
+  afterEach(() => {
+    execFileSyncMock.mockReset();
+  });
+
+  it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
+    const expectedOutPath = scipOutputPath(dir, 'rust-analyzer');
+    execFileSyncMock.mockImplementation(() => {
+      mkdirSync(dirname(expectedOutPath), { recursive: true });
+      writeFileSync(expectedOutPath, 'fake-scip-index');
+      return Buffer.from('');
+    });
+
+    const result = rustEntry.run(dir);
+
+    expect(result).toBe(expectedOutPath);
+    expect(existsSync(expectedOutPath)).toBe(true);
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      'rust-analyzer',
+      expect.arrayContaining(['scip', dir, '--output', expectedOutPath]),
+      expect.objectContaining({ cwd: dir }),
+    );
+  });
+
+  it('throws if rust-analyzer does not produce an index at the isolated path', () => {
+    execFileSyncMock.mockImplementation(() => Buffer.from(''));
+    expect(() => rustEntry.run(dir)).toThrow(/did not produce an index/);
   });
 });
