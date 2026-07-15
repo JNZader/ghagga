@@ -389,6 +389,34 @@ describe('buildGraphFromScip — symbolRanges capture', () => {
     expect(graph.nodes['Baz.java']?.symbolRanges).toEqual({ Baz: [10, 10] });
   });
 
+  it('prefers typedEnclosingRange over the deprecated flat enclosingRange when BOTH are set (SCIP proto precedence)', () => {
+    const symbol = 'scip-java maven g:a:1.0 `mod`/Both#';
+    const doc = create(DocumentSchema, {
+      relativePath: 'Both.java',
+      language: 'java',
+      symbols: [create(SymbolInformationSchema, { symbol, displayName: 'Both' })],
+      occurrences: [
+        defOccurrence(symbol, {
+          // Deprecated flat form: would resolve to [4, 6] if read.
+          enclosingRange: [3, 0, 6, 0],
+          // Newer typed form: MUST win — resolves to [21, 23].
+          typedEnclosingRange: {
+            case: 'multiLineEnclosingRange',
+            value: { startLine: 20, startCharacter: 0, endLine: 23, endCharacter: 0 },
+          },
+        }),
+      ],
+    });
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [doc],
+      externalSymbols: [],
+    });
+
+    const graph = buildGraphFromScip(index);
+    expect(graph.nodes['Both.java']?.symbolRanges).toEqual({ Both: [21, 23] });
+  });
+
   it('omits symbolRanges when NEITHER enclosingRange nor typedEnclosingRange is present (never fabricated)', () => {
     const symbol = 'scip-csharp nuget pkg 1.0 `mod`/Qux#';
     const doc = create(DocumentSchema, {

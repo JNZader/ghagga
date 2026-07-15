@@ -99,25 +99,26 @@ function convertRange(
 
 /**
  * D2: capture a Definition occurrence's full-body enclosing range.
- * Priority order (per spec): the deprecated flat `enclosingRange`
- * (`[startLine, startChar, endLine, endChar]` — the only form go/ts/rust
- * indexers in the wild emit) first, else `typedEnclosingRange` (java's
- * `multiLineEnclosingRange`/`singleLineEnclosingRange` oneof). Neither
- * present → `undefined` — the caller must NOT fabricate a range; that
- * symbol's changes simply go unattributed downstream.
+ * Priority order (per the SCIP proto doc): `typedEnclosingRange` (java's
+ * `multiLineEnclosingRange`/`singleLineEnclosingRange` oneof — the newer
+ * form) takes precedence when set, else the deprecated flat
+ * `enclosingRange` (`[startLine, startChar, endLine, endChar]` — the only
+ * form go/ts/rust indexers in the wild emit today). Neither present →
+ * `undefined` — the caller must NOT fabricate a range; that symbol's
+ * changes simply go unattributed downstream.
  */
 function extractEnclosingRange(occ: Occurrence): [number, number] | undefined {
-  if (occ.enclosingRange.length === 4) {
-    const [startLine, , endLine, endChar] = occ.enclosingRange as [number, number, number, number];
-    return convertRange(startLine, endLine, endChar);
-  }
-
   const typed = occ.typedEnclosingRange;
   if (typed.case === 'multiLineEnclosingRange') {
     return convertRange(typed.value.startLine, typed.value.endLine, typed.value.endCharacter);
   }
   if (typed.case === 'singleLineEnclosingRange') {
     return convertRange(typed.value.line, typed.value.line, typed.value.endCharacter);
+  }
+
+  if (occ.enclosingRange.length === 4) {
+    const [startLine, , endLine, endChar] = occ.enclosingRange as [number, number, number, number];
+    return convertRange(startLine, endLine, endChar);
   }
 
   return undefined;
