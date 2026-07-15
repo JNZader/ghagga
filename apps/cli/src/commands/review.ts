@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type {
   DependencyGraph,
+  GraphLoader,
   GraphMetadata,
   LLMProvider,
   MemoryStorage,
@@ -34,6 +35,8 @@ import {
   GRAPH_VERSION,
   initializeDefaultTools,
   isGraphStale,
+  NullGraphLoader,
+  PreloadedGraphLoader,
   parseDiffFiles,
   REVIEW_COMMENT_MARKER,
   reviewPipeline,
@@ -283,11 +286,19 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     // (D2) + partial-language-coverage (D8) as advisory warnings — never
     // blocking. Graph-absent is a silent no-op: applyBlastRadius itself
     // already emits its own "no graph available" pipeline event.
-    let graphLoader: FilesystemGraphLoader | undefined;
+    //
+    // The graph is loaded exactly ONCE here (for staleness/coverage). The
+    // already-loaded result is then wrapped in a PreloadedGraphLoader (or
+    // NullGraphLoader when absent/malformed/oversize) so the pipeline's own
+    // `applyBlastRadius` step — which unconditionally calls
+    // `graphLoader.load()` — reads it from memory instead of re-reading
+    // graph.json (up to 20MB) and re-emitting the oversize/malformed warning
+    // a second time (R4-001).
+    let graphLoader: GraphLoader | undefined;
     let fileReader: ((filePath: string) => Promise<string | null>) | undefined;
 
     if (settings.enableBlastRadius) {
-      graphLoader = new FilesystemGraphLoader(repoPath, {
+      const filesystemGraphLoader = new FilesystemGraphLoader(repoPath, {
         onOversize: (bytes, max) => {
           tui.log.warn(
             `⚠️  Dependency graph exceeds ${max} bytes (actual: ${bytes}) — ignoring, blast-radius disabled for this run.`,
@@ -306,9 +317,9 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
       };
 
       try {
-        const graph = await graphLoader.load();
+        const graph = await filesystemGraphLoader.load();
         if (graph) {
-          const metadata = await graphLoader.loadMetadata();
+          const metadata = await filesystemGraphLoader.loadMetadata();
           let currentHead = '';
           try {
             currentHead = execSync('git rev-parse HEAD', {
@@ -331,10 +342,20 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
                 'blast-radius will show 0 dependents for these files, which may be unreliable rather than accurate.',
             );
           }
+
+          // Hand the pipeline the graph we already loaded — no re-read.
+          graphLoader = new PreloadedGraphLoader(graph, metadata);
+        } else {
+          // Absent/malformed/oversize — filesystemGraphLoader already fired
+          // its onOversize/onMalformed warning exactly once above. Hand the
+          // pipeline a loader that always resolves to null so it degrades
+          // without touching the filesystem again.
+          graphLoader = new NullGraphLoader();
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         tui.log.warn(`⚠️  Blast-radius staleness/coverage check failed (continuing): ${message}`);
+        graphLoader = new NullGraphLoader();
       }
     }
 
@@ -971,10 +992,13 @@ function buildProviderChain(
 
 // ─── Blast-Radius: Pure Seams (design v2 D9) ────────────────────
 //
-// These are NAMED, EXPORTED pure functions — extracted so the auto-ON,
+// These are NAMED, EXPORTED functions — extracted so the auto-ON,
 // staleness, and partial-coverage logic can be unit-tested without mocking
 // the side-effecting `reviewCommand` try-block. `reviewCommand` only wires
 // I/O (git HEAD read, FilesystemGraphLoader, tui.warn) around them.
+// NOTE: `resolveBlastRadiusEnabled` is NOT pure — it does a filesystem
+// existence check (`existsSync`) against `repoPath`. `checkGraphStaleness`
+// and `computeUncoveredLanguages` (below) are pure.
 
 /** One staleness/coverage signal for `checkGraphStaleness` — WARN, never block. */
 export interface StalenessWarning {

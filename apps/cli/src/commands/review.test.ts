@@ -9,6 +9,25 @@
 import type { FindingSeverity, LLMProvider, ReviewResult, ReviewStatus } from 'ghagga-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Mutable control cell for the mocked `FilesystemGraphLoader` — lets
+// individual tests (blast-radius integration coverage, R4-002) drive the
+// graph/metadata `load()` returns without needing a real `.ghagga/graph.json`
+// on disk. Declared with `vi.hoisted` so it's initialized before the
+// `vi.mock('ghagga-core', ...)` factory below runs (which is itself hoisted).
+const graphLoaderControl = vi.hoisted(() => ({
+  // biome-ignore lint/suspicious/noExplicitAny: test control cell, shape mirrors DependencyGraph
+  graph: null as any,
+  // biome-ignore lint/suspicious/noExplicitAny: test control cell, shape mirrors GraphMetadata
+  metadata: null as any,
+  // When set, `load()` invokes the constructor's `onOversize`/`onMalformed`
+  // callback (mirroring the REAL FilesystemGraphLoader contract) and
+  // resolves to null — lets tests drive the oversize/malformed degrade path
+  // without a real oversized/corrupt graph.json on disk.
+  oversize: null as { bytes: number; max: number } | null,
+  malformed: null as string | null,
+  loadCallCount: 0,
+}));
+
 // ─── Mock ghagga-core to prevent actual LLM calls ───────────────
 
 vi.mock('ghagga-core', () => {
@@ -126,11 +145,52 @@ vi.mock('ghagga-core', () => {
     // `new FilesystemGraphLoader(...)` never throws; `load()` defaults to
     // null (no graph) unless an individual test overrides the instance.
     FilesystemGraphLoader: class {
+      constructor(
+        _repoRoot: string,
+        // biome-ignore lint/suspicious/noExplicitAny: mirrors real FilesystemGraphLoaderOptions
+        private opts?: any,
+      ) {}
+      async load() {
+        graphLoaderControl.loadCallCount++;
+        if (graphLoaderControl.oversize) {
+          this.opts?.onOversize?.(
+            graphLoaderControl.oversize.bytes,
+            graphLoaderControl.oversize.max,
+          );
+          return null;
+        }
+        if (graphLoaderControl.malformed) {
+          this.opts?.onMalformed?.(graphLoaderControl.malformed);
+          return null;
+        }
+        return graphLoaderControl.graph;
+      }
+      async loadMetadata() {
+        return graphLoaderControl.metadata;
+      }
+    },
+    // Wired in alongside FilesystemGraphLoader (R4-001 fix): reviewCommand
+    // wraps the already-loaded graph in one of these instead of handing the
+    // pipeline the same FilesystemGraphLoader instance (which would re-read
+    // graph.json a second time).
+    NullGraphLoader: class {
       async load() {
         return null;
       }
       async loadMetadata() {
         return null;
+      }
+    },
+    PreloadedGraphLoader: class {
+      constructor(
+        private readonly graph: unknown,
+        private readonly metadata?: unknown,
+      ) {}
+      async load() {
+        return this.graph;
+      }
+      async loadMetadata() {
+        return this.metadata ?? null;
       }
     },
     detectLanguage: vi.fn().mockReturnValue(undefined),
@@ -1200,5 +1260,164 @@ describe('Phase 7: config file with new tool fields', () => {
     const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
     const settings = callArgs.settings as Record<string, unknown>;
     expect(settings.disabledTools).toContain('cpd');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Blast-radius glue integration coverage (R4-002)
+//
+// The pure seams (`resolveBlastRadiusEnabled`, `checkGraphStaleness`,
+// `computeUncoveredLanguages`) are unit-tested in
+// `review-blast-radius.test.ts`. This block exercises the side-effecting
+// GLUE in `reviewCommand` itself — the `execSync('git rev-parse HEAD')`
+// try/catch, the outer try/catch around the staleness/coverage block, and
+// the warn ordering — with a present graph, an oversize/malformed graph,
+// and a failing `git rev-parse HEAD`. It also locks in the R4-001 fix: the
+// graph is loaded exactly once and the oversize/malformed warning fires
+// exactly once.
+// ═══════════════════════════════════════════════════════════════
+
+describe('reviewCommand — blast-radius glue integration (R4-002)', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: mock spy type
+  let logSpy: any;
+  // biome-ignore lint/suspicious/noExplicitAny: mock spy type
+  let errorSpy: any;
+  // biome-ignore lint/suspicious/noExplicitAny: mock spy type
+  let exitSpy: any;
+
+  const diff = 'diff --git a/file.ts b/file.ts\n+line';
+
+  function makeGraph(): unknown {
+    return {
+      version: 1,
+      rootDir: '.',
+      nodes: {
+        'src/main.go': {
+          hash: 'h',
+          language: 'go',
+          imports: [],
+          exports: [],
+          calls: [],
+          isTest: false,
+        },
+      },
+    };
+  }
+
+  function makeMetadata(): unknown {
+    return {
+      lastIndexedCommit: 'abc123',
+      lastIndexedAt: new Date().toISOString(),
+      schemaVersion: 1,
+      fileCount: 1,
+      languages: ['go'],
+      indexDurationMs: 10,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
+
+    // Auto-enable blast-radius: existsSync(<repo>/.ghagga/graph.json) → true,
+    // existsSync(<repo>/.ghagga.json) → false (no config file to load).
+    mockExistsSync.mockImplementation((p: unknown) => String(p).includes('graph.json'));
+
+    graphLoaderControl.graph = null;
+    graphLoaderControl.metadata = null;
+    graphLoaderControl.oversize = null;
+    graphLoaderControl.malformed = null;
+    graphLoaderControl.loadCallCount = 0;
+
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+    exitSpy.mockRestore();
+    graphLoaderControl.graph = null;
+    graphLoaderControl.metadata = null;
+    graphLoaderControl.oversize = null;
+    graphLoaderControl.malformed = null;
+    graphLoaderControl.loadCallCount = 0;
+  });
+
+  it('present valid graph: blast-radius enables, no crash, review continues (PASSED)', async () => {
+    graphLoaderControl.graph = makeGraph();
+    graphLoaderControl.metadata = makeMetadata();
+    mockExecSync.mockReturnValue(diff as never);
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    expect(graphLoaderControl.loadCallCount).toBe(1);
+    expect(mockReviewPipeline).toHaveBeenCalledTimes(1);
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    // The pipeline must receive a loader wrapping the already-loaded graph
+    // (Preloaded/Null), NEVER the same FilesystemGraphLoader instance that
+    // review.ts already called `.load()` on — that identity is what would
+    // cause a second filesystem read (R4-001).
+    expect((callArgs.graphLoader as { constructor: { name: string } }).constructor.name).not.toBe(
+      'FilesystemGraphLoader',
+    );
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('oversize graph: degrades gracefully, review continues, warning fires exactly once (R4-001)', async () => {
+    graphLoaderControl.oversize = { bytes: 25_000_000, max: 20_000_000 };
+    mockExecSync.mockReturnValue(diff as never);
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    expect(graphLoaderControl.loadCallCount).toBe(1);
+    const oversizeWarnings = logSpy.mock.calls.filter((call: unknown[]) =>
+      String(call[0]).includes('Dependency graph exceeds'),
+    );
+    expect(oversizeWarnings).toHaveLength(1);
+    // Review continues (degrades) rather than crashing or aborting.
+    expect(mockReviewPipeline).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('malformed graph: degrades gracefully, review continues, warning fires exactly once (R4-001)', async () => {
+    graphLoaderControl.malformed = 'invalid JSON';
+    mockExecSync.mockReturnValue(diff as never);
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    expect(graphLoaderControl.loadCallCount).toBe(1);
+    const malformedWarnings = logSpy.mock.calls.filter((call: unknown[]) =>
+      String(call[0]).includes('stale/corrupt'),
+    );
+    expect(malformedWarnings).toHaveLength(1);
+    expect(mockReviewPipeline).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('git rev-parse HEAD throws: staleness check skipped, review continues, no crash', async () => {
+    graphLoaderControl.graph = makeGraph();
+    graphLoaderControl.metadata = makeMetadata();
+    mockExecSync.mockImplementation((cmd: unknown) => {
+      if (String(cmd).includes('rev-parse HEAD')) {
+        throw new Error('fatal: not a git repository');
+      }
+      return diff as never;
+    });
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    // The staleness check is skipped (currentHead falls back to '') but the
+    // review is NOT aborted by the failing git call — it must degrade, not
+    // propagate the throw.
+    expect(mockReviewPipeline).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });
