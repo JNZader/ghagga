@@ -7,10 +7,14 @@
  * - PreloadedGraphLoader: wraps an already-fetched graph (used by SaaS for early fetch)
  */
 
+import { statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   type DependencyGraph,
   type GraphLoader,
   type GraphMetadata,
+  MAX_GRAPH_SIZE_BYTES,
   validateGraph,
   validateMetadata,
 } from './schema.js';
@@ -89,6 +93,91 @@ export class NullGraphLoader implements GraphLoader {
 
   async loadMetadata(): Promise<GraphMetadata | null> {
     return null;
+  }
+}
+
+// ─── Filesystem Graph Loader ────────────────────────────────────
+
+export interface FilesystemGraphLoaderOptions {
+  /** Called when `graph.json` exceeds `MAX_GRAPH_SIZE_BYTES`, before returning null. */
+  onOversize?: (bytes: number, max: number) => void;
+  /**
+   * Called when `graph.json` exists but fails to parse or fails
+   * `validateGraph()` — DISTINCT from the "absent" case so callers can warn
+   * the user that a stale/corrupt graph is being ignored, not simply "no
+   * graph built yet".
+   */
+  onMalformed?: (reason: string) => void;
+}
+
+/**
+ * Reads the local, `ghagga index`-produced dependency graph from
+ * `<repoRoot>/.ghagga/graph.json` (and its sibling `.ghagga/metadata.json`).
+ *
+ * Never throws: absent, oversized, and malformed files all resolve to
+ * `null` — matching the other `GraphLoader` implementations and the
+ * `applyBlastRadius` degrade-gracefully contract. Oversize and malformed
+ * are reported via distinct optional callbacks so the CLI can warn
+ * differently for each (spec: "MUST NOT throw... distinct from the 'no
+ * graph present' case").
+ */
+export class FilesystemGraphLoader implements GraphLoader {
+  constructor(
+    private readonly repoRoot: string,
+    private readonly opts: FilesystemGraphLoaderOptions = {},
+  ) {}
+
+  async load(): Promise<DependencyGraph | null> {
+    const graphPath = join(this.repoRoot, '.ghagga', 'graph.json');
+
+    let stats: ReturnType<typeof statSync>;
+    try {
+      stats = statSync(graphPath);
+    } catch {
+      // Absent — not an error, no callback.
+      return null;
+    }
+
+    if (stats.size > MAX_GRAPH_SIZE_BYTES) {
+      this.opts.onOversize?.(stats.size, MAX_GRAPH_SIZE_BYTES);
+      return null;
+    }
+
+    let raw: string;
+    let json: unknown;
+    try {
+      raw = await readFile(graphPath, 'utf-8');
+      json = JSON.parse(raw);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.opts.onMalformed?.(reason);
+      return null;
+    }
+
+    const graph = validateGraph(json);
+    if (!graph) {
+      this.opts.onMalformed?.('graph.json failed schema validation');
+      return null;
+    }
+
+    return graph;
+  }
+
+  async loadMetadata(): Promise<GraphMetadata | null> {
+    const metadataPath = join(this.repoRoot, '.ghagga', 'metadata.json');
+
+    let raw: string;
+    let json: unknown;
+    try {
+      raw = await readFile(metadataPath, 'utf-8');
+      json = JSON.parse(raw);
+    } catch {
+      // Absent or malformed — null-safe, no callback (metadata absence is
+      // handled by the caller's staleness check, D2/B-005).
+      return null;
+    }
+
+    return validateMetadata(json);
   }
 }
 

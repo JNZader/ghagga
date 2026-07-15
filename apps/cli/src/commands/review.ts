@@ -8,8 +8,12 @@
 
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type {
+  DependencyGraph,
+  GraphLoader,
+  GraphMetadata,
   LLMProvider,
   MemoryStorage,
   ProgressCallback,
@@ -24,9 +28,16 @@ import type {
 import {
   buildSarif,
   DEFAULT_SETTINGS,
+  detectLanguage,
   EngramMemoryStorage,
+  FilesystemGraphLoader,
   formatReviewComment,
+  GRAPH_VERSION,
   initializeDefaultTools,
+  isGraphStale,
+  NullGraphLoader,
+  PreloadedGraphLoader,
+  parseDiffFiles,
   REVIEW_COMMENT_MARKER,
   reviewPipeline,
   SqliteMemoryStorage,
@@ -114,6 +125,12 @@ export interface ReviewOptions {
   lenses?: string;
   /** Path to custom lens definitions directory (from --lens-dir flag). */
   lensDir?: string;
+  /**
+   * Explicit blast-radius override from `--no-blast-radius`. `false` forces
+   * blast-radius off regardless of graph presence / config; `undefined`
+   * defers to `.ghagga.json`/auto-detection (see `resolveBlastRadiusEnabled`).
+   */
+  blastRadius?: boolean;
 }
 
 /**
@@ -161,6 +178,13 @@ interface GhaggaConfig {
    * across these gateway entries instead of hammering a single engine.
    */
   providerChain?: GhaggaConfigProviderChainEntry[];
+  /**
+   * Enable blast-radius filtering (design v2 D7). `true`/`false` override
+   * auto-detection (`.ghagga/graph.json` presence); omit to auto-detect.
+   * `--no-blast-radius` (ReviewOptions.blastRadius === false) always wins
+   * over this config key.
+   */
+  enableBlastRadius?: boolean;
 }
 
 // ─── Main Command ───────────────────────────────────────────────
@@ -252,6 +276,88 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
 
     // Step 3: Merge settings (CLI options take priority over config file)
     const settings = mergeSettings(options, fileConfig);
+
+    // Step 3.4: Resolve blast-radius auto-ON (design v2 D7) — resolved
+    // against repoPath (the review target), not process.cwd() (CRITICAL-2).
+    settings.enableBlastRadius = resolveBlastRadiusEnabled(repoPath, options, fileConfig);
+
+    // Step 3.4.5: Wire the local FilesystemGraphLoader + fs fileReader when
+    // blast-radius is enabled (design v2 D3/D4), and surface staleness
+    // (D2) + partial-language-coverage (D8) as advisory warnings — never
+    // blocking. Graph-absent is a silent no-op: applyBlastRadius itself
+    // already emits its own "no graph available" pipeline event.
+    //
+    // The graph is loaded exactly ONCE here (for staleness/coverage). The
+    // already-loaded result is then wrapped in a PreloadedGraphLoader (or
+    // NullGraphLoader when absent/malformed/oversize) so the pipeline's own
+    // `applyBlastRadius` step — which unconditionally calls
+    // `graphLoader.load()` — reads it from memory instead of re-reading
+    // graph.json (up to 20MB) and re-emitting the oversize/malformed warning
+    // a second time (R4-001).
+    let graphLoader: GraphLoader | undefined;
+    let fileReader: ((filePath: string) => Promise<string | null>) | undefined;
+
+    if (settings.enableBlastRadius) {
+      const filesystemGraphLoader = new FilesystemGraphLoader(repoPath, {
+        onOversize: (bytes, max) => {
+          tui.log.warn(
+            `⚠️  Dependency graph exceeds ${max} bytes (actual: ${bytes}) — ignoring, blast-radius disabled for this run.`,
+          );
+        },
+        onMalformed: (reason) => {
+          tui.log.warn(`⚠️  Dependency graph is stale/corrupt — ignoring (${reason}).`);
+        },
+      });
+      fileReader = async (filePath: string): Promise<string | null> => {
+        try {
+          return await readFile(join(repoPath, filePath), 'utf-8');
+        } catch {
+          return null;
+        }
+      };
+
+      try {
+        const graph = await filesystemGraphLoader.load();
+        if (graph) {
+          const metadata = await filesystemGraphLoader.loadMetadata();
+          let currentHead = '';
+          try {
+            currentHead = execSync('git rev-parse HEAD', {
+              cwd: repoPath,
+              encoding: 'utf-8',
+            }).trim();
+          } catch {
+            currentHead = '';
+          }
+
+          for (const warning of checkGraphStaleness(metadata, currentHead)) {
+            tui.log.warn(`⚠️  ${warning.message}`);
+          }
+
+          const changedFiles = parseDiffFiles(diff).map((f) => f.path);
+          const uncoveredLanguages = computeUncoveredLanguages(graph, changedFiles);
+          if (uncoveredLanguages.length > 0) {
+            tui.log.warn(
+              `⚠️  Partial graph coverage: no indexed dependents for ${uncoveredLanguages.join(', ')} — ` +
+                'blast-radius will show 0 dependents for these files, which may be unreliable rather than accurate.',
+            );
+          }
+
+          // Hand the pipeline the graph we already loaded — no re-read.
+          graphLoader = new PreloadedGraphLoader(graph, metadata);
+        } else {
+          // Absent/malformed/oversize — filesystemGraphLoader already fired
+          // its onOversize/onMalformed warning exactly once above. Hand the
+          // pipeline a loader that always resolves to null so it degrades
+          // without touching the filesystem again.
+          graphLoader = new NullGraphLoader();
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        tui.log.warn(`⚠️  Blast-radius staleness/coverage check failed (continuing): ${message}`);
+        graphLoader = new NullGraphLoader();
+      }
+    }
 
     // Step 3.5: Build the per-voice cross-engine provider chain, if configured
     // (BL-CLI-PROVIDER-CHAIN). Undefined when absent — regression-safe, the
@@ -379,6 +485,10 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
       // Per-voice cross-engine routing (BL-CLI-PROVIDER-CHAIN) — undefined
       // when `.ghagga.json` has no providerChain, unchanged flat-provider path.
       ...(providerChain ? { providerChain } : {}),
+      // Blast-radius (design v2) — undefined when disabled/no graph, matching
+      // the pre-existing `applyBlastRadius` gate (`enableBlastRadius && graphLoader`).
+      ...(graphLoader ? { graphLoader } : {}),
+      ...(fileReader ? { fileReader } : {}),
     });
 
     // Step 5.5: Persist memory to disk
@@ -878,6 +988,136 @@ function buildProviderChain(
     ...(entry.gatewayUrl !== undefined ? { gatewayUrl: entry.gatewayUrl } : {}),
     ...(entry.cliModel !== undefined ? { cliModel: entry.cliModel } : {}),
   }));
+}
+
+// ─── Blast-Radius: Pure Seams (design v2 D9) ────────────────────
+//
+// These are NAMED, EXPORTED functions — extracted so the auto-ON,
+// staleness, and partial-coverage logic can be unit-tested without mocking
+// the side-effecting `reviewCommand` try-block. `reviewCommand` only wires
+// I/O (git HEAD read, FilesystemGraphLoader, tui.warn) around them.
+// NOTE: `resolveBlastRadiusEnabled` is NOT pure — it does a filesystem
+// existence check (`existsSync`) against `repoPath`. `checkGraphStaleness`
+// and `computeUncoveredLanguages` (below) are pure.
+
+/** One staleness/coverage signal for `checkGraphStaleness` — WARN, never block. */
+export interface StalenessWarning {
+  kind: 'head-mismatch' | 'stale-age' | 'no-metadata' | 'version-mismatch';
+  message: string;
+}
+
+/**
+ * Resolve whether blast-radius should be enabled for this review run.
+ *
+ * Precedence (highest to lowest):
+ *   1. `--no-blast-radius` (options.blastRadius === false) → OFF
+ *   2. `.ghagga.json` `enableBlastRadius` (explicit true/false) → that value
+ *   3. Auto-ON when `<repoPath>/.ghagga/graph.json` exists
+ *   4. OFF (no graph, no override)
+ *
+ * CRITICAL-2 (JD B-001): the existence check is resolved against `repoPath`
+ * — the review target — NOT `process.cwd()`, so `ghagga review <other-dir>`
+ * from an unrelated cwd still auto-detects correctly.
+ */
+export function resolveBlastRadiusEnabled(
+  repoPath: string,
+  options: Pick<ReviewOptions, 'blastRadius'>,
+  fileConfig: Pick<GhaggaConfig, 'enableBlastRadius'>,
+): boolean {
+  if (options.blastRadius === false) return false;
+  if (fileConfig.enableBlastRadius === false) return false;
+  if (fileConfig.enableBlastRadius === true) return true;
+  return existsSync(join(repoPath, '.ghagga', 'graph.json'));
+}
+
+/**
+ * Detect staleness/coverage-verification signals for the loaded graph.
+ * ALWAYS warn-and-continue (design v2 D2) — never blocks the review.
+ *
+ * - HEAD mismatch: `metadata.lastIndexedCommit` non-empty and differs from
+ *   `currentHead`. An EMPTY `currentHead` (non-git/detached checkout) skips
+ *   this specific check — there's nothing meaningful to compare against.
+ * - Age: delegates to `isGraphStale` (>`GRAPH_STALE_DAYS` days).
+ * - Metadata absent (B-005): `metadata === null` — graph.json loaded but no
+ *   sibling metadata.json (e.g. pre-feature `ghagga index` run). Returns
+ *   EARLY with only this warning — there's nothing else to check.
+ * - Version mismatch (B-003): `metadata.graphVersion` set and differs from
+ *   the current `GRAPH_VERSION` (equivalent to comparing against the loaded
+ *   graph's `version`, which `validateGraph` already pins to `GRAPH_VERSION`).
+ */
+export function checkGraphStaleness(
+  metadata: GraphMetadata | null,
+  currentHead: string,
+): StalenessWarning[] {
+  if (!metadata) {
+    return [
+      {
+        kind: 'no-metadata',
+        message:
+          'Graph loaded but no metadata found — staleness cannot be verified; re-run `ghagga index`.',
+      },
+    ];
+  }
+
+  const warnings: StalenessWarning[] = [];
+
+  if (currentHead && metadata.lastIndexedCommit && metadata.lastIndexedCommit !== currentHead) {
+    warnings.push({
+      kind: 'head-mismatch',
+      message: `Dependency graph indexed at ${metadata.lastIndexedCommit}, HEAD is ${currentHead} — run \`ghagga index\` to refresh.`,
+    });
+  }
+
+  if (isGraphStale(metadata)) {
+    warnings.push({
+      kind: 'stale-age',
+      message: `Dependency graph is stale (last indexed: ${metadata.lastIndexedAt}) — run \`ghagga index\` to refresh.`,
+    });
+  }
+
+  if (metadata.graphVersion !== undefined && metadata.graphVersion !== GRAPH_VERSION) {
+    warnings.push({
+      kind: 'version-mismatch',
+      message: `Graph metadata schema version (${metadata.graphVersion}) does not match the current graph version (${GRAPH_VERSION}) — run \`ghagga index\` to refresh.`,
+    });
+  }
+
+  return warnings;
+}
+
+/**
+ * Compute the set of languages present among `changedFiles` that have ZERO
+ * coverage in the loaded graph — i.e. files whose blast-radius dependent
+ * count is unreliable (shows zero, not "no dependents").
+ *
+ * Coverage is derived from the graph's ACTUAL node contents (design v2 D8,
+ * JD CRITICAL-1), not from indexer-dispatch bookkeeping:
+ *   - The regex-fallback path sets `indexedLanguages: []` even though every
+ *     node has a real `language` — keying off dispatch state would flag
+ *     every changed file as uncovered.
+ *   - `detectPresentLanguages` is root-only — a language that only exists in
+ *     a subpackage (e.g. `packages/api/requirements.txt`) is never detected
+ *     or skipped, so dispatch state gives no signal at all.
+ *
+ * Files whose language cannot be detected (`detectLanguage` returns
+ * `undefined` — unknown extension) are silently excluded; there is no
+ * language identity to report as uncovered.
+ */
+export function computeUncoveredLanguages(
+  graph: DependencyGraph,
+  changedFiles: string[],
+): string[] {
+  const covered = new Set(Object.values(graph.nodes).map((node) => node.language));
+  const uncovered = new Set<string>();
+
+  for (const filePath of changedFiles) {
+    const language = detectLanguage(filePath);
+    if (language && !covered.has(language)) {
+      uncovered.add(language);
+    }
+  }
+
+  return [...uncovered];
 }
 
 // ─── Settings Merge ─────────────────────────────────────────────

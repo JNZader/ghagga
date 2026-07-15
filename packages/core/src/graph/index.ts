@@ -42,7 +42,13 @@ export { buildReverseIndex, computeBlastRadius } from './blast-radius.js';
 
 // ─── Graph Loaders ──────────────────────────────────────────────
 
-export { GitHubApiGraphLoader, NullGraphLoader, PreloadedGraphLoader } from './loader.js';
+export {
+  FilesystemGraphLoader,
+  type FilesystemGraphLoaderOptions,
+  GitHubApiGraphLoader,
+  NullGraphLoader,
+  PreloadedGraphLoader,
+} from './loader.js';
 
 // ─── Extractors ─────────────────────────────────────────────────
 

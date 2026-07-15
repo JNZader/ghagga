@@ -347,6 +347,14 @@ Options:
 
 The resulting `.ghagga/graph.json` is the same file format read by `blast-radius` and `review` — no other command needs to change to benefit from a SCIP-produced graph.
 
+`ghagga index` also writes a sibling `.ghagga/metadata.json` (the indexed commit SHA, timestamp, per-node languages, and schema version) right after `graph.json`. `ghagga review` reads both: blast-radius filtering **auto-enables** whenever `.ghagga/graph.json` exists under the reviewed path — no flag needed — and uses `metadata.json` to warn (never block) when the graph looks stale or only partially covers the languages in your diff:
+
+- **Stale graph**: current git HEAD differs from the commit `ghagga index` last ran against, or the graph is more than 7 days old → re-run `ghagga index` warning.
+- **Missing metadata**: a `graph.json` produced by an older `ghagga index` (or copied in some other way) has no `metadata.json` next to it — blast-radius still runs, but staleness can't be verified, so the CLI warns instead of silently trusting it.
+- **Partial language coverage**: a changed file's language has zero nodes in the graph (e.g. a language `ghagga index` couldn't index, or one that only lives in a subpackage) — that file's dependent count will show as 0, not "confirmed no dependents", and the CLI warns accordingly.
+
+Use `--no-blast-radius` on `ghagga review` to disable this filtering for a single run regardless of whether a graph is present, or set `"enableBlastRadius": false` in `.ghagga.json` to disable it project-wide (`true` forces it on even without a graph — the pipeline then reports "no graph available" and falls back to the full diff).
+
 ---
 
 ## Review Command Options
@@ -369,6 +377,7 @@ The resulting `.ghagga/graph.json` is the same file format read by `blast-radius
 | `--no-trivy` | — | — | **Deprecated** — use `--disable-tool trivy` |
 | `--no-cpd` | — | — | **Deprecated** — use `--disable-tool cpd` |
 | `--no-memory` | — | — | Disable review memory (skip search and persist steps) |
+| `--no-blast-radius` | — | auto | Disable blast-radius filtering. Auto-enabled when `.ghagga/graph.json` exists (see `ghagga index`); pass this flag to force it off for one run |
 | `--memory-backend <type>` | — | `sqlite` | Memory backend: `sqlite` or `engram` |
 | `--config <path>` | `-c` | `.ghagga.json` | Path to config file (must be a file path, not inline JSON) |
 | `--staged` | — | — | Review only staged files (uses `git diff --cached`; designed for pre-commit hook) |

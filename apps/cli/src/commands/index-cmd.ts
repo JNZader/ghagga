@@ -11,6 +11,7 @@
  * language could be indexed via SCIP.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import {
@@ -18,6 +19,8 @@ import {
   buildGraphFromScip,
   type DependencyGraph,
   EXCLUDED_DIRS,
+  GRAPH_VERSION,
+  type GraphMetadata,
   type Index,
   mergeScipIndexes,
   parseScipIndex,
@@ -82,6 +85,58 @@ function writeGraph(outPath: string, graph: DependencyGraph): void {
   writeFileSync(outPath, JSON.stringify(graph, null, 2));
 }
 
+/**
+ * Resolve the current git HEAD SHA for `repoPath`. Returns `''` on any
+ * failure (not a git repo, detached-without-HEAD edge cases, git not on
+ * PATH) — non-git repos degrade gracefully rather than aborting `ghagga
+ * index` (design v2 D1).
+ */
+function resolveGitHead(repoPath: string): string {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repoPath,
+      encoding: 'utf-8',
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Write `.ghagga/metadata.json` ALONGSIDE `.ghagga/graph.json` (design v2
+ * D1). MUST be called AFTER `writeGraph` (B-003 write ordering) — a crash
+ * between the two writes leaves graph-without-metadata, which
+ * `checkGraphStaleness` reports as a distinct "cannot verify staleness"
+ * warning, never metadata newer than (or inconsistent with) the graph.
+ *
+ * `languages` is DERIVED FROM THE GRAPH'S ACTUAL NODE CONTENTS (CRITICAL-1)
+ * — NOT dispatch's `indexedLanguages` — because the regex-fallback path sets
+ * `indexedLanguages: []` while every node still has a real `language`.
+ * `skippedLanguages` is informational only (languages detected but not
+ * indexed) and is never used to drive a warning.
+ */
+function writeMetadata(
+  graphOutPath: string,
+  graph: DependencyGraph,
+  opts: { repoPath: string; skippedLanguages: string[]; indexDurationMs: number },
+): void {
+  const metadataPath = join(dirname(graphOutPath), 'metadata.json');
+  const languages = [...new Set(Object.values(graph.nodes).map((node) => node.language))];
+
+  const metadata: GraphMetadata = {
+    lastIndexedCommit: resolveGitHead(opts.repoPath),
+    lastIndexedAt: new Date().toISOString(),
+    schemaVersion: GRAPH_VERSION,
+    fileCount: Object.keys(graph.nodes).length,
+    languages,
+    indexDurationMs: opts.indexDurationMs,
+    skippedLanguages: opts.skippedLanguages,
+    graphVersion: graph.version,
+  };
+
+  writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+}
+
 // ─── Per-Language Dispatch (D1, D6) ──────────────────────────────
 
 interface DispatchResult {
@@ -141,9 +196,11 @@ export async function indexCommand(
 ): Promise<void> {
   const repoPath = resolve(targetPath || '.');
   const outPath = resolve(repoPath, options.out ?? DEFAULT_OUT);
+  const startedAt = Date.now();
 
   const detected = detectPresentLanguages(repoPath);
   const { indexes, indexedLanguages, skipped } = await dispatchIndexers(repoPath, detected);
+  const skippedLanguages = skipped.flatMap((s) => s.entry.languages);
 
   if (indexes.length === 0) {
     if (!options.fallbackRegex) {
@@ -168,7 +225,14 @@ export async function indexCommand(
     );
     const files = collectFiles(repoPath);
     const graph = buildGraph(repoPath, files);
+    // Write ORDER (B-003): graph.json FIRST, THEN metadata.json — a crash
+    // between the two leaves graph-without-metadata, never the reverse.
     writeGraph(outPath, graph);
+    writeMetadata(outPath, graph, {
+      repoPath,
+      skippedLanguages,
+      indexDurationMs: Date.now() - startedAt,
+    });
     tui.log.success(
       `✅ Wrote ${Object.keys(graph.nodes).length} node(s) to ${outPath} (regex fallback).`,
     );
@@ -189,7 +253,13 @@ export async function indexCommand(
       );
     },
   });
+  // Write ORDER (B-003): graph.json FIRST, THEN metadata.json.
   writeGraph(outPath, graph);
+  writeMetadata(outPath, graph, {
+    repoPath,
+    skippedLanguages,
+    indexDurationMs: Date.now() - startedAt,
+  });
   tui.log.success(
     `✅ Wrote ${Object.keys(graph.nodes).length} node(s) to ${outPath} ` +
       `(SCIP: ${indexedLanguages.join(', ')}).`,

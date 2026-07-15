@@ -99,6 +99,20 @@ export interface GraphMetadata {
 
   /** Indexing duration in milliseconds */
   indexDurationMs: number;
+
+  /**
+   * Languages detected but NOT indexed (informational only — never a
+   * staleness/warning trigger). Additive/optional for backward compatibility
+   * with older `metadata.json` producers.
+   */
+  skippedLanguages?: string[];
+
+  /**
+   * Graph schema version this metadata was written for (mirrors
+   * `DependencyGraph.version`). Additive/optional; used to detect a
+   * metadata/graph mismatch (e.g. stale metadata next to a rebuilt graph).
+   */
+  graphVersion?: number;
 }
 
 export interface BlastRadiusMetadata {
@@ -136,8 +150,8 @@ export interface GraphLoader {
 /** Current graph schema version */
 export const GRAPH_VERSION = 1;
 
-/** Maximum graph.json size in bytes (5 MB) */
-export const MAX_GRAPH_SIZE_BYTES = 5 * 1024 * 1024;
+/** Maximum graph.json size in bytes (20 MB) */
+export const MAX_GRAPH_SIZE_BYTES = 20 * 1024 * 1024;
 
 /** Maximum files in a blast-radius result before falling back to full diff */
 export const MAX_BLAST_RADIUS_FILES = 50;
