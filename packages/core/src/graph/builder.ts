@@ -126,6 +126,13 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
   const nodes: Record<string, GraphNode> = {};
   const availableFiles = new Set(files.keys());
 
+  // Staged rawSource -> symbols per file, keyed BEFORE Pass-2 path
+  // resolution (`node.imports` still holds raw specifiers at this point).
+  // Remapped to resolved paths in Pass 2, alongside `node.imports` itself,
+  // so `importSymbols` ends up keyed in the SAME resolved-path space as
+  // `imports` (required for Slice 2 lookups to work).
+  const rawSymbolsByFile = new Map<string, Map<string, Set<string>>>();
+
   // Pass 1: Build nodes with raw imports
   for (const [filePath, content] of files) {
     // Skip excluded directories
@@ -152,6 +159,8 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
         calls: [],
         isTest: isTestFile(filePath),
       };
+
+      stageImportSymbols(rawSymbolsByFile, filePath, extractedImports);
     } catch {
       // Parse errors in individual files don't abort the build
       // Create a minimal node so the file still appears in the graph
@@ -169,6 +178,12 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
   // Pass 2: Resolve relative imports to project-relative paths
   for (const [filePath, node] of Object.entries(nodes)) {
     node.imports = node.imports.map((imp) => resolveImportPath(filePath, imp, availableFiles));
+
+    const rawSymbols = rawSymbolsByFile.get(filePath);
+    if (rawSymbols) {
+      const resolved = remapImportSymbols(filePath, rawSymbols, availableFiles);
+      if (resolved) node.importSymbols = resolved;
+    }
   }
 
   return {
@@ -176,6 +191,68 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
     rootDir,
     nodes,
   };
+}
+
+// ─── importSymbols Helpers ──────────────────────────────────────
+
+/**
+ * Stage `rawSource -> symbols` for a file's extracted imports, BEFORE
+ * Pass-2 path resolution. Only sources with at least one named symbol are
+ * staged (omit-empty rule) — namespace/default/side-effect imports and
+ * extractors without symbol data (Python/Rust, most Go) never populate
+ * this map.
+ */
+function stageImportSymbols(
+  rawSymbolsByFile: Map<string, Map<string, Set<string>>>,
+  filePath: string,
+  extractedImports: Array<{ source: string; symbols: string[] }>,
+): void {
+  for (const { source, symbols } of extractedImports) {
+    if (symbols.length === 0) continue;
+
+    let bySource = rawSymbolsByFile.get(filePath);
+    if (!bySource) {
+      bySource = new Map();
+      rawSymbolsByFile.set(filePath, bySource);
+    }
+    let set = bySource.get(source);
+    if (!set) {
+      set = new Set();
+      bySource.set(source, set);
+    }
+    for (const symbol of symbols) set.add(symbol);
+  }
+}
+
+/**
+ * Remap a file's staged `rawSource -> symbols` map to the SAME resolved
+ * path space as `node.imports`, merging symbol sets when multiple raw
+ * specifiers resolve to the same target (e.g. `./b` and `./b.ts`).
+ * Returns `undefined` when there is nothing to record (omit-empty rule).
+ */
+function remapImportSymbols(
+  filePath: string,
+  rawSymbols: Map<string, Set<string>>,
+  availableFiles: Set<string>,
+): Record<string, string[]> | undefined {
+  const result: Record<string, Set<string>> = {};
+  for (const [rawSource, symbols] of rawSymbols) {
+    const resolved = resolveImportPath(filePath, rawSource, availableFiles);
+    const existing = result[resolved];
+    if (existing) {
+      for (const s of symbols) existing.add(s);
+    } else {
+      result[resolved] = new Set(symbols);
+    }
+  }
+
+  if (Object.keys(result).length === 0) return undefined;
+
+  const out: Record<string, string[]> = {};
+  for (const [target, symbols] of Object.entries(result)) {
+    out[target] = Array.from(symbols);
+  }
+  return out;
 }
 
 // ─── Incremental Build ──────────────────────────────────────────
@@ -239,6 +316,22 @@ export function buildGraphIncremental(
         calls: [],
         isTest: isTestFile(filePath),
       };
+
+      // Resolves inline (no separate Pass 2 in the incremental path) —
+      // remap raw source -> symbols directly to the resolved path space,
+      // matching `node.imports` above.
+      const rawSymbols = new Map<string, Set<string>>();
+      for (const { source, symbols } of extractedImports) {
+        if (symbols.length === 0) continue;
+        let set = rawSymbols.get(source);
+        if (!set) {
+          set = new Set();
+          rawSymbols.set(source, set);
+        }
+        for (const symbol of symbols) set.add(symbol);
+      }
+      const resolvedSymbols = remapImportSymbols(filePath, rawSymbols, allFiles);
+      if (resolvedSymbols) nodes[filePath].importSymbols = resolvedSymbols;
     } catch {
       nodes[filePath] = {
         hash: hashContent(content),

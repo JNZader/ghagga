@@ -18,9 +18,9 @@
  */
 
 import { computeBlastRadius } from '../graph/blast-radius.js';
-import { buildCallChainFromDiff } from '../graph/call-chain.js';
+import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from '../graph/call-chain.js';
 import { buildReverseDependencyMap, findDependents } from '../graph/reverse-deps.js';
-import type { BlastRadiusMetadata } from '../graph/schema.js';
+import type { BlastRadiusMetadata, DependencyGraph } from '../graph/schema.js';
 import { isGraphStale } from '../graph/schema.js';
 import type { ProgressEvent, ReviewInput } from '../types.js';
 import type { DiffFile } from '../utils/diff.js';
@@ -41,6 +41,19 @@ export interface BlastRadiusOutcome {
   filteredFiles: DiffFile[];
   filteredDiff: string;
   blastRadiusMetadata: BlastRadiusMetadata | undefined;
+  /**
+   * The dependency graph successfully loaded during this step, if any.
+   * Threaded into step 2.6 (`buildCallChainContext`) so the Symbol
+   * Impact block can reuse it WITHOUT calling `input.graphLoader.load()`
+   * a second time — a second load call would double-invoke the loader
+   * (breaking `toHaveBeenCalledOnce()` call-count assertions) and, on a
+   * failing loader, produce an EXTRA call-chain warn/failedSteps entry
+   * that the golden degradation snapshots don't expect. `undefined` when
+   * blast-radius is disabled, no loader is configured, the graph is
+   * unavailable, or loading errored (already handled by this step's own
+   * bespoke catch).
+   */
+  graph: DependencyGraph | undefined;
 }
 
 /**
@@ -54,11 +67,13 @@ export async function applyBlastRadius(
   const { input, emit, failedSteps, fileList } = args;
   let { filteredFiles, filteredDiff } = args;
   let blastRadiusMetadata: BlastRadiusMetadata | undefined;
+  let loadedGraph: DependencyGraph | undefined;
 
   if (input.settings.enableBlastRadius && input.graphLoader) {
     try {
       const graph = await input.graphLoader.load();
       if (graph) {
+        loadedGraph = graph;
         const metadata = await input.graphLoader.loadMetadata();
         const stale = metadata ? isGraphStale(metadata) : false;
 
@@ -135,7 +150,69 @@ export async function applyBlastRadius(
     }
   }
 
-  return { filteredFiles, filteredDiff, blastRadiusMetadata };
+  return { filteredFiles, filteredDiff, blastRadiusMetadata, graph: loadedGraph };
+}
+
+/**
+ * Build the additive `## Symbol Impact` block (Slice 2 of
+ * symbol-precise-context). For each changed file B, walks every node A in
+ * the graph whose `imports` includes B — the SAME resolved-path edge
+ * `computeBlastRadius`/`buildReverseIndex` already traverse — and reports
+ * which symbols A references from B (`A.importSymbols[B]`) against which
+ * symbols the diff actually changed in B
+ * (`extractChangedSymbolsFromDiff`).
+ *
+ * STRICTLY ADDITIVE: never excludes a file, never claims "unaffected" when
+ * the data is insufficient to know (barrel edges, missing symbol data).
+ * Returns '' when the graph has NO `importSymbols` data anywhere (keeps
+ * output byte-identical to pre-change context — no regression when no
+ * symbol data exists in the graph, per spec).
+ */
+function buildSymbolImpactBlock(
+  graph: import('../graph/schema.js').DependencyGraph,
+  fileList: string[],
+  filteredDiff: string,
+): string {
+  const anySymbolData = Object.values(graph.nodes).some(
+    (n) => n.importSymbols && Object.keys(n.importSymbols).length > 0,
+  );
+  if (!anySymbolData) return '';
+
+  const changedByFile = extractChangedSymbolsFromDiff(filteredDiff);
+  const changedFileSet = new Set(fileList);
+  const lines: string[] = [];
+
+  for (const b of changedFileSet) {
+    for (const [aPath, aNode] of Object.entries(graph.nodes)) {
+      if (aPath === b || !aNode.imports.includes(b)) continue;
+
+      const used = aNode.importSymbols?.[b];
+      if (!used || used.length === 0) {
+        // No symbol data for this edge (non-TS extractor, namespace/side-
+        // effect import, or SCIP occurrence gap) — degrade to file-level,
+        // never claim the dependent is unaffected.
+        lines.push(`- ${aPath} depends on ${b} (no symbol-level data available)`);
+        continue;
+      }
+
+      const changedSet = changedByFile.get(b);
+      const usedList = used.join(', ');
+      if (!changedSet || changedSet.size === 0) {
+        lines.push(
+          `- ${aPath} uses {${usedList}} from ${b}; changed symbols: unknown (diff parsing found no symbol-level change markers for this file)`,
+        );
+        continue;
+      }
+
+      const hit = used.filter((s) => changedSet.has(s));
+      const changedText =
+        hit.length > 0 ? hit.join(', ') : 'none of the used symbols (conservatively still listed)';
+      lines.push(`- ${aPath} uses {${usedList}} from ${b}; changed: ${changedText}`);
+    }
+  }
+
+  if (lines.length === 0) return '';
+  return `\n## Symbol Impact\n${lines.join('\n')}\n`;
 }
 
 /**
@@ -144,9 +221,20 @@ export async function applyBlastRadius(
  * disabled, no symbols affected, or degraded).
  */
 export async function buildCallChainContext(
-  args: GraphStepArgs & { warnOnlyDegradations: string[] },
+  args: GraphStepArgs & {
+    warnOnlyDegradations: string[];
+    /**
+     * The graph already loaded by step 2.5 (`applyBlastRadius`), if any —
+     * reused here for the Symbol Impact block instead of calling
+     * `input.graphLoader.load()` a second time (see `BlastRadiusOutcome`
+     * for why). `undefined` is a normal, non-error state (blast-radius
+     * disabled, no loader, or graph unavailable) — Symbol Impact is
+     * simply skipped in that case.
+     */
+    graph?: DependencyGraph;
+  },
 ): Promise<string> {
-  const { input, emit, failedSteps, warnOnlyDegradations, fileList, filteredDiff } = args;
+  const { input, emit, failedSteps, warnOnlyDegradations, fileList, filteredDiff, graph } = args;
   let callChainContext = '';
 
   if (input.settings.enableBlastRadius) {
@@ -201,6 +289,23 @@ export async function buildCallChainContext(
                 message: `Reverse deps: ${highRiskFiles.length} high-risk file(s) detected`,
               });
             }
+          }
+        }
+
+        // Symbol Impact (Slice 2 of symbol-precise-context) — strictly
+        // additive, appended onto the SAME callChainContext string. Reuses
+        // the graph step 2.5 already loaded (see the `graph` param doc)
+        // rather than calling `input.graphLoader.load()` again. Never
+        // excludes a file from anything — this block is advisory text
+        // only.
+        if (graph) {
+          const symbolImpactBlock = buildSymbolImpactBlock(graph, fileList, filteredDiff);
+          if (symbolImpactBlock) {
+            callChainContext += symbolImpactBlock;
+            emit({
+              step: 'symbol-impact',
+              message: 'Symbol Impact: symbol-precise import context added',
+            });
           }
         }
       },

@@ -245,6 +245,8 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
     warnOnlyDegradations,
     fileList,
     filteredDiff,
+    // Reuse the graph step 2.5 already loaded — see BlastRadiusOutcome.graph.
+    graph: blast.graph,
   });
 
   // ── Step 3: Detect tech stacks ─────────────────────────────

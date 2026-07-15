@@ -366,6 +366,25 @@ The resulting `.ghagga/graph.json` is the same file format read by `blast-radius
 
 Use `--no-blast-radius` on `ghagga review` to disable this filtering for a single run regardless of whether a graph is present, or set `"enableBlastRadius": false` in `.ghagga.json` to disable it project-wide (`true` forces it on even without a graph — the pipeline then reports "no graph available" and falls back to the full diff).
 
+### Symbol Impact (symbol-precise import context)
+
+When blast-radius is enabled AND the graph carries per-import symbol names, the review prompt gets an additional additive `## Symbol Impact` section: for every dependent file `A` of a changed file `B`, it reports which symbols `A` actually references from `B` and which of those symbols the diff changed — e.g. `A uses {X, Y} from B; changed: X`. This is purely advisory context appended to the prompt; it **never** removes a file from the diff, blast radius, or review set — `imports: string[]` and the blast-radius/exploitability traversal are completely unaffected by it.
+
+The underlying `importSymbols` graph field is populated with different fidelity depending on how the graph was built:
+
+| Source | Coverage |
+|--------|----------|
+| Regex builder — TypeScript/JavaScript | Dense — real named import symbols (`import { X, Y } from './b'`) |
+| Regex builder — Java | Dense — imported class name (last segment) |
+| Regex builder — Python | Populated for `from x import y, z`; empty for bare `import x` (module-only imports carry no named symbol) |
+| Regex builder — Rust | Populated for `use crate::mod::Item;` and grouped `use x::{A, B}`; empty for wildcard `use x::*;` and `mod` declarations |
+| Regex builder — Go | Alias-only — usually empty unless the import uses an explicit alias |
+| SCIP builder (`ghagga index`) | Populated wherever the indexer resolves a reference occurrence to an in-repo symbol definition, for every SCIP-supported language (including Kotlin/C#/PHP, which the regex builder can't index at all) |
+
+When an edge has no symbol data (e.g. a Go import without an alias, or a namespace/side-effect import), the block degrades to a file-level line (`A depends on B`) instead of guessing — it never claims a dependent is unaffected when it lacks the information to know that. If the graph has NO `importSymbols` data anywhere, the block is omitted entirely (no behavior change from a pre-symbol-context graph).
+
+**Deferred**: symbol-precise blast-radius *exclusion* (removing a dependent from the blast radius when none of its used symbols changed) is explicitly out of scope for this feature — it's advisory-only in the review prompt today, not a filtering signal.
+
 ---
 
 ## Review Command Options

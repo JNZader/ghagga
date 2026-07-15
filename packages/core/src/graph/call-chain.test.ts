@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCallChainFromDiff } from './call-chain.js';
+import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from './call-chain.js';
 
 // ─── Sample Fixtures ─────────────────────────────────────────────
 
@@ -135,5 +135,33 @@ describe('buildCallChainFromDiff', () => {
 
     expect(result.callChainGraph.nodes).toHaveLength(0);
     expect(result.callChainGraph.edges).toHaveLength(0);
+  });
+});
+
+// ─── extractChangedSymbolsFromDiff (now exported for Slice 2 reuse) ─
+
+describe('extractChangedSymbolsFromDiff', () => {
+  it('extracts the changed symbol name and file from a unified diff', () => {
+    const result = extractChangedSymbolsFromDiff(SAMPLE_DIFF);
+    expect(result.has('src/auth.ts')).toBe(true);
+    expect(result.get('src/auth.ts')).toContain('validateToken');
+  });
+
+  it('is called internally by buildCallChainFromDiff with unchanged behavior post-export', () => {
+    // Cross-check: buildCallChainFromDiff's changedSymbols should match
+    // exactly what a direct call to extractChangedSymbolsFromDiff reports.
+    const direct = extractChangedSymbolsFromDiff(SAMPLE_DIFF);
+    const viaBuild = buildCallChainFromDiff(SAMPLE_DIFF, new Map([['src/auth.ts', AUTH_CONTENT]]));
+
+    const directNames = new Set([...(direct.get('src/auth.ts') ?? [])]);
+    const builtNames = new Set(
+      viaBuild.changedSymbols.filter((s) => s.filePath === 'src/auth.ts').map((s) => s.symbolName),
+    );
+    expect(builtNames).toEqual(directNames);
+  });
+
+  it('returns an empty map for an empty diff', () => {
+    const result = extractChangedSymbolsFromDiff('');
+    expect(result.size).toBe(0);
   });
 });

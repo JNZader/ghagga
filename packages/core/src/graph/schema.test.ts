@@ -168,6 +168,70 @@ describe('validateGraph', () => {
     expect(result).not.toBeNull();
     expect(Object.keys(result?.nodes ?? {})).toHaveLength(0);
   });
+
+  // ─── importSymbols (additive/optional) ─────────────────────────
+
+  it('accepts a node WITH importSymbols (well-formed Record<string, string[]>)', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'src/index.ts': {
+          hash: 'abc123',
+          language: 'typescript',
+          imports: ['src/schema.ts'],
+          importSymbols: { 'src/schema.ts': ['X', 'Y'] },
+          exports: ['main'],
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    const result = validateGraph(graph);
+    expect(result).not.toBeNull();
+    expect(result?.nodes['src/index.ts']?.importSymbols).toEqual({
+      'src/schema.ts': ['X', 'Y'],
+    });
+  });
+
+  it('accepts a node WITHOUT importSymbols (absence is always valid)', () => {
+    const graph = makeValidGraph(); // makeValidGraph() nodes have no importSymbols
+    const result = validateGraph(graph);
+    expect(result).not.toBeNull();
+    expect(result?.nodes['src/index.ts']?.importSymbols).toBeUndefined();
+  });
+
+  it('rejects a node where importSymbols is present but not an object', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'bad.ts': {
+          hash: 'abc',
+          language: 'typescript',
+          imports: [],
+          importSymbols: 'not-an-object' as any,
+          exports: [],
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    expect(validateGraph(graph)).toBeNull();
+  });
+
+  it('rejects a node where an importSymbols value is not an array', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'bad.ts': {
+          hash: 'abc',
+          language: 'typescript',
+          imports: ['other.ts'],
+          importSymbols: { 'other.ts': 'X' } as any,
+          exports: [],
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    expect(validateGraph(graph)).toBeNull();
+  });
 });
 
 // ─── validateMetadata ───────────────────────────────────────────
