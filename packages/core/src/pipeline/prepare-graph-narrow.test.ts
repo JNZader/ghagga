@@ -126,6 +126,28 @@ async function runApplyBlastRadius(input: ReviewInput) {
   });
 }
 
+// Includes the dependent `src/a.ts` in the PRE-blast-radius file set so
+// the no-narrowing tests below can assert it survives the filter step
+// (rather than trivially never having been present). `src/a.ts` is a
+// dependent (not a changed file), so it is reached only via the graph's
+// `computeBlastRadius` traversal — it is not part of `fileList`.
+const filteredFilesWithDependent: DiffFile[] = [
+  { path: 'src/a.ts', content: '' },
+  { path: 'src/b.ts', content: DIFF_CHANGES_Y },
+];
+
+async function runApplyBlastRadiusWithDependent(input: ReviewInput) {
+  const failedSteps: FailedStep[] = [];
+  return applyBlastRadius({
+    input,
+    emit: NOOP_EMIT,
+    failedSteps,
+    fileList: ['src/b.ts'],
+    filteredDiff: DIFF_CHANGES_Y,
+    filteredFiles: filteredFilesWithDependent,
+  });
+}
+
 describe('applyBlastRadius — symbol-precise narrowing wiring (integration)', () => {
   it('EXACT-COMMIT-FRESH SCIP graph: narrows a.ts (uses X, only Y changed) out of the blast radius', async () => {
     const graph = makeGraph();
@@ -183,17 +205,55 @@ describe('applyBlastRadius — symbol-precise narrowing wiring (integration)', (
     expect(paths).toEqual(['src/b.ts'].sort());
   });
 
-  it('builtVia absent on the graph metadata: zero narrowing', async () => {
+  it('builtVia absent on the graph metadata (legacy/pre-existing index): zero narrowing, dependent stays included', async () => {
     const graph = makeGraph();
-    const metadata = makeMetadata({ builtVia: undefined });
+    // Simulate a legacy metadata.json written before builtVia existed —
+    // the key is omitted entirely, not just set to undefined, to mirror
+    // what `JSON.parse` on an old file actually produces.
+    const { builtVia: _builtVia, ...legacyMetadata } = makeMetadata();
     const input = makeInput({
-      graphLoader: new StaticGraphLoader(graph, metadata),
+      graphLoader: new StaticGraphLoader(graph, legacyMetadata as GraphMetadata),
       currentHead: 'commit-abc',
     });
 
-    const outcome = await runApplyBlastRadius(input);
+    const outcome = await runApplyBlastRadiusWithDependent(input);
 
     expect(outcome.blastRadiusMetadata?.narrowedDependents).toBeUndefined();
+    // The dependent that WOULD be narrowed under builtVia: 'scip' must stay.
+    const paths = outcome.filteredFiles.map((f) => f.path);
+    expect(paths).toContain('src/a.ts');
+    expect(paths).toContain('src/b.ts');
+  });
+
+  it('metadata is null (graphLoader.loadMetadata() returns null): zero narrowing, dependent stays included', async () => {
+    const graph = makeGraph();
+    const input = makeInput({
+      graphLoader: new StaticGraphLoader(graph, null),
+      currentHead: 'commit-abc',
+    });
+
+    const outcome = await runApplyBlastRadiusWithDependent(input);
+
+    expect(outcome.blastRadiusMetadata?.narrowedDependents).toBeUndefined();
+    const paths = outcome.filteredFiles.map((f) => f.path);
+    expect(paths).toContain('src/a.ts');
+    expect(paths).toContain('src/b.ts');
+  });
+
+  it('lastIndexedCommit absent from otherwise-scip metadata: zero narrowing, dependent stays included', async () => {
+    const graph = makeGraph();
+    const { lastIndexedCommit: _lastIndexedCommit, ...metadataWithoutCommit } = makeMetadata();
+    const input = makeInput({
+      graphLoader: new StaticGraphLoader(graph, metadataWithoutCommit as GraphMetadata),
+      currentHead: 'commit-abc',
+    });
+
+    const outcome = await runApplyBlastRadiusWithDependent(input);
+
+    expect(outcome.blastRadiusMetadata?.narrowedDependents).toBeUndefined();
+    const paths = outcome.filteredFiles.map((f) => f.path);
+    expect(paths).toContain('src/a.ts');
+    expect(paths).toContain('src/b.ts');
   });
 });
 

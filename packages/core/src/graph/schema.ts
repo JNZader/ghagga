@@ -174,6 +174,17 @@ export interface GraphMetadata {
    * producers; ABSENT or unrecognized MUST be treated as the most
    * conservative case (no symbol-precise exclusion), never defaulted to
    * either value.
+   *
+   * No `schemaVersion` bump was needed to introduce this field: a
+   * pre-existing `metadata.json` written before `builtVia` existed simply
+   * omits the key, `metadata?.builtVia` reads `undefined`, and the
+   * `applyBlastRadius` wiring (prepare-graph.ts) gates narrowing on
+   * `builtVia` being truthy — so a legacy/absent value already fails
+   * closed (no narrowing) without any version check. Verified at the
+   * integration-wiring level in
+   * `pipeline/prepare-graph-narrow.test.ts` (legacy/absent `builtVia`,
+   * `null` metadata, and missing `lastIndexedCommit` all assert
+   * zero narrowing).
    */
   builtVia?: 'scip' | 'regex';
 }
