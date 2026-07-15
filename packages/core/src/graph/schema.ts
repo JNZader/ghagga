@@ -81,8 +81,32 @@ export interface GraphNode {
    */
   importSymbols?: Record<string, string[]>;
 
-  /** Exported symbol names (for cross-reference) */
+  /**
+   * Locally-defined exported symbol names only (for cross-reference).
+   * Re-exported names (`export ... from`) are EXCLUDED — see
+   * `reExportedSymbols`/`reExportsAll` for those. Prior to the barrel
+   * re-export split (D3), this field also contained re-exported names;
+   * this is a behavior change for `export { x } from './b'`-style lines.
+   */
   exports: string[];
+
+  /**
+   * Symbol names re-exported via named or type-only `export ... from`
+   * (e.g. `export { X } from './b'`, `export type { X } from './b'`).
+   * Additive/optional — omitted when a file has no such re-exports.
+   * Distinguishes re-exported names from `exports` (locally-defined),
+   * per D3's safety primitive for a future conservative always-include
+   * exclusion fallback.
+   */
+  reExportedSymbols?: string[];
+
+  /**
+   * Resolved source paths of wildcard re-exports (`export * from './b'`).
+   * Additive/optional — omitted when a file has no wildcard re-exports.
+   * Individual re-exported symbol names are NOT enumerated for wildcards
+   * (D4) — only the source is recorded.
+   */
+  reExportsAll?: string[];
 
   /** Cross-file function/method calls */
   calls: Array<{ target: string; symbol: string }>;
@@ -283,6 +307,15 @@ export function validateGraph(json: unknown): DependencyGraph | null {
       for (const value of Object.values(node.importSymbols as Record<string, unknown>)) {
         if (!Array.isArray(value)) return null;
       }
+    }
+    // reExportedSymbols/reExportsAll are additive/optional — permissive
+    // spot-check only: when present, must be a string array. Absence is
+    // always valid (older producers, files with no re-exports).
+    if (node.reExportedSymbols !== undefined && !Array.isArray(node.reExportedSymbols)) {
+      return null;
+    }
+    if (node.reExportsAll !== undefined && !Array.isArray(node.reExportsAll)) {
+      return null;
     }
   }
 

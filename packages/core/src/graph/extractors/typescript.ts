@@ -41,11 +41,28 @@ const EXPORT_TYPE_RE = /export\s+(?:type|interface)\s+(\w+)/g;
 /** export default */
 const EXPORT_DEFAULT_RE = /export\s+default\s+(?:function\s+(\w+)|class\s+(\w+)|(\w+))/g;
 
-/** export { x, y, z } — re-exports or named exports */
-const EXPORT_NAMED_RE = /export\s+{([^}]+)}/g;
+/**
+ * export { x, y, z } — LOCAL named exports only. The negative lookahead
+ * excludes `export { x } from '...'` (a re-export), which is handled
+ * separately by REEXPORT_NAMED_RE/REEXPORT_TYPE_RE below (D2 discriminator:
+ * the `from` clause is the ground-truth signal that a name is re-exported,
+ * not locally declared).
+ */
+const EXPORT_NAMED_RE = /export\s+{([^}]+)}(?!\s*from\b)/g;
 
 /** export default (anonymous) — export default function() {}, export default class {} */
 const EXPORT_DEFAULT_ANON_RE = /export\s+default\s+(?:function|class)\s*[({]/g;
+
+// ─── Re-export Patterns (D1) ────────────────────────────────────
+
+/** export { x, y } from 'module' — named re-export (multiline-safe) */
+const REEXPORT_NAMED_RE = /export\s+{([^}]+)}\s+from\s+['"]([^'"]+)['"]/g;
+
+/** export type { x, y } from 'module' — type-only re-export */
+const REEXPORT_TYPE_RE = /export\s+type\s+{([^}]+)}\s+from\s+['"]([^'"]+)['"]/g;
+
+/** export * from 'module' — wildcard re-export (symbols not enumerable) */
+const REEXPORT_WILDCARD_RE = /export\s+\*\s+from\s+['"]([^'"]+)['"]/g;
 
 // ─── Extractor ──────────────────────────────────────────────────
 
@@ -122,17 +139,70 @@ export const typescriptExtractor: Extractor = {
       }
     }
 
+    // Re-export named: export { x, y } from 'module' (D1)
+    for (const match of content.matchAll(REEXPORT_NAMED_RE)) {
+      const symbols = match[1]
+        ?.split(',')
+        .map((s) => s.trim().replace(/\s+as\s+\w+/, ''))
+        .filter(Boolean);
+      const source = match[2]!;
+      const key = `${source}:reexport-named`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        imports.push({ source, symbols });
+      }
+    }
+
+    // Re-export type-only: export type { x, y } from 'module' (D1)
+    for (const match of content.matchAll(REEXPORT_TYPE_RE)) {
+      const symbols = match[1]
+        ?.split(',')
+        .map((s) => s.trim().replace(/\s+as\s+\w+/, ''))
+        .filter(Boolean);
+      const source = match[2]!;
+      const key = `${source}:reexport-type`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        imports.push({ source, symbols });
+      }
+    }
+
+    // Re-export wildcard: export * from 'module' (D1, D4 — never enumerate)
+    for (const match of content.matchAll(REEXPORT_WILDCARD_RE)) {
+      const source = match[1]!;
+      const key = `${source}:reexport-wildcard`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        imports.push({ source, symbols: [] });
+      }
+    }
+
     return imports;
   },
 
   extractExports(content: string): ExportInfo[] {
     const exports: ExportInfo[] = [];
     const seen = new Set<string>();
+    const seenReExports = new Set<string>();
 
     function add(name: string, kind: ExportInfo['kind']): void {
       if (!seen.has(name)) {
         seen.add(name);
         exports.push({ name, kind });
+      }
+    }
+
+    // Re-exported names are tracked in a SEPARATE seen-set, keyed by
+    // `name:source`, so (a) they never collide with a genuine local export
+    // of the same name and (b) the same name re-exported from two
+    // different sources isn't silently dropped. The wildcard sentinel
+    // (`'*'`) uses the same mechanism so multiple `export * from` lines
+    // (different sources) are all recorded.
+    function addReExport(name: string, kind: ExportInfo['kind'], source: string): void {
+      const key = `${name}:${source}`;
+      if (!seenReExports.has(key)) {
+        seenReExports.add(key);
+        exports.push({ name, kind, source });
       }
     }
 
@@ -167,15 +237,47 @@ export const typescriptExtractor: Extractor = {
       add(match[1]!, 'type');
     }
 
-    // export { x, y, z }
+    // export { x, y, z } — local named exports only (D2: `from`-suffixed
+    // matches are excluded by EXPORT_NAMED_RE's negative lookahead)
     for (const match of content.matchAll(EXPORT_NAMED_RE)) {
       const names = match[1]
         ?.split(',')
         .map((s) => s.trim().replace(/\s+as\s+\w+/, ''))
         .filter(Boolean);
       for (const name of names) {
-        add(name, 'variable'); // Can't determine kind from re-export
+        add(name, 'variable');
       }
+    }
+
+    // export { x, y } from 'module' — named re-export (D1, D2)
+    for (const match of content.matchAll(REEXPORT_NAMED_RE)) {
+      const names = match[1]
+        ?.split(',')
+        .map((s) => s.trim().replace(/\s+as\s+\w+/, ''))
+        .filter(Boolean);
+      const source = match[2]!;
+      for (const name of names) {
+        addReExport(name, 'variable', source); // Can't determine kind from re-export
+      }
+    }
+
+    // export type { x, y } from 'module' — type-only re-export (D1, D2)
+    for (const match of content.matchAll(REEXPORT_TYPE_RE)) {
+      const names = match[1]
+        ?.split(',')
+        .map((s) => s.trim().replace(/\s+as\s+\w+/, ''))
+        .filter(Boolean);
+      const source = match[2]!;
+      for (const name of names) {
+        addReExport(name, 'type', source);
+      }
+    }
+
+    // export * from 'module' — wildcard re-export (D1, D4: sentinel name,
+    // never enumerate individual symbols)
+    for (const match of content.matchAll(REEXPORT_WILDCARD_RE)) {
+      const source = match[1]!;
+      addReExport('*', 'variable', source);
     }
 
     return exports;

@@ -11,6 +11,7 @@
 
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import type { ExportInfo } from './extractors/index.js';
 import { getExtractor } from './extractors/index.js';
 import {
   type DependencyGraph,
@@ -113,6 +114,48 @@ export function resolveImportPath(
   return resolved;
 }
 
+// ─── Export Buckets (D3, D6) ─────────────────────────────────────
+
+/**
+ * Split a file's extracted `ExportInfo[]` into locally-defined exports vs
+ * the two re-export buckets (named/type-only symbols, and wildcard
+ * sources). Shared by BOTH `buildGraph` and `buildGraphIncremental` (D6
+ * parity) — factored out specifically so the barrel split can't drift
+ * between the two builder paths the way `extractImports`/`extractExports`
+ * calls historically have (see `stageImportSymbols`/`remapImportSymbols`
+ * for the analogous import-side precedent).
+ *
+ * `reExportsAllRaw` sources are UNRESOLVED module specifiers — the caller
+ * resolves them via `resolveImportPath` in whichever pass it already
+ * resolves `imports` in (Pass 2 for `buildGraph`, inline for
+ * `buildGraphIncremental`).
+ */
+function deriveExportBuckets(extractedExports: ExportInfo[]): {
+  exports: string[];
+  reExportedSymbols?: string[];
+  reExportsAllRaw?: string[];
+} {
+  const exports: string[] = [];
+  const reExportedSymbols: string[] = [];
+  const reExportsAllRaw: string[] = [];
+
+  for (const exp of extractedExports) {
+    if (exp.source === undefined) {
+      exports.push(exp.name);
+    } else if (exp.name === '*') {
+      reExportsAllRaw.push(exp.source);
+    } else {
+      reExportedSymbols.push(exp.name);
+    }
+  }
+
+  return {
+    exports,
+    reExportedSymbols: reExportedSymbols.length > 0 ? reExportedSymbols : undefined,
+    reExportsAllRaw: reExportsAllRaw.length > 0 ? reExportsAllRaw : undefined,
+  };
+}
+
 // ─── Build Graph ────────────────────────────────────────────────
 
 /**
@@ -133,6 +176,11 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
   // `imports` (required for Slice 2 lookups to work).
   const rawSymbolsByFile = new Map<string, Map<string, Set<string>>>();
 
+  // Staged rawSource[] (wildcard re-export sources) per file, BEFORE Pass-2
+  // path resolution — resolved into `reExportsAll` alongside `imports` in
+  // Pass 2, mirroring `rawSymbolsByFile` above (D6).
+  const rawWildcardSourcesByFile = new Map<string, string[]>();
+
   // Pass 1: Build nodes with raw imports
   for (const [filePath, content] of files) {
     // Skip excluded directories
@@ -150,15 +198,21 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
     try {
       const extractedImports = extractor.extractImports(content);
       const extractedExports = extractor.extractExports(content);
+      const buckets = deriveExportBuckets(extractedExports);
 
       nodes[filePath] = {
         hash: hashContent(content),
         language,
         imports: extractedImports.map((i) => i.source),
-        exports: extractedExports.map((e) => e.name),
+        exports: buckets.exports,
+        ...(buckets.reExportedSymbols ? { reExportedSymbols: buckets.reExportedSymbols } : {}),
         calls: [],
         isTest: isTestFile(filePath),
       };
+
+      if (buckets.reExportsAllRaw) {
+        rawWildcardSourcesByFile.set(filePath, buckets.reExportsAllRaw);
+      }
 
       stageImportSymbols(rawSymbolsByFile, filePath, extractedImports);
     } catch {
@@ -183,6 +237,13 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
     if (rawSymbols) {
       const resolved = remapImportSymbols(filePath, rawSymbols, availableFiles);
       if (resolved) node.importSymbols = resolved;
+    }
+
+    const rawWildcardSources = rawWildcardSourcesByFile.get(filePath);
+    if (rawWildcardSources) {
+      node.reExportsAll = rawWildcardSources.map((src) =>
+        resolveImportPath(filePath, src, availableFiles),
+      );
     }
   }
 
@@ -307,12 +368,21 @@ export function buildGraphIncremental(
     try {
       const extractedImports = extractor.extractImports(content);
       const extractedExports = extractor.extractExports(content);
+      const buckets = deriveExportBuckets(extractedExports);
 
       nodes[filePath] = {
         hash: hashContent(content),
         language,
         imports: extractedImports.map((i) => resolveImportPath(filePath, i.source, allFiles)),
-        exports: extractedExports.map((e) => e.name),
+        exports: buckets.exports,
+        ...(buckets.reExportedSymbols ? { reExportedSymbols: buckets.reExportedSymbols } : {}),
+        ...(buckets.reExportsAllRaw
+          ? {
+              reExportsAll: buckets.reExportsAllRaw.map((src) =>
+                resolveImportPath(filePath, src, allFiles),
+              ),
+            }
+          : {}),
         calls: [],
         isTest: isTestFile(filePath),
       };

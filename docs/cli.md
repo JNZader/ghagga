@@ -385,6 +385,12 @@ When an edge has no symbol data (e.g. a Go import without an alias, or a namespa
 
 **Deferred**: symbol-precise blast-radius *exclusion* (removing a dependent from the blast radius when none of its used symbols changed) is explicitly out of scope for this feature — it's advisory-only in the review prompt today, not a filtering signal.
 
+### Barrel re-export edges (TypeScript/JavaScript regex builder)
+
+The regex builder now treats `export ... from` lines as import-producing, so a barrel file (`index.ts`) re-exporting a symbol from another module produces a graph edge to that module — closing a false negative where a consumer importing a symbol *through* a barrel was silently excluded from blast-radius when the true source file changed. All three re-export forms are handled: named (`export { X } from './b'`), wildcard (`export * from './b'`), and type-only (`export type { X } from './b'`). Re-exported names are recorded separately from a file's locally-defined `exports` (additive `reExportedSymbols`/`reExportsAll` graph fields) so existing consumers of `node.exports` are unaffected.
+
+Transitive re-export resolution (a barrel re-exporting from another barrel) and Python/Rust barrel-style re-exports are **not** covered by this fix — deferred. The SCIP builder (`ghagga index`) was verified empirically to already be immune to this class of false negative: it resolves a re-exported reference through the barrel to the symbol's true defining file directly, independent of the regex-extractor fix above.
+
 ---
 
 ## Review Command Options

@@ -232,6 +232,71 @@ describe('validateGraph', () => {
     });
     expect(validateGraph(graph)).toBeNull();
   });
+
+  // ─── reExportedSymbols / reExportsAll (additive/optional, D3) ───
+
+  it('accepts a node WITH reExportedSymbols and reExportsAll', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'src/index.ts': {
+          hash: 'abc123',
+          language: 'typescript',
+          imports: ['src/b.ts', 'src/c.ts'],
+          exports: [],
+          reExportedSymbols: ['X'],
+          reExportsAll: ['src/c.ts'],
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    const result = validateGraph(graph);
+    expect(result).not.toBeNull();
+    expect(result?.nodes['src/index.ts']?.reExportedSymbols).toEqual(['X']);
+    expect(result?.nodes['src/index.ts']?.reExportsAll).toEqual(['src/c.ts']);
+  });
+
+  it('accepts a node WITHOUT reExportedSymbols/reExportsAll (absence is always valid — old graphs)', () => {
+    const graph = makeValidGraph(); // makeValidGraph() nodes have neither field
+    const result = validateGraph(graph);
+    expect(result).not.toBeNull();
+    expect(result?.nodes['src/index.ts']?.reExportedSymbols).toBeUndefined();
+    expect(result?.nodes['src/index.ts']?.reExportsAll).toBeUndefined();
+  });
+
+  it('rejects a node where reExportedSymbols is present but not an array', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'bad.ts': {
+          hash: 'abc',
+          language: 'typescript',
+          imports: [],
+          exports: [],
+          reExportedSymbols: 'not-an-array' as any,
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    expect(validateGraph(graph)).toBeNull();
+  });
+
+  it('rejects a node where reExportsAll is present but not an array', () => {
+    const graph = makeValidGraph({
+      nodes: {
+        'bad.ts': {
+          hash: 'abc',
+          language: 'typescript',
+          imports: [],
+          exports: [],
+          reExportsAll: 'not-an-array' as any,
+          calls: [],
+          isTest: false,
+        },
+      },
+    });
+    expect(validateGraph(graph)).toBeNull();
+  });
 });
 
 // ─── validateMetadata ───────────────────────────────────────────
