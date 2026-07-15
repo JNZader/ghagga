@@ -389,8 +389,8 @@ program
       'Rust (captured fixtures, CI-validated); Python is stable (entry shipped, fixture capture ' +
       'deferred — scip-python 0.6.6 emits 0 docs in some environments); heavy — Java, Kotlin ' +
       '(scip-java needs a Maven/Gradle build); experimental — C# (scip-dotnet), PHP (scip-php). ' +
-      'Detects language markers at ANY depth (default 4 levels below repo root; no CLI override ' +
-      'yet — a --marker-depth flag is a tracked follow-up), not just repo root — each marker ' +
+      'Detects language markers at ANY depth (default 4 levels below repo root; override with ' +
+      '--marker-depth), not just repo root — each marker ' +
       'directory is indexed independently and merged into one repo-relative graph (a Go marker ' +
       'in apps/backend and another in services/worker both get indexed; two same-language marker ' +
       "dirs never clobber each other's output). Vendored-tool directories (.tools, .ghagga, " +
@@ -410,9 +410,18 @@ program
     '--fallback-regex',
     'Use the regex-based indexer when no detected language could be SCIP-indexed',
   )
-  .action(async (path: string, options: { out?: string; fallbackRegex?: boolean }) => {
-    await indexCommand(path, options);
-  });
+  .option(
+    '--marker-depth <n>',
+    'Maximum depth (repo root = 0) to walk when detecting nested language markers (positive integer, default: 4)',
+  )
+  .action(
+    async (
+      path: string,
+      options: { out?: string; fallbackRegex?: boolean; markerDepth?: string },
+    ) => {
+      await indexCommand(path, options);
+    },
+  );
 
 // ─── Memory ─────────────────────────────────────────────────────
 

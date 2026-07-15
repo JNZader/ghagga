@@ -46,6 +46,13 @@ export interface IndexCommandOptions {
   out?: string;
   /** Fall back to the regex-based indexer when no language could be SCIP-indexed. */
   fallbackRegex?: boolean;
+  /**
+   * Raw `--marker-depth` CLI value (string — commander does not coerce it).
+   * Maximum depth (repo root = 0) the nested-marker walk descends to.
+   * Must be a positive integer; validated and parsed in `indexCommand`.
+   * Undefined → `detectMarkerDirectories`'s own default (`DEFAULT_MARKER_DEPTH`, 4).
+   */
+  markerDepth?: string;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -386,7 +393,20 @@ export async function indexCommand(
   const outPath = resolve(repoPath, options.out ?? DEFAULT_OUT);
   const startedAt = Date.now();
 
-  const rawPairs = detectMarkerDirectories(repoPath);
+  let markerDepth: number | undefined;
+  if (options.markerDepth != null) {
+    const parsed = Number.parseInt(options.markerDepth, 10);
+    if (Number.isNaN(parsed) || parsed <= 0 || String(parsed) !== options.markerDepth.trim()) {
+      tui.log.error(
+        `❌ Invalid --marker-depth "${options.markerDepth}". Provide a positive integer.`,
+      );
+      process.exit(1);
+      return;
+    }
+    markerDepth = parsed;
+  }
+
+  const rawPairs = detectMarkerDirectories(repoPath, { maxDepth: markerDepth });
   const pairs = collapseTypescriptPairs(repoPath, rawPairs);
   const { indexes, indexedLanguages, skipped } = await dispatchIndexers(repoPath, pairs);
   const skippedLanguages = [...new Set(skipped.flatMap((s) => s.entry.languages))];

@@ -9,8 +9,13 @@ import type { ExportInfo, Extractor, ImportInfo } from './types.js';
 
 // ─── Import Patterns ────────────────────────────────────────────
 
-/** use crate::module::item; / use super::module; / use std::collections::HashMap; */
-const USE_RE = /^use\s+([\w:]+(?:::\{[^}]+\})?(?:::\*)?)\s*;/gm;
+/**
+ * use crate::module::item; / use super::module; / use std::collections::HashMap;
+ * / pub use crate::module::Item; / pub(crate) use crate::module::Item; — a
+ * `pub use` is a re-export (Rust's barrel-equivalent) and must be captured
+ * with the same import-entry parity as a plain `use` (BL-SCIP-BARREL-PYTHON-RUST).
+ */
+const USE_RE = /^(?:pub(?:\([\w]+\))?\s+)?use\s+([\w:]+(?:::\{[^}]+\})?(?:::\*)?)\s*;/gm;
 
 /** mod module_name; — external module declaration (links to another file) */
 const MOD_RE = /^(?:pub\s+)?mod\s+(\w+)\s*;/gm;

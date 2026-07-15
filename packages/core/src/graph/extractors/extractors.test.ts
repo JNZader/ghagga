@@ -603,6 +603,44 @@ describe('Rust extractor', () => {
       expect(imports[0]?.source).toBe('crate::config');
       expect(imports[0]?.symbols).toContain('Settings');
     });
+
+    // ─── pub use re-exports (BL-SCIP-BARREL-PYTHON-RUST) ──────────
+    // Before this fix, `USE_RE` only matched lines starting with `use `
+    // (no `pub`/`pub(crate)` prefix) — a `pub use` re-export (Rust's
+    // barrel-equivalent) produced NO import entry at all, silently.
+
+    it('extracts `pub use` as an import, at parity with plain `use`', () => {
+      const content = `pub use crate::config::Settings;`;
+      const imports = rustExtractor.extractImports(content);
+      expect(imports).toHaveLength(1);
+      expect(imports[0]?.source).toBe('crate::config');
+      expect(imports[0]?.symbols).toContain('Settings');
+    });
+
+    it('extracts `pub(crate) use` as an import', () => {
+      const content = `pub(crate) use crate::helper::Item;`;
+      const imports = rustExtractor.extractImports(content);
+      expect(imports).toHaveLength(1);
+      expect(imports[0]?.source).toBe('crate::helper');
+      expect(imports[0]?.symbols).toContain('Item');
+    });
+
+    it('extracts a grouped `pub use`', () => {
+      const content = `pub use std::collections::{HashMap, BTreeMap};`;
+      const imports = rustExtractor.extractImports(content);
+      expect(imports).toHaveLength(1);
+      expect(imports[0]?.source).toBe('std::collections');
+      expect(imports[0]?.symbols).toEqual(expect.arrayContaining(['HashMap', 'BTreeMap']));
+    });
+
+    it('does not double-count a `pub use` and a plain `use` of the SAME path as duplicate keys collide, but distinct paths both get an entry', () => {
+      const content = `pub use crate::a::X;\nuse crate::b::Y;`;
+      const imports = rustExtractor.extractImports(content);
+      expect(imports).toHaveLength(2);
+      expect(imports.map((i) => i.source)).toEqual(
+        expect.arrayContaining(['crate::a', 'crate::b']),
+      );
+    });
   });
 
   describe('exports', () => {

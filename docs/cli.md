@@ -304,7 +304,7 @@ By default this uses a **SCIP-backed backend** for compiler-grade cross-file res
 
 Marker files are detected at **any depth** below repo root, not just repo root itself — a monorepo with `apps/backend/go.mod` and `services/worker/go.mod` (and no root-level `go.mod`) gets BOTH indexed, as does a repo mixing a root-level `package.json` with a nested `pyproject.toml`. This matters because most indexers (Go, Rust, Java, C#, PHP) cannot self-discover nested modules from an ancestor working directory — `ghagga index` runs each of them once **per marker directory found**, then merges all runs into one repo-relative graph.
 
-- **Depth bound**: the walk descends up to **4 levels** below repo root by default (covers `apps/*/`, `services/*/`, and one level of `packages/x/y`-style nesting). A marker nested deeper than that is silently not detected — this is a known limitation. There is no CLI flag to override the depth yet (tracked as a follow-up); it's configurable at the API level via `detectMarkerDirectories(repoPath, { maxDepth })`.
+- **Depth bound**: the walk descends up to **4 levels** below repo root by default (covers `apps/*/`, `services/*/`, and one level of `packages/x/y`-style nesting). A marker nested deeper than that is silently not detected — this is a known limitation. Override with `--marker-depth <n>` (must be a positive integer); it's also configurable at the API level via `detectMarkerDirectories(repoPath, { maxDepth })`.
 - **Excluded directories**: the walk always skips `node_modules`, `vendor`, `.git`, `__pycache__`, `target`, `build`, `dist`, `.next`, `.turbo`, `.worktrees`, `.ghagga`, and `.tools` — this is what keeps a `.tools/codeql/` with 100k+ files, or a `.worktrees/` full of parallel git checkouts, from blowing up the walk.
 - **Output isolation**: two marker directories of the SAME indexer (e.g. Python markers in both `apps/ml-service` and `services/ai-assistant`) never clobber each other's `.scip` output — each nested run gets a directory-disambiguated output path, and the merge step disambiguates identically-named documents (e.g. two `main.py`) by their source subdirectory before building the graph.
 - **Run-count cap**: per-marker-directory indexer runs are capped at **25** by default, but this cap applies ONLY to **nested** marker directories — root-level markers (e.g. a root `pom.xml` or `*.csproj`) are NEVER dropped and always run, no matter how many nested markers are found. Nested runs are sorted `stable` → `heavy` → `experimental` maturity, then depth ascending, BEFORE capping — so cheap, reliable indexers never get crowded out by expensive/immature ones, and a pathological monorepo degrades predictably rather than hanging. Beyond the cap, a warning names exactly which nested marker directories were skipped.
@@ -326,6 +326,9 @@ ghagga index ./services/api
 
 # Write the graph to a custom location
 ghagga index --out .ghagga/graph.json
+
+# Widen the nested-marker-detection depth bound (default: 4)
+ghagga index --marker-depth 6
 ```
 
 When run, `ghagga index`:
@@ -343,6 +346,7 @@ Options:
 | `[path]` | `.` | Path to the repository to index |
 | `--out <path>` | `.ghagga/graph.json` | Output path for the graph, relative to the target repo |
 | `--fallback-regex` | off | When no detected language could be SCIP-indexed, use the regex-based indexer instead of failing. Note: the regex path only resolves relative imports and cannot follow module-path imports (Go, Java, etc.) |
+| `--marker-depth <n>` | `4` | Maximum depth (repo root = 0) to walk when detecting nested language markers. Must be a positive integer — `0`/negative/non-numeric values are rejected with an error |
 
 ### Per-language install hints
 

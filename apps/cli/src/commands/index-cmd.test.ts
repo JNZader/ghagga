@@ -315,6 +315,45 @@ describe('indexCommand', () => {
     });
   });
 
+  describe('--marker-depth option', () => {
+    it('threads a valid --marker-depth through to detectMarkerDirectories as maxDepth', async () => {
+      const runSpy = vi.fn().mockResolvedValue(FIXTURE_SCIP_PATH);
+      const entry = makeEntry({ bin: 'scip-go', languages: ['go'], run: runSpy });
+      mockDetectMarkerDirectories.mockReturnValue([{ entry, dir: FIXTURE_DIR }]);
+
+      await indexCommand(FIXTURE_DIR, { markerDepth: '2' });
+
+      expect(mockDetectMarkerDirectories).toHaveBeenCalledWith(FIXTURE_DIR, { maxDepth: 2 });
+    });
+
+    it('defaults to maxDepth: undefined (detectMarkerDirectories falls back to DEFAULT_MARKER_DEPTH=4) when --marker-depth is absent', async () => {
+      const runSpy = vi.fn().mockResolvedValue(FIXTURE_SCIP_PATH);
+      const entry = makeEntry({ bin: 'scip-go', languages: ['go'], run: runSpy });
+      mockDetectMarkerDirectories.mockReturnValue([{ entry, dir: FIXTURE_DIR }]);
+
+      await indexCommand(FIXTURE_DIR, {});
+
+      expect(mockDetectMarkerDirectories).toHaveBeenCalledWith(FIXTURE_DIR, {
+        maxDepth: undefined,
+      });
+    });
+
+    it.each([
+      '0',
+      '-1',
+      'abc',
+      '2.5',
+      '',
+    ])('rejects an invalid --marker-depth %j with a clear error and exits non-zero, without walking', async (invalid) => {
+      await expect(indexCommand(FIXTURE_DIR, { markerDepth: invalid })).rejects.toThrow(
+        'process.exit(1)',
+      );
+
+      expect(tui.log.error).toHaveBeenCalledWith(expect.stringContaining('--marker-depth'));
+      expect(mockDetectMarkerDirectories).not.toHaveBeenCalled();
+    });
+  });
+
   describe('multi-language merge + output isolation (D2, D4)', () => {
     it('reads each pair.run() return path independently — the dispatcher does not assume a single shared output path', async () => {
       // Two entries, each returning its OWN isolated .scip path — here we

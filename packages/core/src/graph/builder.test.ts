@@ -103,6 +103,84 @@ describe('resolveImportPath', () => {
     const result = resolveImportPath('src/main.ts', './utils.js', available);
     expect(result).toBe('src/utils.ts');
   });
+
+  // ─── Python barrel resolution (BL-SCIP-BARREL-PYTHON-RUST) ────
+
+  describe('Python __init__.py barrel + dotted-import resolution', () => {
+    const pyFiles = new Set(['pkg/__init__.py', 'pkg/sub.py', 'consumer.py', 'pkg/nested/mod.py']);
+
+    it('resolves a single-dot relative import (`from .sub import X`) from a package __init__.py to the submodule', () => {
+      const result = resolveImportPath('pkg/__init__.py', '.sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('resolves a single-dot relative import from a REGULAR module (not __init__.py) to a sibling submodule', () => {
+      const result = resolveImportPath('pkg/other.py', '.sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('resolves an absolute dotted package import (`from pkg import X`) to the package barrel __init__.py', () => {
+      const result = resolveImportPath('consumer.py', 'pkg', pyFiles);
+      expect(result).toBe('pkg/__init__.py');
+    });
+
+    it('resolves an absolute dotted submodule import (`import pkg.sub`) directly to the submodule file', () => {
+      const result = resolveImportPath('consumer.py', 'pkg.sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('resolves a two-dot relative import (`from ..sub import X`) up one package level', () => {
+      const result = resolveImportPath('pkg/nested/mod.py', '..sub', pyFiles);
+      expect(result).toBe('pkg/sub.py');
+    });
+
+    it('leaves a genuinely external/unresolvable absolute import UNCHANGED (graceful degradation, no fabrication)', () => {
+      const result = resolveImportPath('consumer.py', 'numpy', pyFiles);
+      expect(result).toBe('numpy');
+    });
+
+    // ─── R3-001: absolute-import ambiguity (name collision) ────────
+
+    it('does NOT guess the nearest ancestor package when the same package name exists elsewhere in the repo (name collision) — leaves the specifier unchanged rather than resolving to the wrong file', () => {
+      const collisionFiles = new Set([
+        'services/billing/utils/__init__.py',
+        'shared/utils/__init__.py',
+      ]);
+      const result = resolveImportPath(
+        'services/billing/worker/handler.py',
+        'utils',
+        collisionFiles,
+      );
+      // Must NOT be the nearest-ancestor guess ('services/billing/utils/__init__.py').
+      expect(result).not.toBe('services/billing/utils/__init__.py');
+      expect(result).toBe('utils');
+    });
+
+    it('still resolves an absolute import when only ONE candidate package exists anywhere in the repo (unambiguous, common case)', () => {
+      const singleCandidateFiles = new Set([
+        'services/billing/utils/__init__.py',
+        'services/billing/worker/handler.py',
+      ]);
+      const result = resolveImportPath(
+        'services/billing/worker/handler.py',
+        'utils',
+        singleCandidateFiles,
+      );
+      expect(result).toBe('services/billing/utils/__init__.py');
+    });
+
+    // ─── R3-002: no-fabrication contract for relative imports ──────
+
+    it('resolves a root-level relative barrel import (`from . import x`) to `__init__.py` without a leading-slash mismatch', () => {
+      const result = resolveImportPath('main.py', '.', new Set(['__init__.py', 'main.py']));
+      expect(result).toBe('__init__.py');
+    });
+
+    it('returns undefined (never a fabricated empty string) for an unresolvable relative import', () => {
+      const result = resolveImportPath('main.py', '.', new Set(['main.py']));
+      expect(result).toBeUndefined();
+    });
+  });
 });
 
 // ─── buildGraph ─────────────────────────────────────────────────
@@ -375,6 +453,14 @@ describe('buildGraph importSymbols', () => {
   it('populates importSymbols for Rust `use crate::module::Item` (named symbols ARE extracted)', () => {
     const files = makeFiles({
       'src/lib.rs': `use crate::helper::Item;\nfn run() {}`,
+    });
+    const graph = buildGraph('.', files);
+    expect(graph.nodes['src/lib.rs']?.importSymbols?.['crate::helper']).toEqual(['Item']);
+  });
+
+  it('populates importSymbols for Rust `pub use crate::module::Item` (re-export parity with plain `use`; BL-SCIP-BARREL-PYTHON-RUST)', () => {
+    const files = makeFiles({
+      'src/lib.rs': `pub use crate::helper::Item;`,
     });
     const graph = buildGraph('.', files);
     expect(graph.nodes['src/lib.rs']?.importSymbols?.['crate::helper']).toEqual(['Item']);
