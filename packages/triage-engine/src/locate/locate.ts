@@ -65,7 +65,7 @@ export async function locate(
 
   const seeds = await rerankSeed(issue, candidates, files, keywords, rerankFn);
 
-  const contextFiles = expand(seeds, files, config, { maxFiles: 10 });
+  const contextFiles = await expand(seeds, files, config, { maxFiles: 10 });
 
   return { keywords, candidates, seeds, contextFiles, files };
 }
