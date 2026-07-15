@@ -11,7 +11,40 @@
 
 // ─── Supported Languages ────────────────────────────────────────
 
-export type SupportedLanguage = 'typescript' | 'javascript' | 'python' | 'go' | 'java' | 'rust';
+/**
+ * Languages that have a regex-based extractor (see `extractors/index.ts`).
+ * `Record<RegexSupportedLanguage, Extractor>` stays exhaustive: adding a new
+ * regex-capable language forces a compile error until an extractor exists.
+ */
+export type RegexSupportedLanguage =
+  | 'typescript'
+  | 'javascript'
+  | 'python'
+  | 'go'
+  | 'java'
+  | 'rust';
+
+/**
+ * Languages only reachable via a SCIP indexer — no regex extractor exists
+ * (or ever will, e.g. Kotlin/C#/PHP). `--fallback-regex` cannot index files
+ * in these languages.
+ */
+export type ScipOnlyLanguage = 'kotlin' | 'csharp' | 'php';
+
+export type SupportedLanguage = RegexSupportedLanguage | ScipOnlyLanguage;
+
+/** Runtime enumeration of `RegexSupportedLanguage`, for tests/tooling. */
+export const REGEX_SUPPORTED_LANGUAGES: readonly RegexSupportedLanguage[] = [
+  'typescript',
+  'javascript',
+  'python',
+  'go',
+  'java',
+  'rust',
+];
+
+/** Runtime enumeration of `ScipOnlyLanguage`, for tests/tooling. */
+export const SCIP_ONLY_LANGUAGES: readonly ScipOnlyLanguage[] = ['kotlin', 'csharp', 'php'];
 
 // ─── Graph Schema ───────────────────────────────────────────────
 
@@ -123,6 +156,9 @@ export const TEST_FILE_PATTERNS: RegExp[] = [
   /_test\.go$/,
   /Test\.java$/,
   /_test\.rs$/,
+  /Test\.kt$/,
+  /Tests\.cs$/,
+  /Test\.php$/,
 ];
 
 /** Directories excluded from graph indexing */
@@ -150,6 +186,10 @@ export const LANGUAGE_EXTENSIONS: Record<string, SupportedLanguage> = {
   '.go': 'go',
   '.java': 'java',
   '.rs': 'rust',
+  '.kt': 'kotlin',
+  '.kts': 'kotlin',
+  '.cs': 'csharp',
+  '.php': 'php',
 };
 
 // ─── Utility Functions ──────────────────────────────────────────

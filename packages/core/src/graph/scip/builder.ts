@@ -74,6 +74,10 @@ const SCIP_LANGUAGE_MAP: Record<string, SupportedLanguage> = {
   python: 'python',
   java: 'java',
   rust: 'rust',
+  kotlin: 'kotlin',
+  csharp: 'csharp',
+  'c#': 'csharp',
+  php: 'php',
 };
 
 function scipLanguageToSupported(
@@ -103,13 +107,28 @@ function hashDocument(doc: Document): string {
 
 // ─── Build Graph ────────────────────────────────────────────────
 
+export interface BuildGraphFromScipOptions {
+  /**
+   * Called for every SCIP document whose `language` cannot be mapped to a
+   * `SupportedLanguage` (D5) — the document is dropped from the graph, same
+   * as before, but the caller now gets a chance to report it instead of the
+   * drop happening silently. Core stays console-free: pass a callback that
+   * wires to `tui.warn` at the call site.
+   */
+  onUnmappedDoc?: (relativePath: string, language: string) => void;
+}
+
 /**
  * Build a complete DependencyGraph from a parsed SCIP Index.
  *
  * @param index - Parsed SCIP Index (see `parseScipIndex`)
+ * @param opts - Optional hooks (see `BuildGraphFromScipOptions`)
  * @returns Complete v1 DependencyGraph
  */
-export function buildGraphFromScip(index: Index): DependencyGraph {
+export function buildGraphFromScip(
+  index: Index,
+  opts?: BuildGraphFromScipOptions,
+): DependencyGraph {
   const rootDir = index.metadata?.projectRoot ?? '';
   const nodes: Record<string, GraphNode> = {};
 
@@ -138,7 +157,10 @@ export function buildGraphFromScip(index: Index): DependencyGraph {
   // Initialize nodes with exports derived from Document.symbols.
   for (const doc of index.documents) {
     const language = scipLanguageToSupported(doc.language, doc.relativePath);
-    if (!language) continue;
+    if (!language) {
+      opts?.onUnmappedDoc?.(doc.relativePath, doc.language);
+      continue;
+    }
 
     const exportsSet = new Set<string>();
     for (const symInfo of doc.symbols) {

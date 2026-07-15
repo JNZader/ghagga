@@ -249,7 +249,7 @@ describe('constants', () => {
     expect(GRAPH_STALE_DAYS).toBe(7);
   });
 
-  it('LANGUAGE_EXTENSIONS covers all 6 supported languages', () => {
+  it('LANGUAGE_EXTENSIONS covers all 9 supported languages', () => {
     const languages = new Set(Object.values(LANGUAGE_EXTENSIONS));
     expect(languages).toContain('typescript');
     expect(languages).toContain('javascript');
@@ -257,7 +257,10 @@ describe('constants', () => {
     expect(languages).toContain('go');
     expect(languages).toContain('java');
     expect(languages).toContain('rust');
-    expect(languages.size).toBe(6);
+    expect(languages).toContain('kotlin');
+    expect(languages).toContain('csharp');
+    expect(languages).toContain('php');
+    expect(languages.size).toBe(9);
   });
 
   it('EXCLUDED_DIRS includes standard build/dependency directories', () => {
@@ -271,5 +274,25 @@ describe('constants', () => {
   it('TEST_FILE_PATTERNS has patterns for all 6 languages', () => {
     // Each language has at least one test pattern
     expect(TEST_FILE_PATTERNS.length).toBeGreaterThanOrEqual(6);
+  });
+});
+
+// ─── Union Coverage (D3) ──────────────────────────────────────────
+
+describe('SupportedLanguage union coverage', () => {
+  it('SupportedLanguage = RegexSupportedLanguage ∪ SCIP_ONLY_LANGUAGES (runtime assertion)', async () => {
+    // Runtime proxy for the compile-time union equality: every member of
+    // RegexSupportedLanguage plus SCIP_ONLY_LANGUAGES must cover exactly the
+    // same set as the languages actually usable across the codebase (spot
+    // checked via LANGUAGE_EXTENSIONS + SCIP_ONLY_LANGUAGES export).
+    const { SCIP_ONLY_LANGUAGES, REGEX_SUPPORTED_LANGUAGES } = await import('./schema.js');
+    const union = new Set<string>([...REGEX_SUPPORTED_LANGUAGES, ...SCIP_ONLY_LANGUAGES]);
+    const allLanguages = new Set(Object.values(LANGUAGE_EXTENSIONS));
+    expect(union).toEqual(allLanguages);
+  });
+
+  it('SCIP_ONLY_LANGUAGES contains kotlin, csharp, php', async () => {
+    const { SCIP_ONLY_LANGUAGES } = await import('./schema.js');
+    expect(new Set(SCIP_ONLY_LANGUAGES)).toEqual(new Set(['kotlin', 'csharp', 'php']));
   });
 });

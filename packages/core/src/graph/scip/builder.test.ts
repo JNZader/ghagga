@@ -20,7 +20,7 @@ import {
   OccurrenceSchema,
   SymbolInformationSchema,
 } from '@scip-code/scip';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { validateGraph } from '../schema.js';
 import { buildGraphFromScip, parseScipIndex } from './builder.js';
 
@@ -141,5 +141,62 @@ describe('buildGraphFromScip', () => {
     const graph = buildGraphFromScip(index);
     expect(graph.nodes['base.go']?.imports).toEqual([]);
     expect(validateGraph(graph)).not.toBeNull();
+  });
+});
+
+describe('buildGraphFromScip — onUnmappedDoc callback (D5)', () => {
+  function docWithLanguage(relativePath: string, language: string) {
+    return create(DocumentSchema, { relativePath, language, symbols: [], occurrences: [] });
+  }
+
+  it('fires onUnmappedDoc for a document whose language cannot be mapped, and drops it', () => {
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [
+        docWithLanguage('main.go', 'go'),
+        docWithLanguage('unknown.xyz', 'some-unknown-scip-language'),
+      ],
+      externalSymbols: [],
+    });
+
+    const onUnmappedDoc = vi.fn();
+    const graph = buildGraphFromScip(index, { onUnmappedDoc });
+
+    expect(graph.nodes['main.go']).toBeDefined();
+    expect(graph.nodes['unknown.xyz']).toBeUndefined();
+    expect(onUnmappedDoc).toHaveBeenCalledTimes(1);
+    expect(onUnmappedDoc).toHaveBeenCalledWith('unknown.xyz', 'some-unknown-scip-language');
+  });
+
+  it('does not throw when onUnmappedDoc is omitted — core stays console-free by default', () => {
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [docWithLanguage('unknown.xyz', 'some-unknown-scip-language')],
+      externalSymbols: [],
+    });
+
+    expect(() => buildGraphFromScip(index)).not.toThrow();
+    const graph = buildGraphFromScip(index);
+    expect(graph.nodes['unknown.xyz']).toBeUndefined();
+  });
+
+  it('maps kotlin/csharp/php SCIP documents to graph nodes (union coverage, D3)', () => {
+    const index = create(IndexSchema, {
+      metadata: { projectRoot: 'file:///synthetic' },
+      documents: [
+        docWithLanguage('Main.kt', 'kotlin'),
+        docWithLanguage('Program.cs', 'csharp'),
+        docWithLanguage('index.php', 'php'),
+      ],
+      externalSymbols: [],
+    });
+
+    const onUnmappedDoc = vi.fn();
+    const graph = buildGraphFromScip(index, { onUnmappedDoc });
+
+    expect(graph.nodes['Main.kt']?.language).toBe('kotlin');
+    expect(graph.nodes['Program.cs']?.language).toBe('csharp');
+    expect(graph.nodes['index.php']?.language).toBe('php');
+    expect(onUnmappedDoc).not.toHaveBeenCalled();
   });
 });

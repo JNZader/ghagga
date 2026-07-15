@@ -1,13 +1,16 @@
 /**
  * Index command — builds the dependency graph consumed by blast-radius/review.
  *
- * Toolchain-gated: prefers the SCIP backend (compiler-grade resolution, Go-first
- * via scip-go) when `go` and `scip-go` are both on PATH. Falls back to the
- * regex-based indexer only when explicitly opted in via `--fallback-regex`,
- * since it can't resolve non-relative (module-path) imports.
+ * Registry dispatcher (D1): detects present languages via marker files,
+ * checks per-language toolchain availability, runs each available indexer
+ * to an isolated `.scip` output (D2), merges the results (D4), and builds
+ * ONE graph. Per-language failures degrade gracefully (D6) — a missing
+ * toolchain or a runtime crash for one language warns and skips it rather
+ * than aborting the whole run. The regex-based indexer remains available
+ * as an explicit opt-in fallback (`--fallback-regex`) for when NO detected
+ * language could be indexed via SCIP.
  */
 
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import {
@@ -15,46 +18,25 @@ import {
   buildGraphFromScip,
   type DependencyGraph,
   EXCLUDED_DIRS,
+  type Index,
+  mergeScipIndexes,
   parseScipIndex,
 } from 'ghagga-core';
 import * as tui from '../ui/tui.js';
+import { detectPresentLanguages, type IndexerEntry } from './indexer-registry.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface IndexCommandOptions {
   /** Output path for graph.json, relative to the target repo. */
   out?: string;
-  /** Fall back to the regex-based indexer when the SCIP toolchain is absent. */
+  /** Fall back to the regex-based indexer when no language could be SCIP-indexed. */
   fallbackRegex?: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
 
 const DEFAULT_OUT = '.ghagga/graph.json';
-const SCIP_GO_INSTALL_HINT = 'go install github.com/scip-code/scip-go/cmd/scip-go@latest';
-
-// ─── Toolchain Detection ────────────────────────────────────────
-
-/** Check whether a command is resolvable on PATH. */
-function commandExists(cmd: string): boolean {
-  try {
-    const finder = process.platform === 'win32' ? 'where' : 'which';
-    execFileSync(finder, [cmd], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Detect whether both `go` and `scip-go` are available on PATH. */
-export function detectScipGoToolchain(): boolean {
-  return commandExists('go') && commandExists('scip-go');
-}
-
-/** Run scip-go against the target directory, producing `index.scip` there. */
-export function runScipGo(cwd: string): void {
-  execFileSync('scip-go', [], { cwd, stdio: 'inherit' });
-}
 
 // ─── Regex Fallback: File Collection ────────────────────────────
 
@@ -100,6 +82,57 @@ function writeGraph(outPath: string, graph: DependencyGraph): void {
   writeFileSync(outPath, JSON.stringify(graph, null, 2));
 }
 
+// ─── Per-Language Dispatch (D1, D6) ──────────────────────────────
+
+interface DispatchResult {
+  indexes: Index[];
+  /** Languages successfully indexed, for the success message. */
+  indexedLanguages: string[];
+  /** Entries that were detected but could not be indexed, with why — for the hard-fail message. */
+  skipped: Array<{ entry: IndexerEntry; reason: string }>;
+}
+
+/**
+ * Run every detected+available indexer, collecting parsed SCIP indexes.
+ * Missing toolchains and runtime failures warn and are skipped (D6) —
+ * this function never throws for a single language's failure.
+ */
+async function dispatchIndexers(
+  repoPath: string,
+  detected: IndexerEntry[],
+): Promise<DispatchResult> {
+  const indexes: Index[] = [];
+  const indexedLanguages: string[] = [];
+  const skipped: Array<{ entry: IndexerEntry; reason: string }> = [];
+
+  for (const entry of detected) {
+    const languageLabel = entry.languages.join('/');
+
+    if (!entry.toolchainCheck()) {
+      const reason = `toolchain not found (${entry.bin})`;
+      tui.log.warn(`⚠️  ${languageLabel}: ${reason} — skipping.\n   ${entry.installHint}`);
+      skipped.push({ entry, reason });
+      continue;
+    }
+
+    try {
+      const scipPath = await entry.run(repoPath);
+      const bytes = readFileSync(scipPath);
+      const index = parseScipIndex(new Uint8Array(bytes));
+      indexes.push(index);
+      indexedLanguages.push(...entry.languages);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      tui.log.warn(
+        `⚠️  ${languageLabel}: ${entry.bin} failed at runtime — skipping.\n   ${message}`,
+      );
+      skipped.push({ entry, reason: message });
+    }
+  }
+
+  return { indexes, indexedLanguages, skipped };
+}
+
 // ─── Main Command ───────────────────────────────────────────────
 
 export async function indexCommand(
@@ -109,21 +142,30 @@ export async function indexCommand(
   const repoPath = resolve(targetPath || '.');
   const outPath = resolve(repoPath, options.out ?? DEFAULT_OUT);
 
-  const hasToolchain = detectScipGoToolchain();
+  const detected = detectPresentLanguages(repoPath);
+  const { indexes, indexedLanguages, skipped } = await dispatchIndexers(repoPath, detected);
 
-  if (!hasToolchain) {
+  if (indexes.length === 0) {
     if (!options.fallbackRegex) {
+      const triedLines =
+        detected.length === 0
+          ? '   No supported language markers were detected in this repo.'
+          : skipped
+              .map((s) => `   - ${s.entry.languages.join('/')} (${s.entry.bin}): ${s.reason}`)
+              .join('\n');
       tui.log.error(
-        '❌ SCIP toolchain not found (requires "go" and "scip-go" on PATH).\n' +
-          `   Install scip-go: ${SCIP_GO_INSTALL_HINT}\n` +
-          '   Or pass --fallback-regex to use the regex-based indexer instead\n' +
+        '❌ No language could be indexed via SCIP.\n' +
+          `${triedLines}\n` +
+          '   Pass --fallback-regex to use the regex-based indexer instead\n' +
           '   (note: it cannot resolve non-relative/module-path imports).',
       );
       process.exit(1);
       return;
     }
 
-    tui.log.warn('⚠️  SCIP toolchain not found — falling back to regex-based indexing.');
+    tui.log.warn(
+      '⚠️  No language could be indexed via SCIP — falling back to regex-based indexing.',
+    );
     const files = collectFiles(repoPath);
     const graph = buildGraph(repoPath, files);
     writeGraph(outPath, graph);
@@ -133,19 +175,23 @@ export async function indexCommand(
     return;
   }
 
-  tui.log.step('Running scip-go...');
-  runScipGo(repoPath);
-
-  const scipPath = join(repoPath, 'index.scip');
-  if (!existsSync(scipPath)) {
-    tui.log.error(`❌ scip-go did not produce an index at ${scipPath}`);
-    process.exit(1);
-    return;
+  const { index: mergedIndex, duplicatePaths } = mergeScipIndexes(indexes);
+  for (const duplicatePath of duplicatePaths) {
+    tui.log.warn(
+      `⚠️  Duplicate SCIP document path across indexers: ${duplicatePath} — last indexer wins.`,
+    );
   }
 
-  const bytes = readFileSync(scipPath);
-  const index = parseScipIndex(new Uint8Array(bytes));
-  const graph = buildGraphFromScip(index);
+  const graph = buildGraphFromScip(mergedIndex, {
+    onUnmappedDoc: (relativePath, language) => {
+      tui.log.warn(
+        `⚠️  Unmapped SCIP document ${relativePath} (language: ${language}) — dropped from graph.`,
+      );
+    },
+  });
   writeGraph(outPath, graph);
-  tui.log.success(`✅ Wrote ${Object.keys(graph.nodes).length} node(s) to ${outPath} (SCIP).`);
+  tui.log.success(
+    `✅ Wrote ${Object.keys(graph.nodes).length} node(s) to ${outPath} ` +
+      `(SCIP: ${indexedLanguages.join(', ')}).`,
+  );
 }
