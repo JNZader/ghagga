@@ -1,0 +1,6 @@
+// Provides a tiny symbol that another file in this fixture imports via its
+// module path. This is the cross-file reference shape captured for the
+// mapper test.
+pub fn greet(name: &str) -> String {
+    format!("Hello, {}!", name)
+}
