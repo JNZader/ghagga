@@ -71,12 +71,47 @@ function dirUp(dir: string): string {
  * when nothing matches — the caller must NOT fabricate a path.
  */
 function tryPythonTarget(target: string, availableFiles: Set<string>): string | undefined {
-  if (availableFiles.has(`${target}.py`)) return `${target}.py`;
-  if (availableFiles.has(`${target}.pyi`)) return `${target}.pyi`;
-  if (availableFiles.has(`${target}/__init__.py`)) return `${target}/__init__.py`;
-  if (availableFiles.has(`${target}/__init__.pyi`)) return `${target}/__init__.pyi`;
-  if (availableFiles.has(target)) return target;
+  // Root-level target ('' — e.g. `from . import x` at the repo root): the
+  // barrel candidate is `__init__.py`, NOT `/__init__.py` (a leading slash
+  // never matches a repo-relative path, so this case silently fell through
+  // before this fix).
+  const barrelPrefix = target ? `${target}/` : '';
+  if (target && availableFiles.has(`${target}.py`)) return `${target}.py`;
+  if (target && availableFiles.has(`${target}.pyi`)) return `${target}.pyi`;
+  if (availableFiles.has(`${barrelPrefix}__init__.py`)) return `${barrelPrefix}__init__.py`;
+  if (availableFiles.has(`${barrelPrefix}__init__.pyi`)) return `${barrelPrefix}__init__.pyi`;
+  if (target && availableFiles.has(target)) return target;
   return undefined;
+}
+
+/**
+ * Count how many distinct real files in `availableFiles` could satisfy an
+ * ABSOLUTE Python import target (root-relative `target`, already
+ * dot-converted to `/`) — either as `target` itself resolved via
+ * `tryPythonTarget` (root-relative), OR as `target` resolved relative to
+ * ANY ancestor directory anywhere in the repo (i.e. some OTHER file tree
+ * also has a same-named package/module at `target`'s tail). Used to detect
+ * package-name collisions (R3-001): a `utils` package that exists under
+ * BOTH `services/billing/` and `shared/` must never be silently resolved to
+ * whichever one happens to be nearest — that is a WRONG edge, worse than no
+ * edge at all.
+ */
+function countPythonAbsoluteCandidates(target: string, availableFiles: Set<string>): Set<string> {
+  const candidates = new Set<string>();
+
+  const rootResolved = tryPythonTarget(target, availableFiles);
+  if (rootResolved) candidates.add(rootResolved);
+
+  const suffixes = target
+    ? [`/${target}.py`, `/${target}.pyi`, `/${target}/__init__.py`, `/${target}/__init__.pyi`]
+    : [];
+  for (const f of availableFiles) {
+    if (suffixes.some((suffix) => f.endsWith(suffix))) {
+      candidates.add(f);
+    }
+  }
+
+  return candidates;
 }
 
 /**
@@ -95,18 +130,25 @@ function tryPythonTarget(target: string, availableFiles: Set<string>): string | 
  * - ABSOLUTE (`from pkg import X`, `import pkg.sub`): previously short-
  *   circuited by the non-relative-imports-return-as-is branch (correct for
  *   `lodash`-style external packages in OTHER languages, wrong for Python's
- *   dotted own-package imports). Resolved here root-relative first, then
- *   against each ancestor directory of the importer — a heuristic
- *   approximation of `sys.path` resolution with no project-config
- *   awareness (a `src/`-layout repo or a non-root package dir declared only
- *   in `pyproject.toml` can still miss; genuinely external packages, e.g.
- *   `numpy`, correctly fall through unresolved and are returned unchanged).
+ *   dotted own-package imports). Resolved here ONLY when the target is
+ *   UNAMBIGUOUS — exactly one file anywhere in `availableFiles` can satisfy
+ *   it (root-relative, or nested under exactly one ancestor tree). A
+ *   monorepo with duplicate package names (e.g. `services/billing/utils`
+ *   AND `shared/utils`) must NOT silently guess the nearest one — a WRONG
+ *   edge is worse than no edge (R3-001). Zero or multiple candidates fall
+ *   through unresolved and are returned unchanged, same as genuinely
+ *   external packages (e.g. `numpy`).
+ *
+ * Relative-import resolution failures (R3-002) return `undefined` — never a
+ * fabricated non-existent path — since a relative specifier (`.`, `..sub`)
+ * is never a meaningful external reference on its own; callers drop
+ * unresolved imports rather than recording a dangling/fabricated edge.
  */
 function resolvePythonImportPath(
   importerPath: string,
   importSpecifier: string,
   availableFiles: Set<string>,
-): string {
+): string | undefined {
   const dotMatch = importSpecifier.match(/^\.+/);
   const dotCount = dotMatch ? dotMatch[0].length : 0;
   const rest = importSpecifier.slice(dotCount);
@@ -119,21 +161,14 @@ function resolvePythonImportPath(
       dir = dirUp(dir);
     }
     const target = restPath ? path.posix.join(dir, restPath) : dir;
-    return tryPythonTarget(target, availableFiles) ?? target;
+    return tryPythonTarget(target, availableFiles);
   }
 
-  // Absolute dotted import: root-relative first, then each ancestor dir of
-  // the importer (nearest first).
-  const rootResolved = tryPythonTarget(restPath, availableFiles);
-  if (rootResolved) return rootResolved;
-
-  let dir = path.posix.dirname(importerPath);
-  if (dir === '.') dir = '';
-  while (dir !== '') {
-    const target = path.posix.join(dir, restPath);
-    const resolved = tryPythonTarget(target, availableFiles);
-    if (resolved) return resolved;
-    dir = dirUp(dir);
+  // Absolute dotted import: resolve ONLY when unambiguous.
+  const candidates = countPythonAbsoluteCandidates(restPath, availableFiles);
+  if (candidates.size === 1) {
+    const [only] = candidates;
+    return only;
   }
 
   return importSpecifier;
@@ -152,12 +187,18 @@ function resolvePythonImportPath(
  * are delegated to `resolvePythonImportPath` — see that function's doc
  * comment for what's actually resolved vs. left as a documented heuristic
  * gap. No other language's resolution changes.
+ *
+ * Returns `undefined` ONLY for the Python relative-import no-fabrication
+ * case (R3-002) — every other path (including unresolved Python absolute
+ * imports and non-Python external specifiers) always returns a string.
+ * Callers MUST drop `undefined` results rather than substitute a fabricated
+ * path.
  */
 export function resolveImportPath(
   importerPath: string,
   importSpecifier: string,
   availableFiles: Set<string>,
-): string {
+): string | undefined {
   if (detectLanguage(importerPath) === 'python') {
     return resolvePythonImportPath(importerPath, importSpecifier, availableFiles);
   }
@@ -212,6 +253,24 @@ export function resolveImportPath(
 
   // Return the original resolved path (without extension)
   return resolved;
+}
+
+/**
+ * Resolve a list of raw import specifiers, dropping any that
+ * `resolveImportPath` leaves unresolved (R3-002 no-fabrication contract —
+ * currently only the Python relative-import case can return `undefined`).
+ */
+function resolveImportPathList(
+  importerPath: string,
+  specifiers: string[],
+  availableFiles: Set<string>,
+): string[] {
+  const out: string[] = [];
+  for (const spec of specifiers) {
+    const resolved = resolveImportPath(importerPath, spec, availableFiles);
+    if (resolved !== undefined) out.push(resolved);
+  }
+  return out;
 }
 
 // ─── Export Buckets (D3, D6) ─────────────────────────────────────
@@ -331,7 +390,7 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
 
   // Pass 2: Resolve relative imports to project-relative paths
   for (const [filePath, node] of Object.entries(nodes)) {
-    node.imports = node.imports.map((imp) => resolveImportPath(filePath, imp, availableFiles));
+    node.imports = resolveImportPathList(filePath, node.imports, availableFiles);
 
     const rawSymbols = rawSymbolsByFile.get(filePath);
     if (rawSymbols) {
@@ -341,9 +400,7 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
 
     const rawWildcardSources = rawWildcardSourcesByFile.get(filePath);
     if (rawWildcardSources) {
-      node.reExportsAll = rawWildcardSources.map((src) =>
-        resolveImportPath(filePath, src, availableFiles),
-      );
+      node.reExportsAll = resolveImportPathList(filePath, rawWildcardSources, availableFiles);
     }
   }
 
@@ -399,6 +456,7 @@ function remapImportSymbols(
   const result: Record<string, Set<string>> = {};
   for (const [rawSource, symbols] of rawSymbols) {
     const resolved = resolveImportPath(filePath, rawSource, availableFiles);
+    if (resolved === undefined) continue;
     const existing = result[resolved];
     if (existing) {
       for (const s of symbols) existing.add(s);
@@ -473,14 +531,16 @@ export function buildGraphIncremental(
       nodes[filePath] = {
         hash: hashContent(content),
         language,
-        imports: extractedImports.map((i) => resolveImportPath(filePath, i.source, allFiles)),
+        imports: resolveImportPathList(
+          filePath,
+          extractedImports.map((i) => i.source),
+          allFiles,
+        ),
         exports: buckets.exports,
         ...(buckets.reExportedSymbols ? { reExportedSymbols: buckets.reExportedSymbols } : {}),
         ...(buckets.reExportsAllRaw
           ? {
-              reExportsAll: buckets.reExportsAllRaw.map((src) =>
-                resolveImportPath(filePath, src, allFiles),
-              ),
+              reExportsAll: resolveImportPathList(filePath, buckets.reExportsAllRaw, allFiles),
             }
           : {}),
         calls: [],

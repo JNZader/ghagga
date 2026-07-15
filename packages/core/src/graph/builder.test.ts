@@ -138,6 +138,48 @@ describe('resolveImportPath', () => {
       const result = resolveImportPath('consumer.py', 'numpy', pyFiles);
       expect(result).toBe('numpy');
     });
+
+    // ─── R3-001: absolute-import ambiguity (name collision) ────────
+
+    it('does NOT guess the nearest ancestor package when the same package name exists elsewhere in the repo (name collision) — leaves the specifier unchanged rather than resolving to the wrong file', () => {
+      const collisionFiles = new Set([
+        'services/billing/utils/__init__.py',
+        'shared/utils/__init__.py',
+      ]);
+      const result = resolveImportPath(
+        'services/billing/worker/handler.py',
+        'utils',
+        collisionFiles,
+      );
+      // Must NOT be the nearest-ancestor guess ('services/billing/utils/__init__.py').
+      expect(result).not.toBe('services/billing/utils/__init__.py');
+      expect(result).toBe('utils');
+    });
+
+    it('still resolves an absolute import when only ONE candidate package exists anywhere in the repo (unambiguous, common case)', () => {
+      const singleCandidateFiles = new Set([
+        'services/billing/utils/__init__.py',
+        'services/billing/worker/handler.py',
+      ]);
+      const result = resolveImportPath(
+        'services/billing/worker/handler.py',
+        'utils',
+        singleCandidateFiles,
+      );
+      expect(result).toBe('services/billing/utils/__init__.py');
+    });
+
+    // ─── R3-002: no-fabrication contract for relative imports ──────
+
+    it('resolves a root-level relative barrel import (`from . import x`) to `__init__.py` without a leading-slash mismatch', () => {
+      const result = resolveImportPath('main.py', '.', new Set(['__init__.py', 'main.py']));
+      expect(result).toBe('__init__.py');
+    });
+
+    it('returns undefined (never a fabricated empty string) for an unresolvable relative import', () => {
+      const result = resolveImportPath('main.py', '.', new Set(['main.py']));
+      expect(result).toBeUndefined();
+    });
   });
 });
 
