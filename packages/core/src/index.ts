@@ -166,6 +166,23 @@ export {
   createOllamaGenerateFn,
 } from './providers/generate-fn.js';
 
+// ─── Issue-Triage Agent (issue-triage feature) ──────────────────
+
+export type {
+  IssueClassification,
+  IssueComment,
+  IssueTriageInput,
+  IssueTriageResult,
+  IssueTriageSource,
+} from './agents/issue-triage.js';
+export {
+  DEFAULT_CLASSIFICATION,
+  DEFAULT_CONFIDENCE,
+  ISSUE_CLASSIFICATIONS,
+  runIssueTriage,
+} from './agents/issue-triage.js';
+export { ISSUE_TRIAGE_SYSTEM } from './agents/prompts.js';
+
 // ─── Negative Examples ──────────────────────────────────────────
 
 export {
