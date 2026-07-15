@@ -13,6 +13,8 @@ export type {
   GraphLoader,
   GraphMetadata,
   GraphNode,
+  RegexSupportedLanguage,
+  ScipOnlyLanguage,
   SupportedLanguage,
 } from './schema.js';
 
@@ -26,6 +28,8 @@ export {
   LANGUAGE_EXTENSIONS,
   MAX_BLAST_RADIUS_FILES,
   MAX_GRAPH_SIZE_BYTES,
+  REGEX_SUPPORTED_LANGUAGES,
+  SCIP_ONLY_LANGUAGES,
   TEST_FILE_PATTERNS,
   validateGraph,
   validateMetadata,
@@ -66,4 +70,11 @@ export { buildReverseDependencyMap, findDependents } from './reverse-deps.js';
 
 // ─── SCIP Graph Mapper ──────────────────────────────────────────
 
+export type { Index } from '@scip-code/scip';
+export type { BuildGraphFromScipOptions } from './scip/builder.js';
 export { buildGraphFromScip, parseScipIndex } from './scip/builder.js';
+
+// ─── SCIP Multi-Index Merge ──────────────────────────────────────
+
+export type { MergeScipIndexesResult } from './scip/merge.js';
+export { mergeScipIndexes } from './scip/merge.js';

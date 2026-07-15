@@ -5,7 +5,7 @@
  * Used by the graph builder to select the right parser for each file.
  */
 
-import type { SupportedLanguage } from '../schema.js';
+import type { RegexSupportedLanguage, SupportedLanguage } from '../schema.js';
 import { goExtractor } from './go.js';
 import { javaExtractor } from './java.js';
 import { javascriptExtractor } from './javascript.js';
@@ -16,7 +16,7 @@ import { typescriptExtractor } from './typescript.js';
 
 // ─── Registry ───────────────────────────────────────────────────
 
-const extractorRegistry: Record<SupportedLanguage, Extractor> = {
+const extractorRegistry: Record<RegexSupportedLanguage, Extractor> = {
   typescript: typescriptExtractor,
   javascript: javascriptExtractor,
   python: pythonExtractor,
@@ -27,11 +27,11 @@ const extractorRegistry: Record<SupportedLanguage, Extractor> = {
 
 /**
  * Get the extractor for a given language.
- * Returns undefined if the language is not supported (should never happen
- * since SupportedLanguage is a closed union).
+ * Returns undefined for SCIP-only languages (kotlin/csharp/php), which have
+ * no regex extractor — `--fallback-regex` cannot index them.
  */
-export function getExtractor(language: SupportedLanguage): Extractor {
-  return extractorRegistry[language];
+export function getExtractor(language: SupportedLanguage): Extractor | undefined {
+  return (extractorRegistry as Record<string, Extractor>)[language];
 }
 
 // ─── Re-exports ─────────────────────────────────────────────────

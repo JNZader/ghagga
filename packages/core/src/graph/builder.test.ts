@@ -241,6 +241,26 @@ export class Service {}
     expect(Object.keys(graph.nodes)).toHaveLength(4);
     expect(graph.nodes['src/app.ts']?.imports).toContain('src/handler.ts');
   });
+
+  it('skips SCIP-only languages (no regex extractor) without throwing', () => {
+    const files = makeFiles({
+      'src/app.ts': `export function main() {}`,
+      'src/Main.kt': `fun main() { println("hi") }`,
+      'src/Program.cs': `class Program { static void Main() {} }`,
+      'src/index.php': `<?php function hello() {} ?>`,
+    });
+
+    expect(() => buildGraph('.', files)).not.toThrow();
+    const graph = buildGraph('.', files);
+
+    // The regex-indexable file is still built.
+    expect(graph.nodes['src/app.ts']).toBeDefined();
+    // SCIP-only files are dropped from the regex-built graph, not crashed
+    // into a bogus node with an undefined extractor.
+    expect(graph.nodes['src/Main.kt']).toBeUndefined();
+    expect(graph.nodes['src/Program.cs']).toBeUndefined();
+    expect(graph.nodes['src/index.php']).toBeUndefined();
+  });
 });
 
 // ─── buildGraphIncremental ──────────────────────────────────────

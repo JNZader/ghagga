@@ -135,8 +135,12 @@ export function buildGraph(rootDir: string, files: Map<string, string>): Depende
     const language = detectLanguage(filePath);
     if (!language) continue;
 
+    // SCIP-only languages (kotlin/csharp/php) have no regex extractor —
+    // the regex builder can't index them, so skip (no node, no throw).
+    const extractor = getExtractor(language);
+    if (!extractor) continue;
+
     try {
-      const extractor = getExtractor(language);
       const extractedImports = extractor.extractImports(content);
       const extractedExports = extractor.extractExports(content);
 
@@ -216,8 +220,14 @@ export function buildGraphIncremental(
     const language = detectLanguage(filePath);
     if (!language) continue;
 
+    // SCIP-only languages (kotlin/csharp/php) have no regex extractor.
+    const extractor = getExtractor(language);
+    if (!extractor) {
+      delete nodes[filePath];
+      continue;
+    }
+
     try {
-      const extractor = getExtractor(language);
       const extractedImports = extractor.extractImports(content);
       const extractedExports = extractor.extractExports(content);
 
