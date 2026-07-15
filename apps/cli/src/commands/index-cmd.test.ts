@@ -569,6 +569,7 @@ describe('indexCommand', () => {
       // (see the regex-fallback case below, where indexedLanguages is []).
       const graphLanguages = [...new Set(Object.values(graph.nodes).map((n) => n.language))];
       expect(metadata.languages.sort()).toEqual(graphLanguages.sort());
+      expect(metadata.builtVia).toBe('scip');
     });
 
     it('git HEAD resolution failure (non-git repo) degrades to an empty lastIndexedCommit, does not throw', async () => {
@@ -606,6 +607,7 @@ describe('indexCommand', () => {
       const graphLanguages = [...new Set(Object.values(graph.nodes).map((n) => n.language))];
       expect(metadata.languages.sort()).toEqual(graphLanguages.sort());
       expect(metadata.skippedLanguages).toContain('rust');
+      expect(metadata.builtVia).toBe('regex');
     });
   });
 });

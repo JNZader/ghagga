@@ -149,6 +149,17 @@ export interface ReviewInput {
   graphLoader?: import('./graph/schema.js').GraphLoader;
 
   /**
+   * The commit SHA the diff's post-image is computed against (the review's
+   * `git rev-parse HEAD` at review time). Used exclusively as the Pillar 0
+   * freshness precondition for symbol-precise blast-radius narrowing
+   * (scip-symbol-exclusion D0) — line-number-based `symbolRanges`
+   * attribution is only valid when the graph was indexed at this SAME
+   * commit. Absent/empty (non-git repo, detached-without-HEAD) ⇒ not
+   * fresh ⇒ narrowing never runs; file-level blast radius is unaffected.
+   */
+  currentHead?: string;
+
+  /**
    * File content reader for usage analysis.
    * Injected by the caller to read project source files.
    * When undefined, function-level usage analysis is skipped.
@@ -215,6 +226,18 @@ export interface ReviewSettings {
   maxBlastRadiusFiles?: number;
   /** Max traversal depth for dependency graph. Default: 3. */
   traversalDepth?: number;
+
+  /**
+   * Enable symbol-precise blast-radius narrowing (scip-symbol-exclusion).
+   * Opt-in sub-flag under `enableBlastRadius` — Default: false/undefined.
+   * When off (or `enableBlastRadius` is off), `applyBlastRadius` output is
+   * byte-identical to the pre-narrowing behavior; `narrowBySymbols` is
+   * never invoked. Requires a graph with `builtVia` set AND a
+   * EXACT-COMMIT-FRESH graph (see `ReviewInput.currentHead`) to have any
+   * effect — CLI-only (the SaaS/Action paths do not currently populate
+   * `currentHead`).
+   */
+  enableSymbolExclusion?: boolean;
 
   /** SOLID + boundary conditions review checklist configuration. */
   checklist?: import('./checklist/types.js').ChecklistConfig;

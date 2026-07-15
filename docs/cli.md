@@ -383,7 +383,29 @@ The underlying `importSymbols` graph field is populated with different fidelity 
 
 When an edge has no symbol data (e.g. a Go import without an alias, or a namespace/side-effect import), the block degrades to a file-level line (`A depends on B`) instead of guessing — it never claims a dependent is unaffected when it lacks the information to know that. If the graph has NO `importSymbols` data anywhere, the block is omitted entirely (no behavior change from a pre-symbol-context graph).
 
-**Deferred**: symbol-precise blast-radius *exclusion* (removing a dependent from the blast radius when none of its used symbols changed) is explicitly out of scope for this feature — it's advisory-only in the review prompt today, not a filtering signal.
+Symbol-precise blast-radius *exclusion* (actually removing a dependent from the reviewed file set, not just annotating it) is a separate, **opt-in, CLI-only** feature — see the next section.
+
+### Symbol-precise blast-radius exclusion (opt-in narrowing)
+
+Set `"enableSymbolExclusion": true` in `.ghagga.json` (default: off) to let `ghagga review` **remove** a direct dependent `A` of a changed file `B` from the reviewed file set when `A` provably does not use any symbol that changed in `B`. Unlike Symbol Impact (advisory-only, above), this actually shrinks what gets reviewed — treat it as high-stakes and opt in deliberately.
+
+Three fail-closed preconditions gate every exclusion; any single one failing means **zero** narrowing for that edge (never a partial or "probably fine" exclusion):
+
+1. **A fresh, exact-commit-matched graph.** `ghagga index` must have run at the SAME commit `ghagga review` is diffing against (`metadata.lastIndexedCommit === currentHead`) and not be stale-by-age. Symbol-line attribution is line-number based — a graph indexed even one commit off can silently map a changed line to the wrong symbol. This is a stricter check than the existing warn-only staleness check used for file-level blast radius (which tolerates commit drift because a shifted line still lands in the right *file*).
+2. **Fully-attributed changes only.** Any changed file with even one line that can't be mapped to a known symbol (a module-level statement, a deletion, a rename, or a file with no captured symbol ranges) forces every dependent of that file to stay included — the diff isn't clean enough to reason about symbol-by-symbol.
+3. **A per-language whitelist on the CHANGED file's language** (never the dependent's language) — the gate defaults to `false` and only returns `true` for the enumerated cells below. An unrecognized/unmapped language, or a language absent from this table, always resolves to "keep included":
+
+   | Graph built via | Changed file's language | Exclusion eligible? |
+   |---|---|---|
+   | `ghagga index` (SCIP) | TypeScript, JavaScript, Rust, Java | Yes |
+   | `ghagga index` (SCIP) | Go, Python, Kotlin, C#, PHP | No — partial/unverified SCIP fidelity |
+   | `ghagga index --fallback-regex` | TypeScript, JavaScript, Java | Yes |
+   | `ghagga index --fallback-regex` | Python, Rust | Yes, but only for edges where the dependent's `importSymbols` entry for that file is populated |
+   | `ghagga index --fallback-regex` | Go | No — alias-only data is misleading for exclusion |
+
+Even when all three preconditions pass, exclusion only ever prunes **direct (depth-1)** dependents — a dependent reached only transitively (through another file) always stays included, by design (the safety margin is deliberately generous rather than maximizing how much gets pruned). A file that appears directly in the diff is never excluded, regardless of any of the above.
+
+`ghagga review`'s `## Blast Radius` output reports how many dependents were narrowed (`narrowed: N`) when this ran. Requires `ghagga index` to have been re-run at the current commit — a graph built by an older `ghagga index` without the `builtVia` marker never narrows (treated the same as a missing precondition).
 
 ### Barrel re-export edges (TypeScript/JavaScript regex builder)
 

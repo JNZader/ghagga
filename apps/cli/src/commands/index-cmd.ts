@@ -129,7 +129,12 @@ function resolveGitHead(repoPath: string): string {
 function writeMetadata(
   graphOutPath: string,
   graph: DependencyGraph,
-  opts: { repoPath: string; skippedLanguages: string[]; indexDurationMs: number },
+  opts: {
+    repoPath: string;
+    skippedLanguages: string[];
+    indexDurationMs: number;
+    builtVia: 'scip' | 'regex';
+  },
 ): void {
   const metadataPath = join(dirname(graphOutPath), 'metadata.json');
   const languages = [...new Set(Object.values(graph.nodes).map((node) => node.language))];
@@ -143,6 +148,7 @@ function writeMetadata(
     indexDurationMs: opts.indexDurationMs,
     skippedLanguages: opts.skippedLanguages,
     graphVersion: graph.version,
+    builtVia: opts.builtVia,
   };
 
   writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
@@ -418,6 +424,7 @@ export async function indexCommand(
       repoPath,
       skippedLanguages,
       indexDurationMs: Date.now() - startedAt,
+      builtVia: 'regex',
     });
     tui.log.success(
       `✅ Wrote ${Object.keys(graph.nodes).length} node(s) to ${outPath} (regex fallback).`,
@@ -450,6 +457,7 @@ export async function indexCommand(
     repoPath,
     skippedLanguages,
     indexDurationMs: Date.now() - startedAt,
+    builtVia: 'scip',
   });
   tui.log.success(
     `✅ Wrote ${Object.keys(graph.nodes).length} node(s) to ${outPath} ` +
