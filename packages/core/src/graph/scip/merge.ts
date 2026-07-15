@@ -26,6 +26,18 @@
  * keys even when their bare filenames match (e.g. two `main.py`). Warn +
  * last-registry-order wins — the merge stays pure, so it reports
  * `duplicatePaths` for the caller to log rather than logging itself.
+ *
+ * Path-escape guard: `posix.join(prefix, relativePath)` RESOLVES `..`
+ * segments. An indexer emitting a `relativePath` containing `..` (only
+ * `scip-typescript` is known to do this from a subdir cwd, which is why
+ * `collapseTypescriptPairs` avoids per-subdir TS runs — but every other
+ * per-subdir indexer has no such guard) could otherwise produce a merged
+ * document key that escapes the marker directory / repo-relative root,
+ * silently mis-keying or overwriting an unrelated graph node. Any document
+ * whose joined path escapes the repo-relative root (starts with `..` after
+ * normalization, or is absolute) is SKIPPED — not inserted — and reported
+ * via `escapedPaths` for the caller to warn about. Skip+warn, not clamp: an
+ * escaping path means that document's own metadata is untrustworthy.
  */
 
 import { posix } from 'node:path';
@@ -36,6 +48,13 @@ import { IndexSchema } from '@scip-code/scip';
 export interface MergeScipIndexesResult {
   index: Index;
   duplicatePaths: string[];
+  /**
+   * Documents dropped because their prefixed path escaped the
+   * repo-relative root (e.g. an indexer-emitted `relativePath` with `..`
+   * segments resolving outside the marker directory). Never inserted into
+   * `index.documents` — the caller should warn about these.
+   */
+  escapedPaths: string[];
 }
 
 /** One successfully-run indexer's parsed output, plus its source marker directory. */
@@ -69,9 +88,19 @@ function normalizePrefix(prefix: string): string {
  *   indexer, in the order they should be merged (last wins on path
  *   collision after prefixing).
  */
+/**
+ * Whether `p` (already `posix.join`-resolved) escapes the repo-relative
+ * root: it resolves to an absolute path, or its first segment is `..`
+ * (meaning the join climbed above the root it started from).
+ */
+function escapesRoot(p: string): boolean {
+  return posix.isAbsolute(p) || p === '..' || p.startsWith('../');
+}
+
 export function mergeScipIndexes(inputs: MergeScipIndexesInput[]): MergeScipIndexesResult {
   const byPath = new Map<string, Document>();
   const duplicatePaths: string[] = [];
+  const escapedPaths: string[] = [];
 
   for (const { index, pathPrefix } of inputs) {
     const normalizedPrefix = normalizePrefix(pathPrefix);
@@ -80,6 +109,10 @@ export function mergeScipIndexes(inputs: MergeScipIndexesInput[]): MergeScipInde
       const prefixedPath = normalizedPrefix
         ? posix.join(normalizedPrefix, relativePath)
         : relativePath;
+      if (escapesRoot(prefixedPath)) {
+        escapedPaths.push(prefixedPath);
+        continue;
+      }
       if (byPath.has(prefixedPath)) {
         duplicatePaths.push(prefixedPath);
       }
@@ -93,5 +126,5 @@ export function mergeScipIndexes(inputs: MergeScipIndexesInput[]): MergeScipInde
     externalSymbols: [],
   });
 
-  return { index: merged, duplicatePaths };
+  return { index: merged, duplicatePaths, escapedPaths };
 }

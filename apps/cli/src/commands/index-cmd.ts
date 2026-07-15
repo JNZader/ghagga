@@ -174,31 +174,71 @@ function pairDepth(repoPath: string, dir: string): number {
   return rel.split(/[\\/]/).filter(Boolean).length;
 }
 
-/** Sanitize a relative path into a filesystem-safe, collision-stable slug. */
-function slugifyRelPath(relPath: string): string {
-  return relPath
+/**
+ * Deterministic string hash (FNV-1a, 32-bit → 8 lowercase hex chars). Pure
+ * and reproducible run-to-run for the same input — NOT `Math.random`/`Date`
+ * — so the same marker directory always maps to the same `.scip` output
+ * path across runs.
+ */
+function hash8(input: string): string {
+  let hash = 0x811c9dc5; // FNV offset basis
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193); // FNV prime
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Sanitize a relative path into a filesystem-safe, collision-free slug.
+ *
+ * The human-readable sanitized prefix alone is NOT collision-stable: e.g.
+ * `apps/a_b` and `apps_a/b` both sanitize to `apps_a_b`, which would
+ * silently clobber one indexer run's `.scip` output with another's. A
+ * deterministic hash of the RAW `relPath` is appended as a suffix so two
+ * distinct relPaths can never produce the same slug, while keeping the
+ * sanitized prefix for debuggability.
+ */
+export function slugifyRelPath(relPath: string): string {
+  const sanitized = relPath
     .split(/[\\/]/)
     .filter(Boolean)
     .join('_')
     .replace(/[^a-zA-Z0-9_.-]/g, '-');
+  return `${sanitized}__${hash8(relPath)}`;
 }
 
 /**
  * Sort pairs (maturity stable→heavy→experimental, then depth ascending =
  * root-first) BEFORE capping (D5) — cheap high-value indexers run before
  * expensive ones get dropped, deterministically, root-first.
+ *
+ * Root-level pairs (depth 0) are EXEMPT from the cap and ALWAYS run — before
+ * nested-marker-detection, `ghagga index` unconditionally indexed every
+ * root-level language, so a root marker silently vanishing under the cap
+ * would be a regression. The cap (`maxRuns`) applies only to NESTED pairs,
+ * using the existing maturity→depth sort; if root pairs alone exceed
+ * `maxRuns`, they STILL all run (never dropped), matching pre-cap behavior.
  */
 function sortAndCapPairs(
   repoPath: string,
   pairs: MarkerDirPair[],
   maxRuns: number,
 ): { toRun: MarkerDirPair[]; dropped: MarkerDirPair[] } {
-  const sorted = [...pairs].sort((a, b) => {
+  const rootPairs = pairs.filter((p) => pairDepth(repoPath, p.dir) === 0);
+  const nestedPairs = pairs.filter((p) => pairDepth(repoPath, p.dir) !== 0);
+
+  const sortedNested = [...nestedPairs].sort((a, b) => {
     const maturityDiff = MATURITY_ORDER[a.entry.maturity] - MATURITY_ORDER[b.entry.maturity];
     if (maturityDiff !== 0) return maturityDiff;
     return pairDepth(repoPath, a.dir) - pairDepth(repoPath, b.dir);
   });
-  return { toRun: sorted.slice(0, maxRuns), dropped: sorted.slice(maxRuns) };
+
+  const nestedBudget = Math.max(0, maxRuns - rootPairs.length);
+  return {
+    toRun: [...rootPairs, ...sortedNested.slice(0, nestedBudget)],
+    dropped: sortedNested.slice(nestedBudget),
+  };
 }
 
 /**
@@ -385,10 +425,15 @@ export async function indexCommand(
     return;
   }
 
-  const { index: mergedIndex, duplicatePaths } = mergeScipIndexes(indexes);
+  const { index: mergedIndex, duplicatePaths, escapedPaths } = mergeScipIndexes(indexes);
   for (const duplicatePath of duplicatePaths) {
     tui.log.warn(
       `⚠️  Duplicate SCIP document path across indexers: ${duplicatePath} — last indexer wins.`,
+    );
+  }
+  for (const escapedPath of escapedPaths) {
+    tui.log.warn(
+      `⚠️  SCIP document path escaped the repo-relative root: ${escapedPath} — dropped from graph.`,
     );
   }
 

@@ -80,7 +80,7 @@ const mockExit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) =
 // ─── Imports (after mocks) ──────────────────────────────────────
 
 import * as tui from '../ui/tui.js';
-import { indexCommand } from './index-cmd.js';
+import { indexCommand, slugifyRelPath } from './index-cmd.js';
 
 const FIXTURE_DIR = resolve(
   import.meta.dirname,
@@ -112,6 +112,24 @@ function makeEntry(
     ...overrides,
   };
 }
+
+describe('slugifyRelPath', () => {
+  it('does NOT collide on distinct relPaths that sanitize to the same prefix', () => {
+    // 'apps/a_b' and 'apps_a/b' both sanitize to 'apps_a_b' if only the
+    // separator-joined prefix is used — the hash suffix must disambiguate.
+    expect(slugifyRelPath('apps/a_b')).not.toBe(slugifyRelPath('apps_a/b'));
+  });
+
+  it('is deterministic: same input produces the same output across calls', () => {
+    const relPath = 'apps/ml-service';
+    expect(slugifyRelPath(relPath)).toBe(slugifyRelPath(relPath));
+  });
+
+  it('produces a filesystem-safe slug', () => {
+    const slug = slugifyRelPath('apps/a_b');
+    expect(slug).toMatch(/^[a-zA-Z0-9_.-]+$/);
+  });
+});
 
 describe('indexCommand', () => {
   beforeEach(() => {
@@ -484,6 +502,43 @@ describe('indexCommand', () => {
 
       expect(stableRun).toHaveBeenCalledTimes(10);
       expect(experimentalRun).toHaveBeenCalledTimes(15);
+    });
+
+    it('NEVER drops a root-level marker, even when nested stable markers alone exceed the cap', async () => {
+      const rootRun = vi.fn().mockResolvedValue(FIXTURE_SCIP_PATH);
+      const nestedRun = vi.fn().mockResolvedValue(FIXTURE_SCIP_PATH);
+      // Root-level `heavy` marker (e.g. a root pom.xml) — before the fix,
+      // this sorts AFTER every `stable` nested pair and gets capped away.
+      const rootEntry = makeEntry({
+        bin: 'scip-java',
+        languages: ['java'],
+        maturity: 'heavy',
+        run: rootRun,
+      });
+      const nestedEntry = makeEntry({
+        bin: 'scip-go',
+        languages: ['go'],
+        maturity: 'stable',
+        run: nestedRun,
+      });
+      // 25 nested stable pairs — exactly at DEFAULT_MAX_NESTED_RUNS — plus
+      // the one root-level heavy pair.
+      const nestedPairs = Array.from({ length: 25 }, (_, i) => ({
+        entry: nestedEntry,
+        dir: join(FIXTURE_DIR, `dir-${i}`),
+      }));
+      mockDetectMarkerDirectories.mockReturnValue([
+        { entry: rootEntry, dir: FIXTURE_DIR },
+        ...nestedPairs,
+      ]);
+
+      await indexCommand(FIXTURE_DIR, {});
+
+      // The root marker ALWAYS runs — never dropped by the cap.
+      expect(rootRun).toHaveBeenCalledTimes(1);
+      expect(rootRun).toHaveBeenCalledWith(FIXTURE_DIR, expect.any(String));
+      // The cap applies only to the nested pairs: budget = 25 - 1 root = 24.
+      expect(nestedRun).toHaveBeenCalledTimes(24);
     });
   });
 

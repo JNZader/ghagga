@@ -176,4 +176,39 @@ describe('mergeScipIndexes', () => {
 
     expect(merged.documents[0]?.relativePath).toBe('apps/ml-service/main.py');
   });
+
+  // ─── Path-escape guard ──────────────────────────────────────────
+
+  it('skips a document whose relativePath escapes the repo-relative root via `..`, and reports it', () => {
+    const evilIndex = create(IndexSchema, {
+      metadata: create(MetadataSchema, { projectRoot: '/repo' }),
+      documents: [doc('../../evil.go', 'go'), doc('safe.go', 'go')],
+    });
+
+    const {
+      index: merged,
+      duplicatePaths,
+      escapedPaths,
+    } = mergeScipIndexes([{ index: evilIndex, pathPrefix: 'apps' }]);
+
+    // The escaping document is dropped, not inserted.
+    expect(merged.documents).toHaveLength(1);
+    expect(merged.documents[0]?.relativePath).toBe('apps/safe.go');
+    expect(duplicatePaths).toEqual([]);
+    expect(escapedPaths).toEqual(['../evil.go']);
+  });
+
+  it('does not flag a normal (non-escaping) document as escaped', () => {
+    const index = create(IndexSchema, {
+      metadata: create(MetadataSchema, { projectRoot: '/repo' }),
+      documents: [doc('pkg/util.go', 'go')],
+    });
+
+    const { index: merged, escapedPaths } = mergeScipIndexes([
+      { index, pathPrefix: 'apps/service' },
+    ]);
+
+    expect(merged.documents[0]?.relativePath).toBe('apps/service/pkg/util.go');
+    expect(escapedPaths).toEqual([]);
+  });
 });
