@@ -1,0 +1,30 @@
+
+y
+scip-php0.0.1`file:///tmp/claude-1000/-home-javier/02365565-4b2e-4006-96d8-2cf77532f9e6/scratchpad/php-fixture ƒ"19
+src/Main.php_
+Uscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#(_
+ Uscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#(_
+
+
+Sscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Main#run().(Y
+
+Mscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Main#(†
+Sscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Main#run()./```php
+public static function run(): string
+```f
+Mscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Main#```php
+class Main
+```0ë"19
+src/Pkg/Greeting.phpp
+!&dscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#greet().($name)(i
+]scip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#greet().(a
+Uscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#(
+dscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#greet().($name)```php
+string $name
+```—
+]scip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#greet().6```php
+public function greet(string $name): string
+```r
+Uscip-php composer ghagga/scip-php-fixture-scratch 1.0.0.0 ScipPhpSample/Pkg/Greeting#```php
+class Greeting
+```0

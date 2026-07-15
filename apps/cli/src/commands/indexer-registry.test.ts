@@ -85,6 +85,38 @@ describe('INDEXER_REGISTRY — Tier B mature languages', () => {
   });
 });
 
+describe('INDEXER_REGISTRY — Tier C/D heavy + experimental languages', () => {
+  it('contains a Java+Kotlin entry backed by scip-java (shared indexer)', () => {
+    const java = requireEntry('java');
+    expect(java.bin).toBe('scip-java');
+    expect(java.languages).toEqual(['java', 'kotlin']);
+    expect(java.markers).toEqual(
+      expect.arrayContaining(['pom.xml', 'build.gradle', 'build.gradle.kts']),
+    );
+    expect(java.maturity).toBe('heavy');
+    expect(typeof java.installHint).toBe('string');
+    // Same entry object covers both languages — not two separate entries.
+    const kotlin = requireEntry('kotlin');
+    expect(kotlin).toBe(java);
+  });
+
+  it('contains a C# entry backed by scip-dotnet', () => {
+    const csharp = requireEntry('csharp');
+    expect(csharp.bin).toBe('scip-dotnet');
+    expect(csharp.languages).toEqual(['csharp']);
+    expect(csharp.markers).toEqual(expect.arrayContaining(['*.csproj', '*.sln']));
+    expect(csharp.maturity).toBe('experimental');
+  });
+
+  it('contains a PHP entry backed by scip-php', () => {
+    const php = requireEntry('php');
+    expect(php.bin).toBe('scip-php');
+    expect(php.languages).toEqual(['php']);
+    expect(php.markers).toEqual(expect.arrayContaining(['composer.json']));
+    expect(php.maturity).toBe('experimental');
+  });
+});
+
 describe('detectPresentLanguages', () => {
   it('detects Go via go.mod', () => {
     writeFileSync(join(dir, 'go.mod'), 'module example.com/x\n');
@@ -161,6 +193,50 @@ describe('detectPresentLanguages', () => {
     expect(languages.has('typescript')).toBe(true);
     expect(languages.has('python')).toBe(true);
     expect(languages.has('rust')).toBe(true);
+  });
+
+  it('detects Java+Kotlin via pom.xml', () => {
+    writeFileSync(join(dir, 'pom.xml'), '<project></project>\n');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('java'))).toBe(true);
+    expect(detected.some((e) => e.languages.includes('kotlin'))).toBe(true);
+  });
+
+  it('detects Java+Kotlin via build.gradle.kts', () => {
+    writeFileSync(join(dir, 'build.gradle.kts'), '');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('java'))).toBe(true);
+  });
+
+  it('does not duplicate the Java entry when both pom.xml and build.gradle are present', () => {
+    writeFileSync(join(dir, 'pom.xml'), '<project></project>\n');
+    writeFileSync(join(dir, 'build.gradle'), '');
+    const detected = detectPresentLanguages(dir).filter((e) => e.languages.includes('java'));
+    expect(detected).toHaveLength(1);
+  });
+
+  it('detects C# via a glob marker on *.csproj (no fixed filename)', () => {
+    writeFileSync(join(dir, 'MyApp.csproj'), '<Project></Project>\n');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('csharp'))).toBe(true);
+  });
+
+  it('detects C# via a glob marker on *.sln', () => {
+    writeFileSync(join(dir, 'MyApp.sln'), '');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('csharp'))).toBe(true);
+  });
+
+  it('does not detect C# when no *.csproj/*.sln file is present', () => {
+    writeFileSync(join(dir, 'notes.txt'), 'csproject but not a marker\n');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('csharp'))).toBe(false);
+  });
+
+  it('detects PHP via composer.json', () => {
+    writeFileSync(join(dir, 'composer.json'), '{}');
+    const detected = detectPresentLanguages(dir);
+    expect(detected.some((e) => e.languages.includes('php'))).toBe(true);
   });
 });
 
@@ -302,5 +378,118 @@ describe('rustEntry.run (real fs, mocked execFileSync)', () => {
   it('throws if rust-analyzer does not produce an index at the isolated path', () => {
     execFileSyncMock.mockImplementation(() => Buffer.from(''));
     expect(() => rustEntry.run(dir)).toThrow(/did not produce an index/);
+  });
+});
+
+describe('javaEntry.run (real fs, mocked execFileSync)', () => {
+  const javaEntry = requireEntry('java');
+
+  afterEach(() => {
+    execFileSyncMock.mockReset();
+  });
+
+  it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
+    const expectedOutPath = scipOutputPath(dir, 'scip-java');
+    // Mock does NOT create the dir — production's mkdirSync must run first, or
+    // this writeFileSync throws ENOENT. Real regression guard for R1-001.
+    execFileSyncMock.mockImplementation(() => {
+      writeFileSync(expectedOutPath, 'fake-scip-index');
+      return Buffer.from('');
+    });
+
+    expect(existsSync(dirname(expectedOutPath))).toBe(false);
+    const result = javaEntry.run(dir);
+
+    expect(result).toBe(expectedOutPath);
+    expect(existsSync(expectedOutPath)).toBe(true);
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      'scip-java',
+      expect.arrayContaining(['index', '--output', expectedOutPath]),
+      expect.objectContaining({ cwd: dir }),
+    );
+  });
+
+  it('throws if scip-java does not produce an index at the isolated path', () => {
+    execFileSyncMock.mockImplementation(() => Buffer.from(''));
+    expect(() => javaEntry.run(dir)).toThrow(/did not produce an index/);
+  });
+});
+
+describe('csharpEntry.run (real fs, mocked execFileSync)', () => {
+  const csharpEntry = requireEntry('csharp');
+
+  afterEach(() => {
+    execFileSyncMock.mockReset();
+  });
+
+  it('creates the isolated .ghagga/scip/ output dir and writes directly to it via --output', () => {
+    const expectedOutPath = scipOutputPath(dir, 'scip-dotnet');
+    // Mock does NOT create the dir — production's mkdirSync must run first, or
+    // this writeFileSync throws ENOENT. Real regression guard for R1-001.
+    execFileSyncMock.mockImplementation(() => {
+      writeFileSync(expectedOutPath, 'fake-scip-index');
+      return Buffer.from('');
+    });
+
+    expect(existsSync(dirname(expectedOutPath))).toBe(false);
+    const result = csharpEntry.run(dir);
+
+    expect(result).toBe(expectedOutPath);
+    expect(existsSync(expectedOutPath)).toBe(true);
+    expect(execFileSyncMock).toHaveBeenCalledWith(
+      'scip-dotnet',
+      expect.arrayContaining(['index', '--output', expectedOutPath, '--working-directory', dir]),
+      expect.objectContaining({ cwd: dir }),
+    );
+  });
+
+  it('throws if scip-dotnet does not produce an index at the isolated path', () => {
+    execFileSyncMock.mockImplementation(() => Buffer.from(''));
+    expect(() => csharpEntry.run(dir)).toThrow(/did not produce an index/);
+  });
+});
+
+describe('phpEntry.run (real fs, mocked execFileSync)', () => {
+  const phpEntry = requireEntry('php');
+
+  afterEach(() => {
+    execFileSyncMock.mockReset();
+  });
+
+  it('creates the isolated .ghagga/scip/ output dir on a fresh repo (run-then-move, no native --output)', () => {
+    // Simulate scip-php writing `index.scip` at the repo root, as the real
+    // binary does — no --output flag (verified against upstream source).
+    execFileSyncMock.mockImplementation(() => {
+      writeFileSync(join(dir, 'index.scip'), 'fake-scip-index');
+      return Buffer.from('');
+    });
+
+    const result = phpEntry.run(dir);
+
+    const expectedOutPath = scipOutputPath(dir, 'scip-php');
+    expect(result).toBe(expectedOutPath);
+    expect(existsSync(expectedOutPath)).toBe(true);
+    // The root-level index.scip must have been moved, not left behind.
+    expect(existsSync(join(dir, 'index.scip'))).toBe(false);
+  });
+
+  it('removes a stale pre-existing root index.scip before running, so it cannot leak into the output', () => {
+    writeFileSync(join(dir, 'index.scip'), 'stale-from-a-prior-manual-run');
+
+    execFileSyncMock.mockImplementation(() => {
+      writeFileSync(join(dir, 'index.scip'), 'fresh-scip-index');
+      return Buffer.from('');
+    });
+
+    const result = phpEntry.run(dir);
+
+    const expectedOutPath = scipOutputPath(dir, 'scip-php');
+    expect(result).toBe(expectedOutPath);
+    expect(existsSync(expectedOutPath)).toBe(true);
+  });
+
+  it('throws if scip-php does not produce an index.scip at its cwd', () => {
+    execFileSyncMock.mockImplementation(() => Buffer.from(''));
+    expect(() => phpEntry.run(dir)).toThrow(/did not produce an index/);
   });
 });

@@ -4,9 +4,11 @@
  * Hand-rolled, not a scip-io orchestrator wrapper (D1): full control over
  * invocation flags, per-language degradation, and trivially mockable in
  * tests. Tier A shipped the Go entry (refactored from the previous
- * Go-hardcoded `index-cmd.ts`); Tier B (this PR) adds TS/JS, Python, and
- * Rust. Tiers C/D (Java+Kotlin, C#, PHP) land in later PRs on top of this
- * registry shape.
+ * Go-hardcoded `index-cmd.ts`); Tier B added TS/JS, Python, and Rust. Tier C
+ * (this PR) adds Java+Kotlin (shared `scip-java` indexer, `heavy` maturity)
+ * and C# (`scip-dotnet`, `experimental` maturity — scip-dotnet 0.2.x is an
+ * immature upstream indexer, not merely "heavy" like scip-java). Tier D
+ * (this PR) adds PHP (`scip-php`, `experimental`).
  */
 
 import { execFileSync } from 'node:child_process';
@@ -184,17 +186,141 @@ const rustEntry: IndexerEntry = {
   maturity: 'stable',
 };
 
+// ─── Java/Kotlin Entry ────────────────────────────────────────────
+
+const SCIP_JAVA_INSTALL_HINT =
+  'curl -fLo coursier https://git.io/coursier-cli && chmod +x coursier && ' +
+  './coursier bootstrap --standalone -o scip-java org.scip-code:scip-java:latest.stable ' +
+  '--main org.scip_code.scip_java.ScipJava (requires a JDK 17+ host JVM and a ' +
+  'Gradle or Maven build in the target repo — Kotlin support is Gradle-only)';
+
+const javaEntry: IndexerEntry = {
+  bin: 'scip-java',
+  languages: ['java', 'kotlin'],
+  markers: ['pom.xml', 'build.gradle', 'build.gradle.kts'],
+  toolchainCheck(): boolean {
+    return commandExists('scip-java') && (commandExists('gradle') || commandExists('mvn'));
+  },
+  run(dir: string): string {
+    const outPath = scipOutputPath(dir, 'scip-java');
+    mkdirSync(dirname(outPath), { recursive: true });
+    // scip-java's `index` command supports a native --output flag (unlike
+    // scip-go/scip-php) — it auto-detects Gradle vs Maven in `dir` and shells
+    // out to it (D2: still isolated, just directly, like tsEntry/pythonEntry).
+    execFileSync('scip-java', ['index', '--output', outPath], {
+      cwd: dir,
+      stdio: 'inherit',
+    });
+    if (!existsSync(outPath)) {
+      throw new Error(`scip-java did not produce an index at ${outPath}`);
+    }
+    return outPath;
+  },
+  installHint: SCIP_JAVA_INSTALL_HINT,
+  maturity: 'heavy',
+};
+
+// ─── C# Entry ─────────────────────────────────────────────────────
+
+const SCIP_DOTNET_INSTALL_HINT =
+  'dotnet tool install --global scip-dotnet (requires .NET 8.0+ SDK; experimental indexer)';
+
+const csharpEntry: IndexerEntry = {
+  bin: 'scip-dotnet',
+  languages: ['csharp'],
+  markers: ['*.csproj', '*.sln'],
+  toolchainCheck(): boolean {
+    return commandExists('scip-dotnet') && commandExists('dotnet');
+  },
+  run(dir: string): string {
+    const outPath = scipOutputPath(dir, 'scip-dotnet');
+    mkdirSync(dirname(outPath), { recursive: true });
+    // scip-dotnet's `index` command supports a native --output flag plus
+    // --working-directory (its own project/solution auto-discovery arg is
+    // positional and optional — omitted here to let it self-discover).
+    execFileSync('scip-dotnet', ['index', '--output', outPath, '--working-directory', dir], {
+      cwd: dir,
+      stdio: 'inherit',
+    });
+    if (!existsSync(outPath)) {
+      throw new Error(`scip-dotnet did not produce an index at ${outPath}`);
+    }
+    return outPath;
+  },
+  installHint: SCIP_DOTNET_INSTALL_HINT,
+  maturity: 'experimental',
+};
+
+// ─── PHP Entry ────────────────────────────────────────────────────
+
+const SCIP_PHP_INSTALL_HINT =
+  'composer require --dev davidrjenni/scip-php && composer dump-autoload ' +
+  '(requires a composer.json with autoload psr-4/classmap entries covering ' +
+  'the sources to index; experimental, solo-maintained indexer)';
+
+const phpEntry: IndexerEntry = {
+  bin: 'scip-php',
+  languages: ['php'],
+  markers: ['composer.json'],
+  toolchainCheck(): boolean {
+    return commandExists('scip-php');
+  },
+  run(dir: string): string {
+    const outPath = scipOutputPath(dir, 'scip-php');
+    const producedPath = join(dir, 'index.scip');
+    // Guard against a stale root-level `index.scip` from a prior manual run
+    // (same rationale as goEntry).
+    if (existsSync(producedPath)) {
+      rmSync(producedPath);
+    }
+    // scip-php has no --output flag — it always writes `index.scip` to its
+    // cwd (verified against davidrjenni/scip-php's bin/scip-php source,
+    // which hardcodes `file_put_contents('index.scip', ...)`). Run-then-move
+    // (D2 fallback), same pattern as scip-go.
+    execFileSync('scip-php', [], { cwd: dir, stdio: 'inherit' });
+    if (!existsSync(producedPath)) {
+      throw new Error(`scip-php did not produce an index at ${producedPath}`);
+    }
+    mkdirSync(dirname(outPath), { recursive: true });
+    renameSync(producedPath, outPath);
+    return outPath;
+  },
+  installHint: SCIP_PHP_INSTALL_HINT,
+  maturity: 'experimental',
+};
+
 // ─── Registry ───────────────────────────────────────────────────
 
 /**
- * Tier A shipped the Go entry only; Tier B (this PR) adds the mature
- * languages — TS/JS, Python, Rust. Tiers C/D (Java+Kotlin, C#, PHP) land in
- * later PRs — the dispatcher (`index-cmd.ts`) and `detectPresentLanguages`
- * already generalize over N entries.
+ * Tier A shipped the Go entry; Tier B added TS/JS, Python, Rust. Tier C/D
+ * (this PR) add Java+Kotlin, C#, and PHP — the dispatcher (`index-cmd.ts`)
+ * and `detectPresentLanguages` already generalize over N entries.
  */
-export const INDEXER_REGISTRY: IndexerEntry[] = [goEntry, tsEntry, pythonEntry, rustEntry];
+export const INDEXER_REGISTRY: IndexerEntry[] = [
+  goEntry,
+  tsEntry,
+  pythonEntry,
+  rustEntry,
+  javaEntry,
+  csharpEntry,
+  phpEntry,
+];
 
 // ─── Language Detection ─────────────────────────────────────────
+
+/**
+ * Match a single marker against the repo root's entries. Most markers are
+ * exact filenames (`Set.has`); a marker starting with `*.` is a minimal
+ * glob — any-present file with that extension (e.g. C#'s `*.csproj`/`*.sln`,
+ * which have no fixed name).
+ */
+function markerPresent(marker: string, present: Set<string>, rootEntries: string[]): boolean {
+  if (marker.startsWith('*.')) {
+    const ext = marker.slice(1);
+    return rootEntries.some((f) => f.endsWith(ext));
+  }
+  return present.has(marker);
+}
 
 /**
  * Detect which registry entries are "present" in `repoPath`, based on
@@ -212,5 +338,7 @@ export function detectPresentLanguages(repoPath: string): IndexerEntry[] {
   }
   const present = new Set(rootEntries);
 
-  return INDEXER_REGISTRY.filter((entry) => entry.markers.some((marker) => present.has(marker)));
+  return INDEXER_REGISTRY.filter((entry) =>
+    entry.markers.some((marker) => markerPresent(marker, present, rootEntries)),
+  );
 }

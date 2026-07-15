@@ -1,0 +1,19 @@
+
+{
+	scip-java0.13.1bfile:///tmp/claude-1000/-home-javier/02365565-4b2e-4006-96d8-2cf77532f9e6/scratchpad/java-fixture/ ¶
+'src/main/kotlin/com/example/Greeting.kt scip-java maven . . com/B( scip-java maven . . com/example/B=)scip-java maven . . com/example/Greeting#BZ H4scip-java maven . . com/example/Greeting#`<init>`().BZ E1scip-java maven . . com/example/Greeting#greet().BR5K7scip-java maven . . com/example/Greeting#greet().(name)BR,"scip-java maven . . kotlin/String#B,"scip-java maven . . kotlin/String#B#A7scip-java maven . . com/example/Greeting#greet().(name)B/3b
+)scip-java maven . . com/example/Greeting#2Greeting:+"kotlin*!public final class Greeting : Anyj
+4scip-java maven . . com/example/Greeting#`<init>`().2Greeting:("kotlin*public constructor(): Greetingr
+1scip-java maven . . com/example/Greeting#greet().2greet:6"kotlin*,public final fun greet(name: String): StringW
+7scip-java maven . . com/example/Greeting#greet().(name)2name:"kotlin*name: String"kotlin*^package com.example
+
+class Greeting {
+    fun greet(name: String): String = "Hello, $name!"
+}
+‰	
+#src/main/java/com/example/Main.java9%scip-java maven . . com/example/Main#BZ <0scip-java maven . . com/example/Main#`<init>`().BB,scip-java maven . . com/example/Main#main().BZ 2(scip-java maven jdk 21 java/lang/String#B"local 0B%)R)3)scip-java maven . . com/example/Greeting#Blocal 1BR+>4scip-java maven . . com/example/Greeting#`<init>`().B (2(scip-java maven jdk 21 java/lang/System#B6,scip-java maven jdk 21 java/lang/System#out.BA7scip-java maven jdk 21 java/io/PrintStream#println(+8).Blocal 1B#;1scip-java maven . . com/example/Greeting#greet().B$)J
+%scip-java maven . . com/example/Main#(2Main:"java*public class MainS
+0scip-java maven . . com/example/Main#`<init>`().(	2<init>:"java*public Main()f
+,scip-java maven . . com/example/Main#main().(P2main:."java*&public static void main(String[] args)T
+local 02args:"java*String[] argsB,scip-java maven . . com/example/Main#main().^
+local 1(=2greeting:"java*Greeting greetingB,scip-java maven . . com/example/Main#main()."java
