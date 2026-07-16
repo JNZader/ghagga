@@ -43,3 +43,6 @@ DEPLOY-GUIDE.md
 
 # Cloudflare Pages build output
 _site/
+
+# gentle-ai skill-registry (machine-local, auto-generated)
+.atl/
