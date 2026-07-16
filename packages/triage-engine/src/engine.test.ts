@@ -304,6 +304,27 @@ describe('triageIssue auto-reproduction wiring', () => {
     expect(draft.reproductionEvidence).toEqual(FAKE_EVIDENCE);
   });
 
+  it('extracts the route from rawDescription when description is stripped of the widget trailer', async () => {
+    // Mirrors the GitLab adapter: description has the `---` trailer (incl. the
+    // `Ruta:` line) stripped for the LLM, while rawDescription retains it. The
+    // route MUST still be found — this is the bug the rawDescription field fixes.
+    forge.getIssue = vi.fn(async (iid: string) => ({
+      ...makeIssueWithRoute(iid),
+      description: 'Algo se rompió.',
+      rawDescription: 'Algo se rompió.\n\n---\n- Ruta: `/app/energia`',
+    }));
+
+    const draft = await triageIssue(options, '42');
+
+    expect(mockedReproduce).toHaveBeenCalledTimes(1);
+    const [, , , reproOptionsArg] = mockedReproduce.mock.calls.at(0) ?? [];
+    expect(reproOptionsArg).toMatchObject({ route: '/app/energia' });
+    // The LLM still receives the STRIPPED body as reproduce()'s body context.
+    const [issueArg] = mockedReproduce.mock.calls.at(0) ?? [];
+    expect(issueArg).toMatchObject({ body: 'Algo se rompió.' });
+    expect(draft.reproductionEvidence).toEqual(FAKE_EVIDENCE);
+  });
+
   it('skips reproduce() when config.app is not set (regression: current behavior preserved)', async () => {
     options.config = { ...options.config, app: undefined };
 

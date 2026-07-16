@@ -26,6 +26,13 @@ export interface ForgeIssue {
   title: string;
   /** Issue body/description, with forge-specific metadata (e.g. widget blocks) stripped. */
   description: string;
+  /**
+   * The issue body BEFORE any forge-specific widget-metadata stripping; used
+   * for route extraction (REPRODUCE), which needs the `---`-delimited widget
+   * trailer that `description` drops. Falls back to `description` when an
+   * adapter does no stripping.
+   */
+  rawDescription?: string;
   labels: string[];
   url: string;
   comments: ForgeComment[];

@@ -42,6 +42,7 @@ function toForgeIssue(raw: GitHubIssueJson): ForgeIssue {
     iid: String(raw.number),
     title: raw.title ?? '',
     description: raw.body ?? '',
+    rawDescription: raw.body ?? '',
     labels: (raw.labels ?? []).map((l) => l.name),
     url: raw.url ?? '',
     comments: (raw.comments ?? []).map(toForgeComment),
