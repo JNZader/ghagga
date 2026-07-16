@@ -69,6 +69,28 @@ describe('PlaywrightNotInstalledError / lazy loading', () => {
     ).rejects.toBeInstanceOf(PlaywrightNotInstalledError);
   });
 
+  it('creates the browser context with baseURL === config.app.baseURL so relative gotos resolve', async () => {
+    const { fn } = mockGenerateFn([]);
+    const newContext = vi.fn(async (_opts: Record<string, unknown>) => ({
+      newPage: async () => ({
+        on: () => {},
+        evaluate: async () => [],
+      }),
+    }));
+    const browser = { newContext, close: vi.fn(async () => {}) };
+    const chromium = { launch: vi.fn(async () => browser) };
+    const mockLoader = () => Promise.resolve({ chromium });
+
+    // loginRecipe.kind === 'none' short-circuits the agentic loop, so the mock
+    // page needs only the surface reproduce() touches before returning.
+    const cfg = baseConfig({ loginRecipe: { kind: 'none' } });
+    await reproduce({ title: 'x', body: 'y' }, cfg, fn, { route: '/app/energia' }, mockLoader);
+
+    expect(newContext).toHaveBeenCalledTimes(1);
+    expect(newContext.mock.calls[0][0]).toMatchObject({ baseURL: FIXTURE_URL });
+    if (cfg.app) expect(newContext.mock.calls[0][0]).toMatchObject({ baseURL: cfg.app.baseURL });
+  });
+
   it('returns a skipped-reproduction evidence when config.app is not set (no crash, no browser launch)', async () => {
     const { fn } = mockGenerateFn([]);
     const cfg: TriageConfig = { ...baseConfig(), app: undefined };

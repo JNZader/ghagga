@@ -136,6 +136,7 @@ export async function reproduce(
     const storageStatePath =
       config.app.loginRecipe.kind === 'storageState' ? config.app.loginRecipe.path : undefined;
     const context = await browser.newContext({
+      baseURL: config.app.baseURL,
       viewport: options.viewport ?? DEFAULT_VIEWPORT,
       ...(storageStatePath ? { storageState: storageStatePath } : {}),
     });
