@@ -13,6 +13,9 @@ const AuthCallback = lazy(() =>
 );
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Reviews = lazy(() => import('@/pages/Reviews').then((m) => ({ default: m.Reviews })));
+const IssueTriage = lazy(() =>
+  import('@/pages/IssueTriage').then((m) => ({ default: m.IssueTriage })),
+);
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })));
 const GlobalSettings = lazy(() =>
   import('@/pages/GlobalSettings').then((m) => ({ default: m.GlobalSettings })),
@@ -60,6 +63,14 @@ export function App() {
                   element={
                     <ProtectedLayout>
                       <Reviews />
+                    </ProtectedLayout>
+                  }
+                />
+                <Route
+                  path="/issue-triage"
+                  element={
+                    <ProtectedLayout>
+                      <IssueTriage />
                     </ProtectedLayout>
                   }
                 />

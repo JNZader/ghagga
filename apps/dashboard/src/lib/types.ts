@@ -25,3 +25,42 @@ export type {
   WorkflowInstallResult,
   WorkflowStatus,
 } from '@ghagga/types';
+
+// ─── Issue-triage drafts ──────────────────────────────────────
+// Dashboard-local mirror of the approval API wire shape. The wire shape is
+// owned by the server approval API
+// (apps/server/src/routes/api/issue-drafts.ts → toDraftDto).
+
+export const ISSUE_DRAFT_STATUSES = ['DRAFT', 'APPROVED', 'REJECTED', 'POSTED'] as const;
+export type IssueDraftStatus = (typeof ISSUE_DRAFT_STATUSES)[number];
+
+export const ISSUE_DRAFT_KINDS = ['ANALYSIS', 'DUPLICATE', 'NEEDS_INFO'] as const;
+export type IssueDraftKind = (typeof ISSUE_DRAFT_KINDS)[number];
+
+export interface IssueDraftSource {
+  title: string;
+  type: string;
+  ref: string;
+}
+
+export interface IssueDedupMatch {
+  observationId: number;
+  title: string;
+  score: number;
+}
+
+export interface IssueDraft {
+  id: number;
+  repositoryId: number;
+  issueNumber: number;
+  issueTitle: string;
+  status: IssueDraftStatus;
+  draftKind: IssueDraftKind;
+  body: string;
+  sources: IssueDraftSource[];
+  dedupMatches: IssueDedupMatch[];
+  tokensUsed: number;
+  postedCommentId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
