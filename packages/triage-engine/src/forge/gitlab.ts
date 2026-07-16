@@ -72,12 +72,15 @@ export interface GitLabAdapterConfig {
 export function createGitLabAdapter(config: GitLabAdapterConfig): ForgeAdapter {
   return {
     async listIssues(filter?: ForgeIssueFilter): Promise<ForgeIssue[]> {
+      // `glab issue list` uses `-O/--output json` for JSON; `-F/--output-format`
+      // is a DIFFERENT flag (details/ids/urls) and silently falls back to the
+      // human text table, breaking JSON.parse. (`issue view` does use `-F json`.)
       const args = [
         'issue',
         'list',
         '-R',
         config.repo,
-        '-F',
+        '-O',
         'json',
         '-P',
         String(filter?.limit ?? DEFAULT_LIST_LIMIT),

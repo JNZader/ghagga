@@ -77,7 +77,7 @@ describe('createGitLabAdapter', () => {
   });
 
   describe('listIssues', () => {
-    it('calls `glab issue list -R <repo> --label <l> -F json` when a label filter is given', async () => {
+    it('calls `glab issue list -R <repo> -O json --label <l>` when a label filter is given', async () => {
       mockExecFileSync.mockReturnValue(JSON.stringify([]));
 
       await adapter.listIssues({ label: 'estado::nuevo' });
@@ -89,7 +89,7 @@ describe('createGitLabAdapter', () => {
           'list',
           '-R',
           'acme/widgets',
-          '-F',
+          '-O',
           'json',
           '-P',
           '100',
@@ -100,6 +100,18 @@ describe('createGitLabAdapter', () => {
       );
     });
 
+    it('uses `-O json` (NOT `-F json`) so glab emits JSON, not the text table', async () => {
+      // Regression: `-F/--output-format` (details/ids/urls) silently falls back
+      // to glab's human table, breaking JSON.parse. List JSON needs `-O/--output`.
+      mockExecFileSync.mockReturnValue(JSON.stringify([]));
+
+      await adapter.listIssues();
+
+      const call = mockExecFileSync.mock.calls[0];
+      expect(call?.[1]).toContain('-O');
+      expect(call?.[1]).not.toContain('-F');
+    });
+
     it('omits --label when no filter label is given, and respects a custom limit', async () => {
       mockExecFileSync.mockReturnValue(JSON.stringify([]));
 
@@ -107,7 +119,7 @@ describe('createGitLabAdapter', () => {
 
       expect(mockExecFileSync).toHaveBeenCalledWith(
         'glab',
-        ['issue', 'list', '-R', 'acme/widgets', '-F', 'json', '-P', '25'],
+        ['issue', 'list', '-R', 'acme/widgets', '-O', 'json', '-P', '25'],
         expect.objectContaining({ encoding: 'utf8' }),
       );
     });
