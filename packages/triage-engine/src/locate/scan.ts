@@ -6,8 +6,35 @@
  * biogas-triage.mts — made language-agnostic via a configurable extension set.
  */
 
+import * as nodeFs from 'node:fs';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+
+/**
+ * `fs.globSync` only exists on Node ≥22. We access it lazily off the `nodeFs`
+ * namespace (NOT a top-level named `import { globSync }`, which would throw
+ * `SyntaxError: does not provide an export named 'globSync'` at MODULE LOAD on
+ * Node 20/21, hard-crashing every import of this file before any code runs).
+ * Reading it at call time lets the module load everywhere and degrade
+ * gracefully: dir/file entries keep working, glob entries are skipped.
+ */
+type GlobSyncFn = (pattern: string, options: { cwd: string }) => string[];
+
+function getGlobSync(): GlobSyncFn | undefined {
+  const fn = (nodeFs as { globSync?: unknown }).globSync;
+  return typeof fn === 'function' ? (fn as GlobSyncFn) : undefined;
+}
+
+/** Emit the "glob needs Node ≥22" warning at most once per process. */
+let warnedGlobUnavailable = false;
+function warnGlobUnavailableOnce(): void {
+  if (warnedGlobUnavailable) return;
+  warnedGlobUnavailable = true;
+  console.warn(
+    '[triage-engine] fs.globSync is unavailable (requires Node ≥22); ' +
+      'glob moduleMap entries are skipped. Directory and file entries still work.',
+  );
+}
 
 /** Directories always excluded from the LOCATE scan, mirroring the PoC. */
 const EXCLUDED_DIRS = new Set([
@@ -47,10 +74,41 @@ function isTestFile(fileName: string): boolean {
   );
 }
 
+/** Glob magic characters that mark a moduleMap entry as a pattern (vs a plain dir/file path). */
+const GLOB_MAGIC = /[*?[\]{}]/;
+
+/**
+ * Shared inclusion filter for a single file: its extension must match the
+ * language and it must not be a test file. Applied IDENTICALLY across the
+ * dir-walk, glob, and single-file resolution paths so every entry kind gets
+ * the same filtering.
+ */
+function shouldIncludeFile(fileName: string, extensions: string[]): boolean {
+  return extensions.some((ext) => fileName.endsWith(ext)) && !isTestFile(fileName);
+}
+
+/**
+ * True when any segment of a codeRoot-relative path is an excluded noise dir
+ * (node_modules, vendor, .git, …). Used to keep `**` globs from pulling in
+ * dependency trees — `walkDir` already skips these via directory recursion.
+ */
+function hasExcludedSegment(relPath: string): boolean {
+  return relPath.split(/[/\\]/).some((seg) => EXCLUDED_DIRS.has(seg));
+}
+
 /**
  * Walk `dirs` (relative to `codeRoot`) and read all source files matching
  * `language`'s extensions, excluding tests and common noise directories.
  * Returns a Map of codeRoot-relative path -> file content.
+ *
+ * Each entry may be:
+ *  - a **glob pattern** (contains `* ? [ ] { }`) → resolved with `globSync`
+ *    relative to `codeRoot`; matched files get the same extension/test/noise
+ *    filtering as the dir walk;
+ *  - a **directory** → walked recursively (unchanged legacy behavior);
+ *  - a **single file path** → read directly if it passes the filter.
+ * Nonexistent, non-glob entries are skipped silently. The `cap` is honored
+ * across ALL entries and match kinds.
  */
 export function walkCodeScope(
   codeRoot: string,
@@ -60,10 +118,90 @@ export function walkCodeScope(
 ): Map<string, string> {
   const extensions = LANGUAGE_EXTENSIONS[language] ?? [];
   const acc = new Map<string, string>();
-  for (const dir of dirs) {
-    walkDir(path.join(codeRoot, dir), codeRoot, extensions, acc, cap);
+  for (const entry of dirs) {
+    if (acc.size >= cap) break;
+    if (GLOB_MAGIC.test(entry)) {
+      walkGlob(entry, codeRoot, extensions, acc, cap);
+    } else {
+      const full = path.join(codeRoot, entry);
+      let st: ReturnType<typeof statSync>;
+      try {
+        st = statSync(full);
+      } catch {
+        continue; // nonexistent entry — skip silently (legacy behavior)
+      }
+      if (st.isDirectory()) {
+        walkDir(full, codeRoot, extensions, acc, cap);
+      } else if (shouldIncludeFile(path.basename(full), extensions)) {
+        readInto(full, codeRoot, acc);
+      }
+    }
   }
   return acc;
+}
+
+/**
+ * Resolve a glob `pattern` against `codeRoot`. `globSync` with `cwd` set
+ * returns codeRoot-relative paths (verified: same shape as
+ * `path.relative(base, full)`), which become the acc keys directly.
+ */
+function walkGlob(
+  pattern: string,
+  codeRoot: string,
+  extensions: string[],
+  acc: Map<string, string>,
+  cap: number,
+): void {
+  const globSync = getGlobSync();
+  if (!globSync) {
+    warnGlobUnavailableOnce();
+    return; // Node <22: degrade gracefully — skip glob, keep dir/file entries working
+  }
+  let matches: string[];
+  try {
+    matches = globSync(pattern, { cwd: codeRoot });
+  } catch {
+    return;
+  }
+  for (const rel of matches) {
+    if (acc.size >= cap) return;
+    if (hasExcludedSegment(rel)) continue;
+    if (!shouldIncludeFile(path.basename(rel), extensions)) continue;
+    const full = path.join(codeRoot, rel);
+    let st: ReturnType<typeof statSync>;
+    try {
+      st = statSync(full);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) continue; // glob can match dirs; only ingest files
+    readInto(full, codeRoot, acc);
+  }
+}
+
+/**
+ * True when `fullPath` resolves inside `codeRoot`. Enforces the documented
+ * "relative to codeRoot" contract: a glob like `../shared/**` or a file entry
+ * `../secret.go` resolves OUTSIDE the root and must never be read. If the
+ * codeRoot-relative path starts with `..` or is absolute, it escaped.
+ */
+function isInsideCodeRoot(fullPath: string, codeRoot: string): boolean {
+  const rel = path.relative(codeRoot, fullPath);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+/**
+ * Read `full` into `acc` under its codeRoot-relative key. Enforces codeRoot
+ * containment (paths escaping via `..` are silently skipped, consistent with
+ * other skip behavior); unreadable files are skipped.
+ */
+function readInto(full: string, base: string, acc: Map<string, string>): void {
+  if (!isInsideCodeRoot(full, base)) return; // escapes codeRoot — skip
+  try {
+    acc.set(path.relative(base, full), readFileSync(full, 'utf8'));
+  } catch {
+    // unreadable file — skip
+  }
 }
 
 function walkDir(
@@ -91,12 +229,8 @@ function walkDir(
     if (st.isDirectory()) {
       if (EXCLUDED_DIRS.has(entry)) continue;
       walkDir(full, base, extensions, acc, cap);
-    } else if (extensions.some((ext) => entry.endsWith(ext)) && !isTestFile(entry)) {
-      try {
-        acc.set(path.relative(base, full), readFileSync(full, 'utf8'));
-      } catch {
-        // unreadable file — skip
-      }
+    } else if (shouldIncludeFile(entry, extensions)) {
+      readInto(full, base, acc);
     }
   }
 }

@@ -80,4 +80,107 @@ describe('walkCodeScope (filesystem)', () => {
     expect(() => walkCodeScope(root, ['nope'], 'go')).not.toThrow();
     expect(walkCodeScope(root, ['nope'], 'go').size).toBe(0);
   });
+
+  it('walks a plain directory entry recursively (backward-compat regression guard)', () => {
+    mkdirSync(path.join(root, 'internal', 'deep', 'nested'), { recursive: true });
+    writeFileSync(path.join(root, 'internal', 'deep', 'nested', 'buried.go'), 'package nested\n');
+    const files = walkCodeScope(root, ['internal'], 'go');
+    expect([...files.keys()]).toContain('internal/deep/nested/buried.go');
+    expect([...files.keys()]).toContain('internal/alerts.go');
+  });
+});
+
+describe('walkCodeScope (glob + file entries)', () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'triage-glob-'));
+    mkdirSync(path.join(root, 'internal', 'sub'), { recursive: true });
+    mkdirSync(path.join(root, 'internal', 'node_modules'), { recursive: true });
+    // Files a `internal/**/checklist*.go` glob SHOULD match:
+    writeFileSync(path.join(root, 'internal', 'checklist.go'), 'package internal\n');
+    writeFileSync(path.join(root, 'internal', 'sub', 'checklist_items.go'), 'package sub\n');
+    // Siblings / excluded that it must NOT match:
+    writeFileSync(path.join(root, 'internal', 'other.go'), 'package internal\n');
+    writeFileSync(path.join(root, 'internal', 'checklist_test.go'), 'package internal\n');
+    writeFileSync(path.join(root, 'internal', 'node_modules', 'checklist.go'), 'package noise\n');
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('matches only the glob-targeted files, excluding siblings, tests, and node_modules', () => {
+    const keys = [...walkCodeScope(root, ['internal/**/checklist*.go'], 'go').keys()];
+    expect(keys).toContain('internal/checklist.go');
+    expect(keys).toContain('internal/sub/checklist_items.go');
+    expect(keys).not.toContain('internal/other.go');
+    expect(keys).not.toContain('internal/checklist_test.go');
+    expect(keys).not.toContain('internal/node_modules/checklist.go');
+    expect(keys).toHaveLength(2);
+  });
+
+  it('reads exactly the file named by an explicit single-file entry', () => {
+    const files = walkCodeScope(root, ['internal/checklist.go'], 'go');
+    expect([...files.keys()]).toEqual(['internal/checklist.go']);
+  });
+
+  it('ignores a single-file entry whose extension does not match the language', () => {
+    writeFileSync(path.join(root, 'internal', 'notes.md'), 'not code\n');
+    expect(walkCodeScope(root, ['internal/notes.md'], 'go').size).toBe(0);
+  });
+
+  it('combines a glob entry and a directory entry in one dirs array', () => {
+    mkdirSync(path.join(root, 'other'), { recursive: true });
+    writeFileSync(path.join(root, 'other', 'thing.go'), 'package other\n');
+    const keys = [...walkCodeScope(root, ['internal/**/checklist*.go', 'other'], 'go').keys()];
+    expect(keys).toContain('internal/checklist.go');
+    expect(keys).toContain('internal/sub/checklist_items.go');
+    expect(keys).toContain('other/thing.go');
+  });
+
+  it('honors the cap across glob matches', () => {
+    // 2 checklist files match; cap=1 stops after the first.
+    expect(walkCodeScope(root, ['internal/**/checklist*.go'], 'go', 1).size).toBe(1);
+  });
+});
+
+describe('walkCodeScope (codeRoot containment)', () => {
+  let parent: string;
+  let root: string;
+
+  beforeEach(() => {
+    // parent/
+    //   repo/     <- codeRoot
+    //     internal/inside.go
+    //   shared/   <- OUTSIDE codeRoot (sibling); must never be read
+    //     secret.go
+    parent = mkdtempSync(path.join(tmpdir(), 'triage-contain-'));
+    root = path.join(parent, 'repo');
+    mkdirSync(path.join(root, 'internal'), { recursive: true });
+    mkdirSync(path.join(parent, 'shared'), { recursive: true });
+    writeFileSync(path.join(root, 'internal', 'inside.go'), 'package internal\n');
+    writeFileSync(path.join(parent, 'shared', 'secret.go'), 'package shared\n');
+  });
+
+  afterEach(() => {
+    rmSync(parent, { recursive: true, force: true });
+  });
+
+  it('skips a glob entry that escapes codeRoot via `..` (containment holds)', () => {
+    const keys = [...walkCodeScope(root, ['../shared/**/*.go'], 'go').keys()];
+    expect(keys).not.toContain('../shared/secret.go');
+    expect(keys).toHaveLength(0);
+  });
+
+  it('skips an explicit `../outside.go` file entry (containment holds)', () => {
+    const files = walkCodeScope(root, ['../shared/secret.go'], 'go');
+    expect(files.size).toBe(0);
+  });
+
+  it('still reads legitimate in-tree entries alongside an escaping one', () => {
+    const keys = [...walkCodeScope(root, ['internal', '../shared/secret.go'], 'go').keys()];
+    expect(keys).toContain('internal/inside.go');
+    expect(keys).not.toContain('../shared/secret.go');
+  });
 });

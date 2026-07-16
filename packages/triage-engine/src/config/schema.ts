@@ -36,6 +36,18 @@ export const TriageConfigSchema = z.object({
   forge: z.enum(['gitlab', 'github']),
   repo: z.string().min(1, 'repo is required (owner/name)'),
   codeRoot: z.string().min(1, 'codeRoot is required (absolute path to target repo)'),
+  /**
+   * Maps a module label (`módulo::x`) to the code scope LOCATE should scan for
+   * that module. Each value is an array of entries, and each entry — all
+   * relative to `codeRoot` — may be:
+   *  - a **directory**, walked recursively (e.g. `apps/backend/internal/alerts`);
+   *  - a **file path**, read directly (e.g. `apps/backend/internal/checklist.go`);
+   *  - a **glob pattern** (contains `* ? [ ] { }`), resolved with `fs.globSync`
+   *    (e.g. `apps/backend/internal/&#42;&#42;/checklist*.go`) — precise + fast when a
+   *    module lives in a handful of named files rather than a whole directory.
+   * Test files and noise dirs (node_modules, vendor, …) are excluded from ALL
+   * entry kinds. Directory-only maps remain fully backward compatible.
+   */
   moduleMap: z.record(z.string(), z.array(z.string())).optional(),
   synonyms: z.record(z.string(), z.array(z.string())).optional(),
   stopwords: z.array(z.string()).optional(),

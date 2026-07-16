@@ -9,7 +9,8 @@
       "apps/backend/internal/alerts",
       "apps/backend/internal/scheduler",
       "apps/backend/verticals/biogas"
-    ]
+    ],
+    "checklists": ["apps/backend/internal/**/checklist*.go"]
   },
   "synonyms": {
     "umbral": ["threshold", "limit"],
