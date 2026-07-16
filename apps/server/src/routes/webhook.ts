@@ -22,10 +22,16 @@ import {
 } from 'ghagga-db';
 import { githubCommentId, isForgeAuthError, REACTION_KIND } from 'ghagga-forge';
 import { Hono } from 'hono';
-import { getInstallationToken, verifyWebhookSignature } from '../github/client.js';
+import {
+  getInstallationToken,
+  getIssue,
+  listIssueComments,
+  verifyWebhookSignature,
+} from '../github/client.js';
 import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
 import { injectWorkflow } from '../github/runner.js';
 import { logger as rootLogger } from '../lib/logger.js';
+import { enqueueIssueAnalysis } from '../queues/issue-analysis.js';
 import { enqueueReview } from '../queues/review.js';
 
 const logger = rootLogger.child({ module: 'webhook' });
@@ -70,7 +76,14 @@ interface IssueCommentEvent {
   installation?: { id: number };
 }
 
-/** Associations allowed to trigger reviews via comment keyword */
+/**
+ * Associations allowed to trigger a PR REVIEW via comment keyword.
+ *
+ * This is the SHARED, INTENTIONALLY-LENIENT gate for the diff-review path: a PR
+ * is a deliberate code contribution, so even a CONTRIBUTOR / FIRST_TIMER asking
+ * for a review on their own PR is acceptable (review only reads the diff, never
+ * writes). The triage path is STRICTER — see TRIAGE_ALLOWED_ASSOCIATIONS.
+ */
 const ALLOWED_ASSOCIATIONS = new Set([
   'OWNER',
   'MEMBER',
@@ -80,10 +93,28 @@ const ALLOWED_ASSOCIATIONS = new Set([
   'FIRST_TIME_CONTRIBUTOR',
 ]);
 
+/**
+ * Associations allowed to trigger `/ghagga triage` — STRICTLY write-association.
+ *
+ * Issues are openable (and commentable) by ANYONE, so triage — which fetches
+ * untrusted issue text and spends LLM tokens — must be gated to TRUE maintainers
+ * (write access). This is a SEPARATE, stricter gate layered ON TOP of the shared
+ * ALLOWED_ASSOCIATIONS check; the lenient PR-review associations (CONTRIBUTOR /
+ * FIRST_TIMER / FIRST_TIME_CONTRIBUTOR) are deliberately EXCLUDED here so they
+ * can still trigger a review but NOT a triage.
+ */
+const TRIAGE_ALLOWED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
 // ─── Comment Command Parsing ───────────────────────────────────
 
-/** Valid slash commands that can be triggered from PR comments */
-type CommentCommand = 'review' | 'security' | 'perf' | 'describe' | 'fan-out';
+/**
+ * Valid slash commands that can be triggered from a comment.
+ *
+ * `review`/`security`/`perf`/`describe`/`fan-out` target a PR (the diff-review
+ * path). `triage` targets a PLAIN (non-PR) issue (the issue-triage path) — it is
+ * routed to the `issue-analysis` queue, never `enqueueReview`.
+ */
+type CommentCommand = 'review' | 'security' | 'perf' | 'describe' | 'fan-out' | 'triage';
 
 /** Parsed result from a comment command */
 interface ParsedCommand {
@@ -93,13 +124,20 @@ interface ParsedCommand {
   reviewMode: string | null;
 }
 
-/** Maps each command to a review mode override. null = use repo's effective settings. */
+/**
+ * Maps each command to a review mode override. null = use repo's effective
+ * settings. `triage` is NOT a review-mode command — it routes to the
+ * issue-analysis queue — so its value here is null and unused by the PR path.
+ * (This entry is also the on/off switch: reverting `triage` here disables the
+ * command — an unknown `/ghagga triage` then parses as 'unknown'.)
+ */
 const COMMAND_MODE_MAP: Record<CommentCommand, string | null> = {
   review: null,
   security: 'workflow',
   perf: 'workflow',
   describe: 'simple',
   'fan-out': 'fan-out',
+  triage: null,
 };
 
 const VALID_COMMANDS = new Set<string>(Object.keys(COMMAND_MODE_MAP));
@@ -172,6 +210,113 @@ export function parseCommentCommand(body: string): ParsedCommand | 'unknown' | n
     };
   }
   return null;
+}
+
+// ─── Issue-Triage Payload Caps (DoS / unbounded-Redis-payload defense) ─────────
+//
+// The `/ghagga triage` path fetches UNTRUSTED issue title/body/comments from
+// GitHub and packs them into a BullMQ (Redis) job payload. Those fields are NOT
+// size-bounded by GitHub, so without caps a single giant issue (huge body +
+// hundreds of long comments) would land an unbounded blob in `job.data` BEFORE
+// the worker's defensive cap ever runs. We therefore cap BOTH the comment COUNT
+// and the total serialized byte SIZE at this fetch/enqueue boundary.
+
+/** Max number of (most-recent) issue comments fetched + included in a triage job. */
+export const MAX_TRIAGE_COMMENTS = 20;
+
+/** Max bytes for the issue body carried in the job payload (truncated past this). */
+export const MAX_TRIAGE_BODY_BYTES = 32_768; // 32 KiB
+
+/** Max bytes for a single comment body carried in the job payload. */
+export const MAX_TRIAGE_COMMENT_BYTES = 4_096; // 4 KiB
+
+/** Max number of labels carried in the job payload. GitHub allows up to 100. */
+export const MAX_TRIAGE_LABELS = 50;
+
+/** Max bytes for a single label name (labels are short; this is a paranoia cap). */
+export const MAX_TRIAGE_LABEL_BYTES = 256;
+
+/**
+ * Total byte budget for the assembled untrusted text (body + all comment bodies
+ * + all label names). Once reached, remaining comments are dropped so the
+ * enqueued payload stays bounded regardless of how the per-field caps combine.
+ * Labels are counted toward this budget too (a label-stuffed issue can otherwise
+ * push the serialized payload well past the stated ceiling).
+ */
+export const MAX_TRIAGE_TOTAL_BYTES = 131_072; // 128 KiB
+
+/**
+ * Truncate a string to at most `maxBytes` UTF-8 bytes INCLUDING the ellipsis we
+ * append on truncation — so the returned string is ALWAYS ≤ maxBytes (the stated
+ * contract). The ellipsis '…' is 3 UTF-8 bytes, so we slice the source to
+ * `maxBytes - 3` before appending it.
+ */
+function truncateToBytes(value: string, maxBytes: number): string {
+  const buf = Buffer.from(value, 'utf8');
+  if (buf.length <= maxBytes) return value;
+  const ELLIPSIS = '…';
+  const ellipsisBytes = Buffer.byteLength(ELLIPSIS, 'utf8'); // 3
+  // Reserve room for the ellipsis so the final output never exceeds maxBytes.
+  // If maxBytes is too small to hold even the ellipsis, slice hard with no marker.
+  const sliceTo = Math.max(0, maxBytes - ellipsisBytes);
+  // Slice on a byte boundary, then drop a trailing partial codepoint by decoding
+  // leniently — Buffer.toString replaces an incomplete tail with U+FFFD, which we
+  // strip so we never emit a stray replacement char from truncation.
+  let truncated = buf.subarray(0, sliceTo).toString('utf8');
+  if (truncated.endsWith('�')) truncated = truncated.slice(0, -1);
+  return sliceTo === 0 ? '' : `${truncated}${ELLIPSIS}`;
+}
+
+/**
+ * Build a SIZE- and COUNT-bounded issue-triage payload from freshly fetched
+ * (untrusted) issue data. Guarantees (each output field is ≤ its stated bound,
+ * ellipsis-inclusive — see truncateToBytes):
+ *   - issue title ≤ 500 bytes
+ *   - issue body ≤ MAX_TRIAGE_BODY_BYTES
+ *   - comments ≤ MAX_TRIAGE_COMMENTS (caller should already cap the fetch count;
+ *     this re-enforces as a belt-and-suspenders against an over-long list)
+ *   - each comment body ≤ MAX_TRIAGE_COMMENT_BYTES
+ *   - labels ≤ MAX_TRIAGE_LABELS, each label ≤ MAX_TRIAGE_LABEL_BYTES
+ *   - total carried untrusted bytes (body + comment bodies + label names)
+ *     ≤ MAX_TRIAGE_TOTAL_BYTES
+ *
+ * The title is independently capped (issue_drafts.issueTitle is varchar(500) and
+ * the worker re-slices to 500; we cap here so the Redis payload itself is bounded).
+ */
+export function buildBoundedTriagePayload(input: {
+  issueTitle: string;
+  issueBody: string;
+  labels: string[];
+  comments: Array<{ author: string; body: string }>;
+}): {
+  issueTitle: string;
+  issueBody: string;
+  labels: string[];
+  comments: Array<{ author: string; body: string }>;
+} {
+  const issueTitle = truncateToBytes(input.issueTitle, 500);
+  const issueBody = truncateToBytes(input.issueBody, MAX_TRIAGE_BODY_BYTES);
+
+  // Bound labels: cap count, cap each name's bytes, and charge them to the budget.
+  const labels: string[] = [];
+  let remaining = MAX_TRIAGE_TOTAL_BYTES - Buffer.byteLength(issueBody, 'utf8');
+  for (const label of input.labels.slice(0, MAX_TRIAGE_LABELS)) {
+    if (remaining <= 0) break;
+    const capped = truncateToBytes(label, Math.min(MAX_TRIAGE_LABEL_BYTES, remaining));
+    labels.push(capped);
+    remaining -= Buffer.byteLength(capped, 'utf8');
+  }
+
+  const comments: Array<{ author: string; body: string }> = [];
+  for (const c of input.comments.slice(0, MAX_TRIAGE_COMMENTS)) {
+    if (remaining <= 0) break;
+    const perComment = Math.min(MAX_TRIAGE_COMMENT_BYTES, remaining);
+    const body = truncateToBytes(c.body, perComment);
+    comments.push({ author: c.author, body });
+    remaining -= Buffer.byteLength(body, 'utf8');
+  }
+
+  return { issueTitle, issueBody, labels, comments };
 }
 
 interface InstallationEvent {
@@ -395,43 +540,74 @@ async function handleIssueComment(
     return c.json({ message: `Comment action ${payload.action} ignored` }, 200);
   }
 
-  // Only handle comments on PRs (not regular issues)
-  if (!payload.issue.pull_request) {
-    return c.json({ message: 'Comment is not on a pull request' }, 200);
-  }
-
-  // Skip bot comments to prevent self-triggering loops
+  // Skip bot comments to prevent self-triggering loops. Checked FIRST (before
+  // the PR-vs-issue split) so a bot comment is rejected on BOTH paths — a bot
+  // must never trigger triage either.
   if (payload.comment.user.type === 'Bot') {
     return c.json({ message: 'Bot comment ignored' }, 200);
   }
 
-  // Parse comment for a ghagga command
+  // Parse comment for a ghagga command. Done BEFORE the PR check so a `/ghagga
+  // triage` command on a PLAIN issue (no payload.issue.pull_request) is routed
+  // instead of being unconditionally dropped (the old behavior at this point).
   const parsed = parseCommentCommand(payload.comment.body);
   if (parsed === null) {
     return c.json({ message: 'No review trigger keyword found' }, 200);
   }
   if (parsed === 'unknown') {
     return c.json(
-      { message: 'Unknown ghagga command. Valid commands: review, security, perf, describe' },
+      {
+        message: 'Unknown ghagga command. Valid commands: review, security, perf, describe, triage',
+      },
       200,
     );
   }
 
-  // Check author association (only contributors/members can trigger)
+  const isPullRequest = Boolean(payload.issue.pull_request);
+
+  // SHARED SECURITY GATE (applies to EVERY command, BEFORE any fetch / enqueue /
+  // LLM): the comment author must be in ALLOWED_ASSOCIATIONS. This is the LENIENT
+  // review-path gate — it INCLUDES CONTRIBUTOR / FIRST_TIMER / FIRST_TIME_CONTRIBUTOR
+  // (not just write-association maintainers), because requesting a review on a PR
+  // is a benign read-only action. The `triage` path applies an ADDITIONAL,
+  // STRICTER write-only gate (TRIAGE_ALLOWED_ASSOCIATIONS) inside handleIssueTriage,
+  // so a CONTRIBUTOR clears this gate for review but is rejected for triage.
+  // Bot-skip above + this check together mean no unauthorized or automated
+  // comment can enqueue work.
   if (!ALLOWED_ASSOCIATIONS.has(payload.comment.author_association)) {
     logger.info(
       {
         user: payload.comment.user.login,
         association: payload.comment.author_association,
         repo: payload.repository.full_name,
+        command: parsed.command,
       },
-      'Review trigger rejected: insufficient permissions',
+      'Comment trigger rejected: insufficient permissions',
     );
     return c.json({ message: 'Insufficient permissions to trigger review' }, 200);
   }
 
   if (!payload.installation?.id) {
     return c.json({ error: 'Missing installation ID' }, 400);
+  }
+
+  // ── Route: `triage` on a plain issue → issue-analysis queue ─────────────────
+  if (parsed.command === 'triage') {
+    if (isPullRequest) {
+      // `triage` targets plain issues only; on a PR it is a no-op (use the
+      // review commands for PR diffs). Reject AFTER the association gate so we
+      // never reveal routing to unauthorized callers.
+      return c.json({ message: 'triage is only for issues, not pull requests' }, 200);
+    }
+    // installation.id is non-null here (checked just above), narrowed for the
+    // handler so it needs no redundant re-check.
+    return await handleIssueTriage(c, db, payload.installation.id, payload);
+  }
+
+  // ── Route: non-triage command must target a PR ──────────────────────────────
+  // A non-PR comment carrying a review command is dropped (review needs a diff).
+  if (!isPullRequest) {
+    return c.json({ message: 'Comment is not on a pull request' }, 200);
   }
 
   // Generate correlation ID for end-to-end review tracing
@@ -608,6 +784,200 @@ async function handleIssueComment(
       repo: payload.repository.full_name,
       triggeredBy: payload.comment.user.login,
       command: parsed.command,
+      reviewId,
+    },
+    202,
+  );
+}
+
+/**
+ * Handle a `/ghagga triage` command on a PLAIN (non-PR) issue.
+ *
+ * Preconditions (already enforced by the caller, BEFORE this is reached):
+ *   - action === 'created', not a bot comment
+ *   - command parsed === 'triage'
+ *   - author_association ∈ ALLOWED_ASSOCIATIONS (the LENIENT shared review gate)
+ *   - payload.issue.pull_request is absent (a real issue, not a PR)
+ *   - payload.installation.id is present
+ *
+ * Responsibilities (the worker does NOT fetch — this is the fetch boundary):
+ *   0. Apply the STRICTER triage-only write-association gate
+ *      (TRIAGE_ALLOWED_ASSOCIATIONS). A CONTRIBUTOR/FIRST_TIMER clears the shared
+ *      gate (for review) but is REJECTED here — no fetch, no enqueue.
+ *   1. Look up the tracked repo (untracked → 200, no work).
+ *   2. Acknowledge with a 👀 reaction (best-effort, like the review path — routed
+ *      through the composition-root forge adapter, NOT the @internal client fn).
+ *   3. Fetch the issue (title/body/labels) + most-recent comments (COUNT-capped).
+ *      A failed ISSUE fetch ABORTS triage (no useless empty-issue job); a failed
+ *      COMMENTS fetch DEGRADES to `[]` (comments are optional context) + a warn.
+ *   4. Bound the payload SIZE (body + comment-body byte budget) — DoS defense.
+ *   5. Enqueue an `issue-analysis` job. The worker persists a DRAFT; nothing is
+ *      posted here (analysis is human-approved later in the dashboard).
+ */
+async function handleIssueTriage(
+  c: { json: (data: unknown, status?: number) => Response },
+  db: Database,
+  // installationId is narrowed by the caller and re-passed explicitly so this
+  // handler needs no redundant null-check on payload.installation.
+  installationId: number,
+  payload: IssueCommentEvent,
+) {
+  // STRICTER triage-only gate (write association). Layered ON TOP of the shared
+  // ALLOWED_ASSOCIATIONS check the caller already passed: a CONTRIBUTOR/FIRST_TIMER
+  // is allowed to trigger a PR review but must NOT trigger a triage (which fetches
+  // untrusted issue text + spends LLM tokens). Rejected here = 200, no fetch, no
+  // enqueue — before any token exchange or GitHub read.
+  if (!TRIAGE_ALLOWED_ASSOCIATIONS.has(payload.comment.author_association)) {
+    logger.info(
+      {
+        user: payload.comment.user.login,
+        association: payload.comment.author_association,
+        repo: payload.repository.full_name,
+      },
+      'Triage trigger rejected: requires a write association (OWNER/MEMBER/COLLABORATOR)',
+    );
+    return c.json({ message: 'Insufficient permissions to trigger triage' }, 200);
+  }
+
+  const reviewId = randomUUID().slice(0, 8);
+
+  const repo = await getRepoByGithubId(db, payload.repository.id);
+  if (!repo) {
+    logger.warn({ repo: payload.repository.full_name }, 'Triage trigger for unknown repo');
+    return c.json({ message: 'Repository not tracked' }, 200);
+  }
+
+  const appId = process.env.GITHUB_APP_ID;
+  const privateKey = process.env.GITHUB_PRIVATE_KEY;
+  const [owner, repoName] = payload.repository.full_name.split('/') as [string, string];
+  const issueNumber = payload.issue.number;
+
+  // Fetch the issue snapshot. The issue title/body is the PRIMARY input to the
+  // triage agent, so a failed/absent issue fetch ABORTS (we never enqueue a
+  // useless empty-issue analysis). Comments are OPTIONAL context — a failed
+  // comment fetch degrades to `[]` (with a warn) but still enqueues.
+  if (!appId || !privateKey) {
+    // Without app credentials we cannot read the issue at all — abort rather than
+    // enqueue a job that would analyze nothing.
+    logger.warn(
+      { repo: payload.repository.full_name, issue: issueNumber },
+      'GitHub App credentials not configured — aborting triage (cannot fetch issue)',
+    );
+    return c.json({ message: 'Triage unavailable: GitHub App not configured' }, 200);
+  }
+
+  let installationToken: string | undefined;
+  try {
+    installationToken = await getInstallationToken(installationId, appId, privateKey);
+    // Ack via the composition-root forge adapter (the @internal addCommentReaction
+    // is not importable here). Box the trigger-comment id into the canonical
+    // CommentId, guard by method-presence (mirrors the review path).
+    const adapter = makeGitHubAdapter({ owner, repo: repoName, token: installationToken });
+    if ('addReaction' in adapter) {
+      await adapter.addReaction(githubCommentId(payload.comment.id), REACTION_KIND.EYES);
+    }
+  } catch (error) {
+    // Non-critical — acknowledgment (reaction) failure must not block triage.
+    // installationToken may still be set if only the reaction call threw.
+    if (isForgeAuthError(error)) {
+      logger.error(
+        { repo: payload.repository.full_name, status: error.status, error: String(error) },
+        'Triage forge call (ack reaction) rejected with auth failure — installation token rejected; check the GitHub App installation/permissions for this repo',
+      );
+    } else {
+      logger.warn(
+        { repo: payload.repository.full_name, error: String(error) },
+        'Failed to add triage acknowledgment reaction',
+      );
+    }
+  }
+
+  if (!installationToken) {
+    // Token exchange failed → we cannot fetch the issue → abort (no empty job).
+    logger.warn(
+      { repo: payload.repository.full_name, issue: issueNumber },
+      'Failed to obtain installation token — aborting triage (cannot fetch issue)',
+    );
+    return c.json({ message: 'Triage unavailable: could not authenticate to GitHub' }, 200);
+  }
+
+  // PRIMARY fetch: the issue itself. Failure ABORTS — no empty-issue enqueue.
+  let issueTitle: string;
+  let issueBody: string;
+  let labels: string[];
+  try {
+    const issue = await getIssue(owner, repoName, issueNumber, installationToken);
+    issueTitle = issue.title;
+    issueBody = issue.body;
+    labels = issue.labels;
+  } catch (error) {
+    logger.warn(
+      { repo: payload.repository.full_name, issue: issueNumber, error: String(error) },
+      'Failed to fetch issue for triage — aborting (no enqueue of empty analysis)',
+    );
+    return c.json({ message: 'Triage aborted: failed to fetch issue' }, 200);
+  }
+
+  // OPTIONAL context: most-recent comments, COUNT-capped at the source. A failed
+  // fetch DEGRADES to `[]` (no longer silent — a warn distinguishes "no comments"
+  // from "fetch failed") and triage proceeds with title+body only.
+  let fetchedComments: Array<{ author: string; body: string }> = [];
+  try {
+    fetchedComments = await listIssueComments(
+      owner,
+      repoName,
+      issueNumber,
+      installationToken,
+      MAX_TRIAGE_COMMENTS,
+    );
+  } catch (error) {
+    logger.warn(
+      { repo: payload.repository.full_name, issue: issueNumber, error: String(error) },
+      'Failed to fetch issue comments for triage — proceeding with title+body only',
+    );
+  }
+
+  // SIZE cap: bound body + comment bodies so the enqueued Redis payload stays
+  // under a sane byte budget even for a giant issue (huge body + many long
+  // comments). This is the authoritative DoS guard — the worker-side cap runs
+  // only AFTER the payload already landed in Redis.
+  const bounded = buildBoundedTriagePayload({
+    issueTitle,
+    issueBody,
+    labels,
+    comments: fetchedComments,
+  });
+
+  await enqueueIssueAnalysis({
+    reviewId,
+    installationId,
+    repositoryId: repo.id,
+    repoFullName: payload.repository.full_name,
+    issueNumber,
+    issueTitle: bounded.issueTitle,
+    issueBody: bounded.issueBody,
+    labels: bounded.labels,
+    comments: bounded.comments,
+    triggerCommentId: payload.comment.id,
+  });
+
+  logger.info(
+    {
+      repo: payload.repository.full_name,
+      issue: issueNumber,
+      triggeredBy: payload.comment.user.login,
+      reviewId,
+      commentCount: bounded.comments.length,
+    },
+    'Issue triage enqueued',
+  );
+
+  return c.json(
+    {
+      message: 'Triage dispatched',
+      issue: issueNumber,
+      repo: payload.repository.full_name,
+      triggeredBy: payload.comment.user.login,
       reviewId,
     },
     202,
