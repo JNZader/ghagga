@@ -101,3 +101,24 @@ export function makeGitHubAdapter({
 }: MakeGitHubAdapterDeps): GitHubForgeAdapter {
   return new GitHubForgeAdapter({ client: githubClientPort, token, owner, repo });
 }
+
+/**
+ * Post a single plain comment to an issue (or PR) and return its created id.
+ *
+ * SANCTIONED CONSUMER: the forge-boundary lint makes THIS factory module the
+ * SOLE place in apps/server allowed to touch the @internal `client.ts`
+ * forge-adapter fns. The issue-draft approval route
+ * (routes/api/issue-drafts.ts) posts the human-approved draft body through this
+ * helper rather than importing the @internal `postComment` directly — the
+ * GitHubForgeAdapter itself only exposes marker-deduped `upsertSummaryComment`
+ * (wrong semantics for a fresh, one-shot issue comment), so a thin sanctioned
+ * passthrough is the minimal boundary-respecting seam. Behavior-identical to a
+ * direct `client.postComment(owner, repo, issueNumber, body, token)`.
+ */
+export async function postIssueComment(
+  { owner, repo, token }: MakeGitHubAdapterDeps,
+  issueNumber: number,
+  body: string,
+): Promise<{ id: number }> {
+  return githubClient.postComment(owner, repo, issueNumber, body, token);
+}

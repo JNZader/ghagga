@@ -139,6 +139,11 @@ export {
 
 // ─── Providers (for direct model access) ────────────────────────
 
+// Provider-chain → GenerateTextFn resolution. Exported so out-of-pipeline
+// callers (e.g. the server issue-analysis worker) can resolve a backend from a
+// ReviewInput-shaped object and inject the resulting GenerateTextFn into agents
+// the SAME way the review pipeline's execute step does (pipeline/execute.ts).
+export { resolveGenerateTextFns, resolvePrimaryProvider } from './pipeline/providers.js';
 export type { CLIBridgeOptions, CLIToolName } from './providers/cli-bridge.js';
 export {
   CLIConfigurationError,

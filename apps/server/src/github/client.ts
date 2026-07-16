@@ -26,6 +26,7 @@
 
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
+import { logger } from '../lib/logger.js';
 
 // ─── Errors ─────────────────────────────────────────────────────
 
@@ -162,6 +163,194 @@ export async function fetchPRDetails(
   });
 
   return { headSha: data.head.sha, baseBranch: data.base.ref, prAuthor: data.user.login };
+}
+
+// ─── Issue Data ─────────────────────────────────────────────────
+//
+// getIssue / listIssueComments are NOT forge-adapter fns — they are the fetch
+// boundary for the issue-triage path (webhook handleIssueTriage) and, like
+// getInstallationToken/verifyWebhookSignature, stay DIRECTLY importable (they are
+// intentionally absent from the biome noRestrictedImports importNames list).
+
+/**
+ * Fetch a single issue's title, body, and labels.
+ *
+ * Used by the issue_comment handler (issue-triage routing) to build the
+ * IssueAnalysisJobData payload for a plain (non-PR) issue. The worker does NOT
+ * fetch — it consumes a payload-carried snapshot — so this is the authoritative
+ * fetch boundary. The caller is responsible for the payload size/count caps.
+ *
+ * Returns `body` as an empty string when GitHub sends `null` (issues with no
+ * body), and `labels` as the label `name` strings.
+ */
+export async function getIssue(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  token: string,
+): Promise<{ title: string; body: string; labels: string[] }> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`;
+
+  const data = await githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error fetching issue: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    return (await response.json()) as {
+      title: string;
+      body: string | null;
+      labels?: Array<{ name: string } | string>;
+    };
+  });
+
+  const labels = (data.labels ?? [])
+    .map((l) => (typeof l === 'string' ? l : l.name))
+    .filter((name): name is string => typeof name === 'string' && name.length > 0);
+
+  return { title: data.title ?? '', body: data.body ?? '', labels };
+}
+
+/**
+ * Fetch the `maxCount` MOST-RECENT issue comments (author + body).
+ *
+ * SECURITY/DoS: this is the fetch boundary for untrusted issue-comment bodies
+ * that end up in a Redis job payload. The triage agent wants the most RECENT
+ * comments as context.
+ *
+ * GitHub's per-issue comments endpoint (GET …/issues/{n}/comments) is ordered
+ * oldest-first by ascending comment id and does NOT accept `sort`/`direction`
+ * (only `since`/`page`/`per_page` — verified against the REST docs). To return
+ * the NEWEST comments we therefore:
+ *   1. read the FIRST page with the MAX page size (`per_page = 100`) plus the
+ *      `Link` header to learn the LAST page number,
+ *   2. fetch that LAST page (the newest comments),
+ *   3. if the last page holds FEWER than `maxCount` comments AND a previous page
+ *      exists, ALSO fetch the previous page so the newest-`maxCount` window is
+ *      complete across the page boundary,
+ *   4. concatenate in chronological (oldest→newest) order and keep the trailing
+ *      `maxCount`.
+ * Because `per_page = 100`, the last two pages always cover ≥ `maxCount` for any
+ * sane `maxCount ≤ 100`, so this bounds the fetch to at most 3 HTTP calls (the
+ * page-1 probe for the `Link` header, the last page, and one previous page) —
+ * never paging the oldest 500 and slicing the tail (the pre-fix behavior on a
+ * >500-comment issue returned the OLDEST 500's tail, not the newest).
+ *
+ * The CALLER additionally enforces a total-payload byte budget (per-comment +
+ * body truncation) before enqueue — `maxCount` alone does not bound total bytes
+ * because a single comment body can be arbitrarily large.
+ *
+ * Returns `{ author, body }` pairs, OLDEST→NEWEST within the kept window (so the
+ * agent reads them in chronological order). A comment with a missing/null author
+ * falls back to the literal `'unknown'`. A present-but-malformed `Link` header
+ * does NOT silently return the oldest comments — it logs a warn and falls back
+ * to the trailing `maxCount` of whatever page 1 returned.
+ *
+ * THROWS on a failed page so the caller can distinguish "no comments" from
+ * "fetch failed" and log accordingly (the caller degrades to `[]` + a warn).
+ */
+export async function listIssueComments(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  token: string,
+  maxCount: number,
+): Promise<Array<{ author: string; body: string }>> {
+  if (maxCount <= 0) return [];
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`;
+  // Always request the MAX page size: this guarantees the last (and, if needed,
+  // the previous) page together cover ≥ maxCount for any sane maxCount ≤ 100.
+  const perPage = 100;
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.v3+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+
+  const parse = (raw: unknown): Array<{ author: string; body: string }> =>
+    (raw as Array<{ body: string | null; user: { login: string } | null }>).map((c) => ({
+      author: c.user?.login ?? 'unknown',
+      body: c.body ?? '',
+    }));
+
+  const fetchPage = async (page: number) => {
+    const res = await fetch(`${baseUrl}?per_page=${perPage}&page=${page}`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      throw new GitHubApiError(
+        res.status,
+        `GitHub API error listing issue comments: ${res.status} ${res.statusText}`,
+      );
+    }
+    return res;
+  };
+
+  // GitHub exposes the last page via rel="last" in the Link header. Returns the
+  // parsed page number, `null` when there is no Link header (single page), or
+  // `'malformed'` when a Link header is present but unparseable.
+  const lastPageFrom = (link: string | null): number | null | 'malformed' => {
+    if (!link) return null;
+    const m = link.match(/[?&]page=(\d+)[^>]*>;\s*rel="last"/);
+    if (!m?.[1]) return 'malformed';
+    const n = Number.parseInt(m[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : 'malformed';
+  };
+
+  return githubCircuitBreaker.execute(async () => {
+    // Probe page 1 — both for its contents and for the Link header.
+    const firstRes = await fetchPage(1);
+    const firstPage = parse(await firstRes.json());
+    const lastPage = lastPageFrom(firstRes.headers.get('link'));
+
+    // No Link header → single page; it already holds every comment.
+    if (lastPage === null) {
+      return firstPage.slice(-maxCount);
+    }
+
+    // Malformed Link header → do NOT silently return the oldest comments; log
+    // and fall back to the trailing maxCount of whatever page 1 returned.
+    if (lastPage === 'malformed') {
+      logger.warn(
+        { owner, repo, issueNumber },
+        'listIssueComments: malformed GitHub Link header — falling back to page 1 tail',
+      );
+      return firstPage.slice(-maxCount);
+    }
+
+    // rel="last" points at page 1 → page 1 IS the whole set.
+    if (lastPage <= 1) {
+      return firstPage.slice(-maxCount);
+    }
+
+    // Fetch the last page (the newest comments).
+    let window = parse(await (await fetchPage(lastPage)).json());
+
+    // The last page can be partial (e.g. 105 total, per_page=100 → page 2 has
+    // only 5). If it underfills the window AND a previous page exists, prepend
+    // the previous page so the newest-maxCount window is complete across the
+    // boundary. page 1 is already in hand — only re-fetch intermediate pages.
+    if (window.length < maxCount && lastPage > 1) {
+      const prevPage = lastPage - 1;
+      const prev = prevPage === 1 ? firstPage : parse(await (await fetchPage(prevPage)).json());
+      window = [...prev, ...window];
+    }
+
+    return window.slice(-maxCount);
+  });
 }
 
 /**
