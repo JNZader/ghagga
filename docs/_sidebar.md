@@ -14,6 +14,7 @@
   - [Tool Candidates](static-analysis-candidates.md)
   - [Health Check](health.md)
   - [Memory System](memory-system.md)
+  - [Issue Triage](issue-triage.md)
   - [Security Policy](security.md)
 
 - Distribution

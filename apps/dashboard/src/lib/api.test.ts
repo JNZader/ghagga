@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestQueryClient, createWrapper } from '../test/test-utils';
 import {
   ApiError,
+  useApproveIssueDraft,
   useBatchDeleteObservations,
   useBatchDeleteReviews,
   useCleanupEmptySessions,
@@ -19,11 +20,14 @@ import {
   useDeleteRepoReviews,
   useDeleteReview,
   useDeleteSession,
+  useEditIssueDraft,
   useInstallationSettings,
   useInstallations,
+  useIssueDrafts,
   useMemorySessions,
   useObservations,
   usePurgeAllMemory,
+  useRejectIssueDraft,
   useRepositories,
   useReviews,
   useSettings,
@@ -359,6 +363,121 @@ describe('useDeleteReview', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Issue-triage draft hooks
+// ═══════════════════════════════════════════════════════════════════
+
+describe('useIssueDrafts', () => {
+  it('GETs /api/issue-drafts with the status filter and unwraps data', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: [{ id: 9, status: 'DRAFT' }] }));
+
+    const { result } = renderHook(() => useIssueDrafts('DRAFT'), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain('/api/issue-drafts?status=DRAFT');
+    expect(result.current.data).toEqual([{ id: 9, status: 'DRAFT' }]);
+  });
+});
+
+describe('useEditIssueDraft', () => {
+  it('PATCHes the body and invalidates issue-drafts', async () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { id: 9, body: 'x' } }));
+
+    const { result } = renderHook(() => useEditIssueDraft(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({ id: 9, body: 'x' });
+    });
+
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).toContain('/api/issue-drafts/9');
+    expect(options.method).toBe('PATCH');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-drafts'] });
+  });
+});
+
+describe('useApproveIssueDraft', () => {
+  it('POSTs to /approve and invalidates issue-drafts', async () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { id: 9, status: 'POSTED' } }));
+
+    const { result } = renderHook(() => useApproveIssueDraft(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({ id: 9 });
+    });
+
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).toContain('/api/issue-drafts/9/approve');
+    expect(options.method).toBe('POST');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-drafts'] });
+  });
+
+  it('invalidates issue-drafts on FAILURE (e.g. 409 concurrent decision) so the stale row refetches (REL-002)', async () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'ALREADY_DECIDED' }), { status: 409 }),
+    );
+
+    const { result } = renderHook(() => useApproveIssueDraft(), {
+      wrapper: createWrapper(queryClient),
+    });
+    act(() => {
+      result.current.mutate({ id: 9 });
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    // The list must refetch so a draft another maintainer already decided stops
+    // showing as an actionable DRAFT.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-drafts'] });
+  });
+});
+
+describe('useRejectIssueDraft', () => {
+  it('POSTs to /reject and invalidates issue-drafts', async () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { id: 9, status: 'REJECTED' } }));
+
+    const { result } = renderHook(() => useRejectIssueDraft(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({ id: 9 });
+    });
+
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).toContain('/api/issue-drafts/9/reject');
+    expect(options.method).toBe('POST');
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-drafts'] });
+  });
+
+  it('invalidates issue-drafts on FAILURE (e.g. 409 concurrent decision) so the stale row refetches (REL-002)', async () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'ALREADY_DECIDED' }), { status: 409 }),
+    );
+
+    const { result } = renderHook(() => useRejectIssueDraft(), {
+      wrapper: createWrapper(queryClient),
+    });
+    act(() => {
+      result.current.mutate({ id: 9 });
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-drafts'] });
   });
 });
 

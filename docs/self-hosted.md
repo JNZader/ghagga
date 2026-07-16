@@ -58,6 +58,7 @@ Under **Repository permissions**:
 | **Pull requests** | Read and write | Fetch PR diffs and post review comments |
 | **Contents** | Read and write | Inject the static-analysis workflow file at `.github/workflows/ghagga.yml` |
 | **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
+| **Issues** | Read and write | Issue-triage (`/ghagga triage`): read the issue + its comments, post the approved draft comment |
 | **Metadata** | Read-only (auto-selected) | List repositories and installations |
 
 Under **Account permissions**: Leave everything as "No access".

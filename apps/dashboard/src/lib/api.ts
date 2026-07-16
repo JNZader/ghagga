@@ -4,6 +4,8 @@ import { notifySessionExpired } from './session-expired';
 import type {
   Installation,
   InstallationSettings,
+  IssueDraft,
+  IssueDraftStatus,
   MemorySession,
   Observation,
   Repository,
@@ -175,6 +177,65 @@ export function useDeleteRepoReviews() {
       if (variables.includeMemory) {
         void queryClient.invalidateQueries({ queryKey: ['memory'] });
       }
+    },
+  });
+}
+
+// ─── Issue Drafts (issue-triage approval) ─────────────────
+
+export function useIssueDrafts(status?: IssueDraftStatus) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  const qs = params.toString();
+  return useQuery<IssueDraft[]>({
+    queryKey: ['issue-drafts', status ?? 'all'],
+    queryFn: () => fetchData<IssueDraft[]>(`/api/issue-drafts${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useEditIssueDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: string }) =>
+      fetchData<IssueDraft>(`/api/issue-drafts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue-drafts'] });
+    },
+  });
+}
+
+export function useApproveIssueDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number }) =>
+      fetchData<IssueDraft>(`/api/issue-drafts/${id}/approve`, { method: 'POST' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue-drafts'] });
+    },
+    // On failure — especially a 409 when another maintainer already decided the
+    // draft — refetch so the stale DRAFT row reflects true server state and the
+    // user can't retry a resolved draft (REL-002).
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue-drafts'] });
+    },
+  });
+}
+
+export function useRejectIssueDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number }) =>
+      fetchData<IssueDraft>(`/api/issue-drafts/${id}/reject`, { method: 'POST' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue-drafts'] });
+    },
+    // On failure (e.g. a 409 concurrent decision) refetch so the stale DRAFT row
+    // reflects true server state and can't be retried (REL-002).
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue-drafts'] });
     },
   });
 }
