@@ -1,12 +1,17 @@
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, gt, inArray, or, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import {
   type DbProviderChainEntry,
   DEFAULT_REPO_SETTINGS,
   githubUserMappings,
+  type IssueDedupMatch,
+  type IssueDraftKind,
+  type IssueDraftSource,
+  type IssueDraftStatus,
   installationSettings,
   installations,
+  issueDrafts,
   memoryObservations,
   memorySessions,
   type RepoSettings,
@@ -337,6 +342,278 @@ export async function saveReview(
   const [result] = await db.insert(reviews).values(data).returning();
   // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert/update
   return result!;
+}
+
+// ─── Issue Drafts (Issue-Triage Agent) ──────────────────────────
+
+/**
+ * Persist a triage DRAFT produced by the issue-analysis worker.
+ *
+ * The worker NEVER posts a GitHub comment — it only inserts a DRAFT row that a
+ * human later approves in the dashboard. The `issue_drafts` table enforces a
+ * partial-unique invariant: AT MOST ONE open DRAFT per (repository, issue)
+ * (uq_issue_drafts_open_draft, predicate `status = 'DRAFT'`).
+ *
+ * Conflict handling (DECISION): we `onConflictDoNothing` on that partial-unique
+ * index. If a DRAFT for this (repo, issue) is already open, the insert is a
+ * no-op and this returns `undefined` — the caller treats that as "a draft
+ * already exists, skip" rather than overwriting an in-flight human review or
+ * throwing. Re-triaging is allowed only after the prior draft is decided
+ * (APPROVED/REJECTED/POSTED rows fall outside the partial predicate).
+ *
+ * @returns the inserted row, or `undefined` when an open DRAFT already existed.
+ */
+export async function saveIssueDraft(
+  db: Database,
+  data: {
+    repositoryId: number;
+    issueNumber: number;
+    issueTitle: string;
+    status: IssueDraftStatus;
+    draftKind: IssueDraftKind;
+    body: string;
+    sources?: IssueDraftSource[];
+    dedupMatches?: IssueDedupMatch[];
+    tokensUsed?: number;
+  },
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [result] = await db
+    .insert(issueDrafts)
+    .values(data)
+    // Target the partial-unique "one open DRAFT per (repo, issue)" index. The
+    // WHERE mirrors the index predicate so Postgres matches the SAME partial
+    // index. On conflict: do nothing (skip) — returning() yields no row.
+    .onConflictDoNothing({
+      target: [issueDrafts.repositoryId, issueDrafts.issueNumber],
+      where: sql`${issueDrafts.status} = 'DRAFT'`,
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Fetch the currently-open DRAFT (if any) for a given (repository, issue).
+ *
+ * Mirrors the partial-unique invariant enforced by `uq_issue_drafts_open_draft`
+ * (predicate `status = 'DRAFT'`): at most one open DRAFT exists per (repo,
+ * issue), so this returns either that single row or `undefined`.
+ *
+ * The issue-analysis worker calls this BEFORE the expensive dedup/LLM stages so
+ * a retry (or a re-triage while a human is still reviewing the prior draft) can
+ * skip early instead of re-charging the LLM and then silently discarding the
+ * result at the onConflictDoNothing insert.
+ *
+ * @returns the open DRAFT row, or `undefined` when none is open.
+ */
+export async function getOpenIssueDraft(
+  db: Database,
+  repositoryId: number,
+  issueNumber: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .select()
+    .from(issueDrafts)
+    .where(
+      and(
+        eq(issueDrafts.repositoryId, repositoryId),
+        eq(issueDrafts.issueNumber, issueNumber),
+        eq(issueDrafts.status, 'DRAFT'),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
+/**
+ * List issue drafts visible to a set of repositories, newest-first.
+ *
+ * SCOPING: the caller MUST pass `repositoryIds` already restricted to the
+ * authenticated user's repos (see the approval API — it resolves these from
+ * `user.installationIds`). This query NEVER widens scope on its own: an empty
+ * `repositoryIds` returns an empty list (no rows), so a user with no repos can
+ * never see another tenant's drafts. `status` is an optional additional filter.
+ */
+export async function listIssueDrafts(
+  db: Database,
+  repositoryIds: number[],
+  options?: { status?: IssueDraftStatus; limit?: number; offset?: number },
+): Promise<(typeof issueDrafts.$inferSelect)[]> {
+  if (repositoryIds.length === 0) return [];
+  const limit = Math.min(options?.limit ?? 50, 100);
+  const offset = options?.offset ?? 0;
+  const conditions = [inArray(issueDrafts.repositoryId, repositoryIds)];
+  if (options?.status) {
+    conditions.push(eq(issueDrafts.status, options.status));
+  }
+  return db
+    .select()
+    .from(issueDrafts)
+    .where(and(...conditions))
+    .orderBy(desc(issueDrafts.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+/**
+ * Fetch a single issue draft by its primary key. No scoping is applied here —
+ * the caller MUST verify the row's `repositoryId` belongs to the authenticated
+ * user BEFORE returning it or acting on it (the approval API does this).
+ */
+export async function getIssueDraftById(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db.select().from(issueDrafts).where(eq(issueDrafts.id, id)).limit(1);
+  return row;
+}
+
+/**
+ * Edit a draft's body (the human sanitizes/edits before posting). Only a row
+ * still in DRAFT status is editable — editing an APPROVED/POSTED/REJECTED row is
+ * a no-op (returns `undefined`), so a decided draft cannot be silently mutated.
+ */
+export async function updateIssueDraftBody(
+  db: Database,
+  id: number,
+  body: string,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ body, updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .returning();
+  return row;
+}
+
+/**
+ * Atomically CLAIM a DRAFT for posting by flipping it to APPROVED.
+ *
+ * This is the POSTING LOCK that makes the GitHub post exactly-once. The WHERE
+ * clause pins `status = 'DRAFT'` and the UPDATE ... RETURNING is a single atomic
+ * compare-and-swap (CAS): of N concurrent approvers, EXACTLY ONE matches the row
+ * (DRAFT → APPROVED) and gets it back; every other caller matches ZERO rows and
+ * gets `undefined`. The winner — and only the winner — proceeds to postComment.
+ *
+ * APPROVED is therefore a TRANSIENT "posting in progress" state, NOT a terminal
+ * decision: it resolves forward to POSTED (markIssueDraftPosted) on a successful
+ * post, or back to DRAFT (releaseIssueDraftClaim) when the post fails so a human
+ * can retry. The caller MUST treat `undefined` as "another approver already
+ * claimed this — return 409 and do NOT post".
+ *
+ * Lifecycle: DRAFT → APPROVED (posting) → POSTED  (or → DRAFT on post failure).
+ */
+export async function claimIssueDraftForPosting(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    // claimedAt stamps the posting lease (see findStaleApprovedDrafts): a reaper
+    // uses it to detect an APPROVED draft whose poster crashed before posting.
+    .set({ status: 'APPROVED', claimedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .returning();
+  return row;
+}
+
+/**
+ * RELEASE a posting claim by reverting APPROVED → DRAFT after a FAILED post.
+ *
+ * The CAS pins `status = 'APPROVED'` so this only ever un-does an in-flight
+ * posting claim (never a POSTED/REJECTED terminal row). After release the draft
+ * is editable/approvable again, so the human can retry. Returns the reverted row,
+ * or `undefined` when the row was no longer APPROVED (defensive — should not
+ * happen on the post-failure path since the claimer owns the APPROVED row).
+ */
+export async function releaseIssueDraftClaim(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    // Clear the posting lease so a subsequent re-claim gets a fresh claimedAt
+    // (a stale lease would otherwise make the re-claimed draft look orphaned).
+    .set({ status: 'DRAFT', claimedAt: null, updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'APPROVED')))
+    .returning();
+  return row;
+}
+
+/**
+ * Atomically transition an APPROVED (claimed-for-posting) draft to POSTED,
+ * recording the GitHub comment id.
+ *
+ * IDEMPOTENCY/LIFECYCLE: the WHERE clause pins `status = 'APPROVED'` — only the
+ * approver that WON the posting claim (claimIssueDraftForPosting) and actually
+ * posted the comment reaches this. A row that is not APPROVED matches ZERO rows
+ * and returns `undefined`. Combined with the claim CAS this guarantees the post
+ * is recorded exactly once. The caller MUST treat `undefined` as "already
+ * decided, do not pretend we re-posted".
+ */
+export async function markIssueDraftPosted(
+  db: Database,
+  id: number,
+  postedCommentId: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ status: 'POSTED', postedCommentId, updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'APPROVED')))
+    .returning();
+  return row;
+}
+
+/**
+ * Transition a DRAFT to REJECTED — no comment is ever posted. Same DRAFT-only
+ * guard as the post transition: a decided row is not re-rejected (returns
+ * `undefined`).
+ */
+export async function rejectIssueDraft(
+  db: Database,
+  id: number,
+): Promise<typeof issueDrafts.$inferSelect | undefined> {
+  const [row] = await db
+    .update(issueDrafts)
+    .set({ status: 'REJECTED', updatedAt: new Date() })
+    .where(and(eq(issueDrafts.id, id), eq(issueDrafts.status, 'DRAFT')))
+    .returning();
+  return row;
+}
+
+/**
+ * DETECT stuck/orphaned APPROVED drafts whose posting lease is older than
+ * `olderThan` — the reaper-detection primitive (RES-001).
+ *
+ * APPROVED is a TRANSIENT "posting in progress" state (see
+ * claimIssueDraftForPosting). If the poster process crashes AFTER claiming
+ * (DRAFT → APPROVED, stamping `claimedAt`) but BEFORE it reaches POSTED or
+ * releases back to DRAFT, the row is stuck in APPROVED forever with no signal.
+ * This query surfaces those rows: status = APPROVED AND claimedAt IS NOT NULL
+ * AND claimedAt < olderThan, oldest-lease-first, capped at 100.
+ *
+ * It ONLY DETECTS — it takes no recovery action. The caller (PR2's reaper
+ * worker) decides what to do with each returned row: release it back to DRAFT
+ * via `releaseIssueDraftClaim` so a human can retry, or alert an operator.
+ *
+ * Global (not tenant-scoped): the reaper is a system maintenance job over the
+ * whole table, not a user-facing listing.
+ */
+export async function findStaleApprovedDrafts(
+  db: Database,
+  olderThan: Date,
+): Promise<(typeof issueDrafts.$inferSelect)[]> {
+  return db
+    .select()
+    .from(issueDrafts)
+    .where(
+      and(
+        eq(issueDrafts.status, 'APPROVED'),
+        isNotNull(issueDrafts.claimedAt),
+        lt(issueDrafts.claimedAt, olderThan),
+      ),
+    )
+    .orderBy(asc(issueDrafts.claimedAt))
+    .limit(100);
 }
 
 export async function getReviewsByRepoId(
