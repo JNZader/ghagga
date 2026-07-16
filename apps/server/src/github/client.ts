@@ -266,7 +266,7 @@ export async function listIssueComments(
   issueNumber: number,
   token: string,
   maxCount: number,
-): Promise<Array<{ author: string; body: string }>> {
+): Promise<Array<{ id: number; author: string; body: string }>> {
   if (maxCount <= 0) return [];
   const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`;
   // Always request the MAX page size: this guarantees the last (and, if needed,
@@ -279,11 +279,16 @@ export async function listIssueComments(
     'X-GitHub-Api-Version': '2022-11-28',
   };
 
-  const parse = (raw: unknown): Array<{ author: string; body: string }> =>
-    (raw as Array<{ body: string | null; user: { login: string } | null }>).map((c) => ({
-      author: c.user?.login ?? 'unknown',
-      body: c.body ?? '',
-    }));
+  const parse = (raw: unknown): Array<{ id: number; author: string; body: string }> =>
+    (raw as Array<{ id: number; body: string | null; user: { login: string } | null }>).map(
+      (c) => ({
+        // The GitHub comment id — the reaper (queues/issue-draft-reaper.ts) needs
+        // it to record POSTED against a live comment it correlated via marker.
+        id: c.id,
+        author: c.user?.login ?? 'unknown',
+        body: c.body ?? '',
+      }),
+    );
 
   const fetchPage = async (page: number) => {
     const res = await fetch(`${baseUrl}?per_page=${perPage}&page=${page}`, {

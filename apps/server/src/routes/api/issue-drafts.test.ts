@@ -278,8 +278,19 @@ describe('POST /api/issue-drafts/:id/approve', () => {
     expect(res.status).toBe(200);
     // claim happened BEFORE the post
     expect(mockClaimIssueDraftForPosting).toHaveBeenCalledWith(mockDb, 9);
-    // posted to the issue comments endpoint with the (edited) body + repo token
-    expect(mockPostComment).toHaveBeenCalledWith('acme', 'app', 42, 'analysis body', 'tok');
+    // posted to the issue comments endpoint with the (edited) body + repo token.
+    // The posted body carries the invisible per-draft reaper correlation marker
+    // (draft id 9); the stored draft.body itself stays clean.
+    expect(mockPostComment).toHaveBeenCalledWith(
+      'acme',
+      'app',
+      42,
+      'analysis body\n\n<!-- ghagga-issue-draft:9 -->',
+      'tok',
+    );
+    // The marker is on the SAME body that got posted.
+    const postedBody = mockPostComment.mock.calls[0]?.[3] as string;
+    expect(postedBody).toContain('<!-- ghagga-issue-draft:9 -->');
     // token resolved for the GITHUB installation id, not the internal row id
     expect(mockGetInstallationToken).toHaveBeenCalledWith(555000, 'app-id', 'pk');
     // POSTED transition recorded the github comment id; no claim was released

@@ -52,6 +52,7 @@ import { z } from 'zod';
 // `postComment` directly outside that factory.
 import { getInstallationToken } from '../../github/client.js';
 import { postIssueComment } from '../../github/forge-adapter-factory.js';
+import { appendIssueDraftMarker } from '../../github/issue-draft-marker.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import { generateErrorId, logger } from './utils.js';
 
@@ -330,7 +331,11 @@ export function createIssueDraftsRouter(db: Database) {
         posted = await postIssueComment(
           { owner, repo: repoName, token },
           claimed.issueNumber,
-          claimed.body,
+          // Embed the invisible per-draft correlation marker on the POSTED body
+          // ONLY (the stored draft.body stays clean). The stuck-APPROVED reaper
+          // uses it to match a live comment back to this exact draft and record
+          // POSTED without double-posting. See github/issue-draft-marker.ts.
+          appendIssueDraftMarker(claimed.body, claimed.id),
         );
       } catch (postErr) {
         // PRE-POST failure (token exchange or postComment threw before a comment
