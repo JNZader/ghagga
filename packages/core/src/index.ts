@@ -195,7 +195,12 @@ export {
 
 export { formatMemoryContext } from './memory/context.js';
 export { detectContradictions } from './memory/contradiction.js';
-export { computeStrength, decayPhase } from './memory/decay.js';
+export {
+  computeStrength,
+  decayPhase,
+  normalizeBm25Relevance,
+  normalizeRankRelevance,
+} from './memory/decay.js';
 export { EngramMemoryStorage } from './memory/engram.js';
 export {
   createProjectPageIndex,
@@ -206,6 +211,13 @@ export {
   ProjectPageIndexService,
 } from './memory/pageindex/index.js';
 export { stripPrivateData } from './memory/privacy.js';
+export type { IssueDedupMatch, IssueDedupResult } from './memory/search.js';
+export {
+  buildIssueSearchQuery,
+  DEDUP_SCORE_THRESHOLD,
+  findIssueDuplicates,
+  ISSUE_TRIAGE_OBSERVATION_TYPE,
+} from './memory/search.js';
 export { SqliteMemoryStorage, type SqliteMemoryStorageOptions } from './memory/sqlite.js';
 export {
   BranchExistsError,
