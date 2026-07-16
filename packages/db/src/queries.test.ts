@@ -56,6 +56,7 @@ function createMockDb(terminalValue: unknown = []): MockDB & { _resolve: (v: unk
 // itself only has side-effect-free function declarations.
 import {
   buildTsQuery,
+  claimIssueDraftForPosting,
   clearAllMemoryObservations,
   clearEmptyMemorySessions,
   clearMemoryObservationsByProject,
@@ -78,6 +79,7 @@ import {
   getInstallationSettings,
   getInstallationsByAccountLogin,
   getInstallationsByUserId,
+  getIssueDraftById,
   getMemoryObservation,
   getMemoryStats,
   getObservationsBySession,
@@ -89,13 +91,18 @@ import {
   getReviewsByInstallationIds,
   getReviewsByRepoId,
   getSessionsByProject,
+  listIssueDrafts,
   listMemoryObservations,
   listObservationsNeedingEmbedding,
+  markIssueDraftPosted,
+  rejectIssueDraft,
+  releaseIssueDraftClaim,
   removeRepoApiKey,
   saveObservation,
   saveRepoApiKey,
   saveReview,
   searchObservations,
+  updateIssueDraftBody,
   updateObservationEmbedding,
   updateRepoSettings,
   upsertInstallation,
@@ -2327,5 +2334,152 @@ describe('clearEmptyMemorySessions', () => {
     await clearEmptyMemorySessions(db, 100);
 
     expect(mockSelect).toHaveBeenCalled();
+  });
+});
+
+// ─── Issue Drafts: approval lifecycle ──────────────────────────
+
+describe('listIssueDrafts', () => {
+  it('returns an empty array WITHOUT querying when repositoryIds is empty', async () => {
+    const mockSelect = vi.fn();
+    const db = { select: mockSelect } as unknown as Database;
+
+    const result = await listIssueDrafts(db, []);
+
+    expect(result).toEqual([]);
+    // SCOPING INVARIANT: a user with no repos must never reach the DB and so can
+    // never see another tenant's drafts.
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it('queries and returns rows when repositoryIds is non-empty', async () => {
+    const rows = [
+      { id: 1, repositoryId: 7, status: 'DRAFT' },
+      { id: 2, repositoryId: 7, status: 'POSTED' },
+    ];
+    const db = createMockDb(rows) as unknown as Database;
+
+    const result = await listIssueDrafts(db, [7], { status: 'DRAFT' });
+
+    expect(result).toEqual(rows);
+  });
+});
+
+describe('getIssueDraftById', () => {
+  it('returns the row when found', async () => {
+    const row = { id: 9, repositoryId: 7, status: 'DRAFT', body: 'x' };
+    const db = createMockDb([row]) as unknown as Database;
+
+    const result = await getIssueDraftById(db, 9);
+
+    expect(result).toEqual(row);
+  });
+
+  it('returns undefined when not found', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await getIssueDraftById(db, 999);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('updateIssueDraftBody', () => {
+  it('returns the updated row (DRAFT-only update)', async () => {
+    const updated = { id: 9, repositoryId: 7, status: 'DRAFT', body: 'edited' };
+    const db = createMockDb([updated]) as unknown as Database;
+
+    const result = await updateIssueDraftBody(db, 9, 'edited');
+
+    expect(result).toEqual(updated);
+  });
+
+  it('returns undefined when the row is not in DRAFT (no row matched the predicate)', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await updateIssueDraftBody(db, 9, 'edited');
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('claimIssueDraftForPosting', () => {
+  it('claims a DRAFT (CAS DRAFT→APPROVED) and returns the row', async () => {
+    const claimed = { id: 9, repositoryId: 7, status: 'APPROVED', body: 'analysis' };
+    const db = createMockDb([claimed]) as unknown as Database;
+
+    const result = await claimIssueDraftForPosting(db, 9);
+
+    expect(result).toEqual(claimed);
+  });
+
+  it('returns undefined when the draft is not DRAFT (lost the posting claim)', async () => {
+    // Of N concurrent approvers only ONE matches the DRAFT row; the losers match
+    // ZERO rows here and get undefined → the route returns 409 BEFORE postComment.
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await claimIssueDraftForPosting(db, 9);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('releaseIssueDraftClaim', () => {
+  it('reverts an APPROVED claim back to DRAFT (post failed → retryable)', async () => {
+    const reverted = { id: 9, repositoryId: 7, status: 'DRAFT' };
+    const db = createMockDb([reverted]) as unknown as Database;
+
+    const result = await releaseIssueDraftClaim(db, 9);
+
+    expect(result).toEqual(reverted);
+  });
+
+  it('returns undefined when the row was not APPROVED (nothing to release)', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await releaseIssueDraftClaim(db, 9);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('markIssueDraftPosted', () => {
+  it('transitions an APPROVED claim to POSTED and records the comment id', async () => {
+    const posted = { id: 9, repositoryId: 7, status: 'POSTED', postedCommentId: 555 };
+    const db = createMockDb([posted]) as unknown as Database;
+
+    const result = await markIssueDraftPosted(db, 9, 555);
+
+    expect(result).toEqual(posted);
+  });
+
+  it('returns undefined on a non-APPROVED row (exactly-once guard — no double post)', async () => {
+    // Only the approver that WON the claim (status APPROVED) matches; a row that
+    // is no longer APPROVED matches ZERO rows. Caller treats undefined as
+    // "already decided, do not pretend we re-posted".
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await markIssueDraftPosted(db, 9, 555);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('rejectIssueDraft', () => {
+  it('transitions a DRAFT to REJECTED', async () => {
+    const rejected = { id: 9, repositoryId: 7, status: 'REJECTED' };
+    const db = createMockDb([rejected]) as unknown as Database;
+
+    const result = await rejectIssueDraft(db, 9);
+
+    expect(result).toEqual(rejected);
+  });
+
+  it('returns undefined on a non-DRAFT row', async () => {
+    const db = createMockDb([]) as unknown as Database;
+
+    const result = await rejectIssueDraft(db, 9);
+
+    expect(result).toBeUndefined();
   });
 });
