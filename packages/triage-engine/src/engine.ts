@@ -93,13 +93,17 @@ function resolveQueuePath(options: Pick<EngineOptions, 'config' | 'queuePath'>):
  */
 async function autoReproduce(
   options: EngineOptions,
-  issue: Pick<ForgeIssue, 'title' | 'description'>,
+  issue: Pick<ForgeIssue, 'title' | 'description' | 'rawDescription'>,
 ): Promise<ReproEvidence | null> {
   if (!options.config.app || !options.reproduceGenerateFn) {
     return null;
   }
 
-  const route = extractRouteFromIssueBody(issue.description);
+  // Route extraction reads the RAW (un-stripped) body: forge adapters strip the
+  // `---`-delimited widget trailer from `description`, which is where the
+  // `Ruta:` line lives. `rawDescription` retains it (falls back to the stripped
+  // `description` for adapters that do no stripping).
+  const route = extractRouteFromIssueBody(issue.rawDescription ?? issue.description);
   if (!route) {
     return null;
   }

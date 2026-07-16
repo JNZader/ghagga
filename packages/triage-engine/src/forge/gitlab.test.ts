@@ -62,6 +62,7 @@ describe('createGitLabAdapter', () => {
         iid: '42',
         title: 'Threshold alert broken',
         description: 'The alert never fires.',
+        rawDescription: 'The alert never fires.',
         labels: ['módulo::alertas', 'estado::nuevo'],
         url: 'https://gitlab.com/acme/widgets/-/issues/42',
         comments: [{ body: 'confirmed', author: 'jn', createdAt: '2026-01-01' }],
@@ -73,6 +74,30 @@ describe('createGitLabAdapter', () => {
         'Real user text.\n---\nWidget metadata trailer that should be dropped.\n<!-- hidden marker -->';
 
       expect(stripGitLabWidgetMetadata(raw)).toBe('Real user text.');
+    });
+
+    it('keeps the raw widget trailer (with the `Ruta:` line) in rawDescription while description is stripped', async () => {
+      const body =
+        'El gráfico no carga.\n\n---\n- Módulo: `Energía`\n- Ruta: `/app/energia`\n<!-- widget-id: abc -->';
+      mockExecFileSync.mockReturnValue(
+        JSON.stringify({
+          iid: 99,
+          title: 'Gráfico roto',
+          description: body,
+          labels: [],
+          web_url: 'https://gitlab.com/acme/widgets/-/issues/99',
+          notes: [],
+        }),
+      );
+
+      const issue = await adapter.getIssue('99');
+
+      // description: LLM-facing, widget trailer stripped → no `Ruta:` line.
+      expect(issue.description).toBe('El gráfico no carga.');
+      expect(issue.description).not.toContain('Ruta:');
+      // rawDescription: route-extraction-facing, retains the FULL body incl. trailer.
+      expect(issue.rawDescription).toBe(body);
+      expect(issue.rawDescription).toContain('Ruta: `/app/energia`');
     });
   });
 
@@ -132,7 +157,15 @@ describe('createGitLabAdapter', () => {
       const issues = await adapter.listIssues();
 
       expect(issues).toEqual([
-        { iid: '1', title: 'a', description: 'b', labels: [], url: 'u', comments: [] },
+        {
+          iid: '1',
+          title: 'a',
+          description: 'b',
+          rawDescription: 'b',
+          labels: [],
+          url: 'u',
+          comments: [],
+        },
       ]);
     });
   });

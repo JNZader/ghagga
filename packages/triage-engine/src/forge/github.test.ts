@@ -70,10 +70,13 @@ describe('createGitHubAdapter', () => {
         iid: '7',
         title: 'Threshold alert broken',
         description: 'The alert never fires.',
+        rawDescription: 'The alert never fires.',
         labels: ['bug', 'module:alerts'],
         url: 'https://github.com/acme/widgets/issues/7',
         comments: [{ body: 'confirmed', author: 'jn', createdAt: '2026-01-01' }],
       });
+      // GitHub does no widget stripping → rawDescription mirrors description.
+      expect(issue.rawDescription).toBe(issue.description);
     });
   });
 
@@ -130,7 +133,15 @@ describe('createGitHubAdapter', () => {
       const issues = await adapter.listIssues();
 
       expect(issues).toEqual([
-        { iid: '3', title: 'a', description: 'b', labels: [], url: 'u', comments: [] },
+        {
+          iid: '3',
+          title: 'a',
+          description: 'b',
+          rawDescription: 'b',
+          labels: [],
+          url: 'u',
+          comments: [],
+        },
       ]);
     });
   });

@@ -55,6 +55,7 @@ function toForgeIssue(raw: GitLabIssueJson): ForgeIssue {
     iid: String(raw.iid),
     title: raw.title ?? '',
     description: stripGitLabWidgetMetadata(raw.description ?? ''),
+    rawDescription: raw.description ?? '',
     labels: (raw.labels ?? []).map(labelName),
     url: raw.web_url ?? '',
     comments: (raw.notes ?? []).map(toForgeComment),
