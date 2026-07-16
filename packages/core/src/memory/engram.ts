@@ -81,7 +81,18 @@ export class EngramMemoryStorage implements MemoryStorage {
   ): Promise<MemoryObservationRow[]> {
     const { limit = 10, type } = options;
 
-    const results = await this.client.search(query, project, limit);
+    // The `type` filter is applied CLIENT-SIDE (Engram's REST search exposes no
+    // server-side type predicate). If we only fetched `limit` rows, a real
+    // type-matched duplicate sitting at position limit+1 — behind `limit`
+    // keyword matches of OTHER types — would be silently dropped before the
+    // filter ever sees it. So when a type filter is present we OVER-FETCH from
+    // the server (limit * 3, mirroring the Postgres/SQLite adapters'
+    // fetchLimit = limit*3 over-fetch), then filter by type and slice back to
+    // `limit`. Without a type filter there is nothing to drop, so we fetch
+    // exactly `limit`.
+    const fetchLimit = type ? limit * 3 : limit;
+
+    const results = await this.client.search(query, project, fetchLimit);
 
     let mapped = results.map((obs) => {
       const row = toMemoryObservationRow(obs);
@@ -89,9 +100,11 @@ export class EngramMemoryStorage implements MemoryStorage {
       return row;
     });
 
-    // Client-side type filter (Engram may not support it natively)
+    // Client-side type filter (Engram may not support it natively), then slice
+    // back to the caller's requested `limit` — we over-fetched only to absorb
+    // other-typed rows ahead of the matches, never to return MORE than asked.
     if (type) {
-      mapped = mapped.filter((r) => r.type === type);
+      mapped = mapped.filter((r) => r.type === type).slice(0, limit);
     }
 
     return mapped;

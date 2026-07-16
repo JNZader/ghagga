@@ -742,6 +742,14 @@ export interface MemoryObservationRow {
 
   /** Decay strength score (0.0–1.0). Present when decay is enabled, undefined otherwise. */
   strength?: number;
+
+  /**
+   * Backend-native keyword RELEVANCE for this row, normalized to [0,1]
+   * (SQLite bm25 / Postgres ts_rank → saturating map). Telemetry/observability
+   * only — NOT a gate. Undefined on backends that expose no relevance score
+   * (Engram). Issue dedup gates on a separate backend-agnostic keyword overlap.
+   */
+  relevanceScore?: number;
 }
 
 /**

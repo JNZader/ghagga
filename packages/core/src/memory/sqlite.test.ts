@@ -4,6 +4,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmbeddingProvider } from '../embed.js';
 import { EmbeddingProviderError, LocalEmbeddingProvider } from '../embed.js';
+import {
+  DEDUP_SCORE_THRESHOLD,
+  findIssueDuplicates,
+  ISSUE_TRIAGE_OBSERVATION_TYPE,
+} from './search.js';
 import { SqliteMemoryStorage } from './sqlite.js';
 
 // ─── Test Setup ─────────────────────────────────────────────────
@@ -599,9 +604,29 @@ describe('SqliteMemoryStorage', () => {
         filePaths: ['src/auth.ts', 'src/middleware.ts'],
         severity: null,
         strength: expect.any(Number),
+        // Additive: keyword relevance surfaced from FTS5 bm25, bounded to [0,1].
+        relevanceScore: expect.any(Number),
       });
 
       await storage.close();
+    });
+
+    it('surfaces a bounded [0,1] relevanceScore from real FTS5 bm25', async () => {
+      const storage = await SqliteMemoryStorage.create(dbPath);
+
+      await storage.saveObservation(
+        makeObservationData({
+          title: 'Webhook retry timeout',
+          content: 'The webhook retry logic times out under load.',
+        }),
+      );
+
+      const results = await storage.searchObservations('owner/repo', 'webhook retry timeout');
+
+      expect(results).toHaveLength(1);
+      const score = results[0]?.relevanceScore;
+      expect(score).toBeGreaterThan(0);
+      expect(score).toBeLessThanOrEqual(1);
     });
   });
 
@@ -798,6 +823,7 @@ describe('SqliteMemoryStorage', () => {
           filePaths: [],
           severity: null,
           strength: 1,
+          relevanceScore: expect.any(Number),
         },
         {
           id: expect.any(Number),
@@ -807,6 +833,7 @@ describe('SqliteMemoryStorage', () => {
           filePaths: [],
           severity: null,
           strength: 1,
+          relevanceScore: expect.any(Number),
         },
       ]);
 
@@ -1775,5 +1802,98 @@ describe('SqliteMemoryStorage', () => {
 
       await storage.close();
     });
+  });
+});
+
+// ─── Integration: findIssueDuplicates over the REAL SQLite adapter ──────────
+//
+// Exercises the end-to-end relevance/dedup path against a live (in-memory,
+// file-backed) SQLite store: save real issue-triage observations, then run
+// findIssueDuplicates so the backend-agnostic keyword overlap is validated
+// against actual stored rows + real FTS5 retrieval — not just mocked arithmetic.
+
+describe('findIssueDuplicates (real SQLite adapter, integration)', () => {
+  it('flags a genuinely-similar prior issue and skips an unrelated recent one', async () => {
+    const storage = await SqliteMemoryStorage.create(dbPath);
+
+    // A prior triaged issue that closely matches the incoming one.
+    await storage.saveObservation({
+      project: 'owner/repo',
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+      title: 'Login button throws TypeError on Safari',
+      content: 'The login button throws a TypeError on Safari browsers.',
+    });
+    // A recent but unrelated triaged issue (false-positive bait for the old
+    // recency-gated code).
+    await storage.saveObservation({
+      project: 'owner/repo',
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+      title: 'Database migration timeout during deploy',
+      content: 'Migration step times out on large tables during deploy.',
+    });
+
+    // A genuine duplicate: the incoming issue's distinctive keywords are a
+    // subset of (or equal to) the prior issue's, so overlap clears the bar.
+    // (Overlap normalizes by the QUERY's term set, so a verbose unrelated body
+    // would correctly DILUTE the score — that conservatism is covered in the
+    // unit tests; here we model a true re-report.)
+    const dup = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'Login button throws TypeError on Safari',
+      '',
+    );
+
+    expect(dup.isDuplicate).toBe(true);
+    expect(dup.matches.length).toBeGreaterThan(0);
+    expect(dup.matches[0]?.score).toBeGreaterThanOrEqual(DEDUP_SCORE_THRESHOLD);
+    expect(dup.matches[0]?.title).toContain('Login button');
+
+    // FALSE-POSITIVE PREVENTION (explicit): the same store also holds the
+    // unrelated "Database migration timeout during deploy" bait. Query it with
+    // its OWN distinctive terms — it WILL retrieve that bait row, but the
+    // INCOMING issue here is a genuinely different one ("connection pool
+    // exhausted under load") that shares NO distinctive keywords with either
+    // stored issue. The overlap must stay below the threshold so a real new
+    // issue is never auto-suppressed. (Exercises the prevention path directly,
+    // rather than only implying it via the positive case above.)
+    const notDup = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'Connection pool exhausted under heavy concurrent load',
+      'The service rejects requests once the connection pool saturates.',
+    );
+    expect(notDup.isDuplicate).toBe(false);
+    // Whatever (if anything) FTS surfaces, no candidate clears the gate.
+    for (const m of notDup.matches) {
+      expect(m.score).toBeLessThan(DEDUP_SCORE_THRESHOLD);
+    }
+
+    await storage.close();
+  });
+
+  it('returns empty (no dup) when the only stored memory is a DIFFERENT type', async () => {
+    const storage = await SqliteMemoryStorage.create(dbPath);
+
+    // Same keywords, but stored under a NON-issue-triage type → must be excluded
+    // by the type filter so dedup does not match arbitrary memory.
+    await storage.saveObservation({
+      project: 'owner/repo',
+      type: 'pattern',
+      title: 'Login button throws TypeError on Safari',
+      content: 'A coding pattern note that happens to share keywords.',
+    });
+
+    const dup = await findIssueDuplicates(
+      storage,
+      'owner/repo',
+      'Login button throws TypeError on Safari',
+      '',
+    );
+
+    expect(dup.isDuplicate).toBe(false);
+    expect(dup.matches).toEqual([]);
+
+    await storage.close();
   });
 });

@@ -33,7 +33,7 @@ import type {
   NegativeExample,
 } from '../types.js';
 import { DEFAULT_DECAY_CONFIG, type DecayConfig } from '../types.js';
-import { computeStrength } from './decay.js';
+import { computeStrength, normalizeBm25Relevance } from './decay.js';
 // DatabaseWithParams is owned by pageindex/service.ts (already exported and
 // imported by pageindex/index.ts). sqlite.ts already depends on that module
 // (ProjectPageIndexService), so importing the type here adds no new edge —
@@ -321,7 +321,8 @@ export class SqliteMemoryStorage implements MemoryStorage {
     const fetchLimit = limit * 3;
 
     let sql = `
-      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity, o.last_accessed_at
+      SELECT o.id, o.type, o.title, o.content, o.file_paths, o.severity, o.last_accessed_at,
+             bm25(memory_observations_fts) AS bm25_score
       FROM memory_observations o
       JOIN memory_observations_fts fts ON fts.rowid = o.id
       WHERE memory_observations_fts MATCH ?
@@ -363,6 +364,10 @@ export class SqliteMemoryStorage implements MemoryStorage {
         filePaths: row.file_paths ? JSON.parse(row.file_paths as string) : null,
         severity: (row.severity as string) ?? null,
         strength,
+        // Surface the adapter's native keyword relevance (saturating bm25 → [0,1])
+        // for observability/telemetry. NOT the dedup gate. bm25() is ≤ 0 for
+        // matches; normalizeBm25Relevance negates + saturates.
+        relevanceScore: normalizeBm25Relevance(row.bm25_score as number),
       });
 
       if (rows.length >= limit) break;
@@ -610,7 +615,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
     const results: MemoryObservationRow[] = [];
     const accessedIds: number[] = [];
 
-    for (const { candidate, strength } of scored) {
+    for (const { candidate, finalScore, strength } of scored) {
       if (results.length >= limit) break;
       accessedIds.push(candidate.id);
       results.push({
@@ -621,6 +626,9 @@ export class SqliteMemoryStorage implements MemoryStorage {
         filePaths: candidate.filePaths,
         severity: candidate.severity,
         strength,
+        // Surface the combined hybrid relevance (0.7*cosine + 0.3*keyword, in
+        // [0,1]) for observability/telemetry. NOT the dedup gate.
+        relevanceScore: finalScore,
       });
     }
 
