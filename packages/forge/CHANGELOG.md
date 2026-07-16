@@ -1,5 +1,13 @@
 # ghagga-forge
 
+## 3.3.0
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies [8989e0d]
+  - ghagga-core@3.3.0
+
 ## 3.2.0
 
 ### Minor Changes
