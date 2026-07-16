@@ -5,18 +5,23 @@
  * boundaries (design.md "locate/reproduce are pure over injected deps").
  */
 
-import type { IssueDraft } from '../types/draft.js';
+import type { IssueDedupMatch } from 'ghagga-core';
+import type { IssueDraft, IssueDraftKind } from '../types/draft.js';
 import type { ReproEvidence } from '../types/evidence.js';
 import type { Queue } from './store.js';
 
 export interface BuildDraftInput {
   iid: string;
   repo: string;
+  /** Draft kind. Defaults to `ANALYSIS` when omitted. */
+  kind?: IssueDraftKind;
   /** Internal technical analysis (never postable). */
   report: string;
   /** Draft client-facing reply (postable only via approveDraft/approveAndPost). */
   clientReply: string;
   reproductionEvidence?: ReproEvidence | null;
+  /** Prior issues cited by a DUPLICATE-kind draft. Omitted on ANALYSIS drafts. */
+  dedupMatches?: IssueDedupMatch[];
 }
 
 /** Stable draft id derived from repo + issue iid: `<repo>#<iid>`. */
@@ -32,9 +37,11 @@ export function buildDraft(input: BuildDraftInput): IssueDraft {
     issueIid: input.iid,
     repo: input.repo,
     status: 'PENDING_APPROVAL',
+    kind: input.kind ?? 'ANALYSIS',
     report: input.report,
     clientReply: input.clientReply,
     reproductionEvidence: input.reproductionEvidence ?? null,
+    ...(input.dedupMatches ? { dedupMatches: input.dedupMatches } : {}),
     createdAt: now,
     updatedAt: now,
   };

@@ -21,14 +21,23 @@
  * explicit `null`) always overrides auto-reproduction.
  */
 
-import type { GenerateTextFn } from 'ghagga-core';
+import type { GenerateTextFn, IssueDedupResult, MemoryStorage } from 'ghagga-core';
+import { findIssueDuplicates, ISSUE_TRIAGE_OBSERVATION_TYPE } from 'ghagga-core';
 import type { TriageConfig } from './config/schema.js';
+import {
+  buildDedupMemoryContext,
+  buildDuplicateReply,
+  buildDuplicateReport,
+  buildObservationContent,
+  excludeSelfMatch,
+  issueObservationTitle,
+} from './dedup/index.js';
 import { createForgeAdapter } from './forge/index.js';
 import type { ForgeAdapter, ForgeIssue, ForgeIssueFilter } from './forge/port.js';
 import { locate } from './locate/index.js';
 import { type ApprovalResult, approveAndPost, rejectDraft } from './queue/approval.js';
 import { buildDraft, editDraftReply, getDraft, upsertDraft } from './queue/draft.js';
-import { defaultQueuePath, loadQueue, type Queue, saveQueue } from './queue/store.js';
+import { defaultQueuePath, loadQueue, type Queue, repoSlug, saveQueue } from './queue/store.js';
 import { type ReproduceOptions, reproduce } from './reproduce/index.js';
 import { extractRouteFromIssueBody } from './reproduce/route.js';
 import { runTriage } from './triage/run.js';
@@ -55,6 +64,15 @@ export interface EngineOptions {
   reproduceOptions?: Partial<Omit<ReproduceOptions, 'route'>>;
   /** Defaults to `defaultQueuePath(config.repo)` when not provided. */
   queuePath?: string;
+  /**
+   * Optional memory store enabling issue DEDUP (`findIssueDuplicates`) + the
+   * post-triage observation persistence that future dedup matches against. When
+   * absent, dedup is skipped ENTIRELY (the pre-dedup behavior is preserved
+   * exactly). `config.dedup.enabled === false` also disables it even when a
+   * store is present. Scoped per-repo via `repoSlug(config.repo)`. The CLI
+   * wires a `SqliteMemoryStorage` here for `ghagga triage`.
+   */
+  memory?: MemoryStorage;
 }
 
 function resolveForge(options: Pick<EngineOptions, 'config' | 'forge'>): ForgeAdapter {
@@ -121,8 +139,47 @@ export async function triageIssue(
 
   const issue = await forge.getIssue(iid);
 
+  // Snapshot the prior draft (idempotency guard, mirrors the server's Stage-0
+  // open-draft short-circuit): a NON-REJECTED prior draft means this issue was
+  // already triaged and its observation already stored — so we do NOT re-store
+  // it below (avoids polluting dedup with a near-identical second row).
+  const prior = getDraft(loadQueue(queuePath), String(issue.iid));
+  const alreadyTriaged = prior !== undefined && prior.status !== 'REJECTED';
+
   const evidence =
     reproEvidence !== undefined ? reproEvidence : await autoReproduce(options, issue);
+
+  // ── DEDUP stage — BEFORE the expensive LOCATE + LLM analysis ──────────
+  // Runs only when a memory store is wired AND config.dedup is not disabled.
+  const dedupEnabled = options.config.dedup?.enabled ?? true;
+  const project = repoSlug(options.config.repo);
+  let dedup: IssueDedupResult | null = null;
+  if (options.memory && dedupEnabled) {
+    // findIssueDuplicates degrades gracefully (never throws). Drop the issue's
+    // OWN prior observation so a re-triage never flags itself as a duplicate.
+    const raw = await findIssueDuplicates(options.memory, project, issue.title, issue.description);
+    dedup = excludeSelfMatch(raw, issueObservationTitle(issue.iid, project));
+
+    if (dedup.isDuplicate) {
+      // Cheap path: a confident dedup hit short-circuits BEFORE any LLM call —
+      // no LOCATE, no analysis, no client-reply generation, no re-persist (the
+      // issue IS a duplicate of an already-stored observation).
+      const duplicateDraft = buildDraft({
+        iid: issue.iid,
+        repo: options.config.repo,
+        kind: 'DUPLICATE',
+        report: buildDuplicateReport(dedup.matches),
+        clientReply: buildDuplicateReply(
+          dedup.matches,
+          options.config.clientReplyPolicy?.language ?? 'es',
+        ),
+        reproductionEvidence: evidence,
+        dedupMatches: dedup.matches,
+      });
+      saveQueue(queuePath, upsertDraft(loadQueue(queuePath), duplicateDraft));
+      return duplicateDraft;
+    }
+  }
 
   const locateResult = await locate(
     { title: issue.title, body: issue.description, labels: issue.labels },
@@ -130,22 +187,27 @@ export async function triageIssue(
     options.rerankGenerateFn,
   );
 
+  const comments = issue.comments.map((comment) => ({
+    author: comment.author ?? 'unknown',
+    body: comment.body,
+  }));
+
   const triageResult = await runTriage({
     issue: {
       iid: issue.iid,
       title: issue.title,
       body: issue.description,
       labels: issue.labels,
-      comments: issue.comments.map((comment) => ({
-        author: comment.author ?? 'unknown',
-        body: comment.body,
-      })),
+      comments,
     },
     config: options.config,
     contextFiles: locateResult.contextFiles,
     files: locateResult.files,
     keywords: locateResult.keywords,
     reproEvidence: evidence,
+    // Weak (non-blocking) dedup matches become situational context for the
+    // analysis agent — mirrors the server's buildMemoryContextFromDedup.
+    memoryContext: dedup ? buildDedupMemoryContext(dedup.matches) : null,
     analysisGenerateFn: options.analysisGenerateFn,
     clientReplyGenerateFn: options.clientReplyGenerateFn,
   });
@@ -153,13 +215,42 @@ export async function triageIssue(
   const draft = buildDraft({
     iid: issue.iid,
     repo: options.config.repo,
+    kind: 'ANALYSIS',
     report: triageResult.technicalAnalysis,
     clientReply: triageResult.clientReply,
     reproductionEvidence: evidence,
   });
 
-  const queue = upsertDraft(loadQueue(queuePath), draft);
-  saveQueue(queuePath, queue);
+  saveQueue(queuePath, upsertDraft(loadQueue(queuePath), draft));
+
+  // ── Persist THIS issue to memory for future dedup ─────────────────────
+  // Only after a successful NON-duplicate triage, only when a store is wired,
+  // and only for a FRESH (or previously REJECTED) issue — re-triaging an
+  // already-queued issue must not double-store its observation. Best-effort:
+  // a memory failure never fails the (already-persisted) draft.
+  if (options.memory && dedupEnabled && !alreadyTriaged) {
+    try {
+      await options.memory.saveObservation({
+        project,
+        type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+        title: issueObservationTitle(issue.iid, project),
+        content: buildObservationContent({
+          issueTitle: issue.title,
+          issueBody: issue.description,
+          classification: triageResult.classification,
+          labels: issue.labels,
+          comments,
+        }),
+      });
+    } catch (error) {
+      console.warn(
+        `[ghagga-triage-engine] failed to persist issue observation for dedup: ${
+          (error as Error).message
+        }`,
+      );
+    }
+  }
+
   return draft;
 }
 

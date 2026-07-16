@@ -80,9 +80,20 @@ const STATUS_BADGE: Record<IssueDraft['status'], string> = {
 function renderCard(draft: IssueDraft): string {
   const badge = STATUS_BADGE[draft.status];
   const disabled = draft.status !== 'PENDING_APPROVAL' ? 'disabled' : '';
+  const kindTag = draft.kind === 'DUPLICATE' ? ' <span class="meta">🔁 duplicate</span>' : '';
+  const dedupBlock =
+    draft.dedupMatches && draft.dedupMatches.length > 0
+      ? `<details open><summary>Likely duplicate of (memory dedup)</summary><ul>${draft.dedupMatches
+          .map(
+            (match) =>
+              `<li>${esc(match.title)} <span class="meta">(observation #${match.observationId}, overlap ${match.score.toFixed(2)})</span></li>`,
+          )
+          .join('')}</ul></details>`
+      : '';
   return `<article class="card ${draft.status}">
       <header><span class="badge">${badge}</span> <strong>#${esc(String(draft.issueIid))}</strong>
-        <span class="meta">${esc(draft.repo)}</span></header>
+        <span class="meta">${esc(draft.repo)}</span>${kindTag}</header>
+      ${dedupBlock}
       <details><summary>Technical analysis (internal — NEVER posted to the client)</summary><pre>${esc(draft.report)}</pre></details>
       <form method="POST">
         <input type="hidden" name="iid" value="${esc(String(draft.issueIid))}">
