@@ -91,6 +91,66 @@ describe('PlaywrightNotInstalledError / lazy loading', () => {
     if (cfg.app) expect(newContext.mock.calls[0][0]).toMatchObject({ baseURL: cfg.app.baseURL });
   });
 
+  // Fully-mocked browser/page: exercises the login-redirect wait seam without a
+  // real chromium. `waitForURL`/`waitForLoadState` are the redirect-wait signals
+  // added to fix the login timing race (harness navigates before the SPA
+  // post-login redirect establishes the session → unauthenticated reproduce).
+  function mockBrowserWithPage(page: Record<string, unknown>) {
+    const newContext = vi.fn(async (_opts: Record<string, unknown>) => ({
+      newPage: async () => page,
+    }));
+    const browser = { newContext, close: vi.fn(async () => {}) };
+    const chromium = { launch: vi.fn(async () => browser) };
+    return { loader: () => Promise.resolve({ chromium }), newContext };
+  }
+
+  function fakeStepsPage() {
+    const locator = { fill: vi.fn(async () => {}), click: vi.fn(async () => {}) };
+    return {
+      on: () => {},
+      evaluate: async () => [],
+      goto: vi.fn(async () => {}),
+      getByLabel: vi.fn(() => locator),
+      getByRole: vi.fn(() => locator),
+      // captureScopedSnapshot falls back to page.locator('body').ariaSnapshot()
+      // when getByRole('dialog').count() is unavailable on this bare mock.
+      locator: vi.fn(() => ({ ariaSnapshot: async () => '' })),
+      waitForURL: vi.fn(async () => {}),
+      waitForLoadState: vi.fn(async () => {}),
+    };
+  }
+
+  it('waits for the post-login redirect (page.waitForURL) for a `steps` recipe', async () => {
+    const { fn } = mockGenerateFn(['{"action":"done"}']);
+    const page = fakeStepsPage();
+    const { loader } = mockBrowserWithPage(page);
+
+    await reproduce(
+      { title: 'x', body: 'y' },
+      baseConfig(),
+      fn,
+      { route: '#/app', credentials: { email: 'a@x.test', password: 'b' } },
+      loader,
+    );
+
+    expect(page.waitForURL).toHaveBeenCalledTimes(1);
+    // The predicate must treat a URL still on /login as "not yet left".
+    const predicate = page.waitForURL.mock.calls[0][0] as (u: string) => boolean;
+    expect(predicate('https://app.test/login')).toBe(false);
+    expect(predicate('https://app.test/app/dashboard')).toBe(true);
+  });
+
+  it('does NOT wait for a redirect when loginRecipe.kind === "none"', async () => {
+    const { fn } = mockGenerateFn([]);
+    const page = fakeStepsPage();
+    const { loader } = mockBrowserWithPage(page);
+
+    const cfg = baseConfig({ loginRecipe: { kind: 'none' } });
+    await reproduce({ title: 'x', body: 'y' }, cfg, fn, { route: '/app/energia' }, loader);
+
+    expect(page.waitForURL).not.toHaveBeenCalled();
+  });
+
   it('returns a skipped-reproduction evidence when config.app is not set (no crash, no browser launch)', async () => {
     const { fn } = mockGenerateFn([]);
     const cfg: TriageConfig = { ...baseConfig(), app: undefined };

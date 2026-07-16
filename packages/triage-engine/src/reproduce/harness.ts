@@ -152,6 +152,36 @@ export async function reproduce(
     });
     record(loginResult.note);
 
+    // A `steps` recipe performs an interactive login whose final click fires the
+    // auth POST but does NOT await the app's post-login SPA redirect. Navigating
+    // to the target route before the session/JWT is established makes the app
+    // bounce back to /login → REPRODUCE runs unauthenticated against wrong data.
+    // Wait here (best-effort) for the URL to leave the login page before the
+    // agentic loop navigates. `none`/`storageState` recipes never interactively
+    // log in, so they skip this wait.
+    if (config.app.loginRecipe.kind === 'steps' && loginResult.loggedIn) {
+      const leftLogin = await page
+        .waitForURL(
+          (url: URL | string) => {
+            try {
+              return !/\/login\/?$/.test(new URL(String(url)).pathname);
+            } catch {
+              return false;
+            }
+          },
+          { timeout: 15000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      // Secondary settle; non-fatal if the app never reaches networkidle.
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+      record(
+        leftLogin
+          ? 'login redirect confirmed (left /login)'
+          : 'login redirect NOT observed within 15s — proceeding possibly-unauthenticated',
+      );
+    }
+
     const history: ReproAction[] = [];
     let reproduced = false;
     const stepDelayMs = options.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
