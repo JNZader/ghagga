@@ -43,6 +43,14 @@ const DEFAULT_REPRODUCE_MODEL = 'opencode-go/kimi-k2.7-code';
  * `reproduce: true` additionally wires a `reproduceGenerateFn`, which makes
  * `triageIssue` attempt a live-app reproduction (browser + LLM agentic loop)
  * before triaging. Opt-in only — see the `--reproduce` flag on `triage <iid>`.
+ *
+ * When `reproduce` is on, live-app login credentials are sourced from the
+ * environment (`GHAGGA_TRIAGE_LOGIN_EMAIL` / `GHAGGA_TRIAGE_LOGIN_PASSWORD`) and
+ * threaded into `reproduceOptions.credentials`, where the REPRODUCE harness'
+ * login step runner resolves `{{email}}` / `{{password}}` placeholders. Keeping
+ * the password in the environment (not the config file) is deliberate. Omitted
+ * entirely when no password is set, so login-less configs (loginRecipe 'none')
+ * are unaffected.
  */
 function resolveEngineOptions(
   configPath?: string,
@@ -66,8 +74,31 @@ function resolveEngineOptions(
             preferredCLI: 'opencode',
             cliModel: config.models?.reproduce ?? DEFAULT_REPRODUCE_MODEL,
           }),
+          ...resolveReproduceLoginOptions(),
         }
       : {}),
+  };
+}
+
+/**
+ * Reads live-app login credentials from the environment for the REPRODUCE
+ * harness. Returns a `{ reproduceOptions: { credentials } }` fragment to spread
+ * into `EngineOptions`, or an empty object when no password is set (so configs
+ * that need no login stay unchanged). The password lives in the environment,
+ * never in the config file, on purpose.
+ */
+function resolveReproduceLoginOptions():
+  | Pick<EngineOptions, 'reproduceOptions'>
+  | Record<never, never> {
+  const email = process.env.GHAGGA_TRIAGE_LOGIN_EMAIL;
+  const password = process.env.GHAGGA_TRIAGE_LOGIN_PASSWORD;
+  if (!password) {
+    return {};
+  }
+  return {
+    reproduceOptions: {
+      credentials: { ...(email ? { email } : {}), password },
+    },
   };
 }
 
@@ -144,7 +175,9 @@ triageCommand
   .option(
     '--reproduce',
     'Attempt a live-app reproduction before triaging this issue (single-issue only: ' +
-      'launches a browser + costs LLM calls, so it is ignored with --new)',
+      'launches a browser + costs LLM calls, so it is ignored with --new). ' +
+      'Live-app login reads GHAGGA_TRIAGE_LOGIN_EMAIL / GHAGGA_TRIAGE_LOGIN_PASSWORD ' +
+      'from the environment, keeping credentials out of the config file',
   )
   .action(async (iid: string | undefined, opts: { new?: boolean; reproduce?: boolean }) => {
     const configPath = triageCommand.opts().config;

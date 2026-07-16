@@ -63,6 +63,15 @@ const BASE_CONFIG = {
   models: { rerank: 'r-model', analysis: 'a-model' },
 };
 
+/** Restore a saved env var: re-set it if it had a value, else remove it. */
+function restoreEnv(key: string, prev: string | undefined): void {
+  if (prev === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = prev;
+  }
+}
+
 describe('ghagga triage command', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -168,6 +177,49 @@ describe('ghagga triage command', () => {
     expect(createCLIBridgeGenerateFn).toHaveBeenCalledWith(
       expect.objectContaining({ cliModel: 'opencode-go/kimi-k2.7-code' }),
     );
+  });
+
+  it('"triage <iid> --reproduce" threads login credentials from env into reproduceOptions.credentials', async () => {
+    const prevEmail = process.env.GHAGGA_TRIAGE_LOGIN_EMAIL;
+    const prevPassword = process.env.GHAGGA_TRIAGE_LOGIN_PASSWORD;
+    process.env.GHAGGA_TRIAGE_LOGIN_EMAIL = 'admin@x.test';
+    process.env.GHAGGA_TRIAGE_LOGIN_PASSWORD = 's3cret';
+    try {
+      mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+      const triageCommand = await loadCommand();
+
+      await triageCommand.parseAsync(['triage', '42', '--reproduce'], { from: 'user' });
+
+      const [options] = mockTriageIssue.mock.calls[0] as [
+        { reproduceOptions?: { credentials?: { email?: string; password?: string } } },
+      ];
+      expect(options.reproduceOptions?.credentials).toEqual({
+        email: 'admin@x.test',
+        password: 's3cret',
+      });
+    } finally {
+      restoreEnv('GHAGGA_TRIAGE_LOGIN_EMAIL', prevEmail);
+      restoreEnv('GHAGGA_TRIAGE_LOGIN_PASSWORD', prevPassword);
+    }
+  });
+
+  it('"triage <iid> --reproduce" omits credentials when no login env vars are set', async () => {
+    const prevEmail = process.env.GHAGGA_TRIAGE_LOGIN_EMAIL;
+    const prevPassword = process.env.GHAGGA_TRIAGE_LOGIN_PASSWORD;
+    delete process.env.GHAGGA_TRIAGE_LOGIN_EMAIL;
+    delete process.env.GHAGGA_TRIAGE_LOGIN_PASSWORD;
+    try {
+      mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+      const triageCommand = await loadCommand();
+
+      await triageCommand.parseAsync(['triage', '42', '--reproduce'], { from: 'user' });
+
+      const [options] = mockTriageIssue.mock.calls[0] as [{ reproduceOptions?: unknown }];
+      expect(options.reproduceOptions).toBeUndefined();
+    } finally {
+      restoreEnv('GHAGGA_TRIAGE_LOGIN_EMAIL', prevEmail);
+      restoreEnv('GHAGGA_TRIAGE_LOGIN_PASSWORD', prevPassword);
+    }
   });
 
   it('"triage --new --reproduce" ignores --reproduce (too slow/costly across many issues) and warns', async () => {
