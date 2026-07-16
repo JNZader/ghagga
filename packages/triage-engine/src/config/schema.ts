@@ -58,6 +58,21 @@ export const TriageConfigSchema = z.object({
       jargonBan: z.array(z.string()).optional(),
     })
     .optional(),
+  /**
+   * Memory-backed issue DEDUP (mirrors the server worker). When a memory store
+   * is wired into the engine (the CLI does this for `ghagga triage`), each
+   * issue is checked against prior triaged issues BEFORE the expensive LLM
+   * analysis; a confident hit yields a cheap DUPLICATE draft instead.
+   *
+   * OMITTED ⇒ ENABLED when a memory store is available (the engine defaults
+   * `enabled` to `true`). Dedup is always a no-op when no store is wired.
+   * Set `{ "enabled": false }` to opt out even with a store present.
+   */
+  dedup: z
+    .object({
+      enabled: z.boolean().default(true),
+    })
+    .optional(),
 });
 
 export type TriageConfig = z.infer<typeof TriageConfigSchema>;

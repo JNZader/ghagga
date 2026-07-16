@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { GenerateTextFn } from 'ghagga-core';
+import { ISSUE_TRIAGE_OBSERVATION_TYPE, SqliteMemoryStorage } from 'ghagga-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TriageConfig } from './config/schema.js';
 import {
@@ -363,5 +364,185 @@ describe('triageIssue auto-reproduction wiring', () => {
 
     expect(mockedReproduce).not.toHaveBeenCalled();
     expect(draft.reproductionEvidence).toBeNull();
+  });
+});
+
+describe('triageIssue memory-backed dedup', () => {
+  // Distinctive, high-overlap issue text so findIssueDuplicates clears its
+  // conservative keyword-overlap threshold (≥ 2 terms, ≥ 0.6 overlap).
+  const DUP_TITLE = 'Login button throws TypeError on Safari during checkout';
+  const DUP_BODY =
+    'The login button throws a TypeError on Safari during the checkout payment step.';
+  const PROJECT = 'acme-widgets'; // repoSlug('acme/widgets')
+
+  let dir: string;
+  let queuePath: string;
+  let storage: SqliteMemoryStorage;
+  let forge: ForgeAdapter & { postComment: ReturnType<typeof vi.fn> };
+  let analysisSpy: ReturnType<typeof scriptedGenerateFn>;
+  let rerankSpy: GenerateTextFn;
+  let options: EngineOptions;
+
+  function makeDupIssue(iid: string, title = DUP_TITLE, body = DUP_BODY): ForgeIssue {
+    return {
+      iid,
+      title,
+      description: body,
+      labels: [],
+      url: `https://example.test/issues/${iid}`,
+      comments: [],
+    };
+  }
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'ghagga-triage-engine-dedup-'));
+    queuePath = join(dir, 'queue.json');
+    // Real in-memory SQLite store (never flushed to disk — no close() needed).
+    storage = await SqliteMemoryStorage.create(join(dir, 'memory.db'));
+    forge = {
+      listIssues: vi.fn(async () => [makeDupIssue('42')]),
+      getIssue: vi.fn(async (iid: string) => makeDupIssue(iid)),
+      postComment: vi.fn(async () => undefined),
+    };
+    analysisSpy = scriptedGenerateFn(TRIAGE_RESPONSE, 'Estamos revisando tu consulta.');
+    rerankSpy = vi.fn(async () => ({
+      text: '1',
+      tokensUsed: 0,
+      provider: 'cli-bridge' as const,
+      model: 'r',
+    }));
+    options = {
+      config: makeConfig(),
+      forge,
+      rerankGenerateFn: rerankSpy,
+      analysisGenerateFn: analysisSpy,
+      memory: storage,
+      queuePath,
+    };
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('(a) dedup HIT → DUPLICATE draft citing matches, and the analysis LLM is NOT called', async () => {
+    // Pre-store a prior issue observation that the new issue duplicates. Stored
+    // under the STABLE id (repoSlug#iid); the human title lives in the content
+    // (first line) where it drives keyword overlap.
+    await storage.saveObservation({
+      project: PROJECT,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+      title: `${PROJECT}#7`,
+      content: `${DUP_TITLE}\n${DUP_BODY}`,
+    });
+
+    const draft = await triageIssue(options, '42');
+
+    expect(draft.kind).toBe('DUPLICATE');
+    expect(draft.dedupMatches?.length).toBeGreaterThan(0);
+    expect(draft.dedupMatches?.[0]?.title).toBe(`${PROJECT}#7`);
+    // Short-circuit BEFORE any LLM: neither analysis nor locate-rerank ran.
+    expect(analysisSpy).not.toHaveBeenCalled();
+    expect(rerankSpy).not.toHaveBeenCalled();
+    // Never posts.
+    expect(forge.postComment).not.toHaveBeenCalled();
+    // The duplicate path saves NOTHING (the issue dupes an already-stored obs).
+    const stored = await storage.listObservations({
+      project: PROJECT,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+    });
+    expect(stored).toHaveLength(1);
+  });
+
+  it('(b) dedup MISS → normal ANALYSIS triage, and the issue is persisted to memory', async () => {
+    const draft = await triageIssue(options, '42');
+
+    expect(draft.kind).toBe('ANALYSIS');
+    expect(draft.dedupMatches).toBeUndefined();
+    expect(analysisSpy).toHaveBeenCalled();
+
+    const stored = await storage.listObservations({
+      project: PROJECT,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.title).toBe(`${PROJECT}#42`);
+    // Human title folded into content (first line) preserves keyword signal.
+    expect(stored[0]?.content).toContain(DUP_TITLE);
+    expect(stored[0]?.content).toContain('Classification:');
+  });
+
+  it('(c) a second, near-identical issue is detected as a duplicate after the first was stored', async () => {
+    // First triage: MISS → stores the observation.
+    forge.getIssue = vi.fn(async (iid: string) => makeDupIssue(iid));
+    const first = await triageIssue(options, '7');
+    expect(first.kind).toBe('ANALYSIS');
+
+    // Second, DIFFERENT issue with the same text → should now dedup-HIT.
+    const second = await triageIssue(options, '8');
+    expect(second.kind).toBe('DUPLICATE');
+    expect(second.dedupMatches?.[0]?.title).toBe(`${PROJECT}#7`);
+  });
+
+  it('(d) re-triaging the SAME issue never self-flags as a duplicate (self-match guard)', async () => {
+    const first = await triageIssue(options, '7');
+    expect(first.kind).toBe('ANALYSIS');
+
+    // Re-triage #7 (its own observation is now in memory). It must NOT match
+    // itself; the prior non-REJECTED draft also means it is not re-stored.
+    const again = await triageIssue(options, '7');
+    expect(again.kind).toBe('ANALYSIS');
+    const stored = await storage.listObservations({
+      project: PROJECT,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+    });
+    expect(stored).toHaveLength(1);
+  });
+
+  it('(d2) re-triaging after the issue TITLE was edited still self-excludes (no self-duplicate, ANALYSIS not clobbered)', async () => {
+    // First triage: MISS → stores the observation under the STABLE id (repoSlug#iid).
+    const first = await triageIssue(options, '7');
+    expect(first.kind).toBe('ANALYSIS');
+
+    // A maintainer EDITS the issue title between triages. Body keywords are
+    // unchanged, so the issue overlaps its OWN stored observation strongly —
+    // the guard must exclude it by the stable id, not the (now-changed) title.
+    const EDITED_TITLE = `${DUP_TITLE} (edited after maintainer triage)`;
+    forge.getIssue = vi.fn(async (iid: string) => makeDupIssue(iid, EDITED_TITLE));
+
+    const again = await triageIssue(options, '7');
+    // Must NOT be flagged as a duplicate of itself; the ANALYSIS draft stands.
+    expect(again.kind).toBe('ANALYSIS');
+    expect(again.dedupMatches).toBeUndefined();
+
+    // Prior non-REJECTED draft ⇒ not re-stored; identity is the stable id.
+    const stored = await storage.listObservations({
+      project: PROJECT,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.title).toBe(`${PROJECT}#7`);
+  });
+
+  it('(e) dedup disabled in config → no dedup, no persistence, even with a store wired', async () => {
+    options.config = { ...options.config, dedup: { enabled: false } };
+    await storage.saveObservation({
+      project: PROJECT,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+      title: `Issue #7: ${DUP_TITLE}`,
+      content: DUP_BODY,
+    });
+
+    const draft = await triageIssue(options, '42');
+
+    // Would have been a DUPLICATE if dedup ran — instead a normal analysis.
+    expect(draft.kind).toBe('ANALYSIS');
+    expect(analysisSpy).toHaveBeenCalled();
+    // Nothing new persisted (still just the pre-seeded observation).
+    const stored = await storage.listObservations({
+      project: PROJECT,
+      type: ISSUE_TRIAGE_OBSERVATION_TYPE,
+    });
+    expect(stored).toHaveLength(1);
   });
 });

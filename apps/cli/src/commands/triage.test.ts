@@ -19,6 +19,7 @@ const mockRejectIssue = vi.fn();
 const mockStartTriageServer = vi.fn();
 const mockLoadConfig = vi.fn();
 const mockResolveConfigPath = vi.fn();
+const mockMemoryCreate = vi.fn();
 
 vi.mock('ghagga-triage-engine', () => ({
   triageIssue: (...args: unknown[]) => mockTriageIssue(...args),
@@ -35,6 +36,11 @@ vi.mock('ghagga-triage-engine', () => ({
 
 vi.mock('ghagga-core', () => ({
   createCLIBridgeGenerateFn: vi.fn(() => vi.fn()),
+  SqliteMemoryStorage: { create: (...args: unknown[]) => mockMemoryCreate(...args) },
+}));
+
+vi.mock('../lib/embedding.js', () => ({
+  resolveCliEmbeddingProvider: () => ({ config: {}, provider: undefined }),
 }));
 
 vi.mock('../ui/tui.js', () => ({
@@ -62,6 +68,8 @@ describe('ghagga triage command', () => {
     vi.clearAllMocks();
     mockResolveConfigPath.mockReturnValue('/tmp/repo/.ghagga/triage.config.json');
     mockLoadConfig.mockReturnValue(BASE_CONFIG);
+    // Default: memory store opens fine (in-memory WASM store faked with close()).
+    mockMemoryCreate.mockResolvedValue({ close: vi.fn() });
   });
 
   async function loadCommand() {
@@ -79,6 +87,29 @@ describe('ghagga triage command', () => {
     const [options, iid] = mockTriageIssue.mock.calls[0] as [{ config: unknown }, string];
     expect(iid).toBe('42');
     expect(options.config).toEqual(BASE_CONFIG);
+  });
+
+  it('degrades to running WITHOUT dedup when triage memory fails to open (does not crash)', async () => {
+    // A corrupt/unopenable memory.db must NOT crash triage — dedup is an
+    // enhancement, so the command runs with memory disabled (RES-001).
+    mockMemoryCreate.mockRejectedValueOnce(new Error('corrupt memory.db'));
+    mockTriageIssue.mockResolvedValue({
+      issueIid: '42',
+      status: 'PENDING_APPROVAL',
+      kind: 'ANALYSIS',
+    });
+    const triageCommand = await loadCommand();
+
+    // Must resolve (no throw).
+    await triageCommand.parseAsync(['triage', '42'], { from: 'user' });
+
+    // Triage still ran, but with NO memory wired (dedup disabled).
+    expect(mockTriageIssue).toHaveBeenCalledTimes(1);
+    const [options] = mockTriageIssue.mock.calls[0] as [{ memory?: unknown }];
+    expect(options.memory).toBeUndefined();
+
+    const tui = await import('../ui/tui.js');
+    expect(tui.log.warn).toHaveBeenCalledWith(expect.stringContaining('dedup disabled'));
   });
 
   it('dispatches "triage --new" to triageNew', async () => {

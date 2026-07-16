@@ -10,8 +10,9 @@
  * `ghagga-triage-engine`'s queue/approval.ts for the enforced guarantee.
  */
 
+import { join } from 'node:path';
 import { Command } from 'commander';
-import { createCLIBridgeGenerateFn } from 'ghagga-core';
+import { createCLIBridgeGenerateFn, SqliteMemoryStorage } from 'ghagga-core';
 import {
   approveIssue,
   type EngineOptions,
@@ -25,6 +26,8 @@ import {
   triageIssue,
   triageNew,
 } from 'ghagga-triage-engine';
+import { getConfigDir } from '../lib/config.js';
+import { resolveCliEmbeddingProvider } from '../lib/embedding.js';
 import * as tui from '../ui/tui.js';
 
 /**
@@ -68,6 +71,61 @@ function resolveEngineOptions(
   };
 }
 
+/**
+ * Open the SQLite memory store that backs issue DEDUP for `ghagga triage`.
+ *
+ * Reuses the SAME per-user `~/.config/ghagga/memory.db` the `memory`/`review`
+ * commands use (issue observations are project + type scoped, so they coexist
+ * with review memory without collision). The embedding provider is threaded
+ * from the merged CLI config exactly like every other construction site; when
+ * unconfigured, dedup falls back to keyword-only search unchanged.
+ */
+async function openTriageMemory(): Promise<SqliteMemoryStorage> {
+  const dbPath = join(getConfigDir(), 'memory.db');
+  const { config, provider } = resolveCliEmbeddingProvider();
+  return SqliteMemoryStorage.create(
+    dbPath,
+    provider
+      ? {
+          embeddingProvider: provider,
+          embeddingModel: config.model,
+          embeddingCandidateK: config.candidateK,
+        }
+      : {},
+  );
+}
+
+/**
+ * Wire a memory store into `options` for the duration of `fn`, then flush it to
+ * disk via `close()` (SQLite is an in-memory WASM DB — without close(), saved
+ * observations never persist). Skipped entirely when dedup is disabled in
+ * config, so an opt-out never pays the WASM init cost.
+ */
+async function runWithMemory<T>(options: EngineOptions, fn: () => Promise<T>): Promise<T> {
+  const dedupEnabled = options.config.dedup?.enabled ?? true;
+  if (!dedupEnabled) {
+    return fn();
+  }
+  // Dedup is an ENHANCEMENT — a corrupt/unopenable memory.db must never crash
+  // the triage command. On open failure, DEGRADE to running WITHOUT dedup (the
+  // engine no-ops dedup when `options.memory` is falsy). Mirrors review.ts.
+  let store: SqliteMemoryStorage | undefined;
+  try {
+    store = await openTriageMemory();
+    options.memory = store;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    tui.log.warn(`⚠️  Failed to initialize triage memory (dedup disabled): ${msg}`);
+    options.memory = undefined;
+  }
+  try {
+    return await fn();
+  } finally {
+    // Only flush/close if the store actually opened.
+    await store?.close();
+  }
+}
+
 export const triageCommand = new Command('triage').description(
   'Code-aware issue triage with a local human-approval queue (never auto-posts)',
 );
@@ -99,7 +157,7 @@ triageCommand
         );
       }
       const options = resolveEngineOptions(configPath);
-      const drafts = await triageNew(options);
+      const drafts = await runWithMemory(options, () => triageNew(options));
       tui.log.success(`Triaged ${drafts.length} new issue(s).`);
       return;
     }
@@ -111,8 +169,9 @@ triageCommand
     }
 
     const options = resolveEngineOptions(configPath, { reproduce: opts.reproduce });
-    const draft = await triageIssue(options, iid);
-    tui.log.success(`#${iid} triaged -> ${draft.status} (queued for review).`);
+    const draft = await runWithMemory(options, () => triageIssue(options, iid));
+    const kindNote = draft.kind === 'DUPLICATE' ? ' — DUPLICATE (analysis skipped)' : '';
+    tui.log.success(`#${iid} triaged -> ${draft.status} (queued for review)${kindNote}.`);
   });
 
 // ─── list ───────────────────────────────────────────────────────
@@ -143,7 +202,15 @@ triageCommand
   .action((iid: string) => {
     const options = resolveEngineOptions(triageCommand.opts().config);
     const draft = showDraft(options, iid);
-    tui.log.message(`#${draft.issueIid}  status=${draft.status}`);
+    tui.log.message(`#${draft.issueIid}  status=${draft.status}  kind=${draft.kind ?? 'ANALYSIS'}`);
+    if (draft.dedupMatches?.length) {
+      tui.log.message('--- likely duplicate of (memory dedup) ---');
+      for (const match of draft.dedupMatches) {
+        tui.log.message(
+          `  • ${match.title} (observation #${match.observationId}, overlap ${match.score.toFixed(2)})`,
+        );
+      }
+    }
     tui.log.message('--- technical analysis (internal, NEVER posted) ---');
     tui.log.message(draft.report);
     tui.log.message('--- client reply (what gets posted on approve) ---');

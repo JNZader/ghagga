@@ -23,9 +23,21 @@ export {
   TriageConfigSchema,
 } from './config/schema.js';
 
+// ─── DEDUP ──────────────────────────────────────────────────────
+
+export {
+  buildDedupMemoryContext,
+  buildDuplicateReply,
+  buildDuplicateReport,
+  buildObservationContent,
+  excludeSelfMatch,
+  issueObservationTitle,
+  OBSERVATION_COMMENT_BODY_CAP,
+} from './dedup/index.js';
+
 // ─── Shared Types ───────────────────────────────────────────────
 
-export type { DraftStatus, IssueDraft } from './types/draft.js';
+export type { DraftStatus, IssueDraft, IssueDraftKind } from './types/draft.js';
 export type { NetworkFailure, ReproEvidence } from './types/evidence.js';
 export { approveDraft, type PostableReply } from './types/postable.js';
 

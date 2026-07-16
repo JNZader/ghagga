@@ -69,5 +69,8 @@
   "clientReplyPolicy": {
     "language": "es",
     "jargonBan": ["traceback", "stack trace", "endpoint", "API", "log", "ID", "archivo", "backend"]
+  },
+  "dedup": {
+    "enabled": true
   }
 }
