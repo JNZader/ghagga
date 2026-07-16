@@ -3,6 +3,9 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  # Manual re-run (e.g. to publish a newly-added package that a prior release
+  # missed). Every publish step is idempotent — already-published versions skip.
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -29,32 +32,52 @@ jobs:
 
       - run: pnpm turbo test
 
-      # Publish in dependency order: db → core → forge → cli
-      # pnpm publish resolves workspace:^ → ^2.0.0 automatically
+      # Publish in dependency order: db → core → forge → cli → triage-engine.
+      # pnpm publish resolves workspace:^ → ^2.0.0 automatically.
+      # Each step is IDEMPOTENT — if the exact name@version is already on npm it
+      # is skipped, so a re-run (workflow_dispatch) that adds a missed package
+      # never fails on the already-published ones.
       - name: Publish ghagga-db
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: |
+          PKG=$(node -p "require('./package.json').name"); VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then echo "$PKG@$VER already published — skipping"; else pnpm publish --access public --no-git-checks --provenance; fi
         working-directory: packages/db
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
       - name: Publish ghagga-core
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: |
+          PKG=$(node -p "require('./package.json').name"); VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then echo "$PKG@$VER already published — skipping"; else pnpm publish --access public --no-git-checks --provenance; fi
         working-directory: packages/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
       - name: Publish ghagga-forge
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: |
+          PKG=$(node -p "require('./package.json').name"); VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then echo "$PKG@$VER already published — skipping"; else pnpm publish --access public --no-git-checks --provenance; fi
         working-directory: packages/forge
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
       - name: Publish ghagga (CLI)
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: |
+          PKG=$(node -p "require('./package.json').name"); VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then echo "$PKG@$VER already published — skipping"; else pnpm publish --access public --no-git-checks --provenance; fi
         working-directory: apps/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Publish ghagga-triage-engine
+        run: |
+          PKG=$(node -p "require('./package.json').name"); VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then echo "$PKG@$VER already published — skipping"; else pnpm publish --access public --no-git-checks --provenance; fi
+        working-directory: packages/triage-engine
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
