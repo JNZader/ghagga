@@ -45,6 +45,7 @@ import {
   wrapUntrustedDiff,
 } from './prompts.js';
 import { parseReviewResponse } from './simple.js';
+import { getDeadVoiceReason } from './voice-validation.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -227,6 +228,14 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
         .join('\n');
 
       const result = await generateFn(system, userPrompt);
+
+      // A fulfilled call can still be a dead voice (e.g. gateway returned
+      // HTTP 200 whose text is a raw CLI error envelope). Route it into the
+      // existing rejected/failure path so synthesis stays aware of the gap.
+      const deadReason = getDeadVoiceReason(result.text);
+      if (deadReason) {
+        throw new Error(`${specialist.label} (${result.provider}/${result.model}): ${deadReason}`);
+      }
 
       return {
         name: specialist.name,

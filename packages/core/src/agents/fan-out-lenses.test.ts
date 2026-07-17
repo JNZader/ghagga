@@ -345,6 +345,46 @@ describe('runFanOutReview', () => {
     );
   });
 
+  it('treats a lens that fulfills with a CLI error envelope as failed', async () => {
+    const errorEnvelope = JSON.stringify({
+      type: 'result',
+      subtype: 'error_max_turns',
+      is_error: true,
+    });
+    const deadFn = makeFakeGenerateFn(errorEnvelope);
+    const passFn = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    const result = await runFanOutReview(
+      makeInput({
+        generateFns: [deadFn, passFn],
+        lenses: ['security', 'performance'],
+      }),
+    );
+
+    // Dead lens routed into the failure path, not counted as a pass
+    expect(result.metadata.modelsUsed).toEqual(
+      expect.arrayContaining([expect.stringContaining('FAILED')]),
+    );
+    // Only the healthy lens's tokens are counted
+    expect(result.metadata.tokensUsed).toBe(100);
+  });
+
+  it('treats a lens that fulfills with empty text as failed', async () => {
+    const deadFn = makeFakeGenerateFn('   \n');
+    const passFn = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    const result = await runFanOutReview(
+      makeInput({
+        generateFns: [deadFn, passFn],
+        lenses: ['security', 'performance'],
+      }),
+    );
+
+    expect(result.metadata.modelsUsed).toEqual(
+      expect.arrayContaining([expect.stringContaining('FAILED')]),
+    );
+  });
+
   it('tracks token usage across all lenses', async () => {
     const fn = makeFakeGenerateFn(PASSED_RESPONSE);
     const result = await runFanOutReview(

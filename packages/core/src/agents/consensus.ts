@@ -37,6 +37,7 @@ import {
   wrapUntrusted,
   wrapUntrustedDiff,
 } from './prompts.js';
+import { getDeadVoiceReason } from './voice-validation.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -278,6 +279,16 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
         .join('\n');
 
       const result = await generateFn(system, userPrompt);
+
+      // A fulfilled call can still be a dead voice (e.g. gateway returned
+      // HTTP 200 whose text is a raw CLI error envelope). Route it into the
+      // existing rejected/failure path instead of counting it as a vote.
+      const deadReason = getDeadVoiceReason(result.text);
+      if (deadReason) {
+        throw new Error(
+          `${config.stance} vote (${result.provider}/${result.model}): ${deadReason}`,
+        );
+      }
 
       return {
         vote: parseVote(result.text, result.provider as LLMProvider, result.model, config.stance),
