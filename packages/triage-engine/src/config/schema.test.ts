@@ -24,6 +24,23 @@ describe('TriageConfigSchema', () => {
       expect(result.repo).toBe('acme/widgets');
       expect(result.language).toBe('go');
       expect(result.graphExpand).toBe(false);
+      // cli is optional and undefined by default (engine falls back to 'opencode').
+      expect(result.cli).toBeUndefined();
+    });
+
+    it('accepts cli: "codex" (CLI backend selection)', () => {
+      const result = TriageConfigSchema.parse({ ...baseValidConfig, cli: 'codex' });
+      expect(result.cli).toBe('codex');
+    });
+
+    it('accepts cli: "claude" (CLI backend selection)', () => {
+      const result = TriageConfigSchema.parse({ ...baseValidConfig, cli: 'claude' });
+      expect(result.cli).toBe('claude');
+    });
+
+    it('rejects an unrecognized cli value', () => {
+      const result = TriageConfigSchema.safeParse({ ...baseValidConfig, cli: 'ollama' });
+      expect(result.success).toBe(false);
     });
 
     it('parses a full config including app.loginRecipe (steps kind)', () => {

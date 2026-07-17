@@ -60,6 +60,14 @@ export const TriageConfigSchema = z.object({
   stopwords: z.array(z.string()).optional(),
   language: z.enum(['go', 'ts', 'js', 'py', 'rust', 'java']).default('go'),
   graphExpand: z.boolean().default(false),
+  /**
+   * Which CLI backend drives the triage LLM calls (rerank/analysis/reproduce)
+   * through ghagga-core's cli-bridge. Defaults to 'opencode' when omitted (the
+   * historical behavior — existing configs are unaffected). Use 'codex' to route
+   * the gpt-5.x models via the codex CLI (its own local session, no API key),
+   * which is more reliable than the intermittently-flaky opencode-go path.
+   */
+  cli: z.enum(['opencode', 'codex', 'claude', 'gemini', 'copilot']).optional(),
   models: z.object({
     rerank: z.string().min(1),
     analysis: z.string().min(1),

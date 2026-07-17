@@ -7,13 +7,20 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Mock child_process before importing the module
+// Mock child_process before importing the module.
+// NOTE: adapters use execFileSync (args ARRAY, NO shell) — never execSync — so that
+// an untrusted prompt (e.g. a GitHub issue body containing `$(...)`) can never be
+// interpreted by /bin/sh. The mock and assertions below reflect that (file, args, options)
+// call shape.
 vi.mock('node:child_process', () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
 // Must import after mocking
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+// node:fs is NOT mocked — the codex adapter round-trips a real temp file, and the
+// execFileSync mock writes the response there (see the codex adapter describe block).
+import { writeFileSync } from 'node:fs';
 import {
   _getAdapters,
   _setAvailabilityOverride,
@@ -28,7 +35,7 @@ import {
   validateCliModel,
 } from './cli-bridge.js';
 
-const mockExecSync = vi.mocked(execSync);
+const mockExecFileSync = vi.mocked(execFileSync);
 
 describe('cli-bridge', () => {
   afterEach(() => {
@@ -42,7 +49,7 @@ describe('cli-bridge', () => {
     });
 
     it('only contains known CLI names', () => {
-      const validNames = new Set(['opencode', 'copilot', 'gemini']);
+      const validNames = new Set(['opencode', 'copilot', 'gemini', 'codex', 'claude']);
       const result = getAvailableCLIs();
       for (const name of result) {
         expect(validNames.has(name)).toBe(true);
@@ -51,12 +58,14 @@ describe('cli-bridge', () => {
   });
 
   describe('_getAdapters', () => {
-    it('returns adapters in priority order: opencode, copilot, gemini', () => {
+    it('returns adapters in priority order: opencode, copilot, gemini, codex, claude', () => {
       const adapters = _getAdapters();
-      expect(adapters).toHaveLength(3);
+      expect(adapters).toHaveLength(5);
       expect(adapters[0]?.name).toBe('opencode');
       expect(adapters[1]?.name).toBe('copilot');
       expect(adapters[2]?.name).toBe('gemini');
+      expect(adapters[3]?.name).toBe('codex');
+      expect(adapters[4]?.name).toBe('claude');
     });
 
     it('each adapter has required fields', () => {
@@ -82,7 +91,7 @@ describe('cli-bridge', () => {
       const available = getAvailableCLIs();
       if (available.length === 0) {
         expect(() => generateViaCLI('test prompt')).toThrow(
-          'No CLI providers available. Install one of: opencode, copilot, gemini',
+          'No CLI providers available. Install one of: opencode, copilot, gemini, codex, claude',
         );
       }
     });
@@ -103,7 +112,7 @@ describe('cli-bridge', () => {
       const available = getAvailableCLIs();
       if (available.length > 0) {
         // Mock the actual exec to return a fake review
-        mockExecSync.mockReturnValue('STATUS: PASSED\nSUMMARY: Looks good\nFINDINGS:\n');
+        mockExecFileSync.mockReturnValue('STATUS: PASSED\nSUMMARY: Looks good\nFINDINGS:\n');
         const result = generateViaCLI('test');
         expect(result).toHaveProperty('text');
         expect(result).toHaveProperty('provider', 'cli-bridge');
@@ -117,7 +126,7 @@ describe('cli-bridge', () => {
       const adapters = _getAdapters();
       // Verify that preferredCLI via options would reorder (structural test)
       const names = adapters.map((a) => a.name);
-      expect(names).toEqual(['opencode', 'copilot', 'gemini']);
+      expect(names).toEqual(['opencode', 'copilot', 'gemini', 'codex', 'claude']);
     });
 
     it('accepts options object without error', () => {
@@ -329,7 +338,7 @@ describe('cli-bridge', () => {
         try {
           // Should not throw CLIConfigurationError about cliModel format for gemini
           // (cliModel format validation only applies to opencode)
-          mockExecSync.mockReturnValue('review output');
+          mockExecFileSync.mockReturnValue('review output');
           expect(() =>
             generateViaCLI('test', undefined, {
               preferredCLI: 'gemini',
@@ -434,65 +443,107 @@ describe('cli-bridge', () => {
     });
   });
 
-  describe('legacy claude alias', () => {
-    it('resolves preferredCLI "claude" to opencode with anthropic/claude-sonnet-4-5', () => {
-      // This test verifies the legacy mapping at the validation level.
-      // When 'claude' is used, cliModel defaults to 'anthropic/claude-sonnet-4-5',
-      // which requires ANTHROPIC_API_KEY for credential validation.
-      // We test through resolveCredentialEnvVar since the alias mapping
-      // results in opencode + anthropic prefix.
-      const envVar = resolveCredentialEnvVar('opencode', 'anthropic/claude-sonnet-4-5');
-      expect(envVar).toBe('ANTHROPIC_API_KEY');
+  // ─── Claude adapter ─────────────────────────────────────────────
+  // The claude adapter runs `claude -p --model <m> <prompt>` and captures the
+  // response directly from stdout (no temp file, unlike codex). Previously
+  // 'claude' was a legacy alias that remapped to opencode; it is now a
+  // first-class adapter invoking the real `claude` CLI.
+  describe('claude adapter', () => {
+    afterEach(() => {
+      _setAvailabilityOverride(undefined);
     });
 
-    it('generates CLI call with claude alias when opencode is available', () => {
-      const available = getAvailableCLIs();
-      if (available.includes('opencode')) {
-        // Set credential so validation passes
-        const original = process.env.ANTHROPIC_API_KEY;
-        process.env.ANTHROPIC_API_KEY = 'test-key';
-        try {
-          // Mock opencode to return valid JSON output
-          const jsonOutput = [
-            JSON.stringify({
-              type: 'text',
-              part: { text: 'STATUS: PASSED\nSUMMARY: Good\nFINDINGS:\n' },
-            }),
-          ].join('\n');
-          mockExecSync.mockReturnValue(jsonOutput);
+    it('builds `claude -p --model <model> <prompt>` and returns trimmed stdout', () => {
+      _setAvailabilityOverride({
+        opencode: false,
+        copilot: false,
+        gemini: false,
+        codex: false,
+        claude: true,
+      });
+      mockExecFileSync.mockReturnValue('  CLAUDE RESPONSE  \n');
 
-          const result = generateViaCLI('test prompt', undefined, { preferredCLI: 'claude' });
-          expect(result.cli).toBe('opencode');
-          expect(result.provider).toBe('cli-bridge');
-        } finally {
-          process.env.ANTHROPIC_API_KEY = original;
-        }
-      }
+      const result = generateViaCLI('do the thing', 'system rules', {
+        preferredCLI: 'claude',
+        cliModel: 'opus',
+      });
+
+      expect(result.cli).toBe('claude');
+      expect(result.provider).toBe('cli-bridge');
+      expect(result.text).toBe('CLAUDE RESPONSE');
+
+      const [file, args] = mockExecFileSync.mock.calls.at(-1)!;
+      expect(file).toBe('claude');
+      // system + prompt are combined and passed as a single inert argv element.
+      expect(args).toEqual(['-p', '--model', 'opus', 'system rules\n\ndo the thing']);
     });
 
-    it('claude alias does not override an explicitly set cliModel', () => {
-      // When 'claude' is the alias but cliModel is explicitly set,
-      // the explicit model should be used, not the default anthropic/claude-sonnet-4-5
-      const available = getAvailableCLIs();
-      if (available.includes('opencode')) {
-        const original = process.env.OPENAI_API_KEY;
-        process.env.OPENAI_API_KEY = 'test-key';
-        try {
-          const jsonOutput = [
-            JSON.stringify({ type: 'text', part: { text: 'review output' } }),
-          ].join('\n');
-          mockExecSync.mockReturnValue(jsonOutput);
+    it('defaults the model to sonnet when cliModel is absent', () => {
+      _setAvailabilityOverride({
+        opencode: false,
+        copilot: false,
+        gemini: false,
+        codex: false,
+        claude: true,
+      });
+      mockExecFileSync.mockReturnValue('ok');
 
-          // Should use openai/gpt-5-codex, not the default claude model
-          const result = generateViaCLI('test', undefined, {
-            preferredCLI: 'claude',
-            cliModel: 'openai/gpt-5-codex',
-          });
-          expect(result.cli).toBe('opencode');
-        } finally {
-          process.env.OPENAI_API_KEY = original;
-        }
-      }
+      const result = generateViaCLI('prompt only', undefined, { preferredCLI: 'claude' });
+
+      expect(result.text).toBe('ok');
+      const [file, args] = mockExecFileSync.mock.calls.at(-1)!;
+      expect(file).toBe('claude');
+      expect(args).toEqual(['-p', '--model', 'sonnet', 'prompt only']);
+    });
+
+    it('pipes large prompts via stdin (no inline prompt arg)', () => {
+      _setAvailabilityOverride({
+        opencode: false,
+        copilot: false,
+        gemini: false,
+        codex: false,
+        claude: true,
+      });
+      mockExecFileSync.mockReturnValue('stdin response');
+
+      const bigPrompt = 'x'.repeat(10_001);
+      const result = generateViaCLI(bigPrompt, undefined, { preferredCLI: 'claude' });
+
+      expect(result.text).toBe('stdin response');
+      const [file, args, options] = mockExecFileSync.mock.calls.at(-1)!;
+      expect(file).toBe('claude');
+      // args end at the flags — the prompt is NOT included as an argv element.
+      expect(args).toEqual(['-p', '--model', 'sonnet']);
+      // The prompt is delivered via execFileSync's `input` (stdin) option instead.
+      expect((options as { input?: string }).input).toBe(bigPrompt);
+    });
+
+    it('throws when the claude CLI exits non-zero (so the fallback chain sees it)', () => {
+      _setAvailabilityOverride({
+        opencode: false,
+        copilot: false,
+        gemini: false,
+        codex: false,
+        claude: true,
+      });
+      mockExecFileSync.mockImplementation(() => {
+        const err = new Error('boom') as Error & { status?: number; stderr?: string };
+        err.status = 1;
+        err.stderr = 'claude failure detail';
+        throw err;
+      });
+
+      // claude is the only available adapter → the loop rethrows the aggregate failure.
+      expect(() => generateViaCLI('p', undefined, { preferredCLI: 'claude' })).toThrow(
+        'All CLI providers failed',
+      );
+    });
+
+    it('does NOT require a credential env var (authenticates via its own session)', () => {
+      // 'claude' falls through resolveCredentialEnvVar's default → undefined,
+      // so no CLIConfigurationError is raised for a missing key.
+      expect(resolveCredentialEnvVar('claude')).toBeUndefined();
+      expect(resolveCredentialEnvVar('claude', 'opus')).toBeUndefined();
     });
   });
 
@@ -573,7 +624,7 @@ describe('cli-bridge', () => {
 
     it('does not add an empty-string-named key to the subprocess env for opencode-go', () => {
       const env = buildSubprocessEnv('', undefined);
-      expect(Object.prototype.hasOwnProperty.call(env, '')).toBe(false);
+      expect(Object.hasOwn(env, '')).toBe(false);
     });
   });
 
@@ -720,7 +771,7 @@ describe('cli-bridge', () => {
       const original = process.env.GEMINI_API_KEY;
       delete process.env.GEMINI_API_KEY;
       try {
-        mockExecSync.mockReturnValue('gemini OAuth review output');
+        mockExecFileSync.mockReturnValue('gemini OAuth review output');
         const result = generateViaCLI('test prompt', undefined, { preferredCLI: 'gemini' });
         // It proceeds to attempt the CLI rather than hard-failing on the missing key.
         expect(result.cli).toBe('gemini');
@@ -737,7 +788,7 @@ describe('cli-bridge', () => {
       const original = process.env.COPILOT_GITHUB_TOKEN;
       delete process.env.COPILOT_GITHUB_TOKEN;
       try {
-        mockExecSync.mockReturnValue('copilot login review output');
+        mockExecFileSync.mockReturnValue('copilot login review output');
         const result = generateViaCLI('test prompt', undefined, { preferredCLI: 'copilot' });
         expect(result.cli).toBe('copilot');
         expect(result.provider).toBe('cli-bridge');
@@ -756,13 +807,13 @@ describe('cli-bridge', () => {
       // A non-allowlisted server secret that must NOT leak to the subprocess.
       process.env.SOME_OTHER_SECRET = 'leak-me';
       try {
-        mockExecSync.mockReturnValue('gemini OAuth review output');
+        mockExecFileSync.mockReturnValue('gemini OAuth review output');
         generateViaCLI('test prompt', undefined, { preferredCLI: 'gemini' });
 
-        // gemini.generate calls execSync(cmd, options) — inspect the options.env it received.
-        expect(mockExecSync).toHaveBeenCalled();
-        const lastCall = mockExecSync.mock.calls.at(-1)!;
-        const passedEnv = (lastCall[1] as { env?: NodeJS.ProcessEnv }).env;
+        // gemini.generate calls execFileSync(file, args, options) — inspect options.env.
+        expect(mockExecFileSync).toHaveBeenCalled();
+        const lastCall = mockExecFileSync.mock.calls.at(-1)!;
+        const passedEnv = (lastCall[2] as { env?: NodeJS.ProcessEnv }).env;
 
         // env must be defined (allowlist), never undefined (which would inherit full parent env).
         expect(passedEnv).toBeDefined();
@@ -789,15 +840,15 @@ describe('cli-bridge', () => {
       _setAvailabilityOverride({ opencode: true, copilot: false, gemini: false });
 
       try {
-        mockExecSync.mockReturnValue(
+        mockExecFileSync.mockReturnValue(
           JSON.stringify({ type: 'text', part: { text: 'opencode auto output' } }),
         );
         const result = generateViaCLI('test prompt', undefined, {});
 
         expect(result.cli).toBe('opencode');
-        // env passed to execSync is undefined → adapter inherits the full parent env.
-        const lastCall = mockExecSync.mock.calls.at(-1)!;
-        const passedEnv = (lastCall[1] as { env?: NodeJS.ProcessEnv }).env;
+        // env passed to execFileSync is undefined → adapter inherits the full parent env.
+        const lastCall = mockExecFileSync.mock.calls.at(-1)!;
+        const passedEnv = (lastCall[2] as { env?: NodeJS.ProcessEnv }).env;
         expect(passedEnv).toBeUndefined();
       } finally {
         _setAvailabilityOverride(undefined);
@@ -821,6 +872,159 @@ describe('cli-bridge', () => {
         if (original !== undefined) process.env.ANTHROPIC_API_KEY = original;
         else delete process.env.ANTHROPIC_API_KEY;
       }
+    });
+  });
+
+  // ─── Codex adapter ──────────────────────────────────────────────
+  // The codex adapter runs `codex exec --model <m> --output-last-message <file>`
+  // and reads the final message back from <file>. Here the mocked execFileSync writes
+  // the response to the temp path it parses from the command, so the adapter's
+  // real readFileSync round-trips it (node:fs is not mocked).
+  describe('codex adapter', () => {
+    afterEach(() => {
+      _setAvailabilityOverride(undefined);
+    });
+
+    /**
+     * Make execFileSync write `response` to the --output-last-message temp path.
+     * The path is now read from the args ARRAY (execFileSync's 2nd arg), not a
+     * command string — the element right after '--output-last-message'.
+     */
+    function stubCodexExec(response: string): void {
+      mockExecFileSync.mockImplementation((_file: unknown, args: unknown) => {
+        const argv = args as string[];
+        const idx = argv.indexOf('--output-last-message');
+        const outFile = idx >= 0 ? argv[idx + 1] : undefined;
+        if (outFile) {
+          writeFileSync(outFile, response, 'utf8');
+        }
+        return '';
+      });
+    }
+
+    it('builds `codex exec --model <model> --output-last-message <file> <prompt>` and returns the file content', () => {
+      _setAvailabilityOverride({ opencode: false, copilot: false, gemini: false, codex: true });
+      stubCodexExec('CODEX FINAL MESSAGE');
+
+      const result = generateViaCLI('do the thing', 'system rules', {
+        preferredCLI: 'codex',
+        cliModel: 'gpt-5.5',
+      });
+
+      expect(result.cli).toBe('codex');
+      expect(result.provider).toBe('cli-bridge');
+      expect(result.text).toBe('CODEX FINAL MESSAGE');
+
+      const [file, args] = mockExecFileSync.mock.calls.at(-1)!;
+      const argv = args as string[];
+      expect(file).toBe('codex');
+      expect(argv.slice(0, 4)).toEqual(['exec', '--model', 'gpt-5.5', '--output-last-message']);
+      // system + prompt are combined and passed as a single inert argv element (last).
+      expect(argv.at(-1)).toBe('system rules\n\ndo the thing');
+    });
+
+    it('defaults the model to gpt-5.4 when cliModel is absent', () => {
+      _setAvailabilityOverride({ opencode: false, copilot: false, gemini: false, codex: true });
+      stubCodexExec('ok');
+
+      const result = generateViaCLI('prompt only', undefined, { preferredCLI: 'codex' });
+
+      expect(result.text).toBe('ok');
+      const [, args] = mockExecFileSync.mock.calls.at(-1)!;
+      const argv = args as string[];
+      expect(argv.slice(0, 3)).toEqual(['exec', '--model', 'gpt-5.4']);
+    });
+
+    it('throws when the codex CLI exits non-zero (so the fallback chain sees it)', () => {
+      _setAvailabilityOverride({ opencode: false, copilot: false, gemini: false, codex: true });
+      mockExecFileSync.mockImplementation(() => {
+        const err = new Error('boom') as Error & { status?: number; stderr?: string };
+        err.status = 1;
+        err.stderr = 'codex failure detail';
+        throw err;
+      });
+
+      // codex is the only available adapter → the loop rethrows the aggregate failure.
+      expect(() => generateViaCLI('p', undefined, { preferredCLI: 'codex' })).toThrow(
+        'All CLI providers failed',
+      );
+    });
+  });
+
+  // ─── Command-injection (RCE) regression guard ───────────────────
+  // A prompt is an UNTRUSTED GitHub/GitLab issue body. Because adapters use
+  // execFileSync (args ARRAY, no shell), a `$(...)`/backtick payload must ride
+  // as a LITERAL, inert argv element — never interpolated into a /bin/sh string.
+  // Before the fix, adapters built a shell command via execSync and JSON.stringify
+  // (which does NOT escape `$`/backtick), so `hello $(touch /tmp/pwned)` executed.
+  describe('command-injection regression (execFileSync, no shell)', () => {
+    afterEach(() => {
+      _setAvailabilityOverride(undefined);
+    });
+
+    const MALICIOUS = 'hello $(touch /tmp/should_not_exist) `id` world';
+
+    it('claude passes a malicious prompt as a LITERAL argv element (never a shell string)', () => {
+      _setAvailabilityOverride({
+        opencode: false,
+        copilot: false,
+        gemini: false,
+        codex: false,
+        claude: true,
+      });
+      mockExecFileSync.mockReturnValue('ok');
+
+      generateViaCLI(MALICIOUS, undefined, { preferredCLI: 'claude' });
+
+      const [file, args] = mockExecFileSync.mock.calls.at(-1)!;
+      const argv = args as string[];
+      // execFileSync spawns the binary directly with an argv array — no /bin/sh.
+      expect(file).toBe('claude');
+      // The payload appears VERBATIM as its own inert arg — never concatenated
+      // into a shell command string, so `$(...)`/backticks are never evaluated.
+      expect(argv).toContain(MALICIOUS);
+      expect(argv).toEqual(['-p', '--model', 'sonnet', MALICIOUS]);
+    });
+
+    it('codex passes a malicious prompt as a LITERAL argv element (never a shell string)', () => {
+      _setAvailabilityOverride({ opencode: false, copilot: false, gemini: false, codex: true });
+      // Mirror stubCodexExec: write the response to the --output-last-message path.
+      mockExecFileSync.mockImplementation((_file: unknown, args: unknown) => {
+        const argv = args as string[];
+        const idx = argv.indexOf('--output-last-message');
+        const outFile = idx >= 0 ? argv[idx + 1] : undefined;
+        if (outFile) {
+          writeFileSync(outFile, 'ok', 'utf8');
+        }
+        return '';
+      });
+
+      generateViaCLI(MALICIOUS, undefined, { preferredCLI: 'codex' });
+
+      const [file, args] = mockExecFileSync.mock.calls.at(-1)!;
+      const argv = args as string[];
+      expect(file).toBe('codex');
+      expect(argv).toContain(MALICIOUS);
+      // Payload is the LAST argv element (inline-prompt path), inert.
+      expect(argv.at(-1)).toBe(MALICIOUS);
+    });
+
+    it('opencode passes a malicious prompt as a LITERAL argv element (never a shell string)', () => {
+      _setAvailabilityOverride({
+        opencode: true,
+        copilot: false,
+        gemini: false,
+        codex: false,
+        claude: false,
+      });
+      mockExecFileSync.mockReturnValue(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+
+      generateViaCLI(MALICIOUS, undefined, { preferredCLI: 'opencode' });
+
+      const [file, args] = mockExecFileSync.mock.calls.at(-1)!;
+      const argv = args as string[];
+      expect(file).toBe('opencode');
+      expect(argv).toContain(MALICIOUS);
     });
   });
 

@@ -121,6 +121,34 @@ describe('ghagga triage command', () => {
     expect(tui.log.warn).toHaveBeenCalledWith(expect.stringContaining('dedup disabled'));
   });
 
+  it('builds the generate fns with preferredCLI from config.cli when set (codex)', async () => {
+    mockLoadConfig.mockReturnValue({ ...BASE_CONFIG, cli: 'codex' });
+    mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+    const triageCommand = await loadCommand();
+
+    await triageCommand.parseAsync(['triage', '42'], { from: 'user' });
+
+    const { createCLIBridgeGenerateFn } = await import('ghagga-core');
+    expect(createCLIBridgeGenerateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredCLI: 'codex', cliModel: 'r-model' }),
+    );
+    expect(createCLIBridgeGenerateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredCLI: 'codex', cliModel: 'a-model' }),
+    );
+  });
+
+  it('defaults preferredCLI to opencode when config.cli is absent', async () => {
+    mockTriageIssue.mockResolvedValue({ issueIid: '42', status: 'PENDING_APPROVAL' });
+    const triageCommand = await loadCommand();
+
+    await triageCommand.parseAsync(['triage', '42'], { from: 'user' });
+
+    const { createCLIBridgeGenerateFn } = await import('ghagga-core');
+    expect(createCLIBridgeGenerateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredCLI: 'opencode' }),
+    );
+  });
+
   it('dispatches "triage --new" to triageNew', async () => {
     mockTriageNew.mockResolvedValue([]);
     const triageCommand = await loadCommand();
