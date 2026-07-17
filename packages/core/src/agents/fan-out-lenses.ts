@@ -35,6 +35,7 @@ import {
   wrapUntrustedDiff,
 } from './prompts.js';
 import { parseFindingsBlock } from './simple.js';
+import { getDeadVoiceReason } from './voice-validation.js';
 
 // ─── Lens Definition ───────────────────────────────────────────
 
@@ -563,6 +564,14 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
         .join('\n');
 
       const result = await generateFn(system, userPrompt);
+
+      // A fulfilled call can still be a dead voice (e.g. gateway returned
+      // HTTP 200 whose text is a raw CLI error envelope). Route it into the
+      // existing rejected/failure path instead of counting it as a lens pass.
+      const deadReason = getDeadVoiceReason(result.text);
+      if (deadReason) {
+        throw new Error(`${lens.label} (${result.provider}/${result.model}): ${deadReason}`);
+      }
 
       return {
         name: lens.name,

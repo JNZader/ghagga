@@ -302,6 +302,100 @@ describe('runWorkflowReview', () => {
     expect(result.metadata.mode).toBe('workflow');
   });
 
+  // ── Dead voices (fulfilled with garbage) ──
+
+  it('treats a specialist that fulfills with a CLI error envelope as failed', async () => {
+    const errorEnvelope = JSON.stringify({
+      type: 'result',
+      subtype: 'error_max_turns',
+      is_error: true,
+      duration_ms: 42,
+    });
+    const onProgress = vi.fn();
+    let callCount = 0;
+    const fn: GenerateTextFn = vi.fn(async () => {
+      callCount++;
+      if (callCount === 2) {
+        return { text: errorEnvelope, tokensUsed: 999, provider: 'gateway', model: 'auto' };
+      }
+      return { text: `Output ${callCount}`, tokensUsed: 150, provider: 'gateway', model: 'auto' };
+    });
+
+    const result = await runWorkflowReview(makeInput({ onProgress, generateFns: [fn] }));
+
+    // ✗ emitted for the dead voice, not ✓
+    const failedCalls = onProgress.mock.calls.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: mock callback type
+      ([event]: [any]) => event.step.startsWith('specialist-') && event.message.includes('✗'),
+    );
+    expect(failedCalls).toHaveLength(1);
+    expect(failedCalls[0]?.[0].message).toContain('FAILED');
+
+    // [FAILED] marker (not the raw envelope as a success) in the synthesis prompt
+    const synthesisCall = (vi.mocked(fn).mock.calls as [string, string][])[5];
+    expect(synthesisCall?.[1]).toContain('[FAILED]');
+    expect(synthesisCall?.[1]).toContain('error envelope');
+
+    // modelsUsed tags the dead voice as FAILED instead of a success entry
+    const failedEntries = (result.metadata.modelsUsed ?? []).filter((m) => m.includes('[FAILED:'));
+    expect(failedEntries).toHaveLength(1);
+
+    // Tokens from the dead voice are NOT counted: 4 specialists + synthesis = 5 * 150
+    expect(mockParseReviewResponse).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      750,
+      expect.any(Number),
+      null,
+    );
+  });
+
+  it('treats a specialist that fulfills with empty text as failed', async () => {
+    const onProgress = vi.fn();
+    let callCount = 0;
+    const fn: GenerateTextFn = vi.fn(async () => {
+      callCount++;
+      if (callCount === 3) {
+        return { text: '   \n', tokensUsed: 150, provider: 'gateway', model: 'auto' };
+      }
+      return { text: `Output ${callCount}`, tokensUsed: 150, provider: 'gateway', model: 'auto' };
+    });
+
+    await runWorkflowReview(makeInput({ onProgress, generateFns: [fn] }));
+
+    const failedCalls = onProgress.mock.calls.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: mock callback type
+      ([event]: [any]) => event.step.startsWith('specialist-') && event.message.includes('✗'),
+    );
+    expect(failedCalls).toHaveLength(1);
+
+    const synthesisCall = (vi.mocked(fn).mock.calls as [string, string][])[5];
+    expect(synthesisCall?.[1]).toContain('[FAILED]');
+    expect(synthesisCall?.[1]).toContain('empty response text');
+  });
+
+  it('does not flag a normal review that merely contains the word "error"', async () => {
+    const onProgress = vi.fn();
+    const fn: GenerateTextFn = vi.fn(async () => ({
+      text: 'STATUS: FAILED\nSUMMARY: Missing error handling.\nFINDINGS:\n- error path uncovered',
+      tokensUsed: 150,
+      provider: 'gateway',
+      model: 'auto',
+    }));
+
+    await runWorkflowReview(makeInput({ onProgress, generateFns: [fn] }));
+
+    const successCalls = onProgress.mock.calls.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: mock callback type
+      ([event]: [any]) => event.step.startsWith('specialist-') && event.message.includes('✓'),
+    );
+    expect(successCalls).toHaveLength(5);
+
+    const synthesisCall = (vi.mocked(fn).mock.calls as [string, string][])[5];
+    expect(synthesisCall?.[1]).not.toContain('[FAILED]');
+  });
+
   // ── Token counting ──
 
   it('aggregates tokens from all successful specialists and synthesis', async () => {

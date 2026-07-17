@@ -201,3 +201,58 @@ describe('runConsensusReview — multi-provider distribution via generateFns arr
     expect(fn0).toHaveBeenCalledTimes(3);
   });
 });
+
+// ─── Dead voices (fulfilled with garbage) ───────────────────────
+
+describe('runConsensusReview — dead voice validation', () => {
+  it('treats a vote that fulfills with a CLI error envelope as failed', async () => {
+    const errorEnvelope = JSON.stringify({
+      type: 'result',
+      subtype: 'error_max_turns',
+      is_error: true,
+    });
+    const onProgress = vi.fn();
+    let callCount = 0;
+    const fn: GenerateTextFn = vi.fn(async () => {
+      callCount++;
+      if (callCount === 2) {
+        return { text: errorEnvelope, tokensUsed: 999, provider: 'gateway', model: 'auto' };
+      }
+      return { text: makeVoteText(), tokensUsed: 150, provider: 'gateway', model: 'auto' };
+    });
+
+    const result = await runConsensusReview(makeInput({ onProgress, generateFns: [fn] }));
+
+    // Dead voice emitted as ✗ FAILED, not counted as a vote
+    const failedCalls = onProgress.mock.calls.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: mock callback type
+      ([event]: [any]) => event.step.startsWith('vote-') && event.message.includes('✗'),
+    );
+    expect(failedCalls).toHaveLength(1);
+    expect(failedCalls[0]?.[0].message).toContain('error envelope');
+
+    // Tokens from the dead voice are not counted: 2 healthy votes * 150
+    expect(result.metadata.tokensUsed).toBe(300);
+  });
+
+  it('treats a vote that fulfills with empty text as failed', async () => {
+    const onProgress = vi.fn();
+    let callCount = 0;
+    const fn: GenerateTextFn = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return { text: '   ', tokensUsed: 150, provider: 'gateway', model: 'auto' };
+      }
+      return { text: makeVoteText(), tokensUsed: 150, provider: 'gateway', model: 'auto' };
+    });
+
+    const result = await runConsensusReview(makeInput({ onProgress, generateFns: [fn] }));
+
+    const failedCalls = onProgress.mock.calls.filter(
+      // biome-ignore lint/suspicious/noExplicitAny: mock callback type
+      ([event]: [any]) => event.step.startsWith('vote-') && event.message.includes('✗'),
+    );
+    expect(failedCalls).toHaveLength(1);
+    expect(result.metadata.tokensUsed).toBe(300);
+  });
+});
