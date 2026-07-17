@@ -58,20 +58,23 @@ function resolveEngineOptions(
 ): EngineOptions {
   const path = resolveConfigPath({ explicitPath: configPath });
   const config = loadConfig(path);
+  // Which CLI backend drives the LLM calls. Defaults to 'opencode' so existing
+  // configs are unchanged; set `cli: 'codex'` in the config to use the codex CLI.
+  const preferredCLI = config.cli ?? 'opencode';
   return {
     config,
     rerankGenerateFn: createCLIBridgeGenerateFn({
-      preferredCLI: 'opencode',
+      preferredCLI,
       cliModel: config.models.rerank,
     }),
     analysisGenerateFn: createCLIBridgeGenerateFn({
-      preferredCLI: 'opencode',
+      preferredCLI,
       cliModel: config.models.analysis,
     }),
     ...(opts.reproduce
       ? {
           reproduceGenerateFn: createCLIBridgeGenerateFn({
-            preferredCLI: 'opencode',
+            preferredCLI,
             cliModel: config.models?.reproduce ?? DEFAULT_REPRODUCE_MODEL,
           }),
           ...resolveReproduceLoginOptions(),

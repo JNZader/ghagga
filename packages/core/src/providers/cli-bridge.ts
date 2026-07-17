@@ -5,25 +5,45 @@
  * 1. opencode run --model <provider/model> --format json "<prompt>"
  * 2. copilot -p "prompt"
  * 3. gemini -p "prompt" --output-format text
- *
- * Legacy alias:
- * - 'claude' is treated as 'opencode' with default cliModel 'anthropic/claude-sonnet-4-5'
+ * 4. codex exec --model <model> --output-last-message <tmpfile> "<prompt>"
+ * 5. claude -p --model <alias|model> "<prompt>"
  *
  * Authentication:
  * - OpenCode: provider-specific env var (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
  * - Gemini: GEMINI_API_KEY env var or google account
  * - Copilot: COPILOT_GITHUB_TOKEN or GH_TOKEN env var
+ * - Codex: its own local session (~/.codex) — no credential env var needed
+ * - Claude: its own local session (~/.claude) — no credential env var needed
  */
 
-import { execSync } from 'node:child_process';
-import { unlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // ─── Constants ──────────────────────────────────────────────────
 
-/** Default model used when 'claude' legacy alias is resolved to 'opencode'. */
-const CLAUDE_LEGACY_DEFAULT_MODEL = 'anthropic/claude-sonnet-4-5';
+/** Default model for the codex adapter when no cliModel is supplied. */
+const CODEX_DEFAULT_MODEL = 'gpt-5.4';
+
+/**
+ * Default model alias for the claude adapter when no cliModel is supplied.
+ * The claude CLI accepts short aliases ('sonnet', 'opus', 'haiku', 'fable')
+ * or a full model id.
+ */
+const CLAUDE_DEFAULT_MODEL = 'sonnet';
+
+/**
+ * Timeout (ms) for the codex adapter. Larger than the shared CLI_EXEC_OPTIONS
+ * default because gpt-5.x reasoning models can be slow to produce a final message.
+ */
+const CODEX_TIMEOUT_MS = 240_000;
+
+/**
+ * Timeout (ms) for the claude adapter. Matches the codex timeout because claude
+ * can also be slow to respond on large prompts.
+ */
+const CLAUDE_TIMEOUT_MS = 240_000;
 
 /** Prompt size threshold (in chars) above which stdin is used instead of inline arg. */
 const STDIN_THRESHOLD = 10_000;
@@ -100,15 +120,15 @@ const SAFE_ENV_VARS: readonly string[] = [
 // ─── Types ──────────────────────────────────────────────────────
 
 /** Valid CLI tool names for explicit selection. */
-export type CLIToolName = 'opencode' | 'gemini' | 'copilot';
+export type CLIToolName = 'opencode' | 'gemini' | 'copilot' | 'codex' | 'claude';
 
 /** Options for generateViaCLI(). */
 export interface CLIBridgeOptions {
   /**
-   * Preferred CLI tool to use.
-   * Also accepts 'claude' as a legacy alias → mapped to 'opencode' at runtime.
+   * Preferred CLI tool to use. 'claude' is a first-class adapter that invokes
+   * the real `claude` CLI (`claude -p --model <alias|model>`).
    */
-  preferredCLI?: CLIToolName | 'claude' | (string & {});
+  preferredCLI?: CLIToolName | (string & {});
   /** OpenCode model in `provider/model` format (e.g., 'anthropic/claude-sonnet-4-5'). */
   cliModel?: string;
   /** Injected credentials mapped by env var name (e.g., { ANTHROPIC_API_KEY: 'sk-...' }). */
@@ -146,8 +166,10 @@ export class CLIConfigurationError extends Error {
  */
 function detectCLI(command: string): boolean {
   try {
-    // nosemgrep: command-injection-node -- `command` is only ever the hardcoded literals 'opencode'/'copilot'/'gemini' (see adapters[].command); no external input.
-    execSync(`which ${command}`, { timeout: 3000, stdio: 'pipe' });
+    // execFileSync passes `command` as a literal argv element to `which` — no shell,
+    // so no interpretation of shell metacharacters even if `command` were untrusted
+    // (it never is: only the hardcoded adapter names reach here).
+    execFileSync('which', [command], { timeout: 3000, stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -156,7 +178,7 @@ function detectCLI(command: string): boolean {
 
 // ─── CLI Exec Options ───────────────────────────────────────────
 
-const CLI_EXEC_OPTIONS: import('node:child_process').ExecSyncOptionsWithStringEncoding = {
+const CLI_EXEC_OPTIONS: import('node:child_process').ExecFileSyncOptionsWithStringEncoding = {
   timeout: 180_000,
   maxBuffer: 10 * 1024 * 1024,
   encoding: 'utf8',
@@ -397,33 +419,29 @@ const adapters: CLIAdapter[] = [
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 
       // Build args: opencode run --model <model> --format json [inline-prompt]
+      // No shell — execFileSync passes each element as an inert argv entry, so the
+      // prompt (untrusted issue body) can NEVER be interpreted as a shell command.
+      const useStdin = fullPrompt.length > STDIN_THRESHOLD;
       const args = ['run'];
       if (cliModel) {
         args.push('--model', cliModel);
       }
       args.push('--format', 'json');
+      if (!useStdin) {
+        args.push(fullPrompt);
+      }
 
-      const cmdArgs = args.map((a) => JSON.stringify(a)).join(' ');
-
-      const execOptions: import('node:child_process').ExecSyncOptionsWithStringEncoding = {
+      const execOptions: import('node:child_process').ExecFileSyncOptionsWithStringEncoding = {
         ...CLI_EXEC_OPTIONS,
         ...(env ? { env } : {}),
+        ...(useStdin ? { input: fullPrompt } : {}),
       };
 
       let raw: string;
-      const cmd =
-        fullPrompt.length > STDIN_THRESHOLD
-          ? `opencode ${cmdArgs}`
-          : `opencode ${cmdArgs} ${JSON.stringify(fullPrompt)}`;
-
       try {
-        // nosemgrep: command-injection-node -- `cmd` is built from JSON.stringify-quoted args + config-derived cliModel validated against CLI_MODEL_REGEX; the prompt is passed via stdin, never interpolated into the shell command.
-        raw = execSync(cmd, {
-          ...execOptions,
-          ...(fullPrompt.length > STDIN_THRESHOLD ? { input: fullPrompt } : {}),
-        });
+        raw = execFileSync('opencode', args, execOptions);
       } catch (execError: unknown) {
-        // execSync throws on non-zero exit — capture stderr for diagnostics
+        // execFileSync throws on non-zero exit — capture stderr for diagnostics
         const err = execError as {
           stderr?: Buffer | string;
           stdout?: Buffer | string;
@@ -457,9 +475,12 @@ const adapters: CLIAdapter[] = [
       const tmpFile = join(tmpdir(), `ghagga-prompt-${process.pid}-${Date.now()}.txt`);
       try {
         writeFileSync(tmpFile, prompt, 'utf8');
-        // nosemgrep: command-injection-node -- `tmpFile` is a server-constructed path (join(tmpdir(), `ghagga-prompt-${pid}-${Date.now()}.txt`)); the user prompt is written to that file, never interpolated into the shell command.
-        return execSync(
-          `copilot -p "Read and analyze the file at ${tmpFile} and provide a code review"`,
+        // execFileSync — no shell. The instruction string (with the server-constructed
+        // tmpFile path) is a single inert argv element; the user prompt lives in the
+        // file, never on the command line.
+        return execFileSync(
+          'copilot',
+          ['-p', `Read and analyze the file at ${tmpFile} and provide a code review`],
           { ...CLI_EXEC_OPTIONS, ...(env ? { env } : {}) },
         ).trim();
       } finally {
@@ -478,12 +499,131 @@ const adapters: CLIAdapter[] = [
     generate(prompt, systemPrompt, _cliModel, env) {
       // Gemini auto-detects non-TTY stdin and reads from it
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
-      // nosemgrep: command-injection-node -- literal constant command string; the user prompt is passed via stdin (input), never interpolated into the shell command.
-      return execSync('gemini -p - --output-format text', {
+      // execFileSync — no shell; the prompt is delivered via stdin (input), never argv.
+      return execFileSync('gemini', ['-p', '-', '--output-format', 'text'], {
         ...CLI_EXEC_OPTIONS,
         ...(env ? { env } : {}),
         input: fullPrompt,
       }).trim();
+    },
+  },
+  {
+    name: 'codex',
+    command: 'codex',
+    available: detectCLI('codex'),
+    generate(prompt, systemPrompt, cliModel, env) {
+      const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+      const model = cliModel ?? CODEX_DEFAULT_MODEL;
+
+      // `codex exec --output-last-message <file>` writes ONLY the final agent
+      // message (clean, no hook/token noise) to <file>; we read it back and
+      // clean up. Server-constructed temp path, mirrors the copilot adapter.
+      const outFile = join(tmpdir(), `ghagga-codex-${process.pid}-${Date.now()}.txt`);
+
+      // Large prompts (big diffs) exceed ARG_MAX inline — codex reads the prompt
+      // from stdin when `-` is passed instead of an inline PROMPT argument.
+      const useStdin = fullPrompt.length > STDIN_THRESHOLD;
+      // execFileSync — no shell. The prompt is either a single inert argv element
+      // (small prompts) or piped via stdin (large prompts); a `$(...)`/backtick in
+      // an issue body is therefore never evaluated by any shell.
+      const args = ['exec', '--model', model, '--output-last-message', outFile];
+      if (useStdin) {
+        args.push('-');
+      } else {
+        args.push(fullPrompt);
+      }
+
+      const execOptions: import('node:child_process').ExecFileSyncOptionsWithStringEncoding = {
+        ...CLI_EXEC_OPTIONS,
+        timeout: CODEX_TIMEOUT_MS,
+        ...(env ? { env } : {}),
+        ...(useStdin ? { input: fullPrompt } : {}),
+      };
+
+      try {
+        try {
+          execFileSync('codex', args, execOptions);
+        } catch (execError: unknown) {
+          // execFileSync throws on non-zero exit — capture stderr for diagnostics.
+          const err = execError as {
+            stderr?: Buffer | string;
+            stdout?: Buffer | string;
+            status?: number;
+          };
+          const stderr = err.stderr ? String(err.stderr).slice(0, 500) : 'no stderr';
+          const stdout = err.stdout ? String(err.stdout).slice(0, 200) : 'no stdout';
+          throw new Error(
+            `Codex exited with status ${err.status ?? 'unknown'}. stderr: ${sanitizeErrorMessage(stderr)}. stdout: ${sanitizeErrorMessage(stdout)}`,
+          );
+        }
+
+        const response = readFileSync(outFile, 'utf8').trim();
+        if (!response) {
+          throw new Error(
+            'Codex returned an empty response (--output-last-message file was empty).',
+          );
+        }
+        return response;
+      } finally {
+        try {
+          unlinkSync(outFile);
+        } catch {
+          /* ignore best-effort cleanup */
+        }
+      }
+    },
+  },
+  {
+    name: 'claude',
+    command: 'claude',
+    available: detectCLI('claude'),
+    generate(prompt, systemPrompt, cliModel, env) {
+      const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+      const model = cliModel ?? CLAUDE_DEFAULT_MODEL;
+
+      // `claude -p --model <m>` runs headless and prints ONLY the response to
+      // stdout (clean — no hook/token noise), unlike codex which needs
+      // --output-last-message. We capture stdout, trim, and return it.
+      //
+      // Large prompts (big diffs) exceed ARG_MAX inline — `claude -p` reads the
+      // prompt from stdin when no inline PROMPT argument is given.
+      const useStdin = fullPrompt.length > STDIN_THRESHOLD;
+      // execFileSync — no shell. Small prompts ride as a single inert argv element;
+      // large prompts go via stdin. Either way the prompt is never shell-interpreted.
+      const args = ['-p', '--model', model];
+      if (!useStdin) {
+        args.push(fullPrompt);
+      }
+
+      const execOptions: import('node:child_process').ExecFileSyncOptionsWithStringEncoding = {
+        ...CLI_EXEC_OPTIONS,
+        timeout: CLAUDE_TIMEOUT_MS,
+        ...(env ? { env } : {}),
+        ...(useStdin ? { input: fullPrompt } : {}),
+      };
+
+      let raw: string;
+      try {
+        raw = execFileSync('claude', args, execOptions);
+      } catch (execError: unknown) {
+        // execFileSync throws on non-zero exit — capture stderr for diagnostics.
+        const err = execError as {
+          stderr?: Buffer | string;
+          stdout?: Buffer | string;
+          status?: number;
+        };
+        const stderr = err.stderr ? String(err.stderr).slice(0, 500) : 'no stderr';
+        const stdout = err.stdout ? String(err.stdout).slice(0, 200) : 'no stdout';
+        throw new Error(
+          `Claude exited with status ${err.status ?? 'unknown'}. stderr: ${sanitizeErrorMessage(stderr)}. stdout: ${sanitizeErrorMessage(stdout)}`,
+        );
+      }
+
+      const response = raw.trim();
+      if (!response) {
+        throw new Error('Claude returned an empty response (stdout was empty).');
+      }
+      return response;
     },
   },
 ];
@@ -520,7 +660,7 @@ function isAdapterAvailable(adapter: CLIAdapter): boolean {
 
 /**
  * Get list of available CLI providers.
- * Returns names from the adapter list (opencode, copilot, gemini).
+ * Returns names from the adapter list (opencode, copilot, gemini, codex, claude).
  */
 export function getAvailableCLIs(): string[] {
   return adapters.filter(isAdapterAvailable).map((a) => a.name);
@@ -528,10 +668,11 @@ export function getAvailableCLIs(): string[] {
 
 /**
  * Generate text using CLI bridge.
- * Tries each available CLI in priority order: opencode -> copilot -> gemini.
+ * Tries each available CLI in priority order: opencode -> copilot -> gemini ->
+ * codex -> claude.
  *
- * Legacy alias: 'claude' is mapped to 'opencode' with default model
- * 'anthropic/claude-sonnet-4-5'.
+ * 'claude' is a first-class adapter that invokes the real `claude` CLI
+ * (`claude -p --model <alias|model>`, default alias 'sonnet').
  *
  * Configuration errors (malformed cliModel, unsupported provider prefix,
  * missing credentials) throw CLIConfigurationError immediately — they do NOT
@@ -547,18 +688,7 @@ export function generateViaCLI(
   systemPrompt?: string,
   options?: CLIBridgeOptions,
 ): { text: string; provider: string; cli: string } {
-  const { preferredCLI: rawPreferredCLI, cliModel: rawCliModel, credentials } = options ?? {};
-
-  // ── Legacy alias: 'claude' → 'opencode' with default model ──
-  let resolvedCLI = rawPreferredCLI;
-  let cliModel = rawCliModel;
-
-  if (rawPreferredCLI === 'claude') {
-    resolvedCLI = 'opencode';
-    if (!cliModel) {
-      cliModel = CLAUDE_LEGACY_DEFAULT_MODEL;
-    }
-  }
+  const { preferredCLI: resolvedCLI, cliModel, credentials } = options ?? {};
 
   // ── Validate cliModel (configuration error = hard fail) ──
   if (resolvedCLI === 'opencode' && cliModel) {
@@ -603,7 +733,9 @@ export function generateViaCLI(
   const available = adapters.filter(isAdapterAvailable);
 
   if (available.length === 0) {
-    throw new Error('No CLI providers available. Install one of: opencode, copilot, gemini');
+    throw new Error(
+      'No CLI providers available. Install one of: opencode, copilot, gemini, codex, claude',
+    );
   }
 
   // Reorder: preferred first, then rest
@@ -616,8 +748,11 @@ export function generateViaCLI(
 
   for (const adapter of ordered) {
     try {
-      // Pass cliModel only to the opencode adapter (others ignore it)
-      const modelArg = adapter.name === 'opencode' ? cliModel : undefined;
+      // Pass cliModel only to model-aware adapters (opencode, codex, claude); others ignore it.
+      const modelArg =
+        adapter.name === 'opencode' || adapter.name === 'codex' || adapter.name === 'claude'
+          ? cliModel
+          : undefined;
       const text = adapter.generate(prompt, systemPrompt, modelArg, subprocessEnv);
       return { text, provider: 'cli-bridge', cli: adapter.name };
     } catch (error) {
