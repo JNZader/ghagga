@@ -39,7 +39,7 @@ import { type ApprovalResult, approveAndPost, rejectDraft } from './queue/approv
 import { buildDraft, editDraftReply, getDraft, upsertDraft } from './queue/draft.js';
 import { defaultQueuePath, loadQueue, type Queue, repoSlug, saveQueue } from './queue/store.js';
 import { type ReproduceOptions, reproduce } from './reproduce/index.js';
-import { extractRouteFromIssueBody } from './reproduce/route.js';
+import { deduceRouteFromLabels, extractRouteFromIssueBody } from './reproduce/route.js';
 import { runTriage } from './triage/run.js';
 import type { IssueDraft } from './types/draft.js';
 import type { ReproEvidence } from './types/evidence.js';
@@ -93,17 +93,23 @@ function resolveQueuePath(options: Pick<EngineOptions, 'config' | 'queuePath'>):
  */
 async function autoReproduce(
   options: EngineOptions,
-  issue: Pick<ForgeIssue, 'title' | 'description' | 'rawDescription'>,
+  issue: Pick<ForgeIssue, 'title' | 'description' | 'rawDescription' | 'labels'>,
 ): Promise<ReproEvidence | null> {
   if (!options.config.app || !options.reproduceGenerateFn) {
     return null;
   }
 
-  // Route extraction reads the RAW (un-stripped) body: forge adapters strip the
-  // `---`-delimited widget trailer from `description`, which is where the
-  // `Ruta:` line lives. `rawDescription` retains it (falls back to the stripped
-  // `description` for adapters that do no stripping).
-  const route = extractRouteFromIssueBody(issue.rawDescription ?? issue.description);
+  // Route resolution — two sources, body wins:
+  //  1. The `Ruta:` line in the RAW (un-stripped) body: forge adapters strip the
+  //     `---`-delimited widget trailer from `description`, where the `Ruta:` line
+  //     lives; `rawDescription` retains it (falls back to `description`).
+  //  2. FALLBACK for issues WITHOUT a `Ruta:` line (e.g. created from meeting
+  //     notes, not the widget): deduce the route from the `módulo::X` label via
+  //     the default `/app/<module>` heuristic + `config.moduleRoutes` overrides.
+  // Skip reproduce only when BOTH yield null.
+  const route =
+    extractRouteFromIssueBody(issue.rawDescription ?? issue.description) ??
+    deduceRouteFromLabels(issue.labels, options.config.moduleRoutes);
   if (!route) {
     return null;
   }

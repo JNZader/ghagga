@@ -49,6 +49,13 @@ export const TriageConfigSchema = z.object({
    * entry kinds. Directory-only maps remain fully backward compatible.
    */
   moduleMap: z.record(z.string(), z.array(z.string())).optional(),
+  /**
+   * Maps a module label (the part after `módulo::`) to the in-app route
+   * REPRODUCE should navigate when the issue body has no `Ruta:` line.
+   * Overrides the default `/app/<module>` heuristic. Example:
+   * `{ "equipos": "/app/tanques" }`.
+   */
+  moduleRoutes: z.record(z.string(), z.string()).optional(),
   synonyms: z.record(z.string(), z.array(z.string())).optional(),
   stopwords: z.array(z.string()).optional(),
   language: z.enum(['go', 'ts', 'js', 'py', 'rust', 'java']).default('go'),

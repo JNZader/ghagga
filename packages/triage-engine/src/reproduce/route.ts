@@ -24,3 +24,31 @@ export function extractRouteFromIssueBody(
   const match = body.match(pattern);
   return match?.[1] ?? null;
 }
+
+const MODULE_LABEL_PATTERN = /^m[oó]dulo::(.+)$/i;
+
+/**
+ * Deduces the in-app route from an issue's MODULE LABEL (`módulo::X`) when the
+ * body has no `Ruta:` line — the fallback for issues created from meeting
+ * notes rather than the in-app feedback widget.
+ *
+ * Finds the first `módulo::<slug>` label (also accepts `modulo::` without the
+ * accent for safety), then resolves the route: an explicit `moduleRoutes[slug]`
+ * override wins, otherwise the default `/app/<slug>` heuristic applies. Returns
+ * `null` when no `módulo::` label is present.
+ *
+ * Pure and unit-tested.
+ */
+export function deduceRouteFromLabels(
+  labels: string[],
+  moduleRoutes?: Record<string, string>,
+): string | null {
+  for (const label of labels) {
+    const match = label.match(MODULE_LABEL_PATTERN);
+    const slug = match?.[1]?.trim();
+    if (slug) {
+      return moduleRoutes?.[slug] ?? `/app/${slug}`;
+    }
+  }
+  return null;
+}

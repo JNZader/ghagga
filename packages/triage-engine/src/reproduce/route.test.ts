@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractRouteFromIssueBody } from './route.js';
+import { deduceRouteFromLabels, extractRouteFromIssueBody } from './route.js';
 
 describe('extractRouteFromIssueBody', () => {
   it('extracts the plain widget line: "Módulo: X · Ruta: /app/alertas"', () => {
@@ -40,5 +40,37 @@ describe('extractRouteFromIssueBody', () => {
   it('is case-insensitive on the "Ruta:" label', () => {
     const body = 'ruta: /app/lowercase';
     expect(extractRouteFromIssueBody(body)).toBe('/app/lowercase');
+  });
+});
+
+describe('deduceRouteFromLabels', () => {
+  it('deduces /app/<module> from a módulo:: label via the heuristic', () => {
+    expect(deduceRouteFromLabels(['bug', 'módulo::checklists'])).toBe('/app/checklists');
+  });
+
+  it('prefers a moduleRoutes override over the /app/<module> heuristic', () => {
+    expect(deduceRouteFromLabels(['módulo::equipos'], { equipos: '/app/tanques' })).toBe(
+      '/app/tanques',
+    );
+  });
+
+  it('falls back to the heuristic for modules absent from moduleRoutes', () => {
+    expect(deduceRouteFromLabels(['módulo::compliance'], { equipos: '/app/tanques' })).toBe(
+      '/app/compliance',
+    );
+  });
+
+  it('accepts the non-accented "modulo::" spelling', () => {
+    expect(deduceRouteFromLabels(['modulo::configuracion-planta'])).toBe(
+      '/app/configuracion-planta',
+    );
+  });
+
+  it('returns null when no módulo:: label is present', () => {
+    expect(deduceRouteFromLabels(['bug', 'prioridad::alta'])).toBeNull();
+  });
+
+  it('returns null for an empty label list', () => {
+    expect(deduceRouteFromLabels([])).toBeNull();
   });
 });

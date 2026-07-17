@@ -355,6 +355,52 @@ describe('triageIssue auto-reproduction wiring', () => {
     expect(draft.reproductionEvidence).toBeNull();
   });
 
+  it('deduces the route from a módulo:: label when the body has no Ruta: line', async () => {
+    // Issue created from meeting notes (no widget trailer) but carrying a
+    // module label — the fallback deduces /app/<module> and reproduce runs.
+    forge.getIssue = vi.fn(async (iid: string) => ({
+      ...makeIssueWithRoute(iid),
+      description: 'No widget metadata in this body at all.',
+      rawDescription: 'No widget metadata in this body at all.',
+      labels: ['bug', 'módulo::compliance'],
+    }));
+
+    const draft = await triageIssue(options, '42');
+
+    expect(mockedReproduce).toHaveBeenCalledTimes(1);
+    const [, , , reproOptionsArg] = mockedReproduce.mock.calls.at(0) ?? [];
+    expect(reproOptionsArg).toMatchObject({ route: '/app/compliance' });
+    expect(draft.reproductionEvidence).toEqual(FAKE_EVIDENCE);
+  });
+
+  it('honors a moduleRoutes override when deducing the route from a label', async () => {
+    options.config = { ...options.config, moduleRoutes: { equipos: '/app/tanques' } };
+    forge.getIssue = vi.fn(async (iid: string) => ({
+      ...makeIssueWithRoute(iid),
+      description: 'No widget metadata in this body at all.',
+      rawDescription: 'No widget metadata in this body at all.',
+      labels: ['módulo::equipos'],
+    }));
+
+    await triageIssue(options, '42');
+
+    const [, , , reproOptionsArg] = mockedReproduce.mock.calls.at(0) ?? [];
+    expect(reproOptionsArg).toMatchObject({ route: '/app/tanques' });
+  });
+
+  it('prefers the body Ruta: route over a deduced label route', async () => {
+    // Body has BOTH a Ruta: line and a módulo:: label — the body route wins.
+    forge.getIssue = vi.fn(async (iid: string) => ({
+      ...makeIssueWithRoute(iid),
+      labels: ['módulo::compliance'],
+    }));
+
+    await triageIssue(options, '42');
+
+    const [, , , reproOptionsArg] = mockedReproduce.mock.calls.at(0) ?? [];
+    expect(reproOptionsArg).toMatchObject({ route: '/app/alertas' });
+  });
+
   it('proceeds with the triage (no throw) when reproduce() rejects — evidence is absent, not fatal', async () => {
     mockedReproduce.mockRejectedValueOnce(new Error('chromium launch failed'));
 
