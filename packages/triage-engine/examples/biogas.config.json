@@ -12,6 +12,9 @@
     ],
     "checklists": ["apps/backend/internal/**/checklist*.go"]
   },
+  "moduleRoutes": {
+    "equipos": "/app/tanques"
+  },
   "synonyms": {
     "umbral": ["threshold", "limit"],
     "umbrales": ["threshold", "limit"],
