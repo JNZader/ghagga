@@ -4,6 +4,80 @@ Tracked-but-deferred work. OPEN items at the top.
 
 ## OPEN
 
+### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity, cleanly separated
+
+Hybrid of the 4R lens protocol (risk/reliability/resilience/readability with
+precision gate, batched refutation, ledger, scoped re-review) and the Nvr
+cross-family pattern. The two diversify **orthogonal axes** — 4R by lens (deep,
+single family), Nvr by training distribution (broad, no lens) — and today ghagga
+can't express the combination without confounding them: `fan-out --lenses`
+assigns engines to lenses round-robin from the chain, so if the security lens
+lands on one family and misses, you can't attribute the miss (lens or family?).
+
+Motivating incident (biogas-platform, 2026-07-28): a full 4R ran with 4 lenses
++ 3 refuters, all one family — the protocol's depth worked (2 CRITICALs found,
+confirmed 3-0), but a prior precedent in the same codebase (biogas-v2) had the
+inverse failure: 3 same-family voices returned CLEAN and a different-family
+contrarian caught a HIGH in the same INSERT/UPSERT bug-class. Finder-level
+family blind spots are real and no refutation stage can kill a finding nobody
+found.
+
+**Four features:**
+
+1. **Explicit lens→engine pinning.** Declare "all 4R lenses go to family X"
+   plus "contrarian voices (no lens, whole diff) go to families Y, Z". Kills
+   the round-robin confound; every miss becomes attributable to exactly one
+   axis.
+2. **Refutation stage.** Two-phase pipeline: merge lens+contrarian ledgers →
+   filter BLOCKER/CRITICAL → dispatch the **complete** candidate list to K
+   refuters (one per family, batched — never one task per finding) → per-finding
+   2-of-K vote; malformed/missing verdict defaults to `stands`.
+3. **Ledger as a first-class structured contract** (id/lens/location/severity/
+   status/evidence), schema-validated per voice, so merge, refutation and
+   scoped re-review (fix diff + ledger only, max 2 rounds) are mechanical.
+   Persisted ledgers also yield **per-family metrics** (hit rate, FP rate by
+   voice/lens) — turning engine selection into data instead of intuition.
+4. **Enforced anchoring.** `--anchor <sha>`: checkout/worktree the exact commit
+   before any engine sees the diff; refuse the review if an engine can't see
+   that tree. Hard-codes the rule "couldn't grep it is NEVER refutation"
+   (learned the hard way: refuters once graded a stale ancestor tree and
+   declared real code fictional).
+
+**Sketch:**
+
+```json
+{ "mode": "hybrid-4r",
+  "lensFamily": "claude-cli",
+  "contrarians": ["codex-cli:gpt-5.5", "opencode-cli:kimi-k2.7-code"],
+  "refuters": ["claude-cli", "codex-cli", "opencode-cli:kimi-k2.7-code"],
+  "refuteRule": "2-of-3", "anchor": "auto" }
+```
+
+**Lensed contrarians (operator-validated variant).** The operator's lived
+evidence from the manual Nvr era is that family diversity paid off at the
+*finder* level — "what one family didn't see, another did". So contrarians
+should support carrying the **full 4R lens prompt-pack in a single pass**
+(`"contrarians": [{"engine": "codex-cli:gpt-5.5", "lenses": "4r-pack"}]`):
+family B reads the diff through the same four lenses as family A, in one call
+instead of four deep reviews. This captures cross-family finder coverage at
+1-2 calls; the full 4-lenses×2-families matrix stays reserved for the top
+tier, where same-lens×2-families duplication is the highest-confidence signal.
+
+**Scaling doctrine (tiers, cheapest-independent axis first):** scale
+contrarians first (1 call each, near-orthogonal coverage), then refuter
+*diversity* (3 distinct families beats 5 voices — a refuter grades a closed
+list; the 5th opinion duplicates one of the first 3), and only at the top
+duplicate the expensive correlated axis (a 2nd full lens-family) for
+money/RLS/auth pre-prod gates, where same-lens×2-families duplication becomes a
+high-confidence auto-fix signal. 3 lens-families: reserved for irreversible
+changes (destructive migrations, crypto); otherwise that budget pays more as a
+3rd contrarian.
+
+Validation plan agreed with the operator: run the hybrid once **manually**
+(orchestrator-driven, cross-family voices via the bridge) on the next real
+pre-prod review of biogas-platform; codify as a ghagga mode with what that run
+teaches. (Filed 2026-07-28 from the biogas demo-plant 4R session.)
+
 ### BL-GITLAB-MR-WRITE-E2E — run the GitLab `--mr` write-path live, against a real instance
 
 The `--mr` (GitLab MR post-back) path is fully unit/contract-tested
