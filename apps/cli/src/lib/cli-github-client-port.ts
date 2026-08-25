@@ -19,6 +19,7 @@
  *     - addCommentReaction
  *     - fetchGraphFromBranch, fetchGraphMetadata
  *     - fetchFileContents (server-only, checkout-less triage)
+ *     - searchCode (server-only, checkout-less triage fallback)
  *   Each stub THROWS so any accidental call surfaces loudly instead of silently
  *   returning bad data. The `--pr` post-back path (find → delete → post) only
  *   ever touches the REAL members; see pr-postback.ts + tests.
@@ -235,6 +236,11 @@ export function createCliGitHubClientPort(): GitHubClientPort {
       // Server-only (checkout-less triage). The CLI --pr flow sources code
       // locally, so this read member is stubbed like the others.
       return unsupported('fetchFileContents');
+    },
+    async searchCode(): Promise<never> {
+      // Server-only (checkout-less triage fallback). The CLI --pr flow sources
+      // code locally, so this read member is stubbed like the others.
+      return unsupported('searchCode');
     },
   };
 }

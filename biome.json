@@ -157,7 +157,8 @@
                       "addCommentReaction",
                       "fetchGraphFromBranch",
                       "fetchGraphMetadata",
-                      "fetchFileContents"
+                      "fetchFileContents",
+                      "searchCode"
                     ]
                   },
                   "./github/client.js": {
@@ -174,7 +175,8 @@
                       "addCommentReaction",
                       "fetchGraphFromBranch",
                       "fetchGraphMetadata",
-                      "fetchFileContents"
+                      "fetchFileContents",
+                      "searchCode"
                     ]
                   },
                   "../github/client.js": {
@@ -191,7 +193,8 @@
                       "addCommentReaction",
                       "fetchGraphFromBranch",
                       "fetchGraphMetadata",
-                      "fetchFileContents"
+                      "fetchFileContents",
+                      "searchCode"
                     ]
                   },
                   "../../github/client.js": {
@@ -208,7 +211,8 @@
                       "addCommentReaction",
                       "fetchGraphFromBranch",
                       "fetchGraphMetadata",
-                      "fetchFileContents"
+                      "fetchFileContents",
+                      "searchCode"
                     ]
                   }
                 }

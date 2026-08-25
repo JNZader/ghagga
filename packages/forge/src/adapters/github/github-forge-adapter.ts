@@ -31,6 +31,7 @@ import type {
   GraphReadCapable,
   ReactionCapable,
   ReactionKind,
+  SearchCapable,
 } from '../../ports/forge-adapter.js';
 import { REACTION_KIND } from '../../ports/forge-adapter.js';
 import type {
@@ -95,7 +96,7 @@ function toNativeCommentId(commentId: CommentId): number {
  * will skip inline publishing cleanly.
  */
 export class GitHubForgeAdapter
-  implements ForgeAdapterBase, ReactionCapable, GraphReadCapable, FileReadCapable
+  implements ForgeAdapterBase, ReactionCapable, GraphReadCapable, FileReadCapable, SearchCapable
 {
   readonly capabilities: ForgeCapabilities = {
     reactions: true,
@@ -347,6 +348,23 @@ export class GitHubForgeAdapter
     // the client's "default branch" sentinel (Contents API omits ?ref).
     return this.#mapAuth(() =>
       this.#client.fetchFileContents(this.#owner, this.#repo, path, ref ?? '', this.#token),
+    );
+  }
+
+  // ─── SearchCapable ──────────────────────────────────────────────
+
+  /**
+   * Search the repo's code (default branch) for `term`. Throttle/rate-limit and
+   * other non-auth degradation all live INSIDE client.searchCode (it returns
+   * `[]` rather than throwing); this adapter delegates with the adapter's fixed
+   * owner/repo, wrapped in `#mapAuth` so a genuine 401/403 reclassifies to
+   * `ForgeAuthError` — same P2 token-remint recovery every other read gets. Not
+   * exposed via the `capabilities` flags: consumers narrow by method-presence
+   * (`'searchCode' in adapter`) per the R-CAPABILITY doctrine.
+   */
+  async searchCode(_repo: RepoRef, term: string, limit: number): Promise<string[]> {
+    return this.#mapAuth(() =>
+      this.#client.searchCode(this.#owner, this.#repo, term, limit, this.#token),
     );
   }
 }

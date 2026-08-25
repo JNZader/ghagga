@@ -10,6 +10,7 @@ import {
   getPRCommitMessages,
   getPRFileList,
   listIssueComments,
+  searchCode,
   verifyWebhookSignature,
 } from './client.js';
 
@@ -972,5 +973,152 @@ describe('fetchFileContents (ERE-transfer: remote code-in-evidence, hardened)', 
     await expect(fetchFileContents('octo', 'demo', 'a.ts', 'main', 'tok')).rejects.toThrow(
       'GitHub API error fetching file: 500 Server Error',
     );
+  });
+});
+
+describe('searchCode (triage-search-discovery T3: throttle-isolated code search)', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const searchResponse = (paths: string[]) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: () => Promise.resolve({ items: paths.map((path) => ({ path })) }),
+  });
+
+  it('hits the search/code endpoint with a URLSearchParams-encoded q + per_page', async () => {
+    mockFetch.mockResolvedValueOnce(searchResponse(['src/a.ts', 'src/b.ts']));
+    const out = await searchCode('octo', 'demo', 'fetchGraph', 5, 'tok');
+    expect(out).toEqual(['src/a.ts', 'src/b.ts']);
+    const url = mockFetch.mock.calls[0][0] as string;
+    expect(url).toContain('https://api.github.com/search/code?');
+    expect(url).toContain('q=fetchGraph+repo%3Aocto%2Fdemo');
+    expect(url).toContain('per_page=5');
+  });
+
+  it('caps per_page at MAX_SEARCH_RESULTS even when limit is larger', async () => {
+    mockFetch.mockResolvedValueOnce(searchResponse([]));
+    await searchCode('octo', 'demo', 'fetchGraph', 999, 'tok');
+    const url = mockFetch.mock.calls[0][0] as string;
+    expect(url).toContain('per_page=10');
+  });
+
+  it('validates owner/repo/term/limit BEFORE any network call (term out-of-charset → 400)', async () => {
+    await expect(searchCode('octo/evil', 'demo', 'fetchGraph', 5, 'tok')).rejects.toThrow(
+      /invalid owner/,
+    );
+    await expect(searchCode('octo', '..', 'fetchGraph', 5, 'tok')).rejects.toThrow(/invalid repo/);
+    await expect(searchCode('octo', 'demo', 'bad term!', 5, 'tok')).rejects.toThrow(/invalid term/);
+    await expect(searchCode('octo', 'demo', 'a'.repeat(65), 5, 'tok')).rejects.toThrow(
+      /invalid term/,
+    );
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 0, 'tok')).rejects.toThrow(
+      /invalid limit/,
+    );
+    await expect(searchCode('octo', 'demo', 'fetchGraph', -1, 'tok')).rejects.toThrow(
+      /invalid limit/,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('returns [] on a 429 (rate-limited) without throwing', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+  });
+
+  it('returns [] on a 422 (search-specific rejection) without throwing', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      headers: { get: () => null },
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+  });
+
+  it('returns [] on a 403 WITH rate-limit-remaining=0 (secondary rate limit)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      headers: { get: (h: string) => (h === 'x-ratelimit-remaining' ? '0' : null) },
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+  });
+
+  it('returns [] on a 403 WITH a retry-after header (abuse detection)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      headers: { get: (h: string) => (h === 'retry-after' ? '30' : null) },
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+  });
+
+  it('THROWS on a genuine 403 (no rate-limit headers) — not a throttle', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: () => null },
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).rejects.toThrow(
+      'GitHub API error searching code: 403 Forbidden',
+    );
+  });
+
+  it('throws on a genuine 5xx failure', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: 'Server Error',
+      headers: { get: () => null },
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).rejects.toThrow(
+      'GitHub API error searching code: 500 Server Error',
+    );
+  });
+
+  it('returns [] for an empty/malformed items array, never throws', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: () => Promise.resolve({ items: [] }),
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: () => Promise.resolve({}),
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: () => Promise.reject(new Error('bad json')),
+    });
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+  });
+
+  it('dedupes paths and caps at limit', async () => {
+    mockFetch.mockResolvedValueOnce(searchResponse(['a.ts', 'a.ts', 'b.ts', 'c.ts']));
+    const out = await searchCode('octo', 'demo', 'fetchGraph', 2, 'tok');
+    expect(out).toEqual(['a.ts', 'b.ts']);
   });
 });

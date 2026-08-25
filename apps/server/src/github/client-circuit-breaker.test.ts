@@ -15,6 +15,7 @@ import {
   getPRCommitMessages,
   getPRFileList,
   postComment,
+  searchCode,
 } from './client.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -245,6 +246,62 @@ describe('GitHub client circuit breaker integration', () => {
 
     // 1 more failure from getPRFileList trips it
     await expect(getPRFileList('owner', 'repo', 1, 'token')).rejects.toThrow();
+    expect(githubCircuitBreaker.getState()).toBe('open');
+  });
+
+  // ── searchCode: throttled responses never open the breaker ───
+
+  /** Stub fetch to return a 429 (rate-limited) for every call. */
+  function stubFetch429(): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { get: () => null },
+        json: () => Promise.resolve({}),
+      }),
+    );
+  }
+
+  it('BREAKER ISOLATION: N throttled (429) searchCode calls never open the shared breaker', async () => {
+    stubFetch429();
+
+    // Well over the threshold (5) — a throttle degrades to [] and is fetched
+    // OUTSIDE the breaker, so neither onFailure() nor onSuccess() fires and the
+    // breaker must stay closed the whole time.
+    for (let i = 0; i < 8; i++) {
+      await expect(searchCode('owner', 'repo', 'fetchGraph', 5, 'token')).resolves.toEqual([]);
+    }
+    expect(githubCircuitBreaker.getState()).toBe('closed');
+
+    // Prove the breaker is genuinely still usable: a DIFFERENT function's
+    // success still routes through the SAME breaker instance.
+    stubFetchOk([{ filename: 'still-works.ts' }]);
+    const files = await getPRFileList('owner', 'repo', 1, 'token');
+    expect(files).toEqual(['still-works.ts']);
+    expect(githubCircuitBreaker.getState()).toBe('closed');
+  });
+
+  it('BREAKER RESET ISOLATION: a throttled searchCode does NOT reset accrued failures', async () => {
+    stubFetch500();
+    // 4 genuine failures via fetchPRDiff (threshold is 5) → breaker at 4, still closed.
+    for (let i = 0; i < 4; i++) {
+      await expect(fetchPRDiff('owner', 'repo', 1, 'token')).rejects.toThrow();
+    }
+    expect(githubCircuitBreaker.getState()).toBe('closed');
+
+    // A throttled searchCode must be a NO-OP for the shared breaker — it must not
+    // zero the accrued failure count (the F1 fix: throttle is neither success nor
+    // failure; routing it through onSuccess would reset fetchFileContents's count).
+    stubFetch429();
+    await expect(searchCode('owner', 'repo', 'fetchGraph', 5, 'token')).resolves.toEqual([]);
+    expect(githubCircuitBreaker.getState()).toBe('closed');
+
+    // The 5th genuine failure now OPENS it — proving the throttle did not reset the 4.
+    stubFetch500();
+    await expect(fetchPRDiff('owner', 'repo', 1, 'token')).rejects.toThrow();
     expect(githubCircuitBreaker.getState()).toBe('open');
   });
 });

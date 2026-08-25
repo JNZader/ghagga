@@ -196,6 +196,28 @@ export interface FileReadCapable {
   fetchFileContents(repo: RepoRef, path: string, ref?: string): Promise<string | null>;
 }
 
+/**
+ * Optional: adapter can SEARCH a repo's code for a term, no clone.
+ *
+ * A single-method capability (composed as `Partial<>` on {@link ForgeAdapter}),
+ * narrowed by method-presence (`'searchCode' in adapter`) like every other
+ * optional capability — there is no `ForgeCapabilities` flag for it. Used to
+ * give code-blind (no-checkout) triage a fallback source of candidate paths
+ * when {@link FileReadCapable}-driven path discovery from the issue text alone
+ * finds too few files: the caller extracts an identifier the reporter named
+ * (backtick-quoted) and searches the repo's DEFAULT branch for it (a GitHub
+ * code-search limitation the caller accepts).
+ */
+export interface SearchCapable {
+  /**
+   * Search the repo's code for `term`, returning matching file paths (deduped,
+   * capped at `limit`, first-appearance order). Never throws — a real fault
+   * (auth, rate-limit/throttle, malformed response) degrades to `[]` so triage
+   * proceeds with whatever else it already has.
+   */
+  searchCode(repo: RepoRef, term: string, limit: number): Promise<string[]>;
+}
+
 /** Optional: adapter can publish line-anchored inline comments. */
 export interface InlineCapable {
   /** Publish a batch of inline comments; partial success is reported. */
@@ -225,5 +247,6 @@ export type ForgeAdapter = ForgeAdapterBase &
   Partial<ReactionCapable> &
   (GraphReadCapable | { fetchGraph?: never; fetchGraphMetadata?: never }) &
   Partial<FileReadCapable> &
+  Partial<SearchCapable> &
   Partial<InlineCapable> &
   Partial<MarkerExtractable>;

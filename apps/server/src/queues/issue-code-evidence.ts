@@ -6,9 +6,22 @@
  * repository default branch, so triage can weigh the claim against real source —
  * the server-side analogue of the CLI's LOCATE → buildCodeContext fold.
  *
- * BEST-EFFORT ENHANCEMENT: every failure path (no paths discovered, missing App
- * credentials, a mint failure, a per-file fetch fault) degrades to '' so triage
- * proceeds text-only — it MUST NOT crash or block triage. Nothing here posts.
+ * CODE-SEARCH FALLBACK (triage-search-discovery T6): when {@link discoverCodePaths}
+ * finds FEWER THAN `PATH_DISCOVERY_SUFFICIENT` paths, an issue may still name a
+ * bare identifier (backtick-quoted, e.g. `` `fetchGraph` ``) without a full path.
+ * When the adapter supports it (`'searchCode' in adapter` — R-CAPABILITY method
+ * presence, never a flag), {@link discoverSearchTerms} extracts up to
+ * `SEARCH_TERM_LIMIT` such terms and each is searched SEQUENTIALLY (bounded at
+ * `MAX_SEARCH_CALLS`) via `adapter.searchCode`. A search fault (throw) BREAKS the
+ * loop immediately — it degrades, it never propagates — keeping whatever results
+ * were already found. Path-discovery and search results are merged
+ * PATH-PRECEDENCE (paths first, so a path-discovered file is never displaced by a
+ * search duplicate), deduped, and capped at `MAX_CODE_FILES` before fetching.
+ *
+ * BEST-EFFORT ENHANCEMENT: every failure path (nothing discovered, missing App
+ * credentials, a mint failure, a per-file fetch fault, a search fault) degrades
+ * to '' so triage proceeds text-only — it MUST NOT crash or block triage. Nothing
+ * here posts.
  *
  * SECURITY: the returned bytes are ATTACKER-INFLUENCEABLE (an issue names the
  * paths; a reporter may control the default-branch content of a fork/PR). The
@@ -18,13 +31,24 @@
  * size cap, file-vs-dir check).
  */
 
-import { discoverCodePaths } from 'ghagga-core';
+import { discoverCodePaths, discoverSearchTerms } from 'ghagga-core';
 import { GitHubAppCredentialProvider } from 'ghagga-forge';
 import * as githubClient from '../github/client.js';
 import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
 
 /** Max files fetched per issue — bounds cost, API calls, and mint frequency. */
 const MAX_CODE_FILES = 6;
+/**
+ * Below this many discovered paths, path discovery is considered INSUFFICIENT
+ * and the code-search fallback kicks in (when the adapter supports it).
+ */
+const PATH_DISCOVERY_SUFFICIENT = 2;
+/** Max `searchCode` calls per issue (one per discovered term, bounded). */
+const MAX_SEARCH_CALLS = 3;
+/** Max terms `discoverSearchTerms` extracts to drive the search fallback. */
+const SEARCH_TERM_LIMIT = 3;
+/** Max results requested per search-term call. */
+const SEARCH_PER_TERM_LIMIT = 5;
 /** Per-file char cap — a snippet, not the whole file. */
 const MAX_SNIPPET_CHARS = 3000;
 /**
@@ -71,12 +95,24 @@ export async function collectIssueCodeEvidence(args: {
   const { installationId, repoFullName, issueText, log } = args;
 
   const paths = discoverCodePaths(issueText, { limit: MAX_CODE_FILES });
-  if (paths.length === 0) return '';
+  // NOTE: no early return on paths.length === 0 — the code-search fallback below
+  // needs a minted token even when path discovery found nothing, so it can still
+  // search for a bare backtick-quoted identifier.
 
   const slash = repoFullName.indexOf('/');
   const owner = slash > 0 ? repoFullName.slice(0, slash) : '';
   const repo = slash > 0 ? repoFullName.slice(slash + 1) : '';
   if (!owner || !repo) return '';
+
+  // Compute the search terms up front — discoverSearchTerms needs no token. This
+  // lets a NO-SIGNAL issue (no discovered paths AND no backtick-quoted terms)
+  // return BEFORE minting a throwaway installation token, which the old
+  // unconditional early-return removal would otherwise have done for every issue.
+  const searchTerms =
+    paths.length < PATH_DISCOVERY_SUFFICIENT
+      ? discoverSearchTerms(issueText, { limit: SEARCH_TERM_LIMIT })
+      : [];
+  if (paths.length === 0 && searchTerms.length === 0) return '';
 
   const appId = process.env.GITHUB_APP_ID;
   const privateKey = process.env.GITHUB_PRIVATE_KEY;
@@ -109,12 +145,41 @@ export async function collectIssueCodeEvidence(args: {
   // The adapter keys on its ctor owner/repo, so this RepoRef is inert identity.
   const repoRef = { kind: 'github' as const, nativeId: `${owner}/${repo}`, path: repoFullName };
 
-  // Fetch all discovered paths CONCURRENTLY (bounded — at most MAX_CODE_FILES) so
+  // ── Code-search fallback: too few paths discovered, adapter supports it ────
+  const searchPaths: string[] = [];
+  if (searchTerms.length > 0 && 'searchCode' in adapter) {
+    const budget = Math.min(searchTerms.length, MAX_SEARCH_CALLS);
+    for (let i = 0; i < budget; i++) {
+      const term = searchTerms[i];
+      if (term === undefined) break;
+      try {
+        const hits = await adapter.searchCode(repoRef, term, SEARCH_PER_TERM_LIMIT);
+        searchPaths.push(...hits);
+      } catch (err) {
+        log.warn({ term, err: errMessage(err) }, 'code-evidence: code search failed; degrading');
+        break;
+      }
+    }
+  }
+
+  // Merge PATH-PRECEDENCE (a path-discovered file is never displaced by a search
+  // duplicate), deduped, capped at MAX_CODE_FILES.
+  const merged: string[] = [];
+  const seenPaths = new Set<string>();
+  for (const p of [...paths, ...searchPaths]) {
+    if (seenPaths.has(p)) continue;
+    seenPaths.add(p);
+    merged.push(p);
+    if (merged.length >= MAX_CODE_FILES) break;
+  }
+  if (merged.length === 0) return '';
+
+  // Fetch all merged paths CONCURRENTLY (bounded — at most MAX_CODE_FILES) so
   // the worker never serializes up to 6 × the 10s per-fetch timeout into the job's
   // lock window. Order is preserved (first-appearance). A per-file fault resolves
   // to null (skipped, surfaced) — never fatal.
   const fetched = await Promise.all(
-    paths.map(async (path) => {
+    merged.map(async (path) => {
       try {
         // Empty ref → default branch (an issue has no natural SHA).
         const content = await adapter.fetchFileContents(repoRef, path);
@@ -146,7 +211,7 @@ export async function collectIssueCodeEvidence(args: {
     // Honesty check: discovered paths but attached none — say so, don't proceed
     // silently as if the issue referenced no code.
     log.warn(
-      { discovered: paths.length },
+      { discovered: merged.length },
       'code-evidence: discovered paths but attached none; triaging text-only',
     );
     return '';
@@ -155,7 +220,7 @@ export async function collectIssueCodeEvidence(args: {
   // Report what the model actually SEES (chars + files attached), plus anything
   // dropped for the budget — never over-report the fetch count as "attached".
   log.info(
-    { discovered: paths.length, attached: sections.length, droppedForBudget, chars: usedChars },
+    { discovered: merged.length, attached: sections.length, droppedForBudget, chars: usedChars },
     'code-evidence: attached referenced source to triage',
   );
   return [
