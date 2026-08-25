@@ -68,84 +68,36 @@ re-triage-from-zero is an LLM-cost pain, which the current OPEN priorities
 (review-mode depth, GitLab parity) say it is not yet. Revisit when triage volume
 makes it hurt.
 
-### BL-TRIAGE-SERVER-CODE-BLIND — server-side triage has no code access; add remote code-fetch
+### BL-TRIAGE-CODE-FENCE — give issue triage a dedicated fenced source-code input (not the memory channel)
 
-The CLI/local triage path locates code via a real 3-stage pipeline
-(`packages/triage-engine/src/locate/locate.ts`) — but it **requires a local
-filesystem checkout** (`config.codeRoot`). The **server-side** (webhook-triggered
-SaaS) triage path has **no code access at all** — it is pure text classification
-against the issue body/comments. This is the ONE place ERE's design is strictly
-more capable than anything ghagga has in either mode. Effort M-L, value HIGH,
-risk MEDIUM (new remote-fetch surface — SSRF/path-traversal/rate-limits; ERE
-already solved the hardening). Bigger + more security-sensitive than the two
-resolved siblings — do it as its own reviewed slice, not a quick win.
+Follow-up surfaced by BOTH adversarial reviews of BL-TRIAGE-SERVER-CODE-BLIND
+(now RESOLVED). Code-in-evidence currently folds the fetched source into
+`memoryContext` (mirroring the CLI at `packages/triage-engine/src/triage/run.ts:83-84`),
+which `runIssueTriage` renders through `buildMemoryContext`
+(`packages/core/src/agents/prompts.ts:592`). That wrapper's TRUSTED framing reads:
+"observations are background context from **past reviews** … Do NOT use them as
+reasons to flag issues. Only flag issues you can justify from the **code diff**
+itself." For triage this is doubly wrong: the bytes are the *current source the
+issue references* (not past reviews), and the framing tells the model to DISCOUNT
+that channel and rely on a "diff" that does not exist in the triage path.
 
-**RECON (done 2026-08-25, grounded — build from this, no re-exploration needed):**
+The fence is SECURITY-correct (the code is defanged as untrusted DATA — see the
+resolved item), so this is a UTILITY limitation, not a vulnerability. The better
+design already exists in the same file: `reproductionEvidence` is a dedicated,
+semantically-distinct fenced input (`issue-triage.ts` → `wrapUntrustedReproEvidence`,
+`<REPRO_EVIDENCE>`) with no "do not flag" framing. Add an analogous optional
+`sourceCode` fenced input to `IssueTriageInput` + `buildIssuePrompt`, then switch
+BOTH call sites (the server `collectIssueCodeEvidence` fold in
+`apps/server/src/queues/issue-analysis.ts`, and the CLI fold in
+`packages/triage-engine/src/triage/run.ts`) off the memory channel. Effort M
+(touches the core agent contract + 2 callers + prompt eval). Not a blocker — v1
+keeps CLI parity.
 
-- **Code-blind confirmed:** `apps/server/src/queues/issue-analysis.ts:577-584`
-  calls `runIssueTriage` with only a `memoryContext` built from dedup
-  (`buildMemoryContextFromDedup`) — no code, no `reproductionEvidence`, no
-  checkout.
-- **How the CLI injects code (the seam to mirror):** there is NO code field on
-  `IssueTriageInput`. The CLI FOLDS located code INTO `memoryContext` —
-  `packages/triage-engine/src/triage/run.ts:83-84`:
-  `const codeContext = buildCodeContext(contextFiles, files, keywords);`
-  `const memoryContext = [input.memoryContext, codeContext].filter(Boolean).join('\n\n') || null;`
-  So the server slice is: build a code-context string and fold it into the
-  server's existing `memoryContext` the same way.
-- **The formatter is backend-agnostic and reusable:** `buildCodeContext`
-  (`packages/triage-engine/src/triage/code-context.ts:41`, exported at
-  `packages/triage-engine/src/index.ts:112`) takes `(contextFiles: string[],
-  files: Map<string,string>, keywords: string[], linesPerFile?)` — it reads bytes
-  from the `files` Map, indifferent to whether they came from local FS or a remote
-  API. **Design fork:** the server package depends on `ghagga-core` + `ghagga-forge`
-  but NOT `ghagga-triage-engine`; do NOT add that heavy dep (it drags in LOCATE +
-  Playwright reproduce). Default decision: reimplement the ~15-line markdown
-  formatter locally in the server (same shape), OR lift the pure formatter into
-  `ghagga-core` and re-export from triage-engine. Prefer the local formatter for
-  the first slice.
-- **The forge has NO file-content fetch (must be added):** `ForgeAdapterBase`
-  (`packages/forge/src/ports/forge-adapter.ts:124`) exposes `fetchDiff`,
-  `fetchChangeRequest`, `fetchFileList` (of a PR), `fetchCommits`,
-  `upsertSummaryComment`; the optional `GraphReadCapable` (:173) adds
-  `fetchGraph`/`fetchGraphMetadata` (dependency graph, remote, no clone). The
-  GitHub client port (`adapters/github/github-client-port.ts`) has `fetchPRDiff`,
-  `getPRFileList`, `fetchGraphFromBranch` — but **nothing that reads a file's
-  contents / a tree / searches code at a ref.**
-
-**The slice (4 parts, in dependency order):**
-
-1. **Forge file-read capability (the security-sensitive foundation).** Add an
-   optional `FileReadCapable { fetchFileContents(repo: RepoRef, path: string,
-   ref: string): Promise<string | null> }` to `ports/forge-adapter.ts`, following
-   the existing method-presence-narrowing pattern of `GraphReadCapable` (`'m' in
-   adapter`, never a capabilities flag). Implement in
-   `adapters/github/github-client-port.ts` + `github-forge-adapter.ts` by PORTING
-   ERE `collectors/github-code.ts` `fetchFile`: GitHub Contents API at a pinned
-   ref, base64 decode with `\r\n` strip, `MAX_FILE_BYTES` cap (512KiB),
-   `encodePath` path-traversal guard, read-only. Unit tests (fetch-mocked) incl.
-   the traversal + oversize + 404/auth guards. Independently testable primitive.
-2. **Path discovery.** Port ERE `collectors/issue-code-discovery.ts`
-   `discoverCodePaths` (deterministic, tokenized, ReDoS-hardened —
-   `MAX_TEXT=262144`, `MAX_TOKEN=400`) into `ghagga-core` (shared, so CLI could
-   also adopt it later). It extracts explicit `dir/file.ext` tokens from the issue
-   text. (`discoverSearchTerms` / code-search is a FOLLOW-UP, not this slice.)
-3. **Format.** The local ~15-line markdown formatter (see design fork above),
-   same shape as `buildCodeContext`.
-4. **Wire it into the server worker.** In `issue-analysis.ts`, before the
-   `runIssueTriage` call: discover paths from issue title+body → fetch each via
-   the forge capability (guard: cap the file COUNT, skip on missing capability) →
-   build the `files` Map → format → fold into the existing `memoryContext`
-   (mirror `run.ts:83-84`). Adopt ERE's honesty check — if paths were discovered
-   but none fetched, `logger.warn` loudly rather than silently proceeding
-   code-blind. Tests in `issue-analysis.test.ts`.
-
-**Security must-haves (all already solved in ERE `github-code.ts` — port the
-guards, do not re-derive):** fetch ONLY from the issue's own repo at a pinned
-ref; path-traversal guard on the path; per-file byte cap; a hard cap on the
-number of files fetched per issue; read-only; surface auth/rate-limit errors
-loudly (never swallow as "no code"). Gate the whole slice behind its own
-adversarial review before merge.
+Also noted (LOW, same reviews): `discoverSearchTerms` / GitHub code-search
+discovery (find code by the identifiers an issue names, not just explicit paths)
+is a natural follow-on to `discoverCodePaths` — port ERE's `discoverSearchTerms`
++ a forge `searchCode`/`getTree` capability when path-only discovery proves too
+narrow in practice.
 
 ### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity, cleanly separated
 
@@ -252,6 +204,38 @@ If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardene
 so the risk is low). (Deferred here pending the PAT + throwaway MR.)
 
 ## RESOLVED
+
+### BL-TRIAGE-SERVER-CODE-BLIND — server-side triage has no code access; add remote code-fetch
+
+**Status: RESOLVED** — the checkout-less webhook triage worker now reads the code
+an issue references. Shipped as a 4-part slice, each part its own adversarially-
+reviewed commit:
+
+- **Part 1 (`9246edb`) — the forge file-read capability (security foundation).**
+  Optional `FileReadCapable.fetchFileContents(repo, path, ref?)` on the forge
+  adapter (method-presence narrowed); real HTTP is `client.fetchFileContents`
+  (GitHub Contents API, JSON+base64), ported from ERE `github-code.ts` with the
+  full hardening (owner/repo/ref validated, path traversal-guarded + double-
+  encoded, file-vs-dir → null, 512KiB cap, 404 → null, faults → GitHubApiError),
+  locked `@internal` in the forge-boundary lint. Two blind reviews confirmed the
+  path/URL-injection defense airtight.
+- **Part 2 (`edb9bed`) — `discoverCodePaths`** in `ghagga-core` (deterministic,
+  ReDoS-hardened path-token extraction from issue text).
+- **Parts 3-4 (`a310779`) — the formatter + wiring.** `collectIssueCodeEvidence`
+  (`apps/server/src/queues/issue-code-evidence.ts`) discovers paths → mints an
+  installation token → fetches concurrently at the default branch (empty ref) →
+  assembles within a char budget → the worker folds it into `memoryContext`.
+  Best-effort: every failure (no paths / no creds / mint fail / per-file fault)
+  degrades to text-only; never blocks or crashes triage.
+
+SECURITY (confirmed by review): the fetched bytes are attacker-influenceable but
+fold into `memoryContext`, fenced as untrusted DATA via `buildMemoryContext` /
+`wrapUntrusted` (defangs forged boundary markers) — no fence break-out; token/key
+never logged; ≤6 files + exactly 1 mint per triage. Review corrections folded in:
+concurrent fetch (job-lock safety), honest char/file budget + logging (no silent
+truncation / over-reporting). Follow-up tracked as **BL-TRIAGE-CODE-FENCE** (a
+dedicated `sourceCode` fenced input beats the memory channel). Verified: server
+784/784, forge + core green, monorepo typecheck.
 
 ### BL-TRIAGE-QUEUE-ATOMIC — `queue.json`: non-atomic write + silent corrupt-swallow → draft loss / double-post
 
