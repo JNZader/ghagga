@@ -16,17 +16,33 @@ updates:
       time: "08:00"
       timezone: "America/Argentina/Buenos_Aires"
     open-pull-requests-limit: 5
+    # Supply-chain cooldown: hold a new version a few days before proposing it,
+    # so a just-published compromised release isn't pulled in immediately.
+    cooldown:
+      default-days: 5
     reviewers:
       - "JNZader"
     labels:
       - "dependencies"
     groups:
-      # Group all minor+patch updates into a single PR
+      # Lockstep families FIRST (incl. majors): coupled packages update together
+      # in ONE PR so a partial major bump can't break typecheck. This is the
+      # AI-SDK coupled-majors scar (#289: `ai` v6→v7 + `@ai-sdk/*` landed as
+      # SEPARATE major PRs). A dep lands in the first group it matches, so these
+      # precede the minor-and-patch catch-all.
+      ai-sdk:
+        patterns:
+          - "ai"
+          - "@ai-sdk/*"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      # Everything else: minor+patch batched into one PR; other majors get
+      # individual PRs (breaking changes).
       minor-and-patch:
         update-types:
           - "minor"
           - "patch"
-      # Major updates get individual PRs (breaking changes)
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
