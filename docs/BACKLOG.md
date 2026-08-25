@@ -73,20 +73,79 @@ makes it hurt.
 The CLI/local triage path locates code via a real 3-stage pipeline
 (`packages/triage-engine/src/locate/locate.ts`) — but it **requires a local
 filesystem checkout** (`config.codeRoot`). The **server-side** (webhook-triggered
-SaaS) triage path in `apps/server/src/queues/issue-analysis.ts` has **no code
-access at all** (a grep for `locate|codeRoot|checkout` there returns zero hits) —
-it is pure text classification against the issue body/comments.
+SaaS) triage path has **no code access at all** — it is pure text classification
+against the issue body/comments. This is the ONE place ERE's design is strictly
+more capable than anything ghagga has in either mode. Effort M-L, value HIGH,
+risk MEDIUM (new remote-fetch surface — SSRF/path-traversal/rate-limits; ERE
+already solved the hardening). Bigger + more security-sensitive than the two
+resolved siblings — do it as its own reviewed slice, not a quick win.
 
-**Fix (from ERE `collectors/github-code.ts`):** a remote code-fetch collector
-that reads file bytes from the GitHub Contents/Trees API at a **pinned ref**,
-needing no local clone, over an SSRF/DNS-rebind-hardened read-only HTTPS port
-(ERE's `HttpsReadOnlyHttpPort`). Pair it with ERE's deterministic path/identifier
-extraction (`discoverCodePaths`/`discoverSearchTerms`, ReDoS-hardened) to seed
-what to fetch from the issue text alone, and adopt ERE's honesty check
-("discovered N, fetched 0 → warn loudly"). This is the ONE place ERE's design is
-strictly more capable than anything ghagga has in either mode. Effort M, value
-HIGH, risk MEDIUM (new GitHub API surface + rate limits — ERE already solved the
-hardening).
+**RECON (done 2026-08-25, grounded — build from this, no re-exploration needed):**
+
+- **Code-blind confirmed:** `apps/server/src/queues/issue-analysis.ts:577-584`
+  calls `runIssueTriage` with only a `memoryContext` built from dedup
+  (`buildMemoryContextFromDedup`) — no code, no `reproductionEvidence`, no
+  checkout.
+- **How the CLI injects code (the seam to mirror):** there is NO code field on
+  `IssueTriageInput`. The CLI FOLDS located code INTO `memoryContext` —
+  `packages/triage-engine/src/triage/run.ts:83-84`:
+  `const codeContext = buildCodeContext(contextFiles, files, keywords);`
+  `const memoryContext = [input.memoryContext, codeContext].filter(Boolean).join('\n\n') || null;`
+  So the server slice is: build a code-context string and fold it into the
+  server's existing `memoryContext` the same way.
+- **The formatter is backend-agnostic and reusable:** `buildCodeContext`
+  (`packages/triage-engine/src/triage/code-context.ts:41`, exported at
+  `packages/triage-engine/src/index.ts:112`) takes `(contextFiles: string[],
+  files: Map<string,string>, keywords: string[], linesPerFile?)` — it reads bytes
+  from the `files` Map, indifferent to whether they came from local FS or a remote
+  API. **Design fork:** the server package depends on `ghagga-core` + `ghagga-forge`
+  but NOT `ghagga-triage-engine`; do NOT add that heavy dep (it drags in LOCATE +
+  Playwright reproduce). Default decision: reimplement the ~15-line markdown
+  formatter locally in the server (same shape), OR lift the pure formatter into
+  `ghagga-core` and re-export from triage-engine. Prefer the local formatter for
+  the first slice.
+- **The forge has NO file-content fetch (must be added):** `ForgeAdapterBase`
+  (`packages/forge/src/ports/forge-adapter.ts:124`) exposes `fetchDiff`,
+  `fetchChangeRequest`, `fetchFileList` (of a PR), `fetchCommits`,
+  `upsertSummaryComment`; the optional `GraphReadCapable` (:173) adds
+  `fetchGraph`/`fetchGraphMetadata` (dependency graph, remote, no clone). The
+  GitHub client port (`adapters/github/github-client-port.ts`) has `fetchPRDiff`,
+  `getPRFileList`, `fetchGraphFromBranch` — but **nothing that reads a file's
+  contents / a tree / searches code at a ref.**
+
+**The slice (4 parts, in dependency order):**
+
+1. **Forge file-read capability (the security-sensitive foundation).** Add an
+   optional `FileReadCapable { fetchFileContents(repo: RepoRef, path: string,
+   ref: string): Promise<string | null> }` to `ports/forge-adapter.ts`, following
+   the existing method-presence-narrowing pattern of `GraphReadCapable` (`'m' in
+   adapter`, never a capabilities flag). Implement in
+   `adapters/github/github-client-port.ts` + `github-forge-adapter.ts` by PORTING
+   ERE `collectors/github-code.ts` `fetchFile`: GitHub Contents API at a pinned
+   ref, base64 decode with `\r\n` strip, `MAX_FILE_BYTES` cap (512KiB),
+   `encodePath` path-traversal guard, read-only. Unit tests (fetch-mocked) incl.
+   the traversal + oversize + 404/auth guards. Independently testable primitive.
+2. **Path discovery.** Port ERE `collectors/issue-code-discovery.ts`
+   `discoverCodePaths` (deterministic, tokenized, ReDoS-hardened —
+   `MAX_TEXT=262144`, `MAX_TOKEN=400`) into `ghagga-core` (shared, so CLI could
+   also adopt it later). It extracts explicit `dir/file.ext` tokens from the issue
+   text. (`discoverSearchTerms` / code-search is a FOLLOW-UP, not this slice.)
+3. **Format.** The local ~15-line markdown formatter (see design fork above),
+   same shape as `buildCodeContext`.
+4. **Wire it into the server worker.** In `issue-analysis.ts`, before the
+   `runIssueTriage` call: discover paths from issue title+body → fetch each via
+   the forge capability (guard: cap the file COUNT, skip on missing capability) →
+   build the `files` Map → format → fold into the existing `memoryContext`
+   (mirror `run.ts:83-84`). Adopt ERE's honesty check — if paths were discovered
+   but none fetched, `logger.warn` loudly rather than silently proceeding
+   code-blind. Tests in `issue-analysis.test.ts`.
+
+**Security must-haves (all already solved in ERE `github-code.ts` — port the
+guards, do not re-derive):** fetch ONLY from the issue's own repo at a pinned
+ref; path-traversal guard on the path; per-file byte cap; a hard cap on the
+number of files fetched per issue; read-only; surface auth/rate-limit errors
+loudly (never swallow as "no code"). Gate the whole slice behind its own
+adversarial review before merge.
 
 ### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity, cleanly separated
 
