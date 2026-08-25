@@ -68,53 +68,6 @@ re-triage-from-zero is an LLM-cost pain, which the current OPEN priorities
 (review-mode depth, GitLab parity) say it is not yet. Revisit when triage volume
 makes it hurt.
 
-### BL-TRIAGE-QUEUE-ATOMIC — `queue.json`: non-atomic write + silent corrupt-swallow → draft loss / double-post
-
-**Bug, not a feature.** `packages/triage-engine/src/queue/store.ts` persists the
-triage draft queue with a bare, non-atomic `writeFileSync` (`saveQueue`, ~line
-43-46): a crash or a full disk mid-write leaves a truncated `queue.json`. Worse,
-`loadQueue` (~line 34-40) **swallows corrupt JSON and returns `{}`** — the
-behavior is even documented as intentional ("Missing file or corrupt JSON ->
-empty queue (never throws)"). Together: one interrupted write silently drops the
-**entire** draft queue, including any `POSTED` idempotency state. The plausible
-worst case is a **double-post** — a later re-triage no longer sees the POSTED
-guard and can re-emit a draft that was already published. (The data-loss path is
-confirmed by hand; the double-post is the plausible consequence — it depends on
-the POSTED guard living only in this queue file.)
-
-**Fix (from ERE `collectors/baseline-store.ts:39-55`):** write to a temp file
-then `renameSync` over the target (atomic on POSIX), and make `loadQueue`
-distinguish "missing file → empty queue" from "corrupt file → loud error", never
-silently returning `{}` over a corrupt-but-present file. Same non-atomic pattern
-also lives in the audit history writer (`apps/cli/src/commands/audit.ts`,
-`audit-history.json`) — fix both. Effort S, value HIGH, risk none.
-
-### BL-TRIAGE-CITED-VERDICT — fail-closed triage verdict with a cite-or-abstain gate
-
-The triage output contract is parsed **leniently with silent defaults**: a
-garbled `CLASSIFICATION` line falls back to `'question'`
-(`packages/core/src/agents/issue-triage.ts`, `parseClassification`), a missing
-`CONFIDENCE` becomes `0`, and `parseSources` accepts a `- title | type | ref`
-line **without checking the `ref` points at anything real** — a hallucinated
-source is accepted verbatim. There is no fail-closed rejection and no "a
-confident answer must cite something real" gate; the pipeline cannot distinguish
-"the model abstained" from "the model malfunctioned".
-
-**Fix (from ERE `collectors/issue-verdict-pack.ts:57-80`, the `UNCITED_OUTCOME`
-gate + `issue-llm-reviewer.ts:54-82` balanced-JSON parse):** add a structural
-validator after `parseSources`/`parseClassification` inside `runIssueTriage`. If
-a confident, actionable classification (`bug`/`feature`) cites zero sources — or
-cites a path that is not in LOCATE's file pool (`contextFiles`) — degrade the
-result to the existing safe path (`question` / the Phase-4 worker's
-`needs-human` confidence hook) instead of surfacing a silently-defaulted draft.
-The citation *plumbing already exists* — `parseSources → IssueTriageSource →` the
-DB's `IssueDraftSource {title,type,ref}` — so the transfer is narrow: validate
-`ref` against real evidence and persist the classification/confidence that are
-currently dropped, so the dashboard can sort the queue by merit. Effort S,
-value HIGH, risk LOW (parse-layer only, never touches the posting path). This is
-also the schema groundwork BL-HYBRID-4R-MODE's structured ledger wants on the
-review side.
-
 ### BL-TRIAGE-SERVER-CODE-BLIND — server-side triage has no code access; add remote code-fetch
 
 The CLI/local triage path locates code via a real 3-stage pipeline
@@ -240,6 +193,56 @@ If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardene
 so the risk is low). (Deferred here pending the PAT + throwaway MR.)
 
 ## RESOLVED
+
+### BL-TRIAGE-QUEUE-ATOMIC — `queue.json`: non-atomic write + silent corrupt-swallow → draft loss / double-post
+
+**Status: RESOLVED** by commit `06215f2`. `saveQueue`
+(`packages/triage-engine/src/queue/store.ts`) now writes to a temp file then
+`renameSync`s over the target (atomic on POSIX), and `loadQueue` distinguishes a
+missing file (fresh `{}`) from a corrupt-but-present one (throws loudly, naming
+the risk of dropping POSTED state) instead of silently returning `{}` over any
+read/parse error. The parallel CLI audit-history writer
+(`apps/cli/src/commands/audit.ts`) got the same atomic write; its corrupt-read
+path now WARNS and resets rather than silently wiping (non-critical trend data,
+so it doesn't abort the save). Its store test that encoded the old bug as
+expected behavior ("corrupt JSON → empty object") was flipped to assert the loud
+throw; +2 atomicity tests. Verified: triage-engine 239/239, monorepo typecheck
+green.
+
+### BL-TRIAGE-CITED-VERDICT — fail-closed triage verdict with a cite-or-abstain gate
+
+**Status: RESOLVED** by commit `d5a4950`. `runIssueTriage`
+(`packages/core/src/agents/issue-triage.ts`) now runs a fail-closed citation
+gate: an actionable classification (`bug`/`feature`) that cites NO source has its
+confidence withheld (→ 0) so the Phase-4 threshold routes the draft to the
+hold-for-human channel (NEEDS_INFO), with a transparent note appended to the
+report. Modeled on ERE's `UNCITED_OUTCOME`.
+
+Two blind adversarial reviews (opus) reshaped the first cut — recorded here
+because both corrections matter:
+- **It is a PRESENCE check, not a ref/evidence check.** The first cut required a
+  non-empty `ref`, which would have wrongly held a legitimately-cited first-report
+  bug: the prompt (`prompts.ts:342/365`) accepts an *issue excerpt* (which has no
+  natural `ref`) as a valid citation. And there is no evidence corpus at this seam
+  to validate that a ref resolves. So the gate only catches a verdict that cites
+  literally nothing — the honest limit of a presence check, and the comments say
+  so rather than overselling the ERE analogy.
+- **The classification is PRESERVED, not rewritten to `question`.** The hold is
+  carried entirely by the zeroed confidence; flipping the class bought no routing
+  change (the server routes on confidence, the CLI drops the class) and would have
+  corrupted the dedup/telemetry signal.
+- The reviews also caught that the gate was silently masking four `parseConfidence`
+  regression tests (uncited-bug fixtures); those now cite a source so they isolate
+  the parser again, and the out-of-range clamp assertion was tightened to the exact
+  value.
+
+Known scope (accepted, LOW): a fabricated/self-referential source line still
+passes the presence check (can't be validated here); the report note flows into
+the client-reply generator, but that path is draft-only and human-gated. NOT
+done here (a separate, larger change): persisting classification/confidence into
+the DB draft so the dashboard can sort by merit. Verified: issue-triage 49/49,
+core 3870/3871, triage-engine 239/239, server issue-analysis 22/22, typecheck
+green.
 
 ### BL-ACTION-BUNDLE-REBUILD — rebuild `apps/action/dist` before the next release
 
