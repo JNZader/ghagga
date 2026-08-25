@@ -580,8 +580,9 @@ async function processIssueAnalysis(job: Job<IssueAnalysisJobData>): Promise<Iss
       // Code-in-evidence (best-effort): fetch the source the issue references so
       // triage can weigh the claim against real code. Any failure degrades to
       // text-only — it NEVER blocks triage. The fetched (attacker-influenceable)
-      // bytes fold into memoryContext, which runIssueTriage fences as untrusted
-      // DATA via buildMemoryContext.
+      // bytes are passed as the dedicated `sourceCode` input below, which
+      // runIssueTriage fences as untrusted DATA via wrapUntrustedSourceCode
+      // (<SOURCE_CODE>) — NOT the memory channel.
       let codeContext = '';
       try {
         const issueText = [data.issueTitle, data.issueBody, ...comments.map((c) => c.body)].join(
@@ -599,14 +600,16 @@ async function processIssueAnalysis(job: Job<IssueAnalysisJobData>): Promise<Iss
           'code-evidence collection threw; triaging text-only',
         );
       }
-      const combinedContext = [memoryContext, codeContext].filter(Boolean).join('\n\n') || null;
-
       const result = await runIssueTriage({
         issueTitle: data.issueTitle,
         issueBody: data.issueBody,
         labels: data.labels,
         comments,
-        memoryContext: combinedContext,
+        memoryContext,
+        // Referenced source goes in its OWN fenced input (BL-TRIAGE-CODE-FENCE),
+        // not folded into memoryContext — so the model verifies the claim against
+        // it instead of being told to discount it.
+        sourceCode: codeContext || null,
         provider: resolved.provider,
         model: resolved.model,
         apiKey: resolved.apiKey,

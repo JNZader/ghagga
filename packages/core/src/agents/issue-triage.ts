@@ -39,6 +39,7 @@ import {
   sanitizeLabel,
   wrapUntrustedDescription,
   wrapUntrustedReproEvidence,
+  wrapUntrustedSourceCode,
 } from './prompts.js';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -97,6 +98,16 @@ export interface IssueTriageInput {
    * succeeded, no error"), not omitted.
    */
   reproductionEvidence?: string | null;
+  /**
+   * Repository source the issue references, fetched for the model to VERIFY the
+   * claim against (the CLI locates it from a checkout; the server fetches it
+   * remotely). Its own OPTIONAL fenced input via `wrapUntrustedSourceCode`
+   * (<SOURCE_CODE>) — semantically distinct from `memoryContext` (dedup context,
+   * framed "do not flag from this") and `reproductionEvidence` (live-app output).
+   * Attacker-influenceable (a reporter may control the branch it was read from) —
+   * absent/null preserves existing behavior exactly (no fence emitted).
+   */
+  sourceCode?: string | null;
   /** Provider id — carried for progress/metadata (caller resolves the backend). */
   provider: LLMProvider;
   /** Model id — carried for progress/metadata. */
@@ -311,11 +322,17 @@ function buildIssuePrompt(input: IssueTriageInput): string {
     ? wrapUntrustedReproEvidence(input.reproductionEvidence)
     : '';
 
+  // Repository source the issue references — its OWN untrusted fence, so the
+  // model is told to VERIFY the claim against it (not discount it, as the memory
+  // channel's framing does).
+  const sourceBlock = input.sourceCode ? wrapUntrustedSourceCode(input.sourceCode) : '';
+
   return [
     'Analyze the following GitHub issue and produce a triage draft per your instructions.',
     labelLine,
     wrapUntrustedDescription(untrustedIssue),
     reproBlock,
+    sourceBlock,
   ]
     .filter(Boolean)
     .join('\n\n');

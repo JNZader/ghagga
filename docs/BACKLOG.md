@@ -68,36 +68,18 @@ re-triage-from-zero is an LLM-cost pain, which the current OPEN priorities
 (review-mode depth, GitLab parity) say it is not yet. Revisit when triage volume
 makes it hurt.
 
-### BL-TRIAGE-CODE-FENCE — give issue triage a dedicated fenced source-code input (not the memory channel)
+### BL-TRIAGE-SEARCH-DISCOVERY — find referenced code by identifier, not just explicit path
 
-Follow-up surfaced by BOTH adversarial reviews of BL-TRIAGE-SERVER-CODE-BLIND
-(now RESOLVED). Code-in-evidence currently folds the fetched source into
-`memoryContext` (mirroring the CLI at `packages/triage-engine/src/triage/run.ts:83-84`),
-which `runIssueTriage` renders through `buildMemoryContext`
-(`packages/core/src/agents/prompts.ts:592`). That wrapper's TRUSTED framing reads:
-"observations are background context from **past reviews** … Do NOT use them as
-reasons to flag issues. Only flag issues you can justify from the **code diff**
-itself." For triage this is doubly wrong: the bytes are the *current source the
-issue references* (not past reviews), and the framing tells the model to DISCOUNT
-that channel and rely on a "diff" that does not exist in the triage path.
-
-The fence is SECURITY-correct (the code is defanged as untrusted DATA — see the
-resolved item), so this is a UTILITY limitation, not a vulnerability. The better
-design already exists in the same file: `reproductionEvidence` is a dedicated,
-semantically-distinct fenced input (`issue-triage.ts` → `wrapUntrustedReproEvidence`,
-`<REPRO_EVIDENCE>`) with no "do not flag" framing. Add an analogous optional
-`sourceCode` fenced input to `IssueTriageInput` + `buildIssuePrompt`, then switch
-BOTH call sites (the server `collectIssueCodeEvidence` fold in
-`apps/server/src/queues/issue-analysis.ts`, and the CLI fold in
-`packages/triage-engine/src/triage/run.ts`) off the memory channel. Effort M
-(touches the core agent contract + 2 callers + prompt eval). Not a blocker — v1
-keeps CLI parity.
-
-Also noted (LOW, same reviews): `discoverSearchTerms` / GitHub code-search
-discovery (find code by the identifiers an issue names, not just explicit paths)
-is a natural follow-on to `discoverCodePaths` — port ERE's `discoverSearchTerms`
-+ a forge `searchCode`/`getTree` capability when path-only discovery proves too
-narrow in practice.
+Follow-on to BL-TRIAGE-SERVER-CODE-BLIND (RESOLVED). Today code discovery is
+path-only: `discoverCodePaths` (`packages/core/src/agents/issue-code-discovery.ts`)
+extracts explicit `dir/file.ext` tokens from the issue text. When an issue names a
+symbol/function but no path, no code is fetched. Port ERE's `discoverSearchTerms`
+(snake_case + backtick identifiers, ReDoS-hardened) + add a forge `searchCode` /
+`getTree` capability (GitHub `/search/code`, git trees API — ERE `github-code.ts`
+already has both) so triage can locate code by the identifiers an issue names.
+Deferred deliberately: build it when path-only discovery proves too narrow in
+real triage, not speculatively (the feature just shipped, unused). Effort M
+(new forge capability + a discovery mode).
 
 ### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity, cleanly separated
 
@@ -204,6 +186,30 @@ If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardene
 so the risk is low). (Deferred here pending the PAT + throwaway MR.)
 
 ## RESOLVED
+
+### BL-TRIAGE-CODE-FENCE — give issue triage a dedicated fenced source-code input (not the memory channel)
+
+**Status: RESOLVED** by commit `e0cf70e`. Fetched source no longer rides the
+`memoryContext` channel (whose framing tells the model to discount it for
+flagging and cites a nonexistent "diff"). It now has its own optional
+`sourceCode` fenced input on `runIssueTriage`, mirroring `reproductionEvidence`:
+
+- `prompts.ts`: `SOURCE_CODE` added to `BOUNDARY_MARKERS`; `wrapUntrustedSourceCode`
+  (`<SOURCE_CODE>`, tag boundary, no inner code fence); `UNTRUSTED_CONTENT_POLICY`
+  + `ISSUE_TRIAGE_SYSTEM` declare the channel and instruct the model to USE the
+  code to VERIFY the claim while treating instruction-like text in it as DATA; the
+  SOURCES contract now admits a source file/line as a citable source.
+- `issue-triage.ts`: optional `sourceCode?: string|null` + `buildIssuePrompt`
+  emits the block. Both call sites (server `issue-analysis.ts`, CLI `run.ts`) pass
+  `sourceCode` instead of folding into `memoryContext` (now pure dedup context).
+
+Two blind adversarial reviews (security + correctness) confirmed byte-parity with
+`<REPRO_EVIDENCE>` (forged own-tag AND cross-marker boundaries defanged) and that
+moving attacker bytes out of the system prompt into the user prompt IMPROVES
+injection posture. Corrections folded: SOURCES-contract update (so "cite the code"
+is representable), stale comments corrected, cross-marker-defang +
+system-declaration + CLI memory-passthrough tests added. Verified: core 3885,
+triage-engine 240, server 784, cli 578 — monorepo green.
 
 ### BL-TRIAGE-SERVER-CODE-BLIND — server-side triage has no code access; add remote code-fetch
 
