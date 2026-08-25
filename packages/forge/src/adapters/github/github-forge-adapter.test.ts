@@ -293,6 +293,13 @@ describe('GitHubForgeAdapter — file read (task ERE-transfer / FileReadCapable)
     await expect(adapter.fetchFileContents(repo, 'missing.ts', 'main')).resolves.toBeNull();
   });
 
+  it('bridges an OMITTED ref to the client empty-string sentinel (default branch)', async () => {
+    const client = makeClient();
+    const adapter = makeAdapter(client);
+    await adapter.fetchFileContents(repo, 'src/a.ts'); // no ref → default branch
+    expect(client.fetchFileContents).toHaveBeenCalledWith(OWNER, REPO, 'src/a.ts', '', TOKEN);
+  });
+
   it('reclassifies a 401/403 to ForgeAuthError (P2 recovery), never swallows it as null', async () => {
     const client = makeClient({
       fetchFileContents: vi

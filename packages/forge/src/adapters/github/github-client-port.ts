@@ -112,7 +112,9 @@ export interface GitHubClientPort {
   /**
    * Read one repo-relative file's UTF-8 contents at `ref`, or null if the path
    * is not a file there. Mirrors `client.ts` `fetchFileContents`
-   * (owner/repo/path/ref/token positional style). Throws on a real fault.
+   * (owner/repo/path/ref/token positional style). An EMPTY-STRING `ref` reads the
+   * repository default branch (the adapter passes '' when its caller omits ref).
+   * Throws on a real fault.
    */
   fetchFileContents(
     owner: string,

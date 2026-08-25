@@ -342,9 +342,11 @@ export class GitHubForgeAdapter
    * (`'fetchFileContents' in adapter`) per the R-CAPABILITY doctrine, which is
    * authoritative over the informational flags.
    */
-  async fetchFileContents(_repo: RepoRef, path: string, ref: string): Promise<string | null> {
+  async fetchFileContents(_repo: RepoRef, path: string, ref?: string): Promise<string | null> {
+    // Bridge the optional capability ref to the client's positional `ref`: '' is
+    // the client's "default branch" sentinel (Contents API omits ?ref).
     return this.#mapAuth(() =>
-      this.#client.fetchFileContents(this.#owner, this.#repo, path, ref, this.#token),
+      this.#client.fetchFileContents(this.#owner, this.#repo, path, ref ?? '', this.#token),
     );
   }
 }

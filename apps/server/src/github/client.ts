@@ -825,9 +825,10 @@ function encodeContentsPath(path: string): string {
 
 /**
  * Read one repo-relative file's UTF-8 contents at `ref` via the GitHub Contents
- * API — no local clone. Returns null when the path does not resolve to a file at
- * that ref (404, or a directory/submodule/symlink); throws {@link GitHubApiError}
- * on any real fault (auth, rate-limit, non-2xx, oversize).
+ * API — no local clone. An EMPTY `ref` reads the repository default branch (the
+ * Contents API's behavior when ?ref is omitted). Returns null when the path does
+ * not resolve to a file there (404, or a directory/submodule/symlink); throws
+ * {@link GitHubApiError} on any real fault (auth, rate-limit, non-2xx, oversize).
  *
  * Hardened for untrusted input (an issue — hence a file path — is attacker-
  * influenceable): owner/repo/ref are charset-validated and the path is
@@ -853,11 +854,16 @@ export async function fetchFileContents(
   if (!GH_REPO.test(repo) || repo === '.' || repo === '..') {
     throw new GitHubApiError(400, 'GitHub API error fetching file: invalid repo');
   }
-  if (!GH_REF.test(ref)) {
+  // An empty ref means "the repository default branch" — the Contents API uses it
+  // when ?ref is omitted. Issue triage relies on this: an issue has no natural SHA,
+  // so it reads the current code on the default branch. A non-empty ref is still
+  // charset-validated and encoded.
+  if (ref !== '' && !GH_REF.test(ref)) {
     throw new GitHubApiError(400, 'GitHub API error fetching file: invalid ref');
   }
   const encodedPath = encodeContentsPath(path);
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`;
+  const refQuery = ref === '' ? '' : `?ref=${encodeURIComponent(ref)}`;
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}${refQuery}`;
 
   const response = await githubCircuitBreaker.execute(async () => {
     const res = await fetch(url, {

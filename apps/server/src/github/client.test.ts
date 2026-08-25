@@ -829,6 +829,15 @@ describe('fetchFileContents (ERE-transfer: remote code-in-evidence, hardened)', 
     expect(url).toContain('ref=abc123');
   });
 
+  it('reads the default branch when ref is empty (no ?ref on the URL)', async () => {
+    mockFetch.mockResolvedValueOnce(fileResponse('export const x = 1;\n'));
+    const out = await fetchFileContents('octo', 'demo', 'src/retry.ts', '', 'tok');
+    expect(out).toBe('export const x = 1;\n');
+    const url = mockFetch.mock.calls[0][0] as string;
+    expect(url).toContain('/repos/octo/demo/contents/src/retry.ts');
+    expect(url).not.toContain('?ref='); // default branch → ?ref omitted
+  });
+
   it('returns null on 404 (file absent at that ref)', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' });
     expect(await fetchFileContents('octo', 'demo', 'nope.ts', 'main', 'tok')).toBeNull();

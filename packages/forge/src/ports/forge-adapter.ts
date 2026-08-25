@@ -188,8 +188,12 @@ export interface GraphReadCapable {
  * code-in-evidence.
  */
 export interface FileReadCapable {
-  /** Read a repo-relative file's UTF-8 contents at `ref`, or null if not a file there. */
-  fetchFileContents(repo: RepoRef, path: string, ref: string): Promise<string | null>;
+  /**
+   * Read a repo-relative file's UTF-8 contents at `ref`, or null if not a file
+   * there. `ref` is optional — omitted reads the repository default branch (for
+   * issue triage, which has no natural SHA).
+   */
+  fetchFileContents(repo: RepoRef, path: string, ref?: string): Promise<string | null>;
 }
 
 /** Optional: adapter can publish line-anchored inline comments. */
