@@ -128,6 +128,16 @@ vi.mock('../github/client.js', () => ({
   getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
 }));
 
+// ─── Code-in-evidence mock — isolate the worker's FOLD from the helper ──
+// The helper (collectIssueCodeEvidence) is tested standalone in
+// issue-code-evidence.test.ts. Here we mock it to assert the worker folds its
+// return into memoryContext and hands it to runIssueTriage. Default '' →
+// text-only (existing tests see no behavior change).
+const mockCollectCodeEvidence = vi.fn();
+vi.mock('./issue-code-evidence.js', () => ({
+  collectIssueCodeEvidence: (...args: unknown[]) => mockCollectCodeEvidence(...args),
+}));
+
 // ─── PostgresMemoryStorage mock — captures saveObservation calls ─
 
 const mockSaveObservation = vi.fn().mockResolvedValue({ id: 7 });
@@ -235,6 +245,8 @@ beforeEach(() => {
   });
   mockRunIssueTriage.mockResolvedValue(fullTriageResult());
   mockSaveIssueDraft.mockResolvedValue({ id: 99 });
+  // Default: no code evidence → text-only triage (existing tests unaffected).
+  mockCollectCodeEvidence.mockResolvedValue('');
 });
 
 // ─── Tests ──────────────────────────────────────────────────────
@@ -271,6 +283,50 @@ describe('processIssueAnalysis — happy path (ANALYSIS draft)', () => {
     const input = mockRunIssueTriage.mock.calls[0]?.[0];
     expect(typeof input.generateFn).toBe('function');
     expect(input.issueTitle).toBe('App crashes on startup');
+  });
+});
+
+describe('processIssueAnalysis — code-in-evidence fold', () => {
+  it('folds the code helper output into the memoryContext handed to runIssueTriage', async () => {
+    mockCollectCodeEvidence.mockResolvedValue('## RELEVANT SOURCE CODE\n### src/x.ts\nCODE_MARKER');
+    const job = makeFakeJob(makeJobData());
+
+    await capturedProcessor?.(job);
+
+    // The helper was called with the worker's identity + an issueText carrying the title.
+    expect(mockCollectCodeEvidence).toHaveBeenCalledTimes(1);
+    const helperArgs = mockCollectCodeEvidence.mock.calls[0]?.[0];
+    expect(helperArgs.installationId).toBe(makeJobData().installationId);
+    expect(helperArgs.repoFullName).toBe(makeJobData().repoFullName);
+    expect(helperArgs.issueText).toContain('App crashes on startup');
+
+    // The fetched code reaches the agent, inside memoryContext (fenced downstream).
+    const triageInput = mockRunIssueTriage.mock.calls[0]?.[0];
+    expect(triageInput.memoryContext).toContain('CODE_MARKER');
+  });
+
+  it('preserves the null memoryContext contract when there is neither memory nor code', async () => {
+    mockCollectCodeEvidence.mockResolvedValue(''); // no code
+    // no dedup matches (default) → no memory context either
+    const job = makeFakeJob(makeJobData());
+
+    await capturedProcessor?.(job);
+
+    const triageInput = mockRunIssueTriage.mock.calls[0]?.[0];
+    // combined [memory, ''].filter(Boolean).join || null → null (never the string '').
+    expect(triageInput.memoryContext).toBeNull();
+  });
+
+  it('never lets a code-helper throw block triage (degrades to text-only)', async () => {
+    mockCollectCodeEvidence.mockRejectedValue(new Error('helper boom'));
+    const job = makeFakeJob(makeJobData());
+
+    const result = await capturedProcessor?.(job);
+
+    // Triage still ran and a draft still persisted — the throw was swallowed.
+    expect(mockRunIssueTriage).toHaveBeenCalledTimes(1);
+    expect(mockSaveIssueDraft).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ success: true });
   });
 });
 

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type ForgeAuthError, isForgeAuthError } from '../../errors.js';
-import type { ForgeAdapter, GraphReadCapable, ReactionCapable } from '../../ports/forge-adapter.js';
+import type {
+  FileReadCapable,
+  ForgeAdapter,
+  GraphReadCapable,
+  ReactionCapable,
+} from '../../ports/forge-adapter.js';
 import { REACTION_KIND } from '../../ports/forge-adapter.js';
 import type { ChangeRequestRef, CommentId, CommentMarker, RepoRef } from '../../types.js';
 import { ACTOR_KIND, FORGE_KIND } from '../../types.js';
@@ -32,6 +37,7 @@ function makeClient(overrides: Partial<GitHubClientPort> = {}): GitHubClientPort
     addCommentReaction: vi.fn().mockResolvedValue(undefined),
     fetchGraphFromBranch: vi.fn().mockResolvedValue(null),
     fetchGraphMetadata: vi.fn().mockResolvedValue(null),
+    fetchFileContents: vi.fn().mockResolvedValue('export const x = 1;\n'),
     ...overrides,
   };
 }
@@ -262,17 +268,77 @@ describe('GitHubForgeAdapter — graph read (task 1.2 / 1.12)', () => {
   });
 });
 
+describe('GitHubForgeAdapter — file read (task ERE-transfer / FileReadCapable)', () => {
+  it('fetchFileContents delegates to client with the adapter owner/repo/token (path+ref passed through)', async () => {
+    const client = makeClient({
+      fetchFileContents: vi.fn().mockResolvedValue('export const x = 1;\n'),
+    });
+    const adapter = makeAdapter(client);
+    await expect(adapter.fetchFileContents(repo, 'src/retry.ts', 'abc123')).resolves.toBe(
+      'export const x = 1;\n',
+    );
+    // The adapter is repo-scoped: owner/repo/token are fixed, path + ref pass through.
+    expect(client.fetchFileContents).toHaveBeenCalledWith(
+      OWNER,
+      REPO,
+      'src/retry.ts',
+      'abc123',
+      TOKEN,
+    );
+  });
+
+  it('fetchFileContents returns null when the client reports no file (404/dir handled in client)', async () => {
+    const client = makeClient({ fetchFileContents: vi.fn().mockResolvedValue(null) });
+    const adapter = makeAdapter(client);
+    await expect(adapter.fetchFileContents(repo, 'missing.ts', 'main')).resolves.toBeNull();
+  });
+
+  it('bridges an OMITTED ref to the client empty-string sentinel (default branch)', async () => {
+    const client = makeClient();
+    const adapter = makeAdapter(client);
+    await adapter.fetchFileContents(repo, 'src/a.ts'); // no ref → default branch
+    expect(client.fetchFileContents).toHaveBeenCalledWith(OWNER, REPO, 'src/a.ts', '', TOKEN);
+  });
+
+  it('reclassifies a 401/403 to ForgeAuthError (P2 recovery), never swallows it as null', async () => {
+    const client = makeClient({
+      fetchFileContents: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('boom 401'), { status: 401 })),
+    });
+    const adapter = makeAdapter(client);
+    // Wrapped in #mapAuth like the base reads, so the in-job token re-mint seam fires.
+    const err = await adapter.fetchFileContents(repo, 'src/a.ts', 'main').catch((e) => e);
+    expect(isForgeAuthError(err)).toBe(true);
+    expect((err as ForgeAuthError).status).toBe(401);
+  });
+
+  it('propagates a non-auth fault unchanged (does NOT swallow it as null)', async () => {
+    const client = makeClient({
+      fetchFileContents: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('boom 500'), { status: 500 })),
+    });
+    const adapter = makeAdapter(client);
+    await expect(adapter.fetchFileContents(repo, 'src/a.ts', 'main')).rejects.toThrow('boom 500');
+  });
+});
+
 describe('GitHubForgeAdapter — capability shape', () => {
-  it('satisfies ForgeAdapter (base) and is assignable to ReactionCapable + GraphReadCapable', () => {
+  it('satisfies ForgeAdapter (base) and is assignable to ReactionCapable + GraphReadCapable + FileReadCapable', () => {
     const adapter = makeAdapter(makeClient());
     // Compile-time + runtime: it IS a ForgeAdapter.
     const asForge: ForgeAdapter = adapter;
     const asReaction: ReactionCapable = adapter;
     const asGraph: GraphReadCapable = adapter;
+    const asFileRead: FileReadCapable = adapter;
     expect(typeof asReaction.addReaction).toBe('function');
     // BOTH graph methods co-present.
     expect(typeof asGraph.fetchGraph).toBe('function');
     expect(typeof asGraph.fetchGraphMetadata).toBe('function');
+    // FileReadCapable present (narrowed by method-presence, not a capabilities flag).
+    expect(typeof asFileRead.fetchFileContents).toBe('function');
+    expect('fetchFileContents' in adapter).toBe(true);
     // capabilities hint reflects the implemented surface.
     expect(asForge.capabilities).toEqual({
       reactions: true,

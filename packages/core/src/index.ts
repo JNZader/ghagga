@@ -173,6 +173,7 @@ export {
 
 // ─── Issue-Triage Agent (issue-triage feature) ──────────────────
 
+export { discoverCodePaths } from './agents/issue-code-discovery.js';
 export type {
   IssueClassification,
   IssueComment,

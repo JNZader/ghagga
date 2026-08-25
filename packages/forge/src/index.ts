@@ -46,6 +46,7 @@ export {
 // ─── Ports: forge adapter ───────────────────────────────────────
 
 export type {
+  FileReadCapable,
   ForgeAdapter,
   ForgeAdapterBase,
   GraphReadCapable,

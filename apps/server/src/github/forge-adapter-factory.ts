@@ -4,7 +4,7 @@
  * This is the SOLE module in apps/server that wires the concrete `client.ts`
  * forge-adapter functions into the forge-agnostic {@link GitHubClientPort}. Every
  * forge consumer (the review worker AND the webhook issue_comment handler) builds
- * its adapter through {@link makeGitHubAdapter} — so the 11 `client.ts`
+ * its adapter through {@link makeGitHubAdapter} — so the 12 `client.ts`
  * forge-adapter fns have EXACTLY ONE sanctioned consumer (this factory). That
  * single chokepoint is what makes the 1.5/1.6 lockdown trivial.
  *
@@ -73,6 +73,9 @@ const githubClientPort: GitHubClientPort = {
   },
   get fetchGraphMetadata() {
     return githubClient.fetchGraphMetadata;
+  },
+  get fetchFileContents() {
+    return githubClient.fetchFileContents;
   },
 };
 

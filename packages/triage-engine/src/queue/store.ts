@@ -5,7 +5,7 @@
  * generalized to be forge/repo-aware (multi-project safe).
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { IssueDraft } from '../types/draft.js';
@@ -30,17 +30,41 @@ export function defaultQueuePath(repo: string, options: QueuePathOptions = {}): 
   return join(base, repoSlug(repo), 'queue.json');
 }
 
-/** Loads the queue at `queuePath`. Missing file or corrupt JSON -> empty queue (never throws). */
+/**
+ * Loads the queue at `queuePath`. A MISSING file is a fresh queue (`{}`). A file
+ * that EXISTS but is corrupt is NOT silently discarded — it throws loudly,
+ * because returning `{}` over a corrupt-but-present queue would drop every draft,
+ * including `POSTED` idempotency state (risking a re-post). Repair or delete the
+ * file deliberately; never let a transient corruption erase the queue.
+ */
 export function loadQueue(queuePath: string): Queue {
+  let raw: string;
   try {
-    return JSON.parse(readFileSync(queuePath, 'utf-8')) as Queue;
-  } catch {
-    return {};
+    raw = readFileSync(queuePath, 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    throw err; // permission/IO error — surface it, don't mask a real fault as an empty queue
+  }
+  try {
+    return JSON.parse(raw) as Queue;
+  } catch (err) {
+    throw new Error(
+      `Refusing to load a corrupt triage queue at ${queuePath}: ${(err as Error).message}. ` +
+        'The file exists but is not valid JSON; loading it as empty would drop every draft ' +
+        '(including POSTED state and its de-dup guard). Inspect and repair, or remove it deliberately.',
+    );
   }
 }
 
-/** Persists `queue` to `queuePath`, creating parent directories as needed. */
+/**
+ * Persists `queue` to `queuePath`, creating parent directories as needed. The
+ * write is ATOMIC (temp file + rename) so a crash or full disk mid-write never
+ * truncates the live queue — the rename either fully replaces it or leaves the
+ * previous good file untouched.
+ */
 export function saveQueue(queuePath: string, queue: Queue): void {
   mkdirSync(dirname(queuePath), { recursive: true });
-  writeFileSync(queuePath, `${JSON.stringify(queue, null, 2)}\n`, 'utf-8');
+  const tmp = `${queuePath}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(queue, null, 2)}\n`, 'utf-8');
+  renameSync(tmp, queuePath); // atomic on POSIX
 }

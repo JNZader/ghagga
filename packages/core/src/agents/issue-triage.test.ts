@@ -263,9 +263,16 @@ describe('runIssueTriage — cited sources', () => {
 describe('runIssueTriage — classification', () => {
   it('maps the CLASSIFICATION line into exactly one taxonomy category', async () => {
     for (const category of ['bug', 'feature', 'question'] as const) {
-      const response = [`CLASSIFICATION: ${category}`, 'CONFIDENCE: 0.7', 'REPORT:', 'ok'].join(
-        '\n',
-      );
+      // A cited source keeps an actionable classification from tripping the
+      // citation gate — this test isolates classification PARSING, not the gate.
+      const response = [
+        `CLASSIFICATION: ${category}`,
+        'CONFIDENCE: 0.7',
+        'SOURCES:',
+        '- ctx | issue | #7',
+        'REPORT:',
+        'ok',
+      ].join('\n');
       const { fn } = captureFn(response);
       const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
       expect(result.classification).toBe(category);
@@ -280,7 +287,14 @@ describe('runIssueTriage — classification', () => {
   });
 
   it('is case-insensitive on the classification value', async () => {
-    const response = ['CLASSIFICATION: BUG', 'CONFIDENCE: 0.7', 'REPORT:', 'ok'].join('\n');
+    const response = [
+      'CLASSIFICATION: BUG',
+      'CONFIDENCE: 0.7',
+      'SOURCES:',
+      '- ctx | issue | #7',
+      'REPORT:',
+      'ok',
+    ].join('\n');
     const { fn } = captureFn(response);
     const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
     expect(result.classification).toBe('bug');
@@ -318,15 +332,30 @@ describe('runIssueTriage — robustness', () => {
   });
 
   it('clamps an out-of-range confidence into [0,1]', async () => {
-    const response = ['CLASSIFICATION: bug', 'CONFIDENCE: 9.9', 'REPORT:', 'ok'].join('\n');
+    // Cited so the citation gate doesn't withhold (zero) the confidence — this
+    // test must exercise parseConfidence's clamp, not the gate. 9.9 clamps to 1.
+    const response = [
+      'CLASSIFICATION: bug',
+      'CONFIDENCE: 9.9',
+      'SOURCES:',
+      '- ctx | issue | #7',
+      'REPORT:',
+      'ok',
+    ].join('\n');
     const { fn } = captureFn(response);
     const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
-    expect(result.confidence).toBeLessThanOrEqual(1);
-    expect(result.confidence).toBeGreaterThanOrEqual(0);
+    expect(result.confidence).toBe(1);
   });
 
   it('defaults confidence to 0 when the model omits it', async () => {
-    const response = ['CLASSIFICATION: bug', 'REPORT:', 'ok'].join('\n');
+    // Cited so the 0 under test comes from parseConfidence (omitted), not the gate.
+    const response = [
+      'CLASSIFICATION: bug',
+      'SOURCES:',
+      '- ctx | issue | #7',
+      'REPORT:',
+      'ok',
+    ].join('\n');
     const { fn } = captureFn(response);
     const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
     expect(result.confidence).toBe(0);
@@ -340,6 +369,8 @@ describe('runIssueTriage — parseConfidence robustness (5vr)', () => {
     const response = [
       'CLASSIFICATION: bug',
       'CONFIDENCE: 0.82 (high confidence)',
+      'SOURCES:', // cited so the citation gate doesn't zero the confidence under test
+      '- ctx | issue | #7',
       'REPORT:',
       'ok',
     ].join('\n');
@@ -360,6 +391,8 @@ describe('runIssueTriage — parseConfidence robustness (5vr)', () => {
       'CONDITIONS: x',
       'VERIFICATION: y',
       'CONFIDENCE: high',
+      'SOURCES:', // cited so the 0 proves parseConfidence didn't steal 0.99, not that the gate zeroed it
+      '- ctx | issue | #7',
       'REPORT:',
       'ok',
     ].join('\n');
@@ -369,9 +402,15 @@ describe('runIssueTriage — parseConfidence robustness (5vr)', () => {
   });
 
   it('defaults confidence to 0 for a garbage CONFIDENCE value', async () => {
-    const response = ['CLASSIFICATION: bug', 'CONFIDENCE: probably-ish', 'REPORT:', 'ok'].join(
-      '\n',
-    );
+    // Cited so the 0 comes from parseConfidence (garbage → default), not the gate.
+    const response = [
+      'CLASSIFICATION: bug',
+      'CONFIDENCE: probably-ish',
+      'SOURCES:',
+      '- ctx | issue | #7',
+      'REPORT:',
+      'ok',
+    ].join('\n');
     const { fn } = captureFn(response);
     const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
     expect(result.confidence).toBe(0);
@@ -387,7 +426,16 @@ describe('runIssueTriage — classification normalization (5vr)', () => {
     ['Feature.', 'feature'],
     ['a question?', 'question'],
   ] as const)('normalizes %j to %j', async (raw, expected) => {
-    const response = [`CLASSIFICATION: ${raw}`, 'CONFIDENCE: 0.7', 'REPORT:', 'ok'].join('\n');
+    // Cited so an actionable classification survives the gate — this isolates
+    // classification NORMALIZATION, not the citation gate.
+    const response = [
+      `CLASSIFICATION: ${raw}`,
+      'CONFIDENCE: 0.7',
+      'SOURCES:',
+      '- ctx | issue | #7',
+      'REPORT:',
+      'ok',
+    ].join('\n');
     const { fn } = captureFn(response);
     const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
     expect(result.classification).toBe(expected);
@@ -400,6 +448,81 @@ describe('runIssueTriage — classification normalization (5vr)', () => {
     const { fn } = captureFn(response);
     const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
     expect(result.classification).toBe('question');
+  });
+});
+
+describe('runIssueTriage — fail-closed citation gate (uncited actionable verdict)', () => {
+  const uncited = (classification: string, confidence = '0.9') =>
+    [`CLASSIFICATION: ${classification}`, `CONFIDENCE: ${confidence}`, 'REPORT:', 'asserted.'].join(
+      '\n',
+    );
+
+  it('withholds confidence on an uncited bug (keeping the classification) with a report note', async () => {
+    const { fn } = captureFn(uncited('bug'));
+    const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
+
+    // Classification is preserved (dedup/telemetry signal); the hold is carried
+    // by the zeroed confidence → Phase-4 NEEDS_INFO.
+    expect(result.classification).toBe('bug');
+    expect(result.confidence).toBe(0);
+    expect(result.report).toContain('Confidence withheld');
+    expect(result.report).toContain('asserted.'); // original report preserved, note appended
+  });
+
+  it('withholds confidence on an uncited feature (keeping the classification)', async () => {
+    const { fn } = captureFn(uncited('feature'));
+    const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
+    expect(result.classification).toBe('feature');
+    expect(result.confidence).toBe(0);
+    expect(result.report).toContain('Confidence withheld');
+  });
+
+  it('keeps full confidence for a bug that cites a memory-observation source', async () => {
+    const response = [
+      'CLASSIFICATION: bug',
+      'CONFIDENCE: 0.82',
+      'SOURCES:',
+      '- prior timeout bug | observation | 1234',
+      'REPORT:',
+      'real cause.',
+    ].join('\n');
+    const { fn } = captureFn(response);
+    const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
+
+    expect(result.classification).toBe('bug');
+    expect(result.confidence).toBeCloseTo(0.82);
+    expect(result.report).not.toContain('Confidence withheld');
+  });
+
+  it('accepts a ref-less issue-excerpt citation (the prompt permits excerpts without a ref)', async () => {
+    // The prompt allows citing "an excerpt from the issue itself", which has no
+    // natural ref. Such a citation must NOT be treated as uncited — the gate is a
+    // presence check, not a ref-format check. Guards against wrongly holding a
+    // legitimately-cited first-report bug.
+    const response = [
+      'CLASSIFICATION: bug',
+      'CONFIDENCE: 0.7',
+      'SOURCES:',
+      '- "app crashes on startup" (from the issue body)',
+      'REPORT:',
+      'real cause.',
+    ].join('\n');
+    const { fn } = captureFn(response);
+    const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
+
+    expect(result.classification).toBe('bug');
+    expect(result.confidence).toBeCloseTo(0.7);
+    expect(result.sources[0]?.ref).toBe(''); // no ref, yet still a citation
+    expect(result.report).not.toContain('Confidence withheld');
+  });
+
+  it('leaves an uncited question untouched (a question asserts nothing to cite)', async () => {
+    const { fn } = captureFn(uncited('question', '0.5'));
+    const result = await runIssueTriage({ ...BASE_INPUT, generateFn: fn });
+
+    expect(result.classification).toBe('question');
+    expect(result.confidence).toBeCloseTo(0.5); // NOT withheld — no gate trip
+    expect(result.report).not.toContain('Confidence withheld');
   });
 });
 
@@ -436,6 +559,8 @@ describe('runIssueTriage — empty/garbage LLM responses (5vr)', () => {
       'FINDINGS:',
       '- something vaguely wrong',
       '- another vibe',
+      'SOURCES:',
+      '- ctx | issue | #7',
       'REPORT:',
       'partial.',
     ].join('\n');

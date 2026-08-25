@@ -177,6 +177,25 @@ export interface GraphReadCapable {
   fetchGraphMetadata(repo: RepoRef): Promise<GraphMetadata | null>;
 }
 
+/**
+ * Optional: adapter can READ a single file's contents at a ref, no clone.
+ *
+ * A single-method capability (composed as `Partial<>` on {@link ForgeAdapter}),
+ * narrowed by method-presence (`'fetchFileContents' in adapter`) like every other
+ * optional capability. `null` means "no such file at this ref" (missing, or the
+ * path is a directory/submodule) — distinct from a throw, which is a real fault
+ * (auth, rate-limit, oversize). Used to give code-blind (no-checkout) triage some
+ * code-in-evidence.
+ */
+export interface FileReadCapable {
+  /**
+   * Read a repo-relative file's UTF-8 contents at `ref`, or null if not a file
+   * there. `ref` is optional — omitted reads the repository default branch (for
+   * issue triage, which has no natural SHA).
+   */
+  fetchFileContents(repo: RepoRef, path: string, ref?: string): Promise<string | null>;
+}
+
 /** Optional: adapter can publish line-anchored inline comments. */
 export interface InlineCapable {
   /** Publish a batch of inline comments; partial success is reported. */
@@ -205,5 +224,6 @@ export interface MarkerExtractable {
 export type ForgeAdapter = ForgeAdapterBase &
   Partial<ReactionCapable> &
   (GraphReadCapable | { fetchGraph?: never; fetchGraphMetadata?: never }) &
+  Partial<FileReadCapable> &
   Partial<InlineCapable> &
   Partial<MarkerExtractable>;

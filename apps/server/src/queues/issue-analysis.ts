@@ -74,6 +74,7 @@ import { PostgresMemoryStorage } from '../memory/postgres.js';
 // re-validation (review.ts:66); `normalizeLegacyProvider` remaps stale/legacy
 // provider strings to the 3-variant v3 set (review.ts:277). Importing them keeps
 // triage and review on a single source of truth for outbound-URL trust.
+import { collectIssueCodeEvidence } from './issue-code-evidence.js';
 import { normalizeLegacyProvider, revalidateGatewayChain } from './review.js';
 
 const logger = rootLogger.child({ module: 'issue-analysis-queue' });
@@ -576,12 +577,36 @@ async function processIssueAnalysis(job: Job<IssueAnalysisJobData>): Promise<Iss
       const comments = (data.comments ?? []).slice(0, MAX_ISSUE_COMMENTS);
       const memoryContext = buildMemoryContextFromDedup(dedup);
 
+      // Code-in-evidence (best-effort): fetch the source the issue references so
+      // triage can weigh the claim against real code. Any failure degrades to
+      // text-only — it NEVER blocks triage. The fetched (attacker-influenceable)
+      // bytes fold into memoryContext, which runIssueTriage fences as untrusted
+      // DATA via buildMemoryContext.
+      let codeContext = '';
+      try {
+        const issueText = [data.issueTitle, data.issueBody, ...comments.map((c) => c.body)].join(
+          '\n',
+        );
+        codeContext = await collectIssueCodeEvidence({
+          installationId,
+          repoFullName,
+          issueText,
+          log,
+        });
+      } catch (err) {
+        log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'code-evidence collection threw; triaging text-only',
+        );
+      }
+      const combinedContext = [memoryContext, codeContext].filter(Boolean).join('\n\n') || null;
+
       const result = await runIssueTriage({
         issueTitle: data.issueTitle,
         issueBody: data.issueBody,
         labels: data.labels,
         comments,
-        memoryContext,
+        memoryContext: combinedContext,
         provider: resolved.provider,
         model: resolved.model,
         apiKey: resolved.apiKey,

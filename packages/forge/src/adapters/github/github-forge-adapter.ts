@@ -26,6 +26,7 @@
 import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
 import { ForgeAuthError, getErrorStatus } from '../../errors.js';
 import type {
+  FileReadCapable,
   ForgeAdapterBase,
   GraphReadCapable,
   ReactionCapable,
@@ -93,7 +94,9 @@ function toNativeCommentId(commentId: CommentId): number {
  * deferred), so `publishInline` is ABSENT — callers guarding by method-presence
  * will skip inline publishing cleanly.
  */
-export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, GraphReadCapable {
+export class GitHubForgeAdapter
+  implements ForgeAdapterBase, ReactionCapable, GraphReadCapable, FileReadCapable
+{
   readonly capabilities: ForgeCapabilities = {
     reactions: true,
     inlineComments: false,
@@ -322,6 +325,29 @@ export class GitHubForgeAdapter implements ForgeAdapterBase, ReactionCapable, Gr
    */
   async fetchGraphMetadata(_repo: RepoRef): Promise<GraphMetadata | null> {
     return this.#client.fetchGraphMetadata(this.#owner, this.#repo, this.#token);
+  }
+
+  // ─── FileReadCapable ────────────────────────────────────────────
+
+  /**
+   * Read one repo-relative file's contents at `ref`, or null if the path is not
+   * a file there. The path-traversal guard, size cap, file-vs-directory check,
+   * base64 decode, and 404→null all live INSIDE client.fetchFileContents — this
+   * adapter delegates with the adapter's fixed owner/repo (so `_repo` is unused,
+   * matching the graph methods). Wrapped in `#mapAuth` so a 401/403 from the
+   * Contents API reclassifies to `ForgeAuthError` — same P2 token-remint recovery
+   * every base read gets (the graph methods skip it only because the client
+   * swallows their auth failures to null; this one throws). Not exposed via the
+   * `capabilities` flags: consumers narrow by method-presence
+   * (`'fetchFileContents' in adapter`) per the R-CAPABILITY doctrine, which is
+   * authoritative over the informational flags.
+   */
+  async fetchFileContents(_repo: RepoRef, path: string, ref?: string): Promise<string | null> {
+    // Bridge the optional capability ref to the client's positional `ref`: '' is
+    // the client's "default branch" sentinel (Contents API omits ?ref).
+    return this.#mapAuth(() =>
+      this.#client.fetchFileContents(this.#owner, this.#repo, path, ref ?? '', this.#token),
+    );
   }
 }
 

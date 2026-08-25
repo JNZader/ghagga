@@ -4,6 +4,101 @@ Tracked-but-deferred work. OPEN items at the top.
 
 ## OPEN
 
+### BL-ERE-TRANSFER — import ERE's evidence discipline into the triage path (provenance + strategic frame)
+
+Umbrella entry for a small family of transfers from the **evidence-review-engine**
+(ERE, `~/programacion/ere-reviewer-authority-hardening-v2`) — a sibling project
+that is a content-addressed *verification kernel* for auditing an issue backlog
+against real code. This entry records where the sub-items came from, the
+strategic call, and what NOT to port. Sub-items: BL-TRIAGE-QUEUE-ATOMIC,
+BL-TRIAGE-CITED-VERDICT, BL-TRIAGE-SERVER-CODE-BLIND.
+
+**Provenance (2026-08-25):** three blind agents (fable/opus/sonnet), each reading
+BOTH codebases independently with no shared context, then cross-checked. Only
+findings that survived the cross-check (or were verified by hand) are recorded
+here — single-voice claims were re-read against the source before filing.
+
+**Strategic call — different centers of gravity, transfer discipline not
+machinery.** ghagga is a *delivery* product: three surfaces (Server/Action/CLI),
+BullMQ workers, a human-approval dashboard, an injection-defense layer, and a
+trust model that is *human-in-the-loop* (nothing auto-posts —
+`packages/triage-engine/src/engine.ts`). ERE is a *verification kernel*: its
+trust model is *cryptographic* (a verdict is invalid unless it cites
+content-addressed frozen evidence, and a baseline is invalid unless the real
+verifier re-derives every digest). Merging them wholesale would bolt a
+manifest-verifying lifecycle onto a system whose actual guarantee is "a human
+read the draft". The right relationship: ERE stays the R&D bench where the
+verification *contracts* get proven; ghagga imports the contracts (fail-closed
+verdict schema, cite-or-abstain gate, atomic persistence, revision pinning) as
+ordinary TypeScript — without the manifest/promote kernel.
+
+**Note this cuts toward what ghagga already wants:** BL-HYBRID-4R-MODE
+independently specifies a schema-validated ledger (feature 3) and `--anchor
+<sha>` frozen-tree anchoring (feature 4) as *unbuilt* future work — ERE ships
+tested implementations of both ideas. These triage transfers are the same
+discipline arriving on the triage path first, where the gap is widest.
+
+**Anti-recommendations (do NOT do these):**
+
+1. **Do not port ERE's 8-stage lifecycle** (`collect→freeze→diff→impact→assess→
+   adjudicate→verify→promote`) into triage. Triage's unit of work is one issue →
+   one human-approved draft; a per-draft promoted baseline verifies nothing a
+   human isn't already gating.
+2. **Do not sandbox** (ERE's bwrap template) ghagga's static-analysis tools yet.
+   ghagga runs them directly *by design* (`docs/architecture.md` — "no separate
+   microservices … no SSRF concerns"); there is no untrusted-local-compute threat
+   today, and the real injection surface (untrusted issue text) is already fenced
+   in `packages/core/src/agents/issue-triage.ts`. Revisit only if ghagga starts
+   running tools against fully untrusted third-party repos.
+3. **Do not replace dedup** with an ERE `duplicate` disposition — ghagga's
+   memory-backed `findIssueDuplicates` (pre-LLM short-circuit) is strictly
+   stronger.
+4. **Do not chase ERE's determinism for *verdicts*.** ghagga's consensus/critique
+   modes treat LLM non-determinism as signal (voting). Determinism matters only
+   for *evidence identity* (revision pinning, staleness hashing), not verdict
+   identity. NOTE: ghagga's *review* verdicts are already mechanical
+   (`ReviewStatus` from severities, consensus 60/30 thresholds) — the prose/lenient
+   gap is the *triage* path only.
+
+**Deferred architectural bet (not yet filed as its own item):** a
+content-addressed baseline + carry-forward for triage/audit (re-triage only what
+changed, carry the rest — ERE's `classifyImpact`). No content-addressing exists
+anywhere in `packages/core` today. Effort L; it only pays for itself once
+re-triage-from-zero is an LLM-cost pain, which the current OPEN priorities
+(review-mode depth, GitLab parity) say it is not yet. Revisit when triage volume
+makes it hurt.
+
+### BL-TRIAGE-CODE-FENCE — give issue triage a dedicated fenced source-code input (not the memory channel)
+
+Follow-up surfaced by BOTH adversarial reviews of BL-TRIAGE-SERVER-CODE-BLIND
+(now RESOLVED). Code-in-evidence currently folds the fetched source into
+`memoryContext` (mirroring the CLI at `packages/triage-engine/src/triage/run.ts:83-84`),
+which `runIssueTriage` renders through `buildMemoryContext`
+(`packages/core/src/agents/prompts.ts:592`). That wrapper's TRUSTED framing reads:
+"observations are background context from **past reviews** … Do NOT use them as
+reasons to flag issues. Only flag issues you can justify from the **code diff**
+itself." For triage this is doubly wrong: the bytes are the *current source the
+issue references* (not past reviews), and the framing tells the model to DISCOUNT
+that channel and rely on a "diff" that does not exist in the triage path.
+
+The fence is SECURITY-correct (the code is defanged as untrusted DATA — see the
+resolved item), so this is a UTILITY limitation, not a vulnerability. The better
+design already exists in the same file: `reproductionEvidence` is a dedicated,
+semantically-distinct fenced input (`issue-triage.ts` → `wrapUntrustedReproEvidence`,
+`<REPRO_EVIDENCE>`) with no "do not flag" framing. Add an analogous optional
+`sourceCode` fenced input to `IssueTriageInput` + `buildIssuePrompt`, then switch
+BOTH call sites (the server `collectIssueCodeEvidence` fold in
+`apps/server/src/queues/issue-analysis.ts`, and the CLI fold in
+`packages/triage-engine/src/triage/run.ts`) off the memory channel. Effort M
+(touches the core agent contract + 2 callers + prompt eval). Not a blocker — v1
+keeps CLI parity.
+
+Also noted (LOW, same reviews): `discoverSearchTerms` / GitHub code-search
+discovery (find code by the identifiers an issue names, not just explicit paths)
+is a natural follow-on to `discoverCodePaths` — port ERE's `discoverSearchTerms`
++ a forge `searchCode`/`getTree` capability when path-only discovery proves too
+narrow in practice.
+
 ### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity, cleanly separated
 
 Hybrid of the 4R lens protocol (risk/reliability/resilience/readability with
@@ -109,6 +204,88 @@ If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardene
 so the risk is low). (Deferred here pending the PAT + throwaway MR.)
 
 ## RESOLVED
+
+### BL-TRIAGE-SERVER-CODE-BLIND — server-side triage has no code access; add remote code-fetch
+
+**Status: RESOLVED** — the checkout-less webhook triage worker now reads the code
+an issue references. Shipped as a 4-part slice, each part its own adversarially-
+reviewed commit:
+
+- **Part 1 (`9246edb`) — the forge file-read capability (security foundation).**
+  Optional `FileReadCapable.fetchFileContents(repo, path, ref?)` on the forge
+  adapter (method-presence narrowed); real HTTP is `client.fetchFileContents`
+  (GitHub Contents API, JSON+base64), ported from ERE `github-code.ts` with the
+  full hardening (owner/repo/ref validated, path traversal-guarded + double-
+  encoded, file-vs-dir → null, 512KiB cap, 404 → null, faults → GitHubApiError),
+  locked `@internal` in the forge-boundary lint. Two blind reviews confirmed the
+  path/URL-injection defense airtight.
+- **Part 2 (`edb9bed`) — `discoverCodePaths`** in `ghagga-core` (deterministic,
+  ReDoS-hardened path-token extraction from issue text).
+- **Parts 3-4 (`a310779`) — the formatter + wiring.** `collectIssueCodeEvidence`
+  (`apps/server/src/queues/issue-code-evidence.ts`) discovers paths → mints an
+  installation token → fetches concurrently at the default branch (empty ref) →
+  assembles within a char budget → the worker folds it into `memoryContext`.
+  Best-effort: every failure (no paths / no creds / mint fail / per-file fault)
+  degrades to text-only; never blocks or crashes triage.
+
+SECURITY (confirmed by review): the fetched bytes are attacker-influenceable but
+fold into `memoryContext`, fenced as untrusted DATA via `buildMemoryContext` /
+`wrapUntrusted` (defangs forged boundary markers) — no fence break-out; token/key
+never logged; ≤6 files + exactly 1 mint per triage. Review corrections folded in:
+concurrent fetch (job-lock safety), honest char/file budget + logging (no silent
+truncation / over-reporting). Follow-up tracked as **BL-TRIAGE-CODE-FENCE** (a
+dedicated `sourceCode` fenced input beats the memory channel). Verified: server
+784/784, forge + core green, monorepo typecheck.
+
+### BL-TRIAGE-QUEUE-ATOMIC — `queue.json`: non-atomic write + silent corrupt-swallow → draft loss / double-post
+
+**Status: RESOLVED** by commit `06215f2`. `saveQueue`
+(`packages/triage-engine/src/queue/store.ts`) now writes to a temp file then
+`renameSync`s over the target (atomic on POSIX), and `loadQueue` distinguishes a
+missing file (fresh `{}`) from a corrupt-but-present one (throws loudly, naming
+the risk of dropping POSTED state) instead of silently returning `{}` over any
+read/parse error. The parallel CLI audit-history writer
+(`apps/cli/src/commands/audit.ts`) got the same atomic write; its corrupt-read
+path now WARNS and resets rather than silently wiping (non-critical trend data,
+so it doesn't abort the save). Its store test that encoded the old bug as
+expected behavior ("corrupt JSON → empty object") was flipped to assert the loud
+throw; +2 atomicity tests. Verified: triage-engine 239/239, monorepo typecheck
+green.
+
+### BL-TRIAGE-CITED-VERDICT — fail-closed triage verdict with a cite-or-abstain gate
+
+**Status: RESOLVED** by commit `d5a4950`. `runIssueTriage`
+(`packages/core/src/agents/issue-triage.ts`) now runs a fail-closed citation
+gate: an actionable classification (`bug`/`feature`) that cites NO source has its
+confidence withheld (→ 0) so the Phase-4 threshold routes the draft to the
+hold-for-human channel (NEEDS_INFO), with a transparent note appended to the
+report. Modeled on ERE's `UNCITED_OUTCOME`.
+
+Two blind adversarial reviews (opus) reshaped the first cut — recorded here
+because both corrections matter:
+- **It is a PRESENCE check, not a ref/evidence check.** The first cut required a
+  non-empty `ref`, which would have wrongly held a legitimately-cited first-report
+  bug: the prompt (`prompts.ts:342/365`) accepts an *issue excerpt* (which has no
+  natural `ref`) as a valid citation. And there is no evidence corpus at this seam
+  to validate that a ref resolves. So the gate only catches a verdict that cites
+  literally nothing — the honest limit of a presence check, and the comments say
+  so rather than overselling the ERE analogy.
+- **The classification is PRESERVED, not rewritten to `question`.** The hold is
+  carried entirely by the zeroed confidence; flipping the class bought no routing
+  change (the server routes on confidence, the CLI drops the class) and would have
+  corrupted the dedup/telemetry signal.
+- The reviews also caught that the gate was silently masking four `parseConfidence`
+  regression tests (uncited-bug fixtures); those now cite a source so they isolate
+  the parser again, and the out-of-range clamp assertion was tightened to the exact
+  value.
+
+Known scope (accepted, LOW): a fabricated/self-referential source line still
+passes the presence check (can't be validated here); the report note flows into
+the client-reply generator, but that path is draft-only and human-gated. NOT
+done here (a separate, larger change): persisting classification/confidence into
+the DB draft so the dashboard can sort by merit. Verified: issue-triage 49/49,
+core 3870/3871, triage-engine 239/239, server issue-analysis 22/22, typecheck
+green.
 
 ### BL-ACTION-BUNDLE-REBUILD — rebuild `apps/action/dist` before the next release
 

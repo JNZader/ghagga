@@ -108,6 +108,21 @@ export interface GitHubClientPort {
 
   /** Read graph metadata from the `ghagga/graph` orphan branch, or null. */
   fetchGraphMetadata(owner: string, repo: string, token: string): Promise<GraphMetadata | null>;
+
+  /**
+   * Read one repo-relative file's UTF-8 contents at `ref`, or null if the path
+   * is not a file there. Mirrors `client.ts` `fetchFileContents`
+   * (owner/repo/path/ref/token positional style). An EMPTY-STRING `ref` reads the
+   * repository default branch (the adapter passes '' when its caller omits ref).
+   * Throws on a real fault.
+   */
+  fetchFileContents(
+    owner: string,
+    repo: string,
+    path: string,
+    ref: string,
+    token: string,
+  ): Promise<string | null>;
 }
 
 /**

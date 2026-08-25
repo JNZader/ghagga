@@ -252,6 +252,32 @@ function parseSources(text: string): IssueTriageSource[] {
   return sources;
 }
 
+/**
+ * Actionable classifications assert something concrete (a defect / a wanted
+ * change) and therefore must be BACKED by at least one cited source. `question`
+ * asserts nothing — it asks a human for info — so it needs no citation.
+ */
+const ACTIONABLE_CLASSIFICATIONS: readonly IssueClassification[] = ['bug', 'feature'];
+
+/**
+ * Whether the draft cites ANY source. This is deliberately a PRESENCE check, not
+ * an evidence check, and its scope is narrow ON PURPOSE:
+ *   - The prompt (`prompts.ts`) accepts a citation as EITHER a memory-observation
+ *     id OR an excerpt from the issue itself. An issue excerpt has no natural
+ *     `ref`, so requiring a non-empty `ref` would wrongly flag a legitimately
+ *     cited first-report bug (the highest-value triage case) as unfounded.
+ *   - At this seam there is no evidence corpus to VALIDATE that a cited ref
+ *     resolves, so a model that fabricates a source line still passes. This gate
+ *     therefore only catches the clear failure — a confident verdict that cites
+ *     literally NOTHING — not a dishonest one. That is the honest limit of what a
+ *     presence check can promise.
+ * `parseSources` already drops blank/title-less lines, so a non-empty array
+ * means at least one real source line was emitted.
+ */
+function hasCitation(sources: readonly IssueTriageSource[]): boolean {
+  return sources.length > 0;
+}
+
 // ─── Prompt Assembly ────────────────────────────────────────────
 
 /**
@@ -339,15 +365,37 @@ export async function runIssueTriage(input: IssueTriageInput): Promise<IssueTria
   });
 
   const report = extractBlock(text, 'REPORT') || text.trim();
+  const classification = parseClassification(text);
+  const sources = parseSources(text);
 
-  return {
-    classification: parseClassification(text),
+  const result: IssueTriageResult = {
+    classification,
     rootCauseHypotheses: parseHypotheses(text),
     plan: extractBlock(text, 'PLAN'),
     filesToTouch: parseFilesToTouch(text),
-    sources: parseSources(text),
+    sources,
     report,
     confidence: parseConfidence(text),
     tokensUsed,
   };
+
+  // Fail-closed citation gate (in the spirit of ERE's UNCITED_OUTCOME). A model
+  // committing to an actionable `bug`/`feature` while citing NOTHING is an
+  // unfounded verdict. We WITHHOLD confidence (DEFAULT_CONFIDENCE = 0) so the
+  // Phase-4 threshold routes the draft to the hold-for-human channel
+  // (NEEDS_INFO), and note it transparently in the human-facing report. We do
+  // NOT rewrite the classification: the hold is carried entirely by the zeroed
+  // confidence, and keeping the model's guess preserves the dedup/telemetry
+  // signal instead of overwriting a `bug` with `question`. This only reshapes
+  // the draft — it never posts.
+  if (ACTIONABLE_CLASSIFICATIONS.includes(classification) && !hasCitation(sources)) {
+    emit({
+      step: 'issue-triage-uncited',
+      message: `Confidence withheld: ${classification} classified with no cited source.`,
+    });
+    result.confidence = DEFAULT_CONFIDENCE;
+    result.report = `${report}\n\n> ⚠️ Confidence withheld: the model classified this as \`${classification}\` without citing any source. Treat as needs-human.`;
+  }
+
+  return result;
 }

@@ -6,17 +6,18 @@
  *
  * ─── FORGE-ADAPTER BOUNDARY (SDD forge-agnostic 1.5/1.6) ─────────
  *
- * The 11 forge-adapter functions in this module are INTERNAL. They are tagged
+ * The 12 forge-adapter functions in this module are INTERNAL. They are tagged
  * `@internal` individually and MUST be consumed via `GitHubForgeAdapter`, built
  * through the composition root at
  * `apps/server/src/github/forge-adapter-factory.ts` (`makeGitHubAdapter`). Do
  * NOT import these directly anywhere in `apps/server` outside that factory — the
  * forge-boundary lint (`noRestrictedImports` in biome.json) enforces this.
  *
- * The 11 forge-adapter fns:
+ * The 12 forge-adapter fns:
  *   fetchPRDiff, fetchPRDetails, getPRFileList, getPRCommitMessages,
  *   postComment, findExistingComment, deleteComment, updateComment,
- *   addCommentReaction, fetchGraphFromBranch, fetchGraphMetadata.
+ *   addCommentReaction, fetchGraphFromBranch, fetchGraphMetadata,
+ *   fetchFileContents.
  *
  * NOT forge-adapter fns (remain directly importable everywhere):
  *   - getInstallationToken — the auth/token-mint seam
@@ -786,6 +787,152 @@ export async function fetchGraphMetadata(
   } catch {
     return null;
   }
+}
+
+// ─── File Contents ──────────────────────────────────────────────
+
+/** Per-file cap — bounds prompt cost; an oversized file is rejected, not truncated. */
+const MAX_FILE_BYTES = 512 * 1024;
+const GH_OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+const GH_REPO = /^[A-Za-z0-9._-]{1,100}$/;
+const GH_REF = /^[A-Za-z0-9._/-]{1,255}$/;
+const GH_PATH_SEGMENT = /^[^/\0]+$/;
+
+/**
+ * Validate + percent-encode a repo-relative path for the Contents API. Rejects
+ * absolute paths, empty/`.`/`..` segments (traversal), and NUL; each segment is
+ * `encodeURIComponent`'d and the separating slashes are preserved. Ported from
+ * ERE `collectors/github-code.ts` `encodePath`.
+ */
+function encodeContentsPath(path: string): string {
+  if (typeof path !== 'string' || path.length === 0 || path.startsWith('/')) {
+    throw new GitHubApiError(
+      400,
+      `GitHub API error fetching file: invalid path ${JSON.stringify(path)}`,
+    );
+  }
+  const segments = path.split('/');
+  for (const seg of segments) {
+    if (!GH_PATH_SEGMENT.test(seg) || seg === '.' || seg === '..') {
+      throw new GitHubApiError(
+        400,
+        `GitHub API error fetching file: invalid path segment ${JSON.stringify(seg)}`,
+      );
+    }
+  }
+  return segments.map((s) => encodeURIComponent(s)).join('/');
+}
+
+/**
+ * Read one repo-relative file's UTF-8 contents at `ref` via the GitHub Contents
+ * API — no local clone. An EMPTY `ref` reads the repository default branch (the
+ * Contents API's behavior when ?ref is omitted). Returns null when the path does
+ * not resolve to a file there (404, or a directory/submodule/symlink); throws
+ * {@link GitHubApiError} on any real fault (auth, rate-limit, non-2xx, oversize).
+ *
+ * Hardened for untrusted input (an issue — hence a file path — is attacker-
+ * influenceable): owner/repo/ref are charset-validated and the path is
+ * traversal-guarded before it reaches the URL; the response is validated to be a
+ * `file` and capped at {@link MAX_FILE_BYTES} so a huge file cannot blow prompt
+ * cost. Uses the JSON media type + base64 (not raw) precisely so a directory
+ * path is distinguishable from a file and returns null instead of a JSON listing.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly; the
+ * forge-boundary lint enforces this.
+ */
+export async function fetchFileContents(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+  token: string,
+): Promise<string | null> {
+  if (!GH_OWNER.test(owner)) {
+    throw new GitHubApiError(400, 'GitHub API error fetching file: invalid owner');
+  }
+  if (!GH_REPO.test(repo) || repo === '.' || repo === '..') {
+    throw new GitHubApiError(400, 'GitHub API error fetching file: invalid repo');
+  }
+  // An empty ref means "the repository default branch" — the Contents API uses it
+  // when ?ref is omitted. Issue triage relies on this: an issue has no natural SHA,
+  // so it reads the current code on the default branch. A non-empty ref is still
+  // charset-validated and encoded.
+  if (ref !== '' && !GH_REF.test(ref)) {
+    throw new GitHubApiError(400, 'GitHub API error fetching file: invalid ref');
+  }
+  const encodedPath = encodeContentsPath(path);
+  const refQuery = ref === '' ? '' : `?ref=${encodeURIComponent(ref)}`;
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}${refQuery}`;
+
+  const response = await githubCircuitBreaker.execute(async () => {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    // A 404 (path absent at this ref) is a valid answer, not a breaker failure.
+    // Any OTHER non-2xx is a real failure, thrown INSIDE execute so the circuit
+    // breaker counts it toward opening (matching fetchPRDetails/getIssue).
+    if (res.status !== 404 && !res.ok) {
+      throw new GitHubApiError(
+        res.status,
+        `GitHub API error fetching file: ${res.status} ${res.statusText}`,
+      );
+    }
+    return res;
+  });
+
+  if (response.status === 404) return null; // no such path at this ref
+
+  // Reject a grossly oversized response BEFORE materializing the body. The
+  // o.size / decoded-byte guards below are the precise caps; this just bounds the
+  // transient allocation. GitHub does not inline content for files >1MB, so a
+  // declared length several× the cap cannot be an in-cap file.
+  const declaredLength = Number(response.headers?.get?.('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_FILE_BYTES * 4) {
+    throw new GitHubApiError(
+      413,
+      `GitHub API error fetching file: response ${declaredLength} bytes exceeds cap`,
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = (await response.json()) as unknown;
+  } catch {
+    throw new GitHubApiError(502, 'GitHub API error fetching file: malformed JSON response');
+  }
+  // An array is a directory listing; a non-`file` type is a submodule/symlink —
+  // neither is a readable file, so return null (skip) rather than feeding junk.
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+  const o = body as Record<string, unknown>;
+  if (o.type !== 'file') return null;
+  if (typeof o.size === 'number' && o.size > MAX_FILE_BYTES) {
+    throw new GitHubApiError(
+      413,
+      `GitHub API error fetching file: ${o.size} bytes exceeds ${MAX_FILE_BYTES}`,
+    );
+  }
+  // GitHub omits inline content (or switches encoding) for files >1MB.
+  if (o.encoding !== 'base64' || typeof o.content !== 'string') {
+    throw new GitHubApiError(413, 'GitHub API error fetching file: content not inline (too large)');
+  }
+  const compact = o.content.replace(/[\r\n]/g, '');
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
+    throw new GitHubApiError(502, 'GitHub API error fetching file: content is not valid base64');
+  }
+  const buf = Buffer.from(compact, 'base64');
+  if (buf.byteLength > MAX_FILE_BYTES) {
+    throw new GitHubApiError(
+      413,
+      `GitHub API error fetching file: decoded ${buf.byteLength} exceeds ${MAX_FILE_BYTES}`,
+    );
+  }
+  return buf.toString('utf-8');
 }
 
 // ─── Graph Validation (inline to avoid dynamic imports) ─────────
