@@ -12,10 +12,10 @@
  *
  * SECURITY: the returned bytes are ATTACKER-INFLUENCEABLE (an issue names the
  * paths; a reporter may control the default-branch content of a fork/PR). The
- * caller folds this string into `memoryContext`, which `runIssueTriage` fences as
- * untrusted DATA via `buildMemoryContext` — never as trusted instructions. The
- * fetch itself is hardened in `client.fetchFileContents` (path traversal guard,
- * size cap, file-vs-dir check).
+ * caller passes this string as `runIssueTriage`'s dedicated `sourceCode` input,
+ * which fences it as untrusted DATA via `wrapUntrustedSourceCode` (<SOURCE_CODE>)
+ * — never as trusted instructions. The fetch itself is hardened in
+ * `client.fetchFileContents` (path traversal guard, size cap, file-vs-dir check).
  */
 
 import { discoverCodePaths } from 'ghagga-core';

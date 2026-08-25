@@ -81,7 +81,6 @@ const DEFAULT_CLIENT_REPLY_LANGUAGE = 'es';
  */
 export async function runTriage(input: TriageRunInput): Promise<TriageRunResult> {
   const codeContext = buildCodeContext(input.contextFiles, input.files, input.keywords);
-  const memoryContext = [input.memoryContext, codeContext].filter(Boolean).join('\n\n') || null;
   const reproductionEvidence = formatReproEvidence(input.reproEvidence);
 
   const triageResult = await runIssueTriage({
@@ -89,7 +88,11 @@ export async function runTriage(input: TriageRunInput): Promise<TriageRunResult>
     issueBody: input.issue.body,
     labels: input.issue.labels,
     comments: input.issue.comments,
-    memoryContext,
+    memoryContext: input.memoryContext ?? null,
+    // Located source goes in its OWN fenced input (BL-TRIAGE-CODE-FENCE), not
+    // folded into memoryContext — so the model verifies against it rather than
+    // being told to discount it.
+    sourceCode: codeContext || null,
     reproductionEvidence,
     provider: 'cli-bridge',
     model: input.config.models.analysis,

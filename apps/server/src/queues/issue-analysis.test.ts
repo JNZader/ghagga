@@ -287,7 +287,7 @@ describe('processIssueAnalysis — happy path (ANALYSIS draft)', () => {
 });
 
 describe('processIssueAnalysis — code-in-evidence fold', () => {
-  it('folds the code helper output into the memoryContext handed to runIssueTriage', async () => {
+  it('passes the code helper output to runIssueTriage via its own sourceCode input', async () => {
     mockCollectCodeEvidence.mockResolvedValue('## RELEVANT SOURCE CODE\n### src/x.ts\nCODE_MARKER');
     const job = makeFakeJob(makeJobData());
 
@@ -300,9 +300,11 @@ describe('processIssueAnalysis — code-in-evidence fold', () => {
     expect(helperArgs.repoFullName).toBe(makeJobData().repoFullName);
     expect(helperArgs.issueText).toContain('App crashes on startup');
 
-    // The fetched code reaches the agent, inside memoryContext (fenced downstream).
+    // The fetched code reaches the agent via sourceCode (its own fenced input),
+    // NOT folded into the memory channel.
     const triageInput = mockRunIssueTriage.mock.calls[0]?.[0];
-    expect(triageInput.memoryContext).toContain('CODE_MARKER');
+    expect(triageInput.sourceCode).toContain('CODE_MARKER');
+    expect(triageInput.memoryContext ?? '').not.toContain('CODE_MARKER');
   });
 
   it('preserves the null memoryContext contract when there is neither memory nor code', async () => {
@@ -313,7 +315,8 @@ describe('processIssueAnalysis — code-in-evidence fold', () => {
     await capturedProcessor?.(job);
 
     const triageInput = mockRunIssueTriage.mock.calls[0]?.[0];
-    // combined [memory, ''].filter(Boolean).join || null → null (never the string '').
+    // memoryContext is pure dedup context (buildMemoryContextFromDedup → null on
+    // no matches) — code no longer folds into it. Null, never the string ''.
     expect(triageInput.memoryContext).toBeNull();
   });
 
