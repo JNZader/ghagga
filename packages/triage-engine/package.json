@@ -53,7 +53,7 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.62.1"
   },
   "peerDependenciesMeta": {
     "@playwright/test": {
@@ -61,9 +61,9 @@
     }
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
-    "@types/node": "^25.9.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.1.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   }
 }

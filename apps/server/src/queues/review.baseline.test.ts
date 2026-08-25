@@ -389,7 +389,8 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
     const post = callLog.find((c) => c.fn === 'updateComment');
     expect(post).toBeDefined();
     expect(callLog.some((c) => c.fn === 'postComment')).toBe(false);
-    const body = (post?.body as { body: string }).body;
+    const postBody = post?.body as { body: string };
+    const body = postBody.body;
 
     // Inline snapshot = committed golden. If the rewire changes a single byte
     // of the posted body, this fails. The trailing reviewId marker uses the
@@ -456,9 +457,8 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
 
     const update = callLog.find((c) => c.fn === 'updateComment');
     const reaction = callLog.find((c) => c.fn === 'addCommentReaction');
-    expect(
-      (update?.body as { body: string }).body.endsWith(`<!-- reviewId: ${BASELINE_REVIEW_ID} -->`),
-    ).toBe(true);
+    const updateBody = update?.body as { body: string };
+    expect(updateBody.body.endsWith(`<!-- reviewId: ${BASELINE_REVIEW_ID} -->`)).toBe(true);
     expect(reaction?.body).toEqual({ content: 'rocket' });
   });
 

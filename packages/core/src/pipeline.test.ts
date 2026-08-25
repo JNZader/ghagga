@@ -775,17 +775,20 @@ index 1234567..abcdefg 100644
       ['NaN', Number.NaN],
       ['Infinity', Number.POSITIVE_INFINITY],
       ['fractional', 1.5],
-    ])('rejects reviewConcurrency = %s at the boundary (no infinite loop)', async (_label, value) => {
-      await expect(
-        reviewPipeline(
-          makeInput({
-            mode: 'workflow',
-            // biome-ignore lint/suspicious/noExplicitAny: exercising invalid runtime input
-            settings: settingsWith({ reviewConcurrency: value }) as any,
-          }),
-        ),
-      ).rejects.toThrow('reviewConcurrency must be a finite integer >= 1');
-    });
+    ])(
+      'rejects reviewConcurrency = %s at the boundary (no infinite loop)',
+      async (_label, value) => {
+        await expect(
+          reviewPipeline(
+            makeInput({
+              mode: 'workflow',
+              // biome-ignore lint/suspicious/noExplicitAny: exercising invalid runtime input
+              settings: settingsWith({ reviewConcurrency: value }) as any,
+            }),
+          ),
+        ).rejects.toThrow('reviewConcurrency must be a finite integer >= 1');
+      },
+    );
 
     it('rejects a negative reviewDelayMs at the boundary', async () => {
       await expect(

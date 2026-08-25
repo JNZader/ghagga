@@ -338,20 +338,17 @@ describe('indexCommand', () => {
       });
     });
 
-    it.each([
-      '0',
-      '-1',
-      'abc',
-      '2.5',
-      '',
-    ])('rejects an invalid --marker-depth %j with a clear error and exits non-zero, without walking', async (invalid) => {
-      await expect(indexCommand(FIXTURE_DIR, { markerDepth: invalid })).rejects.toThrow(
-        'process.exit(1)',
-      );
+    it.each(['0', '-1', 'abc', '2.5', ''])(
+      'rejects an invalid --marker-depth %j with a clear error and exits non-zero, without walking',
+      async (invalid) => {
+        await expect(indexCommand(FIXTURE_DIR, { markerDepth: invalid })).rejects.toThrow(
+          'process.exit(1)',
+        );
 
-      expect(tui.log.error).toHaveBeenCalledWith(expect.stringContaining('--marker-depth'));
-      expect(mockDetectMarkerDirectories).not.toHaveBeenCalled();
-    });
+        expect(tui.log.error).toHaveBeenCalledWith(expect.stringContaining('--marker-depth'));
+        expect(mockDetectMarkerDirectories).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('multi-language merge + output isolation (D2, D4)', () => {
