@@ -18,6 +18,7 @@
  *     - fetchPRDiff, fetchPRDetails, getPRFileList, getPRCommitMessages
  *     - addCommentReaction
  *     - fetchGraphFromBranch, fetchGraphMetadata
+ *     - fetchFileContents (server-only, checkout-less triage)
  *   Each stub THROWS so any accidental call surfaces loudly instead of silently
  *   returning bad data. The `--pr` post-back path (find → delete → post) only
  *   ever touches the REAL members; see pr-postback.ts + tests.
@@ -229,6 +230,11 @@ export function createCliGitHubClientPort(): GitHubClientPort {
     },
     async fetchGraphMetadata(): Promise<never> {
       return unsupported('fetchGraphMetadata');
+    },
+    async fetchFileContents(): Promise<never> {
+      // Server-only (checkout-less triage). The CLI --pr flow sources code
+      // locally, so this read member is stubbed like the others.
+      return unsupported('fetchFileContents');
     },
   };
 }

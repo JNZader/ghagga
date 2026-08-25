@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../lib/logger.js';
 import {
+  fetchFileContents,
   fetchGraphFromBranch,
   fetchGraphMetadata,
   findExistingComment,
@@ -796,6 +797,171 @@ describe('getIssue', () => {
 
     await expect(getIssue('owner', 'repo', 10, 'token')).rejects.toThrow(
       'GitHub API error fetching issue: 404 Not Found',
+    );
+  });
+});
+
+describe('fetchFileContents (ERE-transfer: remote code-in-evidence, hardened)', () => {
+  const mockFetch = vi.fn();
+  const b64 = (s: string) => Buffer.from(s, 'utf-8').toString('base64');
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const fileResponse = (content: string, size = content.length) => ({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({ type: 'file', encoding: 'base64', content: b64(content), size }),
+  });
+
+  it('decodes a base64 file and hits the Contents API at the pinned ref', async () => {
+    mockFetch.mockResolvedValueOnce(fileResponse('export const x = 1;\n'));
+    const out = await fetchFileContents('octo', 'demo', 'src/retry.ts', 'abc123', 'tok');
+    expect(out).toBe('export const x = 1;\n');
+    const url = mockFetch.mock.calls[0][0] as string;
+    expect(url).toContain('/repos/octo/demo/contents/src/retry.ts');
+    expect(url).toContain('ref=abc123');
+  });
+
+  it('returns null on 404 (file absent at that ref)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' });
+    expect(await fetchFileContents('octo', 'demo', 'nope.ts', 'main', 'tok')).toBeNull();
+  });
+
+  it('returns null for a directory listing (JSON array), never a bogus "file"', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([{ name: 'a.ts' }]),
+    });
+    expect(await fetchFileContents('octo', 'demo', 'src', 'main', 'tok')).toBeNull();
+  });
+
+  it('returns null for a non-file type (submodule/symlink)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ type: 'submodule' }),
+    });
+    expect(await fetchFileContents('octo', 'demo', 'vendor/x', 'main', 'tok')).toBeNull();
+  });
+
+  it('rejects a path-traversal attempt BEFORE any network call', async () => {
+    await expect(
+      fetchFileContents('octo', 'demo', '../../../etc/passwd', 'main', 'tok'),
+    ).rejects.toThrow(/invalid path segment/);
+    await expect(fetchFileContents('octo', 'demo', '/abs/path', 'main', 'tok')).rejects.toThrow(
+      /invalid path/,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a bad owner/ref BEFORE any network call', async () => {
+    await expect(fetchFileContents('octo/evil', 'demo', 'a.ts', 'main', 'tok')).rejects.toThrow(
+      /invalid owner/,
+    );
+    await expect(fetchFileContents('octo', 'demo', 'a.ts', 'main space', 'tok')).rejects.toThrow(
+      /invalid ref/,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('throws on an oversized file (size field over the cap)', async () => {
+    mockFetch.mockResolvedValueOnce(fileResponse('x', 512 * 1024 + 1));
+    await expect(fetchFileContents('octo', 'demo', 'big.ts', 'main', 'tok')).rejects.toThrow(
+      /exceeds/,
+    );
+  });
+
+  it('throws when content is not inline (encoding switched) — hits the encoding branch, size within cap', async () => {
+    // size is WITHIN the cap so the o.size guard does NOT fire first — this
+    // isolates the `encoding !== 'base64'` branch the size check previously masked.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ type: 'file', encoding: 'none', content: '', size: 100 }),
+    });
+    await expect(fetchFileContents('octo', 'demo', 'huge.ts', 'main', 'tok')).rejects.toThrow(
+      /not inline/,
+    );
+  });
+
+  it('throws on a decoded body over the cap even when the size field is absent/understated', async () => {
+    // No `size` field → the o.size guard is skipped; only the post-decode
+    // byteLength cap can catch it. Guards against a lying/absent size.
+    const big = 'a'.repeat(512 * 1024 + 10);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ type: 'file', encoding: 'base64', content: b64(big) }),
+    });
+    await expect(fetchFileContents('octo', 'demo', 'big.ts', 'main', 'tok')).rejects.toThrow(
+      /decoded .* exceeds/,
+    );
+  });
+
+  it('throws 502 on content that is not valid base64', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({ type: 'file', encoding: 'base64', content: 'not*base64!', size: 11 }),
+    });
+    await expect(fetchFileContents('octo', 'demo', 'a.ts', 'main', 'tok')).rejects.toThrow(
+      /not valid base64/,
+    );
+  });
+
+  it('double-encodes path segments and the ref so specials cannot inject the URL', async () => {
+    // The airtightness of the traversal/query defense rests on encodeURIComponent.
+    // A literal `%2f` must NOT become a separator, a `?`/space must be encoded, and
+    // a ref like `feature/foo` must become `feature%2Ffoo` (not a second path/qs).
+    mockFetch.mockResolvedValueOnce(fileResponse('ok'));
+    await fetchFileContents('octo', 'demo', 'weird/a %2f b?.ts', 'feature/foo', 'tok');
+    const url = mockFetch.mock.calls[0][0] as string;
+    // `%2f` → `%252f` (the % is re-encoded); space → `%20`; `?` → `%3F`.
+    expect(url).toContain('weird/a%20%252f%20b%3F.ts');
+    expect(url).not.toContain('weird/a %2f b?.ts');
+    // ref slash is encoded so it cannot start a new path or query segment.
+    expect(url).toContain('ref=feature%2Ffoo');
+  });
+
+  it('rejects empty and trailing-slash path segments (a//b, a/)', async () => {
+    await expect(fetchFileContents('octo', 'demo', 'a//b', 'main', 'tok')).rejects.toThrow(
+      /invalid path segment/,
+    );
+    await expect(fetchFileContents('octo', 'demo', 'a/', 'main', 'tok')).rejects.toThrow(
+      /invalid path segment/,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a grossly oversized response by Content-Length before reading the body', async () => {
+    const json = vi.fn(() =>
+      Promise.resolve({ type: 'file', encoding: 'base64', content: 'AA==' }),
+    );
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: (h: string) => (h === 'content-length' ? String(512 * 1024 * 5) : null) },
+      json,
+    });
+    await expect(fetchFileContents('octo', 'demo', 'a.ts', 'main', 'tok')).rejects.toThrow(
+      /exceeds cap/,
+    );
+    expect(json).not.toHaveBeenCalled(); // body never materialized
+  });
+
+  it('throws GitHubApiError on a non-2xx that is not 404', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' });
+    await expect(fetchFileContents('octo', 'demo', 'a.ts', 'main', 'tok')).rejects.toThrow(
+      'GitHub API error fetching file: 500 Server Error',
     );
   });
 });
