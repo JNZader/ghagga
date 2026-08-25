@@ -6,7 +6,7 @@
  * skip the LLM and get static findings only.
  */
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { AuditResult, LLMProvider, ReviewFinding, StaticAnalysisResult } from 'ghagga-core';
 import {
@@ -368,6 +368,8 @@ function persistAuditEntry(
       try {
         entries = JSON.parse(readFileSync(historyPath, 'utf-8')) as AuditHistoryEntry[];
       } catch {
+        // Non-critical trend history: don't abort the save, but surface the reset instead of silently wiping it.
+        tui.log.warn('⚠️  Existing audit history was unreadable; starting a fresh history file');
         entries = [];
       }
     }
@@ -387,7 +389,9 @@ function persistAuditEntry(
       entries = entries.slice(entries.length - MAX_AUDIT_ENTRIES);
     }
 
-    writeFileSync(historyPath, `${JSON.stringify(entries, null, 2)}\n`, 'utf-8');
+    const tmpPath = `${historyPath}.tmp`;
+    writeFileSync(tmpPath, `${JSON.stringify(entries, null, 2)}\n`, 'utf-8');
+    renameSync(tmpPath, historyPath); // atomic on POSIX — never truncate existing history mid-write
     tui.log.success('✅ Audit saved to history');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

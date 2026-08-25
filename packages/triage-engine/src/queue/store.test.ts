@@ -2,7 +2,7 @@
  * Queue store tests — local JSON persistence + default path resolution.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -72,10 +72,32 @@ describe('loadQueue / saveQueue', () => {
     expect(reloaded).toEqual({ '42': draft });
   });
 
-  it('loadQueue returns an empty object for corrupt JSON rather than throwing', () => {
+  it('loadQueue throws loudly for a corrupt-but-present file rather than silently dropping the queue', () => {
     const queuePath = join(dir, 'queue.json');
     writeFileSync(queuePath, '{not valid json', 'utf-8');
 
-    expect(loadQueue(queuePath)).toEqual({});
+    // Returning {} here would erase every draft (incl. POSTED state) on a transient corruption.
+    expect(() => loadQueue(queuePath)).toThrow(/corrupt triage queue/);
+  });
+
+  it('saveQueue writes atomically and leaves no .tmp file behind', () => {
+    const queuePath = join(dir, 'nested', 'queue.json');
+    const draft = makeDraft();
+
+    saveQueue(queuePath, { [draft.issueIid as string]: draft });
+
+    expect(existsSync(`${queuePath}.tmp`)).toBe(false);
+    expect(loadQueue(queuePath)).toEqual({ '42': draft });
+  });
+
+  it('saveQueue over an existing queue replaces it without corrupting it', () => {
+    const queuePath = join(dir, 'queue.json');
+    const first = makeDraft({ issueIid: '1', id: 'acme/widgets#1' });
+    const second = makeDraft({ issueIid: '2', id: 'acme/widgets#2' });
+
+    saveQueue(queuePath, { '1': first });
+    saveQueue(queuePath, { '1': first, '2': second });
+
+    expect(loadQueue(queuePath)).toEqual({ '1': first, '2': second });
   });
 });
