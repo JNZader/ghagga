@@ -55,6 +55,7 @@ export type {
   MarkerExtractable,
   ReactionCapable,
   ReactionKind,
+  SearchCapable,
 } from './ports/forge-adapter.js';
 export { REACTION_KIND } from './ports/forge-adapter.js';
 

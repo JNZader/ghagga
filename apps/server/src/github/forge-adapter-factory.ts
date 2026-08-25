@@ -77,6 +77,9 @@ const githubClientPort: GitHubClientPort = {
   get fetchFileContents() {
     return githubClient.fetchFileContents;
   },
+  get searchCode() {
+    return githubClient.searchCode;
+  },
 };
 
 /** Per-call composition input for {@link makeGitHubAdapter}. */

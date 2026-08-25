@@ -123,6 +123,20 @@ export interface GitHubClientPort {
     ref: string,
     token: string,
   ): Promise<string | null>;
+
+  /**
+   * Search the repo's code (default branch) for `term`, returning matching file
+   * paths (deduped, capped at `limit`). Mirrors `client.ts` `searchCode`
+   * (owner/repo/term/limit/token positional style). Never throws — a real fault
+   * degrades to `[]` inside `client.ts` itself.
+   */
+  searchCode(
+    owner: string,
+    repo: string,
+    term: string,
+    limit: number,
+    token: string,
+  ): Promise<string[]>;
 }
 
 /**

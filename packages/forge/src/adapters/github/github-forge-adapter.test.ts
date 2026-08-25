@@ -5,6 +5,7 @@ import type {
   ForgeAdapter,
   GraphReadCapable,
   ReactionCapable,
+  SearchCapable,
 } from '../../ports/forge-adapter.js';
 import { REACTION_KIND } from '../../ports/forge-adapter.js';
 import type { ChangeRequestRef, CommentId, CommentMarker, RepoRef } from '../../types.js';
@@ -38,6 +39,7 @@ function makeClient(overrides: Partial<GitHubClientPort> = {}): GitHubClientPort
     fetchGraphFromBranch: vi.fn().mockResolvedValue(null),
     fetchGraphMetadata: vi.fn().mockResolvedValue(null),
     fetchFileContents: vi.fn().mockResolvedValue('export const x = 1;\n'),
+    searchCode: vi.fn().mockResolvedValue(['src/a.ts']),
     ...overrides,
   };
 }
@@ -324,14 +326,40 @@ describe('GitHubForgeAdapter — file read (task ERE-transfer / FileReadCapable)
   });
 });
 
+describe('GitHubForgeAdapter — code search (task ERE-transfer / SearchCapable)', () => {
+  it('searchCode delegates to client with the adapter owner/repo/token (term+limit passed through)', async () => {
+    const client = makeClient({
+      searchCode: vi.fn().mockResolvedValue(['src/a.ts', 'src/b.ts']),
+    });
+    const adapter = makeAdapter(client);
+    await expect(adapter.searchCode(repo, 'fetchGraph', 5)).resolves.toEqual([
+      'src/a.ts',
+      'src/b.ts',
+    ]);
+    // The adapter is repo-scoped: owner/repo/token are fixed, term + limit pass through.
+    expect(client.searchCode).toHaveBeenCalledWith(OWNER, REPO, 'fetchGraph', 5, TOKEN);
+  });
+
+  it('reclassifies a genuine 401/403 to ForgeAuthError (P2 recovery)', async () => {
+    const client = makeClient({
+      searchCode: vi.fn().mockRejectedValue(Object.assign(new Error('boom 401'), { status: 401 })),
+    });
+    const adapter = makeAdapter(client);
+    const err = await adapter.searchCode(repo, 'fetchGraph', 5).catch((e) => e);
+    expect(isForgeAuthError(err)).toBe(true);
+    expect((err as ForgeAuthError).status).toBe(401);
+  });
+});
+
 describe('GitHubForgeAdapter — capability shape', () => {
-  it('satisfies ForgeAdapter (base) and is assignable to ReactionCapable + GraphReadCapable + FileReadCapable', () => {
+  it('satisfies ForgeAdapter (base) and is assignable to ReactionCapable + GraphReadCapable + FileReadCapable + SearchCapable', () => {
     const adapter = makeAdapter(makeClient());
     // Compile-time + runtime: it IS a ForgeAdapter.
     const asForge: ForgeAdapter = adapter;
     const asReaction: ReactionCapable = adapter;
     const asGraph: GraphReadCapable = adapter;
     const asFileRead: FileReadCapable = adapter;
+    const asSearch: SearchCapable = adapter;
     expect(typeof asReaction.addReaction).toBe('function');
     // BOTH graph methods co-present.
     expect(typeof asGraph.fetchGraph).toBe('function');
@@ -339,6 +367,9 @@ describe('GitHubForgeAdapter — capability shape', () => {
     // FileReadCapable present (narrowed by method-presence, not a capabilities flag).
     expect(typeof asFileRead.fetchFileContents).toBe('function');
     expect('fetchFileContents' in adapter).toBe(true);
+    // SearchCapable present (narrowed by method-presence, not a capabilities flag).
+    expect(typeof asSearch.searchCode).toBe('function');
+    expect('searchCode' in adapter).toBe(true);
     // capabilities hint reflects the implemented surface.
     expect(asForge.capabilities).toEqual({
       reactions: true,

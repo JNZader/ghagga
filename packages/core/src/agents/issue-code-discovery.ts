@@ -61,3 +61,74 @@ export function discoverCodePaths(text: string, opts?: { readonly limit?: number
   }
   return out;
 }
+
+// ─── discoverSearchTerms ──────────────────────────────────────────
+
+/** A backtick-quoted span: `` `...` ``. Matched globally over the (capped) text. */
+const BACKTICK = /`([^`]+)`/g;
+/**
+ * An identifier-shaped token inside a backtick span: starts with a letter, then
+ * letters/digits/`_`/`.`/`-`. This is the SAME charset the emitted terms are
+ * validated against downstream (the server `GH_SEARCH_TERM` regex) — kept in
+ * sync BY CONSTRUCTION since both are `[A-Za-z0-9_.-]`.
+ */
+const TERM_TOKEN = /[A-Za-z][A-Za-z0-9_.-]*/g;
+const DEFAULT_TERM_LIMIT = 5;
+const TERM_MIN = 3;
+const TERM_MAX = 64;
+/** Common template noise that is never a useful search term. */
+const TERM_STOP = new Set(['const_cast', 'static_cast']);
+
+/**
+ * Extract candidate CODE-SEARCH terms from free issue text — the complement to
+ * {@link discoverCodePaths}: instead of a path (`dir/file.ext`), this looks for
+ * an IDENTIFIER a reporter named inline, e.g. `` the bug is in `fetchGraph` ``.
+ * Used when path discovery finds too few candidates, so the caller can fall back
+ * to a GitHub code-search API call keyed on the term.
+ *
+ * BACKTICK-GATED ONLY: a bare-prose token (no surrounding backticks) is never
+ * extracted — markdown backticks are the reporter's own signal that "this is
+ * code", which keeps the false-positive rate low without an LLM. Terms are
+ * matched ANY-CASE (`fetchGraph`, `SEARCH_TERM`, `snake_case`, `foo.bar` all
+ * pass), deduped case-insensitively (first-appearance casing wins), length-
+ * bounded to `[3, 64]`, trailing `[._-]+` is trimmed, and `TERM_STOP` noise is
+ * dropped. Never throws.
+ *
+ * ReDoS-hardened for attacker-authored input the same way as
+ * {@link discoverCodePaths}: the text is capped at `MAX_TEXT`, and any backtick
+ * span longer than `MAX_TOKEN` is skipped WHOLESALE (never regex-scanned) so a
+ * pathological long span cannot drive quadratic backtracking.
+ *
+ * @param text  the issue's combined title/body/comments text
+ * @param opts.limit  max terms to return (default 5)
+ */
+export function discoverSearchTerms(text: string, opts?: { readonly limit?: number }): string[] {
+  const limit = opts?.limit ?? DEFAULT_TERM_LIMIT;
+  if (typeof text !== 'string' || text.length === 0 || limit <= 0) return [];
+  const scanned = text.slice(0, MAX_TEXT);
+  const seenKeys = new Set<string>();
+  const out: string[] = [];
+
+  const add = (raw: string): void => {
+    if (out.length >= limit) return;
+    const trimmed = raw.replace(/[._-]+$/, '');
+    if (trimmed.length < TERM_MIN || trimmed.length > TERM_MAX) return;
+    const key = trimmed.toLowerCase();
+    if (TERM_STOP.has(key)) return;
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    out.push(trimmed);
+  };
+
+  for (const spanMatch of scanned.matchAll(BACKTICK)) {
+    if (out.length >= limit) break;
+    const span = spanMatch[1] ?? '';
+    // Skip an over-long span WHOLESALE (the ReDoS belt) — never regex-scan it.
+    if (span.length > MAX_TOKEN) continue;
+    for (const tokenMatch of span.matchAll(TERM_TOKEN)) {
+      if (out.length >= limit) break;
+      add(tokenMatch[0]);
+    }
+  }
+  return out;
+}

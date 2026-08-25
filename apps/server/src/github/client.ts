@@ -6,18 +6,18 @@
  *
  * ─── FORGE-ADAPTER BOUNDARY (SDD forge-agnostic 1.5/1.6) ─────────
  *
- * The 12 forge-adapter functions in this module are INTERNAL. They are tagged
+ * The 13 forge-adapter functions in this module are INTERNAL. They are tagged
  * `@internal` individually and MUST be consumed via `GitHubForgeAdapter`, built
  * through the composition root at
  * `apps/server/src/github/forge-adapter-factory.ts` (`makeGitHubAdapter`). Do
  * NOT import these directly anywhere in `apps/server` outside that factory — the
  * forge-boundary lint (`noRestrictedImports` in biome.json) enforces this.
  *
- * The 12 forge-adapter fns:
+ * The 13 forge-adapter fns:
  *   fetchPRDiff, fetchPRDetails, getPRFileList, getPRCommitMessages,
  *   postComment, findExistingComment, deleteComment, updateComment,
  *   addCommentReaction, fetchGraphFromBranch, fetchGraphMetadata,
- *   fetchFileContents.
+ *   fetchFileContents, searchCode.
  *
  * NOT forge-adapter fns (remain directly importable everywhere):
  *   - getInstallationToken — the auth/token-mint seam
@@ -797,6 +797,10 @@ const GH_OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const GH_REPO = /^[A-Za-z0-9._-]{1,100}$/;
 const GH_REF = /^[A-Za-z0-9._/-]{1,255}$/;
 const GH_PATH_SEGMENT = /^[^/\0]+$/;
+/** Same charset `discoverSearchTerms` (ghagga-core) emits — kept in sync BY CONSTRUCTION. */
+const GH_SEARCH_TERM = /^[A-Za-z0-9_.-]{1,64}$/;
+/** GitHub code-search per_page hard cap this client will ever request. */
+const MAX_SEARCH_RESULTS = 10;
 
 /**
  * Validate + percent-encode a repo-relative path for the Contents API. Rejects
@@ -933,6 +937,114 @@ export async function fetchFileContents(
     );
   }
   return buf.toString('utf-8');
+}
+
+/**
+ * Search a repo's code (default branch — a GitHub code-search limitation) for
+ * one term, returning matching file paths (deduped, capped at `limit`). Ported
+ * from ERE `collectors/github-code.ts` `searchPaths`.
+ *
+ * THROTTLE ISOLATION (the load-bearing property of this function): a rate-
+ * limited/throttled response (429, 422 "search unavailable", or a 403 carrying
+ * `x-ratelimit-remaining: 0`/`retry-after`) degrades to `[]` and is NEVER
+ * thrown — code search is a best-effort FALLBACK when path discovery from the
+ * issue text alone found too few candidates, so a throttle must not (a) crash
+ * triage or (b) pollute the shared `githubCircuitBreaker`'s failure count and
+ * trip it for every OTHER GitHub call in the same process. A GENUINE 403 (no
+ * rate-limit signal) and any other non-2xx status ARE thrown inside `execute`,
+ * same as every other forge-adapter fn, so real faults still count toward the
+ * breaker.
+ *
+ * Hardened for untrusted input (the search term is extracted from
+ * attacker-influenceable issue text): owner/repo/term/limit are validated
+ * BEFORE any network call, mirroring `fetchFileContents`'s pattern.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly; the
+ * forge-boundary lint enforces this.
+ */
+export async function searchCode(
+  owner: string,
+  repo: string,
+  term: string,
+  limit: number,
+  token: string,
+): Promise<string[]> {
+  if (!GH_OWNER.test(owner)) {
+    throw new GitHubApiError(400, 'GitHub API error searching code: invalid owner');
+  }
+  if (!GH_REPO.test(repo) || repo === '.' || repo === '..') {
+    throw new GitHubApiError(400, 'GitHub API error searching code: invalid repo');
+  }
+  if (!GH_SEARCH_TERM.test(term)) {
+    throw new GitHubApiError(400, 'GitHub API error searching code: invalid term');
+  }
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new GitHubApiError(400, 'GitHub API error searching code: invalid limit');
+  }
+  const perPage = Math.min(limit, MAX_SEARCH_RESULTS);
+  const qs = new URLSearchParams({
+    q: `${term} repo:${owner}/${repo}`,
+    per_page: String(perPage),
+  });
+  const url = `https://api.github.com/search/code?${qs}`;
+
+  // Best-effort search is FULLY DECOUPLED from the shared githubCircuitBreaker.
+  // /search/code is a separate, flakier, far lower-limit (~10 req/min) endpoint
+  // than the core REST API, so its faults must NEITHER open the shared breaker
+  // (which gates PR review + the triage file-fetch path) NOR reset it. Every
+  // non-auth fault — throttle, 5xx, network/timeout — degrades to []; only a
+  // GENUINE auth 403 throws (→ #mapAuth ForgeAuthError), and even that never
+  // touches the breaker. The CALLER additionally skips search when the breaker is
+  // already OPEN, so a real outage fails fast instead of burning search timeouts.
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return []; // network/timeout — degrade; shared breaker untouched
+  }
+
+  const throttled =
+    res.status === 429 ||
+    res.status === 422 ||
+    (res.status === 403 &&
+      (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.get('retry-after') != null));
+  // A genuine auth 403 (no rate-limit signal) is worth surfacing for token remint.
+  if (res.status === 403 && !throttled) {
+    throw new GitHubApiError(403, `GitHub API error searching code: 403 ${res.statusText}`);
+  }
+  // Throttle OR any other non-2xx (incl. 5xx) → degrade to [], breaker untouched.
+  if (!res.ok) return [];
+
+  const response = res;
+  let body: unknown;
+  try {
+    body = (await response.json()) as unknown;
+  } catch {
+    return []; // malformed JSON — never fatal to triage
+  }
+  if (typeof body !== 'object' || body === null) return [];
+  const items = (body as Record<string, unknown>).items;
+  if (!Array.isArray(items)) return [];
+
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (typeof item !== 'object' || item === null) continue;
+    const path = (item as Record<string, unknown>).path;
+    if (typeof path !== 'string' || seen.has(path)) continue;
+    seen.add(path);
+    paths.push(path);
+    if (paths.length >= perPage) break;
+  }
+  return paths;
 }
 
 // ─── Graph Validation (inline to avoid dynamic imports) ─────────
