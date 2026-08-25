@@ -304,4 +304,15 @@ describe('GitHub client circuit breaker integration', () => {
     await expect(fetchPRDiff('owner', 'repo', 1, 'token')).rejects.toThrow();
     expect(githubCircuitBreaker.getState()).toBe('open');
   });
+
+  it('BREAKER DECOUPLE: N searchCode 5xx faults never open the shared breaker', async () => {
+    // /search/code is a separate flaky endpoint — a 5xx there degrades to [] and is
+    // fully decoupled from the shared breaker, so it can NEVER trip the breaker that
+    // gates the primary PR-review + file-fetch paths (well over the threshold of 5).
+    stubFetch500();
+    for (let i = 0; i < 8; i++) {
+      await expect(searchCode('owner', 'repo', 'fetchGraph', 5, 'token')).resolves.toEqual([]);
+    }
+    expect(githubCircuitBreaker.getState()).toBe('closed');
+  });
 });

@@ -989,12 +989,14 @@ export async function searchCode(
   });
   const url = `https://api.github.com/search/code?${qs}`;
 
-  // Fetch OUTSIDE the shared circuit breaker on purpose. A throttle is a VALID
-  // (if unhelpful) answer for best-effort search and must count as NEITHER a
-  // success NOR a failure: routing it through the breaker's success path would
-  // RESET fetchFileContents's accruing consecutive-failure count (a subtle,
-  // partly attacker-influenceable weakening of the shared breaker). A GENUINE
-  // fault is still fed to the breaker so a real outage trips it as before.
+  // Best-effort search is FULLY DECOUPLED from the shared githubCircuitBreaker.
+  // /search/code is a separate, flakier, far lower-limit (~10 req/min) endpoint
+  // than the core REST API, so its faults must NEITHER open the shared breaker
+  // (which gates PR review + the triage file-fetch path) NOR reset it. Every
+  // non-auth fault — throttle, 5xx, network/timeout — degrades to []; only a
+  // GENUINE auth 403 throws (→ #mapAuth ForgeAuthError), and even that never
+  // touches the breaker. The CALLER additionally skips search when the breaker is
+  // already OPEN, so a real outage fails fast instead of burning search timeouts.
   let res: Response;
   try {
     res = await fetch(url, {
@@ -1005,10 +1007,8 @@ export async function searchCode(
       },
       signal: AbortSignal.timeout(10_000),
     });
-  } catch (err) {
-    // Network/timeout is a genuine fault — register it with the breaker, then rethrow.
-    await githubCircuitBreaker.execute(() => Promise.reject(err));
-    throw err; // unreachable: execute rethrows
+  } catch {
+    return []; // network/timeout — degrade; shared breaker untouched
   }
 
   const throttled =
@@ -1016,22 +1016,13 @@ export async function searchCode(
     res.status === 422 ||
     (res.status === 403 &&
       (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.get('retry-after') != null));
-  // Throttled → degrade silently, breaker untouched (neither success nor failure).
-  if (throttled) return [];
-
-  if (!res.ok) {
-    // A non-throttle non-2xx (incl. a genuine 403) is a real failure: count it
-    // toward the breaker and throw so #mapAuth reclassifies 401/403 → ForgeAuthError.
-    await githubCircuitBreaker.execute(() => {
-      throw new GitHubApiError(
-        res.status,
-        `GitHub API error searching code: ${res.status} ${res.statusText}`,
-      );
-    });
+  // A genuine auth 403 (no rate-limit signal) is worth surfacing for token remint.
+  if (res.status === 403 && !throttled) {
+    throw new GitHubApiError(403, `GitHub API error searching code: 403 ${res.statusText}`);
   }
+  // Throttle OR any other non-2xx (incl. 5xx) → degrade to [], breaker untouched.
+  if (!res.ok) return [];
 
-  // 2xx — a search success does NOT reset the shared breaker; the core file-fetch
-  // path owns resets.
   const response = res;
   let body: unknown;
   try {

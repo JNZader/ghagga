@@ -1078,16 +1078,22 @@ describe('searchCode (triage-search-discovery T3: throttle-isolated code search)
     );
   });
 
-  it('throws on a genuine 5xx failure', async () => {
+  it('degrades a 5xx to [] (best-effort search is decoupled from the shared breaker)', async () => {
+    // /search/code is a flakier, lower-limit endpoint; a 5xx there must NOT trip
+    // the shared breaker that gates the core PR-review + file-fetch paths — it
+    // degrades to [] just like a throttle.
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
       statusText: 'Server Error',
       headers: { get: () => null },
     });
-    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).rejects.toThrow(
-      'GitHub API error searching code: 500 Server Error',
-    );
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
+  });
+
+  it('degrades a network/timeout error to [] (never throws out of best-effort search)', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    await expect(searchCode('octo', 'demo', 'fetchGraph', 5, 'tok')).resolves.toEqual([]);
   });
 
   it('returns [] for an empty/malformed items array, never throws', async () => {

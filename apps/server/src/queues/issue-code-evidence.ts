@@ -35,6 +35,7 @@ import { discoverCodePaths, discoverSearchTerms } from 'ghagga-core';
 import { GitHubAppCredentialProvider } from 'ghagga-forge';
 import * as githubClient from '../github/client.js';
 import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
+import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 
 /** Max files fetched per issue — bounds cost, API calls, and mint frequency. */
 const MAX_CODE_FILES = 6;
@@ -146,8 +147,17 @@ export async function collectIssueCodeEvidence(args: {
   const repoRef = { kind: 'github' as const, nativeId: `${owner}/${repo}`, path: repoFullName };
 
   // ── Code-search fallback: too few paths discovered, adapter supports it ────
+  // Skip entirely when the shared breaker is already OPEN: /search/code is
+  // decoupled from the breaker (its faults never trip it), so without this guard a
+  // real GitHub outage would still burn up to MAX_SEARCH_CALLS × the fetch timeout
+  // before the file-fetch path fails fast. Reading the breaker state here gives
+  // search the same fail-fast the core path gets, without letting search mutate it.
   const searchPaths: string[] = [];
-  if (searchTerms.length > 0 && 'searchCode' in adapter) {
+  if (
+    searchTerms.length > 0 &&
+    'searchCode' in adapter &&
+    githubCircuitBreaker.getState() !== 'open'
+  ) {
     const budget = Math.min(searchTerms.length, MAX_SEARCH_CALLS);
     for (let i = 0; i < budget; i++) {
       const term = searchTerms[i];
