@@ -1,7 +1,8 @@
 /**
  * Code-context builder — turns LOCATE's `contextFiles` (a bounded pool of
- * relative paths) into the `memoryContext` string consumed by ghagga-core's
- * `runIssueTriage`. Direct generalization of the biogas PoC's snippet
+ * relative paths) into the markdown string passed as ghagga-core
+ * `runIssueTriage`'s dedicated `sourceCode` input (fenced as <SOURCE_CODE>).
+ * Direct generalization of the biogas PoC's snippet
  * builder (see biogas-triage.mts `snippet()`/codeContext assembly), made
  * language/project-agnostic: no hardcoded ```go fence, no hardcoded module
  * label.

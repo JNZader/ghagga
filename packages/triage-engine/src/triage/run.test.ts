@@ -74,7 +74,7 @@ describe('runTriage', () => {
     expect(result.classification).toBe('bug');
   });
 
-  it('passes code context into the analysis call via memoryContext', async () => {
+  it('passes code context into the analysis call via its own fenced sourceCode input', async () => {
     const { fn, calls } = scriptedFn(TRIAGE_RESPONSE, 'ok');
     const files = new Map([
       ['internal/alerts/threshold.go', 'package alerts\nfunc CheckThreshold() {}\n'],
@@ -88,8 +88,31 @@ describe('runTriage', () => {
       analysisGenerateFn: fn,
     });
 
-    const analysisSystem = calls[0]?.system ?? '';
-    expect(analysisSystem).toContain('CheckThreshold');
+    // Code now rides the <SOURCE_CODE> fence in the USER prompt (not the memory
+    // channel in the system prompt).
+    const analysisPrompt = calls[0]?.prompt ?? '';
+    expect(analysisPrompt).toContain('CheckThreshold');
+    expect(analysisPrompt).toContain('<SOURCE_CODE>');
+    expect(calls[0]?.system ?? '').not.toContain('CheckThreshold');
+  });
+
+  it('still forwards a non-null memoryContext to the system prompt after the code/memory split', async () => {
+    const { fn, calls } = scriptedFn(TRIAGE_RESPONSE, 'ok');
+    const files = new Map([['a.go', 'package a\nfunc Widget() {}\n']]);
+    await runTriage({
+      issue: baseIssue,
+      config: baseConfig,
+      contextFiles: ['a.go'],
+      files,
+      keywords: ['widget'],
+      memoryContext: 'PRIOR_DEDUP_NOTE',
+      analysisGenerateFn: fn,
+    });
+
+    // Memory → system prompt; code → its own <SOURCE_CODE> fence in the user prompt.
+    expect(calls[0]?.system ?? '').toContain('PRIOR_DEDUP_NOTE');
+    expect(calls[0]?.prompt ?? '').toContain('Widget');
+    expect(calls[0]?.prompt ?? '').not.toContain('PRIOR_DEDUP_NOTE');
   });
 
   it('formats and fences reproduction evidence into the analysis call', async () => {
