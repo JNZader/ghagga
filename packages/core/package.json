@@ -25,7 +25,7 @@
     "github"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -63,8 +63,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@stryker-mutator/core": "^9.6.1",
-    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.1.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
