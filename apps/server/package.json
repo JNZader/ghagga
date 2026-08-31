@@ -24,7 +24,7 @@
     "ghagga-core": "workspace:*",
     "ghagga-db": "workspace:*",
     "ghagga-forge": "workspace:*",
-    "hono": "^4.13.3",
+    "hono": "^4.13.5",
     "hono-rate-limiter": "^0.5.3",
     "ioredis": "^5.11.1",
     "node-cron": "^4.6.0",
@@ -34,7 +34,7 @@
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.3.0",
     "@types/node-cron": "^3.0.11",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
