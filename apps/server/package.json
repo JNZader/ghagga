@@ -19,7 +19,7 @@
     "@ghagga/types": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "@octokit/rest": "^22.0.1",
-    "bullmq": "^5.80.2",
+    "bullmq": "^6.2.2",
     "dotenv": "^17.4.2",
     "ghagga-core": "workspace:*",
     "ghagga-db": "workspace:*",
