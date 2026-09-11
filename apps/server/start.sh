@@ -63,5 +63,5 @@ else
   cd /app
   
   echo "🚀 Starting GHAGGA API Server..."
-  node apps/server/dist/index.js
+  exec node apps/server/dist/index.js
 fi
