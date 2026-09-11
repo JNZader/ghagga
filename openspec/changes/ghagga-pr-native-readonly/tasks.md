@@ -16,7 +16,7 @@ Chained PRs recommended: Yes
 Chain strategy: feature-branch-chain
 400-line budget risk: High
 
-Units 1, 2A, 2H, 2B, 2C, 2D, and 3 are complete and undelivered. The historical no-services statement applies only to Units 1/2A; Unit 2H launched disposable PostgreSQL with existing journaled migrations, no custom FTS or production migrations. Only Units 4–5 remain pending; only their scopes remain gated. Single writer. Commands require installed dependencies; forge/server require current dependency exports.
+Units 1, 2A, 2H, 2B, 2C, 2D, and 3 are complete and were delivered with PR #383 on `main`. The historical no-services statement applies only to Units 1/2A; Unit 2H launched disposable PostgreSQL with existing journaled migrations, no custom FTS or production migrations. Units 4–5 are also complete in this task list. Live external rollout is unverified and is not claimed here. Single writer. Commands require installed dependencies; forge/server require current dependency exports.
 
 ### Units
 

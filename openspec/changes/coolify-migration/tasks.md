@@ -430,10 +430,10 @@ export default redis;
 - `apps/server/src/routes/webhook.ts`
 
 **Changes**:
-1. [ ] Remove Inngest imports
-2. [ ] Add BullMQ import
-3. [ ] Replace `inngest.send()` with `enqueueReview()`
-4. [ ] Keep same response format
+1. [x] Remove Inngest imports
+2. [x] Add BullMQ import
+3. [x] Replace `inngest.send()` with `enqueueReview()`
+4. [x] Keep same response format
 
 **Verification**:
 - No Inngest references
@@ -453,7 +453,7 @@ export default redis;
 
 **Requirements**:
 - Multi-stage build
-- Node 20 slim
+- Node 22.22.2 slim
 - Builder stage: install deps, build
 - Runner stage: copy dist, prod deps only
 - Expose port 3000
@@ -475,7 +475,7 @@ export default redis;
 
 **Requirements**:
 - Check SERVICE_TYPE env var
-- If "worker": run worker.js
+- If "worker": run the review and issue-analysis workers
 - Else: run server index.js
 - Add shebang and make executable
 
@@ -495,16 +495,23 @@ export default redis;
 - `docker-compose.yml` (root)
 
 **Services**:
-1. [ ] server (API)
-2. [ ] worker (x2 replicas)
-3. [ ] postgres
-4. [ ] redis
-5. [ ] bull-dashboard
+1. [x] server (API)
+2. [x] worker (review and issue-analysis processors in the worker container)
+3. [x] postgres
+4. [x] redis
+5. [ ] bull-dashboard (not enabled in the current Compose file; keep deployment pending if required)
+
+> **Repository evidence:** the BullMQ review queue and worker are present in
+> `apps/server/src/queues/review.ts` and `apps/server/src/workers/review.ts`; the worker entry
+> also starts issue-analysis in `apps/server/start.sh`. The migration landed in commit `a57688f`
+> (PR #86). The current `docker-compose.yml` defines server, worker, Postgres, and Redis; its
+> Bull Dashboard block is commented out.
 
 **Verification**:
-- All 5 services defined
-- Health checks configured
-- Volumes for persistence
+- Server, worker, Postgres, and Redis are defined in `docker-compose.yml`
+- Server, worker, Postgres, and Redis health checks are configured
+- Volumes for Postgres and Redis persistence are defined
+- Bull Dashboard remains pending because its Compose block is commented out
 
 ---
 
