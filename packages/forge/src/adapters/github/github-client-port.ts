@@ -22,6 +22,16 @@
  */
 
 import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
+import type { ExplanationCommentLookup, ExplanationCommentRef } from '../../ports/forge-adapter.js';
+
+/** Response from one client-owned, revision-pinned explanation read. */
+export interface GitHubRevisionPinnedSnapshot {
+  readonly repositoryId: string;
+  readonly baseSha: string;
+  readonly headSha: string;
+  readonly diff: string;
+  readonly files: readonly { readonly path: string; readonly content: string }[];
+}
 
 /** Reaction emojis the underlying GitHub client accepts. */
 export type GitHubReactionContent =
@@ -137,6 +147,49 @@ export interface GitHubClientPort {
     limit: number,
     token: string,
   ): Promise<string[]>;
+
+  /**
+   * Optional atomic read for an explanation target. The implementation must
+   * prove that repository, base, requested head, diff, and file payloads all
+   * came from the same requested revision; the adapter never composes a live
+   * PR-number fallback when this seam is absent or inconclusive.
+   */
+  fetchRevisionPinnedSnapshot?(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    requestedHeadSha: string,
+    token: string,
+  ): Promise<GitHubRevisionPinnedSnapshot | null>;
+
+  /** Optional exact-owner explanation lookup, with explicit ambiguity state. */
+  findExplanationComment?(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    reference: ExplanationCommentRef,
+    token: string,
+  ): Promise<ExplanationCommentLookup>;
+
+  /** Optional typed explanation-comment create delegation. */
+  createExplanationComment?(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    reference: ExplanationCommentRef,
+    body: string,
+    token: string,
+  ): Promise<{ id: number }>;
+
+  /** Optional typed explanation-comment update delegation. */
+  updateExplanationComment?(
+    owner: string,
+    repo: string,
+    commentId: number,
+    reference: ExplanationCommentRef,
+    body: string,
+    token: string,
+  ): Promise<void>;
 }
 
 /**

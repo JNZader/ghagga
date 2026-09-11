@@ -28,7 +28,13 @@
 // core's graph schema is the canonical graph representation, and importing it
 // `import type` keeps it strictly in type position (R-AGNOSTIC: forge may import
 // core in TYPE position only; core MUST NOT import forge at all).
-import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
+import type {
+  DependencyGraph,
+  ExplanationIdentity,
+  ExplanationSnapshot,
+  GraphMetadata,
+  NonAnswerExplanationOutcome,
+} from 'ghagga-core';
 import type {
   ChangedFile,
   ChangeRequest,
@@ -233,6 +239,70 @@ export interface MarkerExtractable {
   extractMarker(body: string, marker: CommentMarker): string | null;
 }
 
+/** A revision-pinned explanation snapshot, or a core-compatible non-answer. */
+export type ExplanationSnapshotReadResult =
+  | { readonly kind: 'SNAPSHOT'; readonly snapshot: ExplanationSnapshot }
+  | (Pick<NonAnswerExplanationOutcome, 'reason'> & {
+      readonly kind: 'STALE' | 'INVALID';
+    });
+
+/** Optional: adapter can acquire every explanation byte through one pinned read. */
+export interface ExplanationSnapshotCapable {
+  /**
+   * Acquire a snapshot bound to the requested revision without composing live
+   * PR-number reads. A missing or unprovable response is never repaired from
+   * another endpoint: callers receive STALE or INVALID instead.
+   */
+  fetchExplanationSnapshot(
+    identity: ExplanationIdentity,
+    ref: ChangeRequestRef,
+  ): Promise<ExplanationSnapshotReadResult>;
+}
+
+/** Explanation comments are independent from legacy review markers. */
+export type ExplanationCommentChannel = 'progress' | 'answer';
+
+/**
+ * Exact identity required to reconcile an explanation-owned comment.
+ *
+ * `ownerId` is a stable forge-native account ID. Repository namespace, login,
+ * and marker text are labels, not proof of ownership.
+ */
+export interface ExplanationCommentRef {
+  readonly forgeInstance: string;
+  readonly installationId: string;
+  readonly repositoryId: string;
+  readonly changeRequest: ChangeRequestRef;
+  readonly ownerId: string;
+  readonly channel: ExplanationCommentChannel;
+  readonly invocationId: string;
+}
+
+/** An explanation-comment lookup is intentionally three-state. */
+export type ExplanationCommentLookup =
+  | {
+      readonly kind: 'FOUND';
+      readonly commentId: CommentId;
+      readonly reference: ExplanationCommentRef;
+    }
+  | { readonly kind: 'ABSENT' }
+  | { readonly kind: 'INCOMPLETE'; readonly reason: string };
+
+/**
+ * Optional explanation publication seam. It delegates one typed operation at a
+ * time; it does not choose create versus update or turn ABSENT into authority
+ * to recreate a comment. That durable orchestration belongs to Unit 5.
+ */
+export interface ExplanationPublicationCapable {
+  lookupExplanationComment(reference: ExplanationCommentRef): Promise<ExplanationCommentLookup>;
+  createExplanationComment(reference: ExplanationCommentRef, body: string): Promise<CommentId>;
+  updateExplanationComment(
+    reference: ExplanationCommentRef,
+    commentId: CommentId,
+    body: string,
+  ): Promise<void>;
+}
+
 /**
  * The full adapter type the engine consumes.
  *
@@ -249,4 +319,6 @@ export type ForgeAdapter = ForgeAdapterBase &
   Partial<FileReadCapable> &
   Partial<SearchCapable> &
   Partial<InlineCapable> &
-  Partial<MarkerExtractable>;
+  Partial<MarkerExtractable> &
+  Partial<ExplanationSnapshotCapable> &
+  Partial<ExplanationPublicationCapable>;

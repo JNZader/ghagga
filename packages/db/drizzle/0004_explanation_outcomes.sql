@@ -1,0 +1,1 @@
+ALTER TABLE "explanation_invocations" ADD COLUMN "outcome_payload" jsonb;

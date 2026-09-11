@@ -10,6 +10,7 @@
  *  - edge cases like empty results, missing settings, etc.
  */
 
+import { createHash } from 'node:crypto';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { describe, expect, it, vi } from 'vitest';
@@ -411,7 +412,7 @@ describe('getEffectiveRepoSettings', () => {
 
     expect(result.source).toBe('repo');
     expect(result.providerChain).toEqual([]);
-    expect(result.settings).toEqual(DEFAULT_REPO_SETTINGS);
+    expect(result.settings).toEqual({ ...DEFAULT_REPO_SETTINGS, explanationsEnabled: false });
   });
 
   it('should return global settings when useGlobalSettings is true and installation settings exist', async () => {
@@ -474,7 +475,7 @@ describe('getEffectiveRepoSettings', () => {
     expect(result.providerChain).toEqual([]);
     expect(result.aiReviewEnabled).toBe(true);
     expect(result.reviewMode).toBe('simple');
-    expect(result.settings).toEqual(DEFAULT_REPO_SETTINGS);
+    expect(result.settings).toEqual({ ...DEFAULT_REPO_SETTINGS, explanationsEnabled: false });
   });
 });
 
@@ -2481,5 +2482,1298 @@ describe('rejectIssueDraft', () => {
     const result = await rejectIssueDraft(db, 9);
 
     expect(result).toBeUndefined();
+  });
+});
+
+describe('getEffectiveRepoSettings explanation opt-in', () => {
+  const repoProviderChain: DbProviderChainEntry[] = [
+    { provider: 'gateway', model: 'repo-model', encryptedApiKey: 'repo-key' },
+  ];
+
+  function repoInput(settings: RepoSettings | null, useGlobalSettings = false) {
+    return {
+      installationId: 8,
+      useGlobalSettings,
+      providerChain: repoProviderChain,
+      aiReviewEnabled: false,
+      reviewMode: 'consensus',
+      settings,
+    };
+  }
+
+  function dbWithInstallationSettings(settings: RepoSettings) {
+    const mockLimit = vi.fn().mockResolvedValue([
+      {
+        id: 1,
+        installationId: 8,
+        providerChain: [
+          { provider: 'gateway' as const, model: 'global-model', encryptedApiKey: null },
+        ],
+        aiReviewEnabled: true,
+        reviewMode: 'workflow',
+        settings,
+      },
+    ]);
+    const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    return { select: vi.fn().mockReturnValue({ from: mockFrom }) } as unknown as Database;
+  }
+
+  it('defaults legacy and missing selected settings to false without mutating defaults', async () => {
+    const legacySettings: RepoSettings = { ...DEFAULT_REPO_SETTINGS, enableMemory: false };
+    const legacy = await getEffectiveRepoSettings({} as Database, repoInput(legacySettings));
+
+    expect(legacy.settings.explanationsEnabled).toBe(false);
+    expect(legacy.settings.enableMemory).toBe(false);
+    expect(legacy.providerChain).toEqual(repoProviderChain);
+    expect(legacy.aiReviewEnabled).toBe(false);
+    expect(legacy.reviewMode).toBe('consensus');
+    expect(legacySettings).not.toHaveProperty('explanationsEnabled');
+    expect(DEFAULT_REPO_SETTINGS).not.toHaveProperty('explanationsEnabled');
+
+    const missing = await getEffectiveRepoSettings({} as Database, repoInput(null));
+    expect(missing.settings.explanationsEnabled).toBe(false);
+    expect(DEFAULT_REPO_SETTINGS).not.toHaveProperty('explanationsEnabled');
+  });
+
+  it.each([true, false])('honors explicit repo explanationsEnabled=%s', async (enabled) => {
+    const result = await getEffectiveRepoSettings(
+      {} as Database,
+      repoInput({ ...DEFAULT_REPO_SETTINGS, explanationsEnabled: enabled }),
+    );
+
+    expect(result.source).toBe('repo');
+    expect(result.settings.explanationsEnabled).toBe(enabled);
+  });
+
+  it.each([true, false])(
+    'inherits installation explanationsEnabled=%s for global selection',
+    async (enabled) => {
+      const result = await getEffectiveRepoSettings(
+        dbWithInstallationSettings({ ...DEFAULT_REPO_SETTINGS, explanationsEnabled: enabled }),
+        repoInput({ ...DEFAULT_REPO_SETTINGS, explanationsEnabled: !enabled }, true),
+      );
+
+      expect(result.source).toBe('global');
+      expect(result.settings.explanationsEnabled).toBe(enabled);
+      expect(result.providerChain[0]?.model).toBe('global-model');
+      expect(result.aiReviewEnabled).toBe(true);
+      expect(result.reviewMode).toBe('workflow');
+    },
+  );
+});
+
+type ExplanationInvocationIdentityFixture = {
+  forgeInstance: string;
+  installationId: string;
+  actorId: string;
+  repositoryId: string;
+  pullRequestNumber: number;
+  requestedHeadSha: string;
+  sourceCommentId: string;
+  questionHash: string;
+  question: string;
+};
+
+type ExplanationInvocationApi = {
+  deriveExplanationInvocationKey(identity: ExplanationInvocationIdentityFixture): string | null;
+  registerExplanationInvocation(
+    db: unknown,
+    identity: unknown,
+  ): Promise<{ status: string; invocation?: unknown }>;
+  lookupExplanationInvocation(
+    db: unknown,
+    identity: unknown,
+  ): Promise<{ status: string; invocation?: unknown }>;
+};
+
+const explanationIdentity: ExplanationInvocationIdentityFixture = {
+  forgeInstance: 'github.com',
+  installationId: 'installation-42',
+  actorId: 'actor-99',
+  repositoryId: 'repository-7',
+  pullRequestNumber: 17,
+  requestedHeadSha: 'a'.repeat(40),
+  sourceCommentId: 'comment-301',
+  question: 'Why was this function changed?',
+  questionHash: '70d5cef4a5624f6490a48ccecaf6405959c00e492047fee9b2d928abe48163c4',
+};
+
+function explanationStore(inserted: unknown[], selected: unknown[] = []) {
+  const returning = vi.fn().mockResolvedValue(inserted);
+  const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
+  const values = vi.fn().mockReturnValue({ onConflictDoNothing });
+  const insert = vi.fn().mockReturnValue({ values });
+  const limit = vi.fn().mockResolvedValue(selected);
+  const where = vi.fn().mockReturnValue({ limit });
+  const from = vi.fn().mockReturnValue({ where });
+  const select = vi.fn().mockReturnValue({ from });
+  return { db: { insert, select }, insert, select, values, returning, onConflictDoNothing };
+}
+
+function questionHash(question: string): string {
+  return createHash('sha256').update(question).digest('hex');
+}
+
+describe('explanation invocation registration', () => {
+  async function api(): Promise<ExplanationInvocationApi> {
+    return (await import('./queries.js')) as unknown as ExplanationInvocationApi;
+  }
+
+  it('derives a stable SHA-256 key and isolates every immutable identity component', async () => {
+    const { deriveExplanationInvocationKey } = await api();
+    const key = deriveExplanationInvocationKey(explanationIdentity);
+    expect(key).toMatch(/^[a-f0-9]{64}$/);
+    expect(deriveExplanationInvocationKey({ ...explanationIdentity })).toBe(key);
+
+    for (const component of [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+    ] as const) {
+      const value = explanationIdentity[component];
+      const changed =
+        typeof value === 'number'
+          ? value + 1
+          : component === 'questionHash'
+            ? 'c'.repeat(64)
+            : `${value}-other`;
+      expect(
+        deriveExplanationInvocationKey({ ...explanationIdentity, [component]: changed }),
+      ).not.toBe(key);
+    }
+  });
+
+  it('rejects incomplete or non-exact hash input without writing', async () => {
+    const { registerExplanationInvocation, lookupExplanationInvocation } = await api();
+    const store = explanationStore([]);
+
+    await expect(
+      registerExplanationInvocation(store.db, {
+        ...explanationIdentity,
+        questionHash: 'B'.repeat(64),
+      }),
+    ).resolves.toMatchObject({ status: 'invalid' });
+    await expect(
+      lookupExplanationInvocation(store.db, { ...explanationIdentity, actorId: '' }),
+    ).resolves.toMatchObject({ status: 'invalid' });
+    expect(store.insert).not.toHaveBeenCalled();
+    expect(store.select).not.toHaveBeenCalled();
+  });
+
+  it('registers only a pending row and observes an exact duplicate without a second insert', async () => {
+    const { registerExplanationInvocation } = await api();
+    const pending = { id: 1, ...explanationIdentity, executionStatus: 'PENDING' };
+    const fresh = explanationStore([pending]);
+    await expect(
+      registerExplanationInvocation(fresh.db, explanationIdentity),
+    ).resolves.toMatchObject({
+      status: 'registered',
+      invocation: pending,
+    });
+    expect(fresh.onConflictDoNothing).toHaveBeenCalledOnce();
+
+    const duplicate = explanationStore([], [pending]);
+    await expect(
+      registerExplanationInvocation(duplicate.db, explanationIdentity),
+    ).resolves.toMatchObject({
+      status: 'duplicate',
+      invocation: pending,
+    });
+    expect(duplicate.insert).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed for a collision, changed identity, missing conflict follow-up, and database errors', async () => {
+    const { lookupExplanationInvocation, registerExplanationInvocation } = await api();
+    const stored = { id: 1, ...explanationIdentity, actorId: 'other-actor' };
+    await expect(
+      registerExplanationInvocation(explanationStore([], [stored]).db, explanationIdentity),
+    ).resolves.toMatchObject({ status: 'mismatch' });
+    await expect(
+      registerExplanationInvocation(explanationStore([]).db, explanationIdentity),
+    ).resolves.toMatchObject({
+      status: 'unavailable',
+    });
+    await expect(
+      lookupExplanationInvocation(explanationStore([], [stored]).db, explanationIdentity),
+    ).resolves.toMatchObject({ status: 'mismatch' });
+    await expect(
+      lookupExplanationInvocation(explanationStore([]).db, explanationIdentity),
+    ).resolves.toMatchObject({
+      status: 'not_found',
+    });
+
+    const failure = new Error('insert unavailable');
+    const insert = vi.fn(() => {
+      throw failure;
+    });
+    await expect(
+      registerExplanationInvocation({ insert, select: vi.fn() }, explanationIdentity),
+    ).rejects.toBe(failure);
+  });
+});
+
+describe('explanation invocation question correction', () => {
+  it('rejects a request whose exact question does not hash to its identity', async () => {
+    const { registerExplanationInvocation } = await import('./queries.js');
+    const store = explanationStore([]);
+    await expect(
+      registerExplanationInvocation(store.db, {
+        ...explanationIdentity,
+        question: 'Why was this function changed again?',
+      } as typeof explanationIdentity),
+    ).resolves.toEqual({ status: 'invalid' });
+    expect(store.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe('explanation invocation boundary and authority isolation', () => {
+  async function api(): Promise<ExplanationInvocationApi> {
+    return (await import('./queries.js')) as unknown as ExplanationInvocationApi;
+  }
+
+  it('rejects malformed unknown requests without reading or writing', async () => {
+    const { lookupExplanationInvocation, registerExplanationInvocation } = await api();
+    const store = explanationStore([]);
+    const invalidRequests: unknown[] = [
+      null,
+      undefined,
+      [],
+      {},
+      { ...explanationIdentity, forgeInstance: null },
+      { ...explanationIdentity, actorId: 99 },
+      { ...explanationIdentity, pullRequestNumber: 0 },
+      { ...explanationIdentity, pullRequestNumber: Number.NaN },
+      { ...explanationIdentity, pullRequestNumber: 1.5 },
+      { ...explanationIdentity, requestedHeadSha: '' },
+      { ...explanationIdentity, questionHash: 'A'.repeat(64) },
+      { ...explanationIdentity, question: '' },
+      { ...explanationIdentity, question: 'different question' },
+    ];
+
+    for (const request of invalidRequests) {
+      await expect(registerExplanationInvocation(store.db, request)).resolves.toEqual({
+        status: 'invalid',
+      });
+      await expect(lookupExplanationInvocation(store.db, request)).resolves.toEqual({
+        status: 'invalid',
+      });
+    }
+
+    expect(store.insert).not.toHaveBeenCalled();
+    expect(store.select).not.toHaveBeenCalled();
+  });
+
+  it('allowlists only pending identity values from structural caller input', async () => {
+    const { registerExplanationInvocation } = await api();
+    const row = { id: 1, ...explanationIdentity, executionStatus: 'PENDING' };
+    const store = explanationStore([row]);
+    const request = {
+      ...explanationIdentity,
+      executionStatus: 'ANSWERED',
+      executionFence: 'caller-fence',
+      outcomeStatus: 'ANSWERED',
+      outcomeAnswer: 'caller-answer',
+      progressStatus: 'PUBLISHED',
+      progressPublicationStatus: 'PUBLISHED',
+      answerPublicationStatus: 'PUBLISHED',
+    };
+
+    await expect(registerExplanationInvocation(store.db, request)).resolves.toEqual({
+      status: 'registered',
+      invocation: row,
+    });
+
+    const insertedValues = store.values.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(insertedValues).toMatchObject({
+      forgeInstance: explanationIdentity.forgeInstance,
+      installationId: explanationIdentity.installationId,
+      actorId: explanationIdentity.actorId,
+      repositoryId: explanationIdentity.repositoryId,
+      pullRequestNumber: explanationIdentity.pullRequestNumber,
+      requestedHeadSha: explanationIdentity.requestedHeadSha,
+      sourceCommentId: explanationIdentity.sourceCommentId,
+      questionHash: explanationIdentity.questionHash,
+      question: explanationIdentity.question,
+    });
+    for (const field of [
+      'executionStatus',
+      'executionFence',
+      'outcomeStatus',
+      'outcomeAnswer',
+      'progressStatus',
+      'progressPublicationStatus',
+      'answerPublicationStatus',
+    ]) {
+      expect(insertedValues).not.toHaveProperty(field);
+    }
+  });
+
+  it('propagates insert and select errors while returning opaque mismatch results', async () => {
+    const { lookupExplanationInvocation, registerExplanationInvocation } = await api();
+    const insertError = new Error('insert error');
+    const insertFailure = explanationStore([]);
+    insertFailure.insert.mockImplementation(() => {
+      throw insertError;
+    });
+    await expect(registerExplanationInvocation(insertFailure.db, explanationIdentity)).rejects.toBe(
+      insertError,
+    );
+
+    const selectError = new Error('select error');
+    const selectFailure = explanationStore([]);
+    selectFailure.select.mockImplementation(() => {
+      throw selectError;
+    });
+    await expect(registerExplanationInvocation(selectFailure.db, explanationIdentity)).rejects.toBe(
+      selectError,
+    );
+    await expect(lookupExplanationInvocation(selectFailure.db, explanationIdentity)).rejects.toBe(
+      selectError,
+    );
+
+    const stored = { id: 1, ...explanationIdentity, question: 'stored question' };
+    await expect(
+      registerExplanationInvocation(explanationStore([], [stored]).db, explanationIdentity),
+    ).resolves.toEqual({ status: 'mismatch' });
+  });
+
+  it('preserves exact pending reserved and terminal rows on duplicates', async () => {
+    const { registerExplanationInvocation } = await api();
+    const createdAt = new Date('2026-09-08T00:00:00.000Z');
+    const rows = [
+      { id: 1, ...explanationIdentity, executionStatus: 'PENDING', progressVersion: 0, createdAt },
+      {
+        id: 2,
+        ...explanationIdentity,
+        executionStatus: 'DISPATCH_RESERVED',
+        executionFence: 'reservation-fence',
+        dispatchReservedAt: createdAt,
+        dispatchLeaseExpiresAt: createdAt,
+        progressVersion: 4,
+        progressPublicationStatus: 'CREATE_STARTED',
+        progressPublicationCreateStartedAt: createdAt,
+        progressCommentId: 501,
+        progressExpectedBotAuthorId: 502,
+        progressPublicationFence: 'progress-fence',
+        progressPublicationVersion: 3,
+        createdAt,
+      },
+      {
+        id: 3,
+        ...explanationIdentity,
+        executionStatus: 'ANSWERED',
+        outcomeStatus: 'ANSWERED',
+        outcomeAnswer: 'answer',
+        outcomeCompletedAt: createdAt,
+        progressVersion: 7,
+        answerPublicationStatus: 'PUBLISHED',
+        answerPublicationCreateStartedAt: createdAt,
+        answerCommentId: 601,
+        answerExpectedBotAuthorId: 602,
+        answerPublicationFence: 'answer-fence',
+        answerPublicationVersion: 5,
+        createdAt,
+      },
+    ];
+
+    for (const row of rows) {
+      await expect(
+        registerExplanationInvocation(explanationStore([], [row]).db, explanationIdentity),
+      ).resolves.toEqual({ status: 'duplicate', invocation: row });
+    }
+  });
+
+  it('registers a distinct request for every tuple component and valid changed question', async () => {
+    const { registerExplanationInvocation } = await api();
+    const changedQuestion = 'Why did the guard change?';
+    const variants = [
+      { ...explanationIdentity, forgeInstance: 'github.enterprise' },
+      { ...explanationIdentity, installationId: 'installation-43' },
+      { ...explanationIdentity, actorId: 'actor-100' },
+      { ...explanationIdentity, repositoryId: 'repository-8' },
+      { ...explanationIdentity, pullRequestNumber: 18 },
+      { ...explanationIdentity, requestedHeadSha: 'b'.repeat(40) },
+      { ...explanationIdentity, sourceCommentId: 'comment-302' },
+      {
+        ...explanationIdentity,
+        question: changedQuestion,
+        questionHash: questionHash(changedQuestion),
+      },
+    ];
+
+    for (const request of variants) {
+      const row = { id: request.pullRequestNumber, ...request, executionStatus: 'PENDING' };
+      await expect(
+        registerExplanationInvocation(explanationStore([row]).db, request),
+      ).resolves.toEqual({
+        status: 'registered',
+        invocation: row,
+      });
+    }
+  });
+});
+
+describe('explanation invocation settlement', () => {
+  it('accepts complete terminal payloads only for their allowed predecessor state', async () => {
+    const { validateExplanationInvocationSettlement } = await import('./queries.js');
+    const answered = {
+      ...explanationIdentity,
+      expectedExecutionStatus: 'DISPATCH_RESERVED',
+      executionFence: 'dispatch-fence',
+      outcome: {
+        kind: 'ANSWERED',
+        answer: 'The guard prevents stale execution.',
+        metadata: { provider: 'gateway', model: 'fixed-model', tokensUsed: 42 },
+      },
+    };
+    const unavailable = {
+      ...explanationIdentity,
+      expectedExecutionStatus: 'PENDING',
+      outcome: { kind: 'AI_UNAVAILABLE', reason: 'Provider disabled.' },
+    };
+
+    expect(validateExplanationInvocationSettlement(answered)).toEqual(answered);
+    expect(validateExplanationInvocationSettlement(unavailable)).toEqual(unavailable);
+    expect(
+      validateExplanationInvocationSettlement({ ...answered, expectedExecutionStatus: 'PENDING' }),
+    ).toBeNull();
+    expect(
+      validateExplanationInvocationSettlement({
+        ...unavailable,
+        outcome: { kind: 'ANSWERED', answer: 'no', metadata: answered.outcome.metadata },
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects malformed payloads and lifecycle injection before database access', async () => {
+    const { validateExplanationInvocationSettlement } = await import('./queries.js');
+    const request = {
+      ...explanationIdentity,
+      expectedExecutionStatus: 'DISPATCH_RESERVED',
+      executionFence: 'dispatch-fence',
+      outcome: {
+        kind: 'ANSWERED',
+        answer: 'Answer',
+        metadata: { provider: 'gateway', model: 'fixed-model', tokensUsed: 1 },
+      },
+    };
+
+    for (const invalid of [
+      { ...request, executionFence: '  ' },
+      { ...request, outcome: { ...request.outcome, answer: ' ' } },
+      {
+        ...request,
+        outcome: { ...request.outcome, metadata: { ...request.outcome.metadata, tokensUsed: -1 } },
+      },
+      {
+        ...request,
+        outcome: { ...request.outcome, metadata: { ...request.outcome.metadata, tokensUsed: 1.5 } },
+      },
+      { ...request, outcome: { ...request.outcome, reviewStatus: 'PUBLISHED' } },
+      { ...request, outcome: { kind: 'UNKNOWN', reason: 'no' } },
+      { ...request, progressVersion: 9 },
+    ]) {
+      expect(validateExplanationInvocationSettlement(invalid)).toBeNull();
+    }
+  });
+
+  it('rejects invalid requests before DB access and propagates update failures', async () => {
+    const { settleExplanationInvocation } = await import('./queries.js');
+    const update = vi.fn();
+    const select = vi.fn();
+    await expect(
+      settleExplanationInvocation({ update, select } as unknown as Database, { invalid: true }),
+    ).resolves.toEqual({ status: 'invalid' });
+    expect(update).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+
+    const failure = new Error('database unavailable');
+    const returning = vi.fn().mockRejectedValue(failure);
+    const updateWhere = vi.fn().mockReturnValue({ returning });
+    const updateFrom = vi.fn().mockReturnValue({ where: updateWhere });
+    update.mockReturnValue({ set: vi.fn().mockReturnValue({ from: updateFrom }) });
+    const lockAs = vi.fn().mockReturnValue({ id: 1, dispatchLeaseExpiresAt: new Date() });
+    select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({ for: vi.fn().mockReturnValue({ as: lockAs }) }),
+      }),
+    });
+    await expect(
+      settleExplanationInvocation({ update, select } as unknown as Database, {
+        ...explanationIdentity,
+        expectedExecutionStatus: 'PENDING',
+        outcome: { kind: 'INVALID', reason: 'invalid request' },
+      }),
+    ).rejects.toBe(failure);
+  });
+
+  it('replays a complete immutable terminal observation with the explicit settlement allowlist', async () => {
+    const { settleExplanationInvocation } = await import('./queries.js');
+    const completedAt = new Date('2026-09-08T00:00:00.000Z');
+    const outcome = {
+      kind: 'ANSWERED' as const,
+      answer: 'The existing answer remains immutable.',
+      metadata: { provider: 'gateway', model: 'fixed-model', tokensUsed: 7 },
+    };
+    const request = {
+      ...explanationIdentity,
+      expectedExecutionStatus: 'DISPATCH_RESERVED' as const,
+      executionFence: 'dispatch-fence',
+      outcome,
+    };
+    const observed = {
+      id: 1,
+      ...explanationIdentity,
+      executionStatus: 'ANSWERED',
+      outcomeStatus: 'ANSWERED',
+      outcomeAnswer: outcome.answer,
+      outcomePayload: outcome,
+      outcomeCompletedAt: completedAt,
+    };
+    const returning = vi.fn().mockResolvedValue([]);
+    const updateWhere = vi.fn().mockReturnValue({ returning });
+    const updateFrom = vi.fn().mockReturnValue({ where: updateWhere });
+    const set = vi.fn().mockReturnValue({ from: updateFrom });
+    const update = vi.fn().mockReturnValue({ set });
+    const limit = vi.fn().mockResolvedValue([observed]);
+    const observeWhere = vi.fn().mockReturnValue({ limit });
+    const observeFrom = vi.fn().mockReturnValue({ where: observeWhere });
+    const locked = { id: 1, dispatchLeaseExpiresAt: new Date() };
+    const lockAs = vi.fn().mockReturnValue(locked);
+    const lockFor = vi.fn().mockReturnValue({ as: lockAs });
+    const lockWhere = vi.fn().mockReturnValue({ for: lockFor });
+    const lockFrom = vi.fn().mockReturnValue({ where: lockWhere });
+    const select = vi
+      .fn()
+      .mockReturnValueOnce({ from: lockFrom })
+      .mockReturnValueOnce({ from: observeFrom });
+
+    await expect(
+      settleExplanationInvocation({ update, select } as unknown as Database, request),
+    ).resolves.toEqual({ status: 'settled', invocation: observed });
+    expect(Object.keys(set.mock.calls[0]?.[0] ?? {}).sort()).toEqual([
+      'executionStatus',
+      'outcomeAnswer',
+      'outcomeCompletedAt',
+      'outcomePayload',
+      'outcomeStatus',
+    ]);
+    expect(lockFor).toHaveBeenCalledWith('update');
+    expect(updateFrom).toHaveBeenCalledWith(locked);
+  });
+});
+
+describe('explanation invocation dispatch', () => {
+  it('rejects malformed reservation requests before database access', async () => {
+    const { reserveExplanationInvocationDispatch } = await import('./queries.js');
+    const update = vi.fn();
+    const select = vi.fn();
+    await expect(
+      reserveExplanationInvocationDispatch({ update, select } as unknown as Database, {
+        invalid: true,
+      }),
+    ).resolves.toEqual({ status: 'invalid' });
+    expect(update).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed expiry recovery requests before database access', async () => {
+    const { recoverExpiredExplanationInvocationDispatch } = await import('./queries.js');
+    const update = vi.fn();
+    const select = vi.fn();
+    await expect(
+      recoverExpiredExplanationInvocationDispatch({ update, select } as unknown as Database, {
+        ...explanationIdentity,
+        executionFence: '',
+        injectedLifecycle: 'AMBIGUOUS',
+      }),
+    ).resolves.toEqual({ status: 'invalid' });
+    expect(update).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it('uses a locked, fence-bound database-clock recovery update', async () => {
+    const { recoverExpiredExplanationInvocationDispatch } = await import('./queries.js');
+    const returning = vi.fn().mockResolvedValue([]);
+    const updateWhere = vi.fn().mockReturnValue({ returning });
+    const updateFrom = vi.fn().mockReturnValue({ where: updateWhere });
+    const set = vi.fn().mockReturnValue({ from: updateFrom });
+    const update = vi.fn().mockReturnValue({ set });
+    const locked = { id: 1, lease: new Date('2026-09-09T00:00:00.000Z') };
+    const lockAs = vi.fn().mockReturnValue(locked);
+    const lockFor = vi.fn().mockReturnValue({});
+    const lockWhere = vi.fn().mockReturnValue({ for: lockFor });
+    const lockFrom = vi.fn().mockReturnValue({ where: lockWhere });
+    const select = vi.fn().mockReturnValue({ from: lockFrom });
+    const $with = vi.fn().mockReturnValue({ as: lockAs });
+    const withLocked = vi.fn().mockReturnValue({ update });
+
+    await expect(
+      recoverExpiredExplanationInvocationDispatch(
+        { $with, select, update, with: withLocked } as unknown as Database,
+        { ...explanationIdentity, executionFence: 'original-fence' },
+      ),
+    ).resolves.toEqual({ status: 'unavailable' });
+
+    expect(lockFor).toHaveBeenCalledWith('update');
+    expect($with).toHaveBeenCalledWith('locked_expired_explanation_invocation');
+    expect(withLocked).toHaveBeenCalledWith(locked);
+    expect(updateFrom).toHaveBeenCalledWith(locked);
+    expect(updateWhere).toHaveBeenCalledOnce();
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionStatus: 'AMBIGUOUS',
+        outcomeStatus: 'AMBIGUOUS',
+      }),
+    );
+  });
+
+  it('propagates reservation update and observation failures', async () => {
+    const { reserveExplanationInvocationDispatch } = await import('./queries.js');
+    const writeFailure = new Error('reservation write failed');
+    const writeDb = {
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ returning: vi.fn().mockRejectedValue(writeFailure) }),
+        }),
+      }),
+      select: vi.fn(),
+    };
+    await expect(
+      reserveExplanationInvocationDispatch(writeDb as unknown as Database, {
+        ...explanationIdentity,
+        leaseDurationMs: 1_000,
+      }),
+    ).rejects.toBe(writeFailure);
+
+    const observationFailure = new Error('observation read failed');
+    const readDb = {
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }),
+        }),
+      }),
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ limit: vi.fn().mockRejectedValue(observationFailure) }),
+        }),
+      }),
+    };
+    await expect(
+      reserveExplanationInvocationDispatch(readDb as unknown as Database, {
+        ...explanationIdentity,
+        leaseDurationMs: 1_000,
+      }),
+    ).rejects.toBe(observationFailure);
+  });
+});
+
+describe('explanation publication CREATE persistence', () => {
+  const publicationRequest = {
+    ...explanationIdentity,
+    channel: 'progress',
+    expectedPublicationVersion: 0,
+    expectedBotAuthorId: 42,
+  };
+
+  it('reserves only a complete NOT_STARTED channel before caller I/O', async () => {
+    const module = await import('./queries.js');
+    const update = vi.fn();
+    const select = vi.fn();
+
+    await expect(
+      module.reserveExplanationPublicationCreate({ update, select } as unknown as Database, {
+        ...publicationRequest,
+        expectedBotAuthorId: 0,
+      }),
+    ).resolves.toEqual({ status: 'invalid' });
+    await expect(
+      module.reserveExplanationPublicationCreate({ update, select } as unknown as Database, {
+        ...publicationRequest,
+        expectedPublicationVersion: 2_147_483_647,
+      }),
+    ).resolves.toEqual({ status: 'invalid' });
+    for (const invalid of [
+      { ...publicationRequest, channel: 'review' },
+      { ...publicationRequest, question: 'a changed question' },
+      { ...publicationRequest, questionHash: 'A'.repeat(64) },
+      { ...publicationRequest, pullRequestNumber: 0 },
+      { ...publicationRequest, expectedPublicationVersion: -1 },
+      { ...publicationRequest, expectedPublicationVersion: 1.5 },
+      { ...publicationRequest, expectedBotAuthorId: 1.5 },
+      { ...publicationRequest, injectedStatus: 'PUBLISHED' },
+    ]) {
+      await expect(
+        module.reserveExplanationPublicationCreate(
+          { update, select } as unknown as Database,
+          invalid,
+        ),
+      ).resolves.toEqual({ status: 'invalid' });
+    }
+    expect(update).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it('persists only the selected channel with a database fence and increments its version', async () => {
+    const module = await import('./queries.js');
+    const reserved = {
+      id: 1,
+      ...explanationIdentity,
+      progressPublicationStatus: 'CREATE_STARTED',
+      progressPublicationFence: 'database-fence',
+      progressPublicationVersion: 1,
+      progressExpectedBotAuthorId: 42,
+    };
+    const returning = vi.fn().mockResolvedValue([reserved]);
+    const where = vi.fn().mockReturnValue({ returning });
+    const set = vi.fn().mockReturnValue({ where });
+    const update = vi.fn().mockReturnValue({ set });
+
+    await expect(
+      module.reserveExplanationPublicationCreate(
+        { update, select: vi.fn() } as unknown as Database,
+        publicationRequest,
+      ),
+    ).resolves.toEqual({
+      status: 'reserved',
+      invocation: reserved,
+      publicationFence: 'database-fence',
+    });
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progressPublicationStatus: 'CREATE_STARTED',
+        progressExpectedBotAuthorId: 42,
+        progressPublicationVersion: 1,
+      }),
+    );
+    expect(Object.keys(set.mock.calls[0]?.[0] ?? {}).sort()).toEqual([
+      'progressExpectedBotAuthorId',
+      'progressPublicationCreateStartedAt',
+      'progressPublicationFence',
+      'progressPublicationStatus',
+      'progressPublicationVersion',
+    ]);
+  });
+
+  it('settles the matching reservation once and rejects late or injected authority', async () => {
+    const module = await import('./queries.js');
+    const update = vi.fn();
+    const select = vi.fn();
+    const request = {
+      ...publicationRequest,
+      expectedPublicationVersion: 1,
+      publicationFence: 'publication-fence',
+      outcome: 'ACKNOWLEDGED',
+      commentId: 701,
+    };
+
+    await expect(
+      module.settleExplanationPublicationCreate({ update, select } as unknown as Database, {
+        ...request,
+        expectedBotAuthorId: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).resolves.toEqual({ status: 'invalid' });
+    await expect(
+      module.settleExplanationPublicationCreate({ update, select } as unknown as Database, {
+        ...request,
+        outcome: 'UNCERTAIN',
+        commentId: 701,
+      }),
+    ).resolves.toEqual({ status: 'invalid' });
+    expect(update).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it('guards both channel int32 fenceposts without database work after the terminal version', async () => {
+    const module = await import('./queries.js');
+    const maxReservedVersion = 2_147_483_646;
+    const lastReservationVersion = 2_147_483_645;
+
+    for (const channel of ['progress', 'answer'] as const) {
+      const versionField =
+        channel === 'progress' ? 'progressPublicationVersion' : 'answerPublicationVersion';
+      const fenceField =
+        channel === 'progress' ? 'progressPublicationFence' : 'answerPublicationFence';
+      const statusField =
+        channel === 'progress' ? 'progressPublicationStatus' : 'answerPublicationStatus';
+      const reserved = {
+        id: 1,
+        ...explanationIdentity,
+        [statusField]: 'CREATE_STARTED',
+        [fenceField]: `${channel}-terminal-fence`,
+        [versionField]: maxReservedVersion,
+      };
+      const reserveReturning = vi.fn().mockResolvedValue([reserved]);
+      const reserveWhere = vi.fn().mockReturnValue({ returning: reserveReturning });
+      const reserveSet = vi.fn().mockReturnValue({ where: reserveWhere });
+      const reserveUpdate = vi.fn().mockReturnValue({ set: reserveSet });
+
+      await expect(
+        module.reserveExplanationPublicationCreate(
+          { update: reserveUpdate, select: vi.fn() } as unknown as Database,
+          {
+            ...publicationRequest,
+            channel,
+            expectedPublicationVersion: lastReservationVersion,
+          },
+        ),
+      ).resolves.toMatchObject({
+        status: 'reserved',
+        publicationFence: `${channel}-terminal-fence`,
+        invocation: { [versionField]: maxReservedVersion },
+      });
+      expect(reserveSet).toHaveBeenCalledWith(
+        expect.objectContaining({ [versionField]: maxReservedVersion }),
+      );
+
+      const settleReturning = vi.fn().mockResolvedValue([
+        {
+          ...reserved,
+          [statusField]: 'PUBLISHED',
+          [fenceField]: null,
+          [versionField]: 2_147_483_647,
+        },
+      ]);
+      const settleWhere = vi.fn().mockReturnValue({ returning: settleReturning });
+      const settleSet = vi.fn().mockReturnValue({ where: settleWhere });
+      const settleUpdate = vi.fn().mockReturnValue({ set: settleSet });
+      await expect(
+        module.settleExplanationPublicationCreate(
+          { update: settleUpdate, select: vi.fn() } as unknown as Database,
+          {
+            ...publicationRequest,
+            channel,
+            expectedPublicationVersion: maxReservedVersion,
+            publicationFence: `${channel}-terminal-fence`,
+            outcome: 'ACKNOWLEDGED',
+            commentId: 701,
+          },
+        ),
+      ).resolves.toMatchObject({
+        status: 'settled',
+        invocation: { [versionField]: 2_147_483_647 },
+      });
+      expect(settleSet).toHaveBeenCalledWith(
+        expect.objectContaining({ [versionField]: 2_147_483_647 }),
+      );
+
+      const invalidUpdate = vi.fn();
+      const invalidSelect = vi.fn();
+      await expect(
+        module.reserveExplanationPublicationCreate(
+          { update: invalidUpdate, select: invalidSelect } as unknown as Database,
+          {
+            ...publicationRequest,
+            channel,
+            expectedPublicationVersion: maxReservedVersion,
+          },
+        ),
+      ).resolves.toEqual({ status: 'invalid' });
+      await expect(
+        module.settleExplanationPublicationCreate(
+          { update: invalidUpdate, select: invalidSelect } as unknown as Database,
+          {
+            ...publicationRequest,
+            channel,
+            expectedPublicationVersion: 2_147_483_647,
+            publicationFence: `${channel}-terminal-fence`,
+            outcome: 'ACKNOWLEDGED',
+            commentId: 701,
+          },
+        ),
+      ).resolves.toEqual({ status: 'invalid' });
+      expect(invalidUpdate).not.toHaveBeenCalled();
+      expect(invalidSelect).not.toHaveBeenCalled();
+    }
+  });
+
+  it('consumes a matching fence into PUBLISHED or AMBIGUOUS without changing the other channel', async () => {
+    const module = await import('./queries.js');
+    const settled = {
+      id: 1,
+      ...explanationIdentity,
+      progressPublicationStatus: 'PUBLISHED',
+      progressCommentId: 701,
+      progressPublicationFence: null,
+      progressPublicationVersion: 2,
+      answerPublicationStatus: 'NOT_STARTED',
+      answerPublicationVersion: 0,
+    };
+    const returning = vi.fn().mockResolvedValue([settled]);
+    const where = vi.fn().mockReturnValue({ returning });
+    const set = vi.fn().mockReturnValue({ where });
+    const update = vi.fn().mockReturnValue({ set });
+    const request = {
+      ...publicationRequest,
+      expectedPublicationVersion: 1,
+      publicationFence: 'publication-fence',
+      outcome: 'ACKNOWLEDGED',
+      commentId: 701,
+    };
+
+    await expect(
+      module.settleExplanationPublicationCreate(
+        { update, select: vi.fn() } as unknown as Database,
+        request,
+      ),
+    ).resolves.toEqual({ status: 'settled', invocation: settled });
+    expect(set).toHaveBeenCalledWith({
+      progressPublicationStatus: 'PUBLISHED',
+      progressCommentId: 701,
+      progressPublicationFence: null,
+      progressPublicationVersion: 2,
+    });
+  });
+});
+
+describe('explanation publication stale persistence', () => {
+  const staleRequest = {
+    ...explanationIdentity,
+    channel: 'progress' as const,
+  };
+
+  it('persists and replays STALE without changing execution outcome or visible publication data', async () => {
+    const module = await import('./queries.js');
+    const stale = {
+      id: 1,
+      ...explanationIdentity,
+      executionStatus: 'ANSWERED',
+      outcomeStatus: 'ANSWERED',
+      outcomeAnswer: 'persisted answer',
+      progressPublicationStatus: 'STALE',
+      progressPublicationVersion: 4,
+      progressCommentId: 701,
+      answerPublicationStatus: 'PUBLISHED',
+      answerPublicationVersion: 8,
+      answerCommentId: 702,
+    };
+    const returning = vi.fn().mockResolvedValueOnce([stale]).mockResolvedValueOnce([]);
+    const where = vi.fn().mockReturnValue({ returning });
+    const set = vi.fn().mockReturnValue({ where });
+    const update = vi.fn().mockReturnValue({ set });
+    const limit = vi.fn().mockResolvedValue([stale]);
+    const selectWhere = vi.fn().mockReturnValue({ limit });
+    const from = vi.fn().mockReturnValue({ where: selectWhere });
+    const select = vi.fn().mockReturnValue({ from });
+    const markStale = (
+      module as unknown as {
+        markExplanationPublicationStale: (
+          db: Database,
+          request: typeof staleRequest,
+        ) => Promise<unknown>;
+      }
+    ).markExplanationPublicationStale;
+
+    await expect(
+      markStale({ update, select } as unknown as Database, staleRequest),
+    ).resolves.toEqual({
+      status: 'stale',
+      invocation: stale,
+    });
+    await expect(
+      markStale({ update, select } as unknown as Database, staleRequest),
+    ).resolves.toEqual({
+      status: 'stale',
+      invocation: stale,
+    });
+
+    expect(set).toHaveBeenCalledWith({ progressPublicationStatus: 'STALE' });
+    expect(stale).toMatchObject({
+      executionStatus: 'ANSWERED',
+      outcomeStatus: 'ANSWERED',
+      outcomeAnswer: 'persisted answer',
+      progressPublicationVersion: 4,
+      progressCommentId: 701,
+      answerPublicationStatus: 'PUBLISHED',
+      answerPublicationVersion: 8,
+      answerCommentId: 702,
+    });
+  });
+});
+
+describe('explanation publication PATCH persistence', () => {
+  const patchRequest = {
+    ...explanationIdentity,
+    channel: 'progress' as const,
+    expectedPublicationVersion: 2,
+    expectedBotAuthorId: 42,
+    commentId: 701,
+  };
+
+  it('reserves only a matching PUBLISHED comment into PATCH_STARTED without a CREATE timestamp', async () => {
+    const module = await import('./queries.js');
+    const returning = vi.fn().mockResolvedValue([]);
+    const where = vi.fn().mockReturnValue({ returning });
+    const set = vi.fn().mockReturnValue({ where });
+    const update = vi.fn().mockReturnValue({ set });
+    const limit = vi.fn().mockResolvedValue([]);
+    const selectWhere = vi.fn().mockReturnValue({ limit });
+    const from = vi.fn().mockReturnValue({ where: selectWhere });
+    const select = vi.fn().mockReturnValue({ from });
+
+    await expect(
+      module.reserveExplanationPublicationPatch(
+        { update, select } as unknown as Database,
+        patchRequest,
+      ),
+    ).resolves.toEqual({ status: 'unavailable' });
+  });
+
+  it('validates both channels and preserves the comment while fencing ACKNOWLEDGED and UNCERTAIN settlements', async () => {
+    const module = await import('./queries.js');
+    for (const invalid of [
+      { ...patchRequest, commentId: 0 },
+      { ...patchRequest, expectedPublicationVersion: 2_147_483_647 },
+      { ...patchRequest, channel: 'review' },
+      { ...patchRequest, injectedStatus: 'PUBLISHED' },
+    ]) {
+      expect(module.validateExplanationPublicationPatchReservation(invalid)).toBeNull();
+    }
+
+    for (const channel of ['progress', 'answer'] as const) {
+      const fields =
+        channel === 'progress'
+          ? {
+              status: 'progressPublicationStatus',
+              fence: 'progressPublicationFence',
+              version: 'progressPublicationVersion',
+              comment: 'progressCommentId',
+            }
+          : {
+              status: 'answerPublicationStatus',
+              fence: 'answerPublicationFence',
+              version: 'answerPublicationVersion',
+              comment: 'answerCommentId',
+            };
+      const reserved = {
+        id: 1,
+        ...explanationIdentity,
+        [fields.status]: 'PATCH_STARTED',
+        [fields.fence]: `${channel}-fence`,
+        [fields.version]: 3,
+        [fields.comment]: 701,
+      };
+      const reserveReturning = vi.fn().mockResolvedValue([reserved]);
+      const reserveWhere = vi.fn().mockReturnValue({ returning: reserveReturning });
+      const reserveSet = vi.fn().mockReturnValue({ where: reserveWhere });
+      const reserveUpdate = vi.fn().mockReturnValue({ set: reserveSet });
+      await expect(
+        module.reserveExplanationPublicationPatch(
+          { update: reserveUpdate, select: vi.fn() } as unknown as Database,
+          { ...patchRequest, channel },
+        ),
+      ).resolves.toMatchObject({ status: 'reserved', publicationFence: `${channel}-fence` });
+      expect(reserveSet).toHaveBeenCalledWith(
+        expect.objectContaining({ [fields.status]: 'PATCH_STARTED', [fields.version]: 3 }),
+      );
+      expect(Object.keys(reserveSet.mock.calls[0]?.[0] ?? {})).not.toContain(
+        channel === 'progress'
+          ? 'progressPublicationCreateStartedAt'
+          : 'answerPublicationCreateStartedAt',
+      );
+
+      for (const outcome of ['ACKNOWLEDGED', 'UNCERTAIN'] as const) {
+        const settled = {
+          ...reserved,
+          [fields.status]: outcome === 'ACKNOWLEDGED' ? 'PUBLISHED' : 'AMBIGUOUS',
+          [fields.fence]: null,
+          [fields.version]: 4,
+        };
+        const settleReturning = vi.fn().mockResolvedValue([settled]);
+        const settleWhere = vi.fn().mockReturnValue({ returning: settleReturning });
+        const settleSet = vi.fn().mockReturnValue({ where: settleWhere });
+        const settleUpdate = vi.fn().mockReturnValue({ set: settleSet });
+        await expect(
+          module.settleExplanationPublicationPatch(
+            { update: settleUpdate, select: vi.fn() } as unknown as Database,
+            {
+              ...patchRequest,
+              channel,
+              expectedPublicationVersion: 3,
+              publicationFence: `${channel}-fence`,
+              outcome,
+            },
+          ),
+        ).resolves.toMatchObject({
+          status: 'settled',
+          invocation: { [fields.status]: settled[fields.status] },
+        });
+        expect(settleSet).toHaveBeenCalledWith({
+          [fields.status]: outcome === 'ACKNOWLEDGED' ? 'PUBLISHED' : 'AMBIGUOUS',
+          [fields.fence]: null,
+          [fields.version]: 4,
+        });
+      }
+    }
+  });
+
+  it('uses the exact int32 PATCH reservation and settlement fenceposts for both channels', async () => {
+    const module = await import('./queries.js');
+    for (const channel of ['progress', 'answer'] as const) {
+      const fields =
+        channel === 'progress'
+          ? {
+              status: 'progressPublicationStatus',
+              fence: 'progressPublicationFence',
+              version: 'progressPublicationVersion',
+              comment: 'progressCommentId',
+            }
+          : {
+              status: 'answerPublicationStatus',
+              fence: 'answerPublicationFence',
+              version: 'answerPublicationVersion',
+              comment: 'answerCommentId',
+            };
+      const reserved = {
+        id: 1,
+        ...explanationIdentity,
+        [fields.status]: 'PATCH_STARTED',
+        [fields.fence]: `${channel}-terminal-fence`,
+        [fields.version]: 2_147_483_646,
+        [fields.comment]: 701,
+      };
+      const settled = {
+        ...reserved,
+        [fields.status]: 'PUBLISHED',
+        [fields.fence]: null,
+        [fields.version]: 2_147_483_647,
+      };
+      const returning = vi.fn().mockResolvedValueOnce([reserved]).mockResolvedValueOnce([settled]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const db = { update, select: vi.fn() } as unknown as Database;
+      const request = {
+        ...patchRequest,
+        channel,
+        expectedPublicationVersion: 2_147_483_645,
+      };
+
+      await expect(module.reserveExplanationPublicationPatch(db, request)).resolves.toMatchObject({
+        status: 'reserved',
+        publicationFence: `${channel}-terminal-fence`,
+        invocation: { [fields.version]: 2_147_483_646 },
+      });
+      await expect(
+        module.settleExplanationPublicationPatch(db, {
+          ...request,
+          expectedPublicationVersion: 2_147_483_646,
+          publicationFence: `${channel}-terminal-fence`,
+          outcome: 'ACKNOWLEDGED',
+        }),
+      ).resolves.toMatchObject({
+        status: 'settled',
+        invocation: { [fields.version]: 2_147_483_647 },
+      });
+      expect(set).toHaveBeenNthCalledWith(1, {
+        [fields.status]: 'PATCH_STARTED',
+        [fields.fence]: expect.anything(),
+        [fields.version]: 2_147_483_646,
+      });
+      expect(set).toHaveBeenNthCalledWith(2, {
+        [fields.status]: 'PUBLISHED',
+        [fields.fence]: null,
+        [fields.version]: 2_147_483_647,
+      });
+
+      const rejectedDb = { update: vi.fn(), select: vi.fn() } as unknown as Database;
+      await expect(
+        module.reserveExplanationPublicationPatch(rejectedDb, {
+          ...request,
+          expectedPublicationVersion: 2_147_483_646,
+        }),
+      ).resolves.toEqual({ status: 'invalid' });
+      await expect(
+        module.settleExplanationPublicationPatch(rejectedDb, {
+          ...request,
+          expectedPublicationVersion: 2_147_483_647,
+          publicationFence: `${channel}-terminal-fence`,
+          outcome: 'ACKNOWLEDGED',
+        }),
+      ).resolves.toEqual({ status: 'invalid' });
+      expect(rejectedDb.update).not.toHaveBeenCalled();
+      expect(rejectedDb.select).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rejects malformed PATCH reservation and settlement authority before database work', async () => {
+    const module = await import('./queries.js');
+    const malformedReservations: unknown[] = [
+      null,
+      [],
+      { ...patchRequest, expectedBotAuthorId: 1.5 },
+      { ...patchRequest, expectedBotAuthorId: -1 },
+      { ...patchRequest, expectedBotAuthorId: Number.MAX_SAFE_INTEGER + 1 },
+      { ...patchRequest, expectedPublicationVersion: 1.5 },
+      { ...patchRequest, expectedPublicationVersion: -1 },
+      { ...patchRequest, expectedPublicationVersion: 2_147_483_647 },
+      { ...patchRequest, commentId: 1.5 },
+      { ...patchRequest, commentId: -1 },
+      { ...patchRequest, question: '' },
+      { ...patchRequest, questionHash: 'not-a-sha256' },
+      { ...patchRequest, questionHash: 'a'.repeat(64) },
+      { ...patchRequest, repositoryId: '' },
+      { ...patchRequest, sourceCommentId: undefined },
+      { ...patchRequest, unexpected: true },
+    ];
+    const malformedSettlements: unknown[] = [
+      ...malformedReservations,
+      {
+        ...patchRequest,
+        expectedPublicationVersion: 3,
+        publicationFence: '',
+        outcome: 'ACKNOWLEDGED',
+      },
+      {
+        ...patchRequest,
+        expectedPublicationVersion: 3,
+        publicationFence: 'fence',
+        outcome: 'INVALID',
+      },
+      {
+        ...patchRequest,
+        expectedPublicationVersion: 3,
+        expectedBotAuthorId: Number.MAX_SAFE_INTEGER + 1,
+        publicationFence: 'fence',
+        outcome: 'ACKNOWLEDGED',
+      },
+      {
+        ...patchRequest,
+        expectedPublicationVersion: 3,
+        questionHash: 'a'.repeat(64),
+        publicationFence: 'fence',
+        outcome: 'ACKNOWLEDGED',
+      },
+      {
+        ...patchRequest,
+        expectedPublicationVersion: 3,
+        publicationFence: 'fence',
+        outcome: 'ACKNOWLEDGED',
+        lifecycle: 'caller-controlled',
+      },
+    ];
+
+    for (const value of malformedReservations) {
+      const db = { update: vi.fn(), select: vi.fn() } as unknown as Database;
+      await expect(module.reserveExplanationPublicationPatch(db, value)).resolves.toEqual({
+        status: 'invalid',
+      });
+      expect(db.update).not.toHaveBeenCalled();
+      expect(db.select).not.toHaveBeenCalled();
+    }
+    for (const value of malformedSettlements) {
+      const db = { update: vi.fn(), select: vi.fn() } as unknown as Database;
+      await expect(module.settleExplanationPublicationPatch(db, value)).resolves.toEqual({
+        status: 'invalid',
+      });
+      expect(db.update).not.toHaveBeenCalled();
+      expect(db.select).not.toHaveBeenCalled();
+    }
   });
 });

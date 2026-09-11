@@ -22,6 +22,27 @@
       "when": 1784168403711,
       "tag": "0002_curved_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788835940476,
+      "tag": "0003_explanation_invocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788875117018,
+      "tag": "0004_explanation_outcomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789066446592,
+      "tag": "0005_explanation_publication_patch",
+      "breakpoints": true
     }
   ]
 }

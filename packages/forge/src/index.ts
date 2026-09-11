@@ -46,6 +46,12 @@ export {
 // ─── Ports: forge adapter ───────────────────────────────────────
 
 export type {
+  ExplanationCommentChannel,
+  ExplanationCommentLookup,
+  ExplanationCommentRef,
+  ExplanationPublicationCapable,
+  ExplanationSnapshotCapable,
+  ExplanationSnapshotReadResult,
   FileReadCapable,
   ForgeAdapter,
   ForgeAdapterBase,
@@ -99,9 +105,13 @@ export type {
   GitHubClientPort,
   GitHubInstallationTokenMintWithExpiry,
   GitHubReactionContent,
+  GitHubRevisionPinnedSnapshot,
   MintedInstallationToken,
 } from './adapters/github/github-client-port.js';
-export type { GitHubForgeAdapterDeps } from './adapters/github/github-forge-adapter.js';
+export type {
+  GitHubExplanationBinding,
+  GitHubForgeAdapterDeps,
+} from './adapters/github/github-forge-adapter.js';
 export { GitHubForgeAdapter } from './adapters/github/github-forge-adapter.js';
 export { StaticTokenProvider } from './adapters/github/static-token-provider.js';
 

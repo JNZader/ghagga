@@ -16,6 +16,8 @@ import {
   getEffectiveRepoSettings,
   getInstallationByGitHubId,
   getRepoByGithubId,
+  recoverPendingExplanationInvocation,
+  registerExplanationInvocation,
   updateWorkflowStatus,
   upsertInstallation,
   upsertRepository,
@@ -62,6 +64,7 @@ interface IssueCommentEvent {
     user: {
       login: string;
       type: string; // "User" | "Bot"
+      id: number;
     };
     author_association: string;
   };
@@ -114,7 +117,14 @@ const TRIAGE_ALLOWED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
  * path). `triage` targets a PLAIN (non-PR) issue (the issue-triage path) — it is
  * routed to the `issue-analysis` queue, never `enqueueReview`.
  */
-type CommentCommand = 'review' | 'security' | 'perf' | 'describe' | 'fan-out' | 'triage';
+type CommentCommand =
+  | 'review'
+  | 'security'
+  | 'perf'
+  | 'describe'
+  | 'fan-out'
+  | 'triage'
+  | 'explain';
 
 /** Parsed result from a comment command */
 interface ParsedCommand {
@@ -138,6 +148,7 @@ const COMMAND_MODE_MAP: Record<CommentCommand, string | null> = {
   describe: 'simple',
   'fan-out': 'fan-out',
   triage: null,
+  explain: null,
 };
 
 const VALID_COMMANDS = new Set<string>(Object.keys(COMMAND_MODE_MAP));
@@ -375,6 +386,23 @@ function _allFilesIgnored(files: string[], patterns: string[]): boolean {
   return files.every((file) => patterns.some((pattern) => matchesPattern(file, pattern)));
 }
 
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function hasExplanationQuestion(body: string): boolean {
+  let inFence = false;
+  for (const line of body.split('\n')) {
+    if (FENCE_LINE_REGEX.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (/^[^\S\r\n]*\/?ghagga[^\S\r\n]+explain[^\S\r\n]+\S/i.test(line)) return true;
+  }
+  return false;
+}
+
 // ─── Route Factory ──────────────────────────────────────────────
 
 export function createWebhookRouter(db: Database) {
@@ -564,6 +592,10 @@ async function handleIssueComment(
   }
 
   const isPullRequest = Boolean(payload.issue.pull_request);
+
+  if (parsed.command === 'explain') {
+    return await handleExplanationComment(c, db, payload, isPullRequest);
+  }
 
   // SHARED SECURITY GATE (applies to EVERY command, BEFORE any fetch / enqueue /
   // LLM): the comment author must be in ALLOWED_ASSOCIATIONS. This is the LENIENT
@@ -788,6 +820,179 @@ async function handleIssueComment(
     },
     202,
   );
+}
+
+async function handleExplanationComment(
+  c: { json: (data: unknown, status?: number) => Response },
+  db: Database,
+  payload: IssueCommentEvent,
+  isPullRequest: boolean,
+) {
+  if (!isPullRequest) {
+    return c.json({ message: 'explain is only for pull requests' }, 200);
+  }
+  if (
+    payload.comment.user.type !== 'User' ||
+    !TRIAGE_ALLOWED_ASSOCIATIONS.has(payload.comment.author_association)
+  ) {
+    return c.json({ message: 'Explanation unauthorized' }, 200);
+  }
+  if (
+    !isPositiveSafeInteger(payload.comment.id) ||
+    !isPositiveSafeInteger(payload.comment.user.id) ||
+    !isPositiveSafeInteger(payload.repository.id) ||
+    !isPositiveSafeInteger(payload.issue.number) ||
+    !isPositiveSafeInteger(payload.installation?.id)
+  ) {
+    return c.json({ message: 'Explanation invalid' }, 200);
+  }
+  if (!hasExplanationQuestion(payload.comment.body)) {
+    return c.json({ message: 'Explanation invalid' }, 200);
+  }
+  if (!payload.installation) {
+    return c.json({ error: 'Missing installation ID' }, 400);
+  }
+
+  const repo = await getRepoByGithubId(db, payload.repository.id);
+  if (!repo) {
+    return c.json({ message: 'Repository not tracked' }, 200);
+  }
+
+  const effective = await getEffectiveRepoSettings(db, repo);
+  if (!effective.settings.explanationsEnabled) {
+    return c.json({ message: 'Explanation disabled' }, 200);
+  }
+
+  const appId = process.env.GITHUB_APP_ID;
+  const privateKey = process.env.GITHUB_PRIVATE_KEY;
+  if (!appId || !privateKey) {
+    return c.json({ message: 'Explanation unavailable: GitHub App not configured' }, 200);
+  }
+
+  const [owner, repoName] = payload.repository.full_name.split('/') as [string, string];
+  const changeRef = {
+    repo: {
+      kind: 'github' as const,
+      nativeId: String(payload.repository.id),
+      path: payload.repository.full_name,
+    },
+    iid: payload.issue.number,
+  };
+
+  let token: string;
+  try {
+    token = await getInstallationToken(payload.installation.id, appId, privateKey);
+  } catch (error) {
+    logger.warn({ error: String(error) }, 'Explanation token acquisition failed');
+    return c.json({ message: 'Explanation unavailable' }, 200);
+  }
+
+  const adapter = makeGitHubAdapter({
+    owner,
+    repo: repoName,
+    token,
+    explanationBinding: {
+      forgeInstance: 'github.com',
+      installationId: String(payload.installation.id),
+      repositoryId: String(payload.repository.id),
+    },
+  });
+
+  let requestedHeadSha: string;
+  try {
+    requestedHeadSha = (await adapter.fetchChangeRequest(changeRef)).headSha;
+  } catch (error) {
+    logger.warn({ error: String(error) }, 'Explanation head acquisition failed');
+    return c.json({ message: 'Explanation stale or unavailable' }, 200);
+  }
+
+  const { createExplanationIngress, enqueueExplanation, EXPLANATION_INGRESS_OUTCOME } =
+    await import('../queues/explanation.js');
+  const ingress = createExplanationIngress({
+    body: payload.comment.body,
+    actorType: payload.comment.user.type,
+    association: payload.comment.author_association,
+    sourceCommentId: payload.comment.id,
+    actorId: payload.comment.user.id,
+    installationId: payload.installation.id,
+    repositoryId: payload.repository.id,
+    pullRequestNumber: payload.issue.number,
+    requestedHeadSha,
+    forgeInstance: 'github.com',
+  });
+  if (ingress.kind !== EXPLANATION_INGRESS_OUTCOME.ACCEPTED) {
+    return c.json({ message: `Explanation ${ingress.kind.toLowerCase()}` }, 200);
+  }
+  if (typeof adapter.fetchExplanationSnapshot !== 'function') {
+    return c.json({ message: 'Explanation unavailable' }, 200);
+  }
+
+  let snapshotResult: Awaited<ReturnType<NonNullable<typeof adapter.fetchExplanationSnapshot>>>;
+  try {
+    snapshotResult = await adapter.fetchExplanationSnapshot(ingress.request.identity, changeRef);
+  } catch (error) {
+    logger.warn({ error: String(error) }, 'Explanation snapshot acquisition failed');
+    return c.json({ message: 'Explanation stale or unavailable' }, 200);
+  }
+  if (
+    snapshotResult.kind !== 'SNAPSHOT' ||
+    snapshotResult.snapshot.headSha !== ingress.request.identity.requestedHeadSha
+  ) {
+    return c.json({ message: 'Explanation stale or invalid' }, 200);
+  }
+
+  let registration: Awaited<ReturnType<typeof registerExplanationInvocation>>;
+  try {
+    registration = await registerExplanationInvocation(db, {
+      ...ingress.request.identity,
+      question: ingress.request.question,
+    });
+  } catch (error) {
+    logger.error({ error: String(error) }, 'Explanation invocation registration failed');
+    return c.json({ error: 'Explanation registration failed' }, 500);
+  }
+
+  if (
+    registration.status === 'invalid' ||
+    registration.status === 'mismatch' ||
+    registration.status === 'unavailable'
+  ) {
+    return c.json({ error: 'Explanation registration unavailable' }, 500);
+  }
+
+  const shouldEnqueue =
+    registration.status === 'registered' ||
+    (registration.status === 'duplicate' && registration.invocation.executionStatus === 'PENDING');
+  if (!shouldEnqueue) {
+    return c.json({ message: 'Explanation invocation already acknowledged' }, 200);
+  }
+
+  try {
+    await enqueueExplanation({
+      invocationKey: registration.invocation.invocationKey,
+      repositoryDbId: repo.id,
+      actorLogin: payload.comment.user.login,
+      request: ingress.request,
+      snapshot: snapshotResult.snapshot,
+    });
+  } catch (error) {
+    logger.error({ error: String(error) }, 'Explanation enqueue failed');
+    await recoverPendingExplanationInvocation(db, {
+      ...ingress.request.identity,
+      question: ingress.request.question,
+    });
+    return c.json({ error: 'Explanation enqueue failed' }, 500);
+  }
+
+  try {
+    if ('addReaction' in adapter) {
+      await adapter.addReaction(githubCommentId(payload.comment.id), REACTION_KIND.EYES);
+    }
+  } catch (error) {
+    logger.warn({ error: String(error) }, 'Explanation acknowledgment reaction failed');
+  }
+
+  return c.json({ message: 'Explanation dispatched' }, 202);
 }
 
 /**

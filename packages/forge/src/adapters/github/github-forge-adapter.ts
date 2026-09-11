@@ -26,6 +26,10 @@
 import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
 import { ForgeAuthError, getErrorStatus } from '../../errors.js';
 import type {
+  ExplanationCommentLookup,
+  ExplanationCommentRef,
+  ExplanationPublicationCapable,
+  ExplanationSnapshotCapable,
   FileReadCapable,
   ForgeAdapterBase,
   GraphReadCapable,
@@ -47,7 +51,18 @@ import type {
   UpsertSummaryResult,
 } from '../../types.js';
 import { ACTOR_KIND } from '../../types.js';
-import type { GitHubClientPort, GitHubReactionContent } from './github-client-port.js';
+import type {
+  GitHubClientPort,
+  GitHubReactionContent,
+  GitHubRevisionPinnedSnapshot,
+} from './github-client-port.js';
+
+/** Stable installation/repository binding required before explanation seams exist. */
+export interface GitHubExplanationBinding {
+  readonly forgeInstance: string;
+  readonly installationId: string;
+  readonly repositoryId: string;
+}
 
 /** Construction options for {@link GitHubForgeAdapter}. */
 export interface GitHubForgeAdapterDeps {
@@ -59,6 +74,11 @@ export interface GitHubForgeAdapterDeps {
   owner: string;
   /** Repository name. */
   repo: string;
+  /**
+   * Optional stable identity binding for PR-native explanation seams. Legacy
+   * review callers omit it and receive no explanation methods at runtime.
+   */
+  explanationBinding?: GitHubExplanationBinding;
 }
 
 /** Maps a canonical {@link ReactionKind} to the GitHub reaction content string. */
@@ -108,12 +128,41 @@ export class GitHubForgeAdapter
   readonly #token: string;
   readonly #owner: string;
   readonly #repo: string;
+  readonly #explanationBinding?: GitHubExplanationBinding;
+
+  /** Present only when the injected client and stable binding prove this seam. */
+  declare readonly fetchExplanationSnapshot?: ExplanationSnapshotCapable['fetchExplanationSnapshot'];
+  /** Present only when all exact-owner publication delegates are available. */
+  declare readonly lookupExplanationComment?: ExplanationPublicationCapable['lookupExplanationComment'];
+  /** Present only when all exact-owner publication delegates are available. */
+  declare readonly createExplanationComment?: ExplanationPublicationCapable['createExplanationComment'];
+  /** Present only when all exact-owner publication delegates are available. */
+  declare readonly updateExplanationComment?: ExplanationPublicationCapable['updateExplanationComment'];
 
   constructor(deps: GitHubForgeAdapterDeps) {
     this.#client = deps.client;
     this.#token = deps.token;
     this.#owner = deps.owner;
     this.#repo = deps.repo;
+    this.#explanationBinding = deps.explanationBinding;
+
+    if (this.#explanationBinding && this.#client.fetchRevisionPinnedSnapshot) {
+      this.fetchExplanationSnapshot = (identity, ref) =>
+        this.#fetchExplanationSnapshot(identity, ref);
+    }
+
+    if (
+      this.#explanationBinding &&
+      this.#client.findExplanationComment &&
+      this.#client.createExplanationComment &&
+      this.#client.updateExplanationComment
+    ) {
+      this.lookupExplanationComment = (reference) => this.#lookupExplanationComment(reference);
+      this.createExplanationComment = (reference, body) =>
+        this.#createExplanationComment(reference, body);
+      this.updateExplanationComment = (reference, commentId, body) =>
+        this.#updateExplanationComment(reference, commentId, body);
+    }
   }
 
   /**
@@ -142,6 +191,193 @@ export class GitHubForgeAdapter
       }
       throw error;
     }
+  }
+
+  #matchesExplanationBinding(identity: {
+    forgeInstance: string;
+    installationId: string;
+    repositoryId: string;
+  }): boolean {
+    const binding = this.#explanationBinding;
+    return (
+      binding !== undefined &&
+      identity.forgeInstance === binding.forgeInstance &&
+      identity.installationId === binding.installationId &&
+      identity.repositoryId === binding.repositoryId
+    );
+  }
+
+  #validateExplanationReference(reference: ExplanationCommentRef): void {
+    if (
+      !this.#matchesExplanationBinding(reference) ||
+      reference.changeRequest.repo.nativeId !== reference.repositoryId ||
+      reference.changeRequest.repo.kind !== 'github' ||
+      !Number.isSafeInteger(reference.changeRequest.iid) ||
+      reference.changeRequest.iid < 1 ||
+      reference.ownerId.length === 0 ||
+      reference.invocationId.length === 0 ||
+      (reference.channel !== 'progress' && reference.channel !== 'answer')
+    ) {
+      throw new TypeError('GitHubForgeAdapter explanation comment reference is not exactly bound');
+    }
+  }
+
+  #sameExplanationReference(left: ExplanationCommentRef, right: ExplanationCommentRef): boolean {
+    return (
+      left.forgeInstance === right.forgeInstance &&
+      left.installationId === right.installationId &&
+      left.repositoryId === right.repositoryId &&
+      left.changeRequest.repo.kind === right.changeRequest.repo.kind &&
+      left.changeRequest.repo.nativeId === right.changeRequest.repo.nativeId &&
+      left.changeRequest.iid === right.changeRequest.iid &&
+      left.changeRequest.globalId === right.changeRequest.globalId &&
+      left.ownerId === right.ownerId &&
+      left.channel === right.channel &&
+      left.invocationId === right.invocationId
+    );
+  }
+
+  #snapshotFailure(kind: 'STALE' | 'INVALID', reason: string) {
+    return { kind, reason } as const;
+  }
+
+  #isCompleteSnapshot(snapshot: GitHubRevisionPinnedSnapshot): boolean {
+    if (
+      snapshot.baseSha.length === 0 ||
+      snapshot.diff.length === 0 ||
+      snapshot.files.length === 0
+    ) {
+      return false;
+    }
+    const paths = new Set<string>();
+    return snapshot.files.every((file) => {
+      if (file.path.length === 0 || typeof file.content !== 'string' || paths.has(file.path)) {
+        return false;
+      }
+      paths.add(file.path);
+      return true;
+    });
+  }
+
+  async #fetchExplanationSnapshot(
+    identity: Parameters<ExplanationSnapshotCapable['fetchExplanationSnapshot']>[0],
+    ref: ChangeRequestRef,
+  ): ReturnType<ExplanationSnapshotCapable['fetchExplanationSnapshot']> {
+    if (
+      !this.#matchesExplanationBinding(identity) ||
+      identity.repositoryId !== ref.repo.nativeId ||
+      identity.pullRequestNumber !== ref.iid ||
+      identity.requestedHeadSha.length === 0 ||
+      !Number.isSafeInteger(ref.iid) ||
+      ref.iid < 1
+    ) {
+      return this.#snapshotFailure(
+        'INVALID',
+        'Explanation identity is not bound to this change request',
+      );
+    }
+
+    const fetchSnapshot = this.#client.fetchRevisionPinnedSnapshot;
+    if (!fetchSnapshot) {
+      return this.#snapshotFailure('INVALID', 'Revision-pinned snapshot capability is unavailable');
+    }
+    const snapshot = await this.#mapAuth(() =>
+      fetchSnapshot(this.#owner, this.#repo, ref.iid, identity.requestedHeadSha, this.#token),
+    );
+    if (!snapshot) {
+      return this.#snapshotFailure('INVALID', 'Revision-pinned snapshot is missing');
+    }
+    if (snapshot.headSha !== identity.requestedHeadSha) {
+      return this.#snapshotFailure('STALE', 'Requested head SHA is superseded');
+    }
+    if (snapshot.repositoryId !== identity.repositoryId || !this.#isCompleteSnapshot(snapshot)) {
+      return this.#snapshotFailure(
+        'INVALID',
+        'Revision-pinned snapshot is incomplete or mismatched',
+      );
+    }
+    return {
+      kind: 'SNAPSHOT',
+      snapshot: {
+        repositoryId: snapshot.repositoryId,
+        baseSha: snapshot.baseSha,
+        headSha: snapshot.headSha,
+        diff: snapshot.diff,
+        files: snapshot.files,
+      },
+    };
+  }
+
+  async #lookupExplanationComment(
+    reference: ExplanationCommentRef,
+  ): ReturnType<ExplanationPublicationCapable['lookupExplanationComment']> {
+    this.#validateExplanationReference(reference);
+    const findComment = this.#client.findExplanationComment;
+    if (!findComment) {
+      throw new TypeError('GitHubForgeAdapter explanation publication capability is unavailable');
+    }
+    const lookup = await this.#mapAuth(() =>
+      findComment(this.#owner, this.#repo, reference.changeRequest.iid, reference, this.#token),
+    );
+    if (lookup.kind === 'FOUND') {
+      if (
+        !this.#sameExplanationReference(reference, lookup.reference) ||
+        lookup.commentId.kind !== 'github:issue-comment' ||
+        !Number.isSafeInteger(lookup.commentId.raw)
+      ) {
+        return { kind: 'INCOMPLETE', reason: 'Explanation comment ownership is unprovable' };
+      }
+    }
+    return lookup as ExplanationCommentLookup;
+  }
+
+  async #createExplanationComment(
+    reference: ExplanationCommentRef,
+    body: string,
+  ): Promise<CommentId> {
+    this.#validateExplanationReference(reference);
+    const createComment = this.#client.createExplanationComment;
+    if (!createComment) {
+      throw new TypeError('GitHubForgeAdapter explanation publication capability is unavailable');
+    }
+    const created = await this.#mapAuth(() =>
+      createComment(
+        this.#owner,
+        this.#repo,
+        reference.changeRequest.iid,
+        reference,
+        body,
+        this.#token,
+      ),
+    );
+    if (!Number.isSafeInteger(created?.id)) {
+      throw new TypeError(
+        'GitHubForgeAdapter.createExplanationComment: client returned no numeric id',
+      );
+    }
+    return { kind: 'github:issue-comment', raw: created.id };
+  }
+
+  async #updateExplanationComment(
+    reference: ExplanationCommentRef,
+    commentId: CommentId,
+    body: string,
+  ): Promise<void> {
+    this.#validateExplanationReference(reference);
+    const updateComment = this.#client.updateExplanationComment;
+    if (!updateComment) {
+      throw new TypeError('GitHubForgeAdapter explanation publication capability is unavailable');
+    }
+    await this.#mapAuth(() =>
+      updateComment(
+        this.#owner,
+        this.#repo,
+        toNativeCommentId(commentId),
+        reference,
+        body,
+        this.#token,
+      ),
+    );
   }
 
   // ─── Base: reads ───────────────────────────────────────────────

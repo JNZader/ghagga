@@ -22,6 +22,8 @@ import { logger } from './lib/logger.js';
 import { describeRedisConfig } from './lib/redis.js';
 import { validateEnvironment } from './lib/validate-env.js';
 import { authMiddleware } from './middleware/auth.js';
+import { createExplanationWorker } from './queues/explanation.js';
+import { createPersistedExplanationPublisher } from './queues/explanation-publisher-factory.js';
 import { createApiRouter } from './routes/api/index.js';
 import { createOAuthRouter } from './routes/oauth.js';
 import { createRunnerCallbackRouter } from './routes/runner-callback.js';
@@ -52,6 +54,10 @@ initializeDefaultTools();
 // ─── Database ───────────────────────────────────────────────────
 
 const db = createDatabaseFromEnv();
+const explanationWorker = createExplanationWorker(1, {
+  publisher: createPersistedExplanationPublisher(),
+  progressPublisher: createPersistedExplanationPublisher('progress'),
+});
 
 // ─── App ────────────────────────────────────────────────────────
 
@@ -315,12 +321,20 @@ const SHUTDOWN_TIMEOUT_MS = 30_000;
 
 process.on('SIGTERM', () => {
   logger.info('Received SIGTERM, draining connections...');
-  server.close(() => {
-    logger.info('Server closed gracefully');
-    process.exit(0);
-  });
-  setTimeout(() => {
+  const forcedExit = setTimeout(() => {
     logger.warn('Forced shutdown after timeout');
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS);
+  server.close(() => {
+    void explanationWorker
+      .close()
+      .then(() => {
+        clearTimeout(forcedExit);
+        logger.info('Server closed gracefully');
+        process.exit(0);
+      })
+      .catch((err: unknown) => {
+        logger.error({ err }, 'Explanation worker failed to close gracefully');
+      });
+  });
 });

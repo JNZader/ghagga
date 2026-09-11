@@ -5,7 +5,9 @@
  * and error handling of the webhook router using mocked dependencies.
  */
 
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
+import { deriveExplanationInvocationKey, type ExplanationInvocationRow } from 'ghagga-db';
+import type { GitHubRevisionPinnedSnapshot } from 'ghagga-forge';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildBoundedTriagePayload,
@@ -28,8 +30,12 @@ const mockGetRepoByGithubId = vi.fn();
 const mockGetEffectiveRepoSettings = vi.fn();
 const mockGetInstallationByGitHubId = vi.fn();
 const mockDeleteMappingsByInstallationId = vi.fn();
+const mockUpdateWorkflowStatus = vi.fn();
+const mockRegisterExplanationInvocation = vi.fn();
+const mockRecoverPendingExplanationInvocation = vi.fn();
 
-vi.mock('ghagga-db', () => ({
+vi.mock('ghagga-db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ghagga-db')>()),
   upsertInstallation: (...args: unknown[]) => mockUpsertInstallation(...args),
   deactivateInstallation: (...args: unknown[]) => mockDeactivateInstallation(...args),
   upsertRepository: (...args: unknown[]) => mockUpsertRepository(...args),
@@ -38,6 +44,10 @@ vi.mock('ghagga-db', () => ({
   getInstallationByGitHubId: (...args: unknown[]) => mockGetInstallationByGitHubId(...args),
   deleteMappingsByInstallationId: (...args: unknown[]) =>
     mockDeleteMappingsByInstallationId(...args),
+  updateWorkflowStatus: (...args: unknown[]) => mockUpdateWorkflowStatus(...args),
+  registerExplanationInvocation: (...args: unknown[]) => mockRegisterExplanationInvocation(...args),
+  recoverPendingExplanationInvocation: (...args: unknown[]) =>
+    mockRecoverPendingExplanationInvocation(...args),
 }));
 
 // Mock BullMQ review queue
@@ -53,10 +63,34 @@ vi.mock('../queues/issue-analysis.js', () => ({
   enqueueIssueAnalysis: (...args: unknown[]) => mockEnqueueIssueAnalysis(...args),
 }));
 
+const unexpectedRedisClientCalls: unknown[][] = [];
+const mockCreateRedisClient = vi.fn((...args: unknown[]) => {
+  unexpectedRedisClientCalls.push(args);
+  throw new Error('Unexpected Redis client construction in webhook test');
+});
+vi.mock('../lib/redis.js', () => ({
+  createRedisClient: mockCreateRedisClient,
+}));
+
+const mockEnqueueExplanation = vi.fn();
+vi.mock('../queues/explanation.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../queues/explanation.js')>();
+  return {
+    ...original,
+    enqueueExplanation: (...args: unknown[]) => mockEnqueueExplanation(...args),
+  };
+});
+
+const mockInjectWorkflow = vi.fn();
+vi.mock('../github/runner.js', () => ({
+  injectWorkflow: (...args: unknown[]) => mockInjectWorkflow(...args),
+}));
+
 // Mock GitHub client functions used by issue_comment handler
 const mockAddCommentReaction = vi.fn();
 const mockGetInstallationToken = vi.fn();
 const mockFetchPRDetails = vi.fn();
+const mockFetchRevisionPinnedSnapshot = vi.fn();
 const mockGetIssue = vi.fn();
 const mockListIssueComments = vi.fn();
 vi.mock('../github/client.js', async (importOriginal) => {
@@ -66,6 +100,7 @@ vi.mock('../github/client.js', async (importOriginal) => {
     addCommentReaction: (...args: unknown[]) => mockAddCommentReaction(...args),
     getInstallationToken: (...args: unknown[]) => mockGetInstallationToken(...args),
     fetchPRDetails: (...args: unknown[]) => mockFetchPRDetails(...args),
+    fetchRevisionPinnedSnapshot: (...args: unknown[]) => mockFetchRevisionPinnedSnapshot(...args),
     getIssue: (...args: unknown[]) => mockGetIssue(...args),
     listIssueComments: (...args: unknown[]) => mockListIssueComments(...args),
   };
@@ -100,6 +135,14 @@ function makeRequest(
   });
 }
 
+async function readJsonObject(response: Response): Promise<Record<string, unknown>> {
+  const value: unknown = await response.json();
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('Expected a JSON object response');
+  }
+  return value as Record<string, unknown>;
+}
+
 const FAKE_REPO = {
   id: 42,
   githubRepoId: 12345,
@@ -120,15 +163,74 @@ const FAKE_REPO = {
   },
 };
 
+const EXPLANATION_QUESTION = 'Why did this change?';
+const EXPLANATION_IDENTITY = {
+  forgeInstance: 'github.com',
+  installationId: '999',
+  actorId: '2468',
+  repositoryId: '12345',
+  pullRequestNumber: 42,
+  requestedHeadSha: 'pr-head-sha-abc',
+  sourceCommentId: '777',
+  questionHash: createHash('sha256').update(EXPLANATION_QUESTION).digest('hex'),
+};
+
+function explanationInvocationFixture(
+  executionStatus: ExplanationInvocationRow['executionStatus'] = 'PENDING',
+): ExplanationInvocationRow {
+  const invocationKey = deriveExplanationInvocationKey({
+    ...EXPLANATION_IDENTITY,
+  });
+  if (!invocationKey) throw new Error('Expected valid explanation invocation identity');
+  return {
+    id: 1,
+    invocationKey,
+    ...EXPLANATION_IDENTITY,
+    question: EXPLANATION_QUESTION,
+    executionStatus,
+    executionFence: null,
+    dispatchReservedAt: null,
+    dispatchLeaseExpiresAt: null,
+    outcomeStatus: null,
+    outcomeAnswer: null,
+    outcomePayload: null,
+    outcomeCompletedAt: null,
+    progressStatus: null,
+    progressVersion: 0,
+    progressPublicationStatus: 'NOT_STARTED',
+    progressPublicationCreateStartedAt: null,
+    progressCommentId: null,
+    progressExpectedBotAuthorId: null,
+    progressPublicationFence: null,
+    progressPublicationVersion: 0,
+    answerPublicationStatus: 'NOT_STARTED',
+    answerPublicationCreateStartedAt: null,
+    answerCommentId: null,
+    answerExpectedBotAuthorId: null,
+    answerPublicationFence: null,
+    answerPublicationVersion: 0,
+    createdAt: new Date(0),
+  };
+}
+
 // ─── Setup ──────────────────────────────────────────────────────
 
 let router: ReturnType<typeof createWebhookRouter>;
 let originalEnv: string | undefined;
 let originalAppId: string | undefined;
 let originalPrivateKey: string | undefined;
+let originalFetch: typeof globalThis.fetch;
+const unexpectedFetchCalls: unknown[][] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  originalFetch = globalThis.fetch;
+  unexpectedFetchCalls.length = 0;
+  unexpectedRedisClientCalls.length = 0;
+  globalThis.fetch = ((...args: unknown[]) => {
+    unexpectedFetchCalls.push(args);
+    return Promise.reject(new Error('Unexpected network fetch in webhook test'));
+  }) as typeof globalThis.fetch;
   originalEnv = process.env.GITHUB_WEBHOOK_SECRET;
   originalAppId = process.env.GITHUB_APP_ID;
   originalPrivateKey = process.env.GITHUB_PRIVATE_KEY;
@@ -144,13 +246,36 @@ beforeEach(() => {
   mockDeactivateInstallation.mockResolvedValue(undefined);
   mockGetInstallationByGitHubId.mockResolvedValue(null);
   mockDeleteMappingsByInstallationId.mockResolvedValue(undefined);
+  mockUpdateWorkflowStatus.mockResolvedValue(undefined);
+  mockRegisterExplanationInvocation.mockResolvedValue({
+    status: 'registered',
+    invocation: explanationInvocationFixture(),
+  });
+  mockRecoverPendingExplanationInvocation.mockResolvedValue({
+    status: 'recovered',
+    invocation: explanationInvocationFixture(),
+  });
   mockGetRepoByGithubId.mockResolvedValue(null);
   mockAddCommentReaction.mockResolvedValue(undefined);
   mockGetInstallationToken.mockResolvedValue('fake-installation-token');
-  mockFetchPRDetails.mockResolvedValue({ headSha: 'pr-head-sha-abc', baseBranch: 'main' });
+  mockFetchPRDetails.mockResolvedValue({
+    headSha: 'pr-head-sha-abc',
+    baseBranch: 'main',
+    prAuthor: 'pr-author',
+  });
+  const snapshot = {
+    repositoryId: '12345',
+    baseSha: 'base-sha',
+    headSha: 'pr-head-sha-abc',
+    diff: 'diff --git a/a b/a',
+    files: [{ path: 'a.ts', content: 'export {}' }],
+  } satisfies GitHubRevisionPinnedSnapshot;
+  mockFetchRevisionPinnedSnapshot.mockResolvedValue(snapshot);
   mockGetIssue.mockResolvedValue({ title: 'Bug: thing broken', body: 'It crashes', labels: [] });
   mockListIssueComments.mockResolvedValue([]);
   mockEnqueueIssueAnalysis.mockResolvedValue({ id: 'mock-triage-job-id' });
+  mockEnqueueExplanation.mockResolvedValue({ id: 'mock-explanation-job-id' });
+  mockInjectWorkflow.mockResolvedValue({ sha: 'mock-workflow-sha' });
   mockGetEffectiveRepoSettings.mockResolvedValue({
     providerChain: [],
     aiReviewEnabled: true,
@@ -170,20 +295,26 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (originalEnv !== undefined) {
-    process.env.GITHUB_WEBHOOK_SECRET = originalEnv;
-  } else {
-    delete process.env.GITHUB_WEBHOOK_SECRET;
-  }
-  if (originalAppId !== undefined) {
-    process.env.GITHUB_APP_ID = originalAppId;
-  } else {
-    delete process.env.GITHUB_APP_ID;
-  }
-  if (originalPrivateKey !== undefined) {
-    process.env.GITHUB_PRIVATE_KEY = originalPrivateKey;
-  } else {
-    delete process.env.GITHUB_PRIVATE_KEY;
+  try {
+    expect(unexpectedFetchCalls).toHaveLength(0);
+    expect(unexpectedRedisClientCalls).toHaveLength(0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalEnv !== undefined) {
+      process.env.GITHUB_WEBHOOK_SECRET = originalEnv;
+    } else {
+      delete process.env.GITHUB_WEBHOOK_SECRET;
+    }
+    if (originalAppId !== undefined) {
+      process.env.GITHUB_APP_ID = originalAppId;
+    } else {
+      delete process.env.GITHUB_APP_ID;
+    }
+    if (originalPrivateKey !== undefined) {
+      process.env.GITHUB_PRIVATE_KEY = originalPrivateKey;
+    } else {
+      delete process.env.GITHUB_PRIVATE_KEY;
+    }
   }
 });
 
@@ -212,7 +343,7 @@ describe('webhook signature verification', () => {
     const req = makeRequest(body, 'pull_request');
     const res = await router.fetch(req);
     expect(res.status).toBe(500);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json).toHaveProperty('error', 'INTERNAL_ERROR');
     expect(json).toHaveProperty('message', 'Server misconfiguration');
     expect(json).toHaveProperty('errorId');
@@ -282,7 +413,7 @@ describe('pull_request event handling', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(202);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json).toHaveProperty('message', 'Review dispatched');
     expect(json).toHaveProperty('pr', 42);
     expect(json).toHaveProperty('repo', 'owner/repo');
@@ -327,7 +458,7 @@ describe('pull_request event handling', () => {
       const req = makeRequest(body, 'pull_request');
       const res = await router.fetch(req);
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = await readJsonObject(res);
       expect(json.message).toContain('ignored');
       expect(mockEnqueueReview).not.toHaveBeenCalled();
     }
@@ -348,7 +479,7 @@ describe('pull_request event handling', () => {
     const req = makeRequest(body, 'pull_request');
     const res = await router.fetch(req);
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('not tracked');
     expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
@@ -429,7 +560,7 @@ describe('installation event handling', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('ignored');
   });
 });
@@ -499,6 +630,35 @@ describe('issue_comment event handling', () => {
     installation: { id: 999 },
   };
 
+  function explanationPayload() {
+    return {
+      ...commentPayload,
+      comment: {
+        ...commentPayload.comment,
+        body: `/ghagga explain ${EXPLANATION_QUESTION}`,
+        user: { login: 'maintainer-user', type: 'User', id: 2468 },
+        author_association: 'MEMBER',
+      },
+    };
+  }
+
+  function enableExplanations() {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    mockGetEffectiveRepoSettings.mockResolvedValue({
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { ...FAKE_REPO.settings, explanationsEnabled: true },
+      source: 'repo',
+    });
+  }
+
+  function expectExplanationNotDispatched() {
+    expect(mockRegisterExplanationInvocation).not.toHaveBeenCalled();
+    expect(mockEnqueueExplanation).not.toHaveBeenCalled();
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+  }
+
   it('dispatches review when "ghagga review" keyword is found in PR comment', async () => {
     mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
     const body = JSON.stringify(commentPayload);
@@ -506,7 +666,7 @@ describe('issue_comment event handling', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(202);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json).toHaveProperty('message', 'Review dispatched (comment trigger)');
     expect(json).toHaveProperty('pr', 42);
     expect(json).toHaveProperty('triggeredBy', 'contributor-user');
@@ -524,6 +684,267 @@ describe('issue_comment event handling', () => {
     expect(jobData.githubRepoId).toBe(12345);
     // reviewId propagated to BullMQ job
     expect(jobData.reviewId).toBe(json.reviewId);
+  });
+
+  it('accepts an eligible explanation with a pinned snapshot before registration and enqueue', async () => {
+    enableExplanations();
+    const body = JSON.stringify(explanationPayload());
+
+    const res = await router.fetch(makeRequest(body, 'issue_comment'));
+    const response = await readJsonObject(res);
+
+    expect(res.status, JSON.stringify(response)).toBe(202);
+    expect(response).toEqual({ message: 'Explanation dispatched' });
+    expect(mockEnqueueReview).not.toHaveBeenCalled();
+    expect(mockRegisterExplanationInvocation).toHaveBeenCalledOnce();
+    expect(mockEnqueueExplanation).toHaveBeenCalledOnce();
+    expect(mockEnqueueExplanation.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockRegisterExplanationInvocation.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mockFetchRevisionPinnedSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRegisterExplanationInvocation.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
+    expect(mockRegisterExplanationInvocation.mock.calls[0]?.[1]).toMatchObject({
+      forgeInstance: 'github.com',
+      installationId: '999',
+      actorId: '2468',
+      repositoryId: '12345',
+      pullRequestNumber: 42,
+      requestedHeadSha: 'pr-head-sha-abc',
+      sourceCommentId: '777',
+      question: 'Why did this change?',
+    });
+    expect(mockGetInstallationToken).toHaveBeenCalledWith(999, '12345', 'fake-private-key');
+    expect(mockFetchRevisionPinnedSnapshot).toHaveBeenCalledWith(
+      'owner',
+      'repo',
+      42,
+      'pr-head-sha-abc',
+      'fake-installation-token',
+    );
+    expect(mockEnqueueExplanation.mock.calls[0]?.[0]).toEqual({
+      invocationKey: explanationInvocationFixture().invocationKey,
+      repositoryDbId: 42,
+      actorLogin: 'maintainer-user',
+      request: { identity: EXPLANATION_IDENTITY, question: EXPLANATION_QUESTION },
+      snapshot: expect.objectContaining({ repositoryId: '12345', headSha: 'pr-head-sha-abc' }),
+    });
+  });
+
+  it('rejects malformed explanation requests before token, snapshot, persistence, or queue work', async () => {
+    const invalidPayloads = [
+      { comment: { ...explanationPayload().comment, user: { login: 'x', type: 'Bot', id: 1 } } },
+      { comment: { ...explanationPayload().comment, author_association: 'CONTRIBUTOR' } },
+      { comment: { ...explanationPayload().comment, id: 0 } },
+      { comment: { ...explanationPayload().comment, id: Number.MAX_SAFE_INTEGER + 1 } },
+      { comment: { ...explanationPayload().comment, user: { login: 'x', type: 'User', id: 0 } } },
+      {
+        comment: {
+          ...explanationPayload().comment,
+          user: { login: 'x', type: 'User', id: Number.MAX_SAFE_INTEGER + 1 },
+        },
+      },
+      { repository: { id: 0, full_name: 'owner/repo' } },
+      { repository: { id: Number.MAX_SAFE_INTEGER + 1, full_name: 'owner/repo' } },
+      { installation: { id: 0 } },
+      { installation: { id: Number.MAX_SAFE_INTEGER + 1 } },
+      { issue: { ...explanationPayload().issue, number: 0 } },
+      { issue: { ...explanationPayload().issue, number: Number.MAX_SAFE_INTEGER + 1 } },
+      { comment: { ...explanationPayload().comment, body: '/ghagga explain' } },
+      { comment: { ...explanationPayload().comment, body: 'please /ghagga explain hidden' } },
+      { comment: { ...explanationPayload().comment, body: '> /ghagga explain hidden' } },
+      { comment: { ...explanationPayload().comment, body: '```\n/ghagga explain hidden\n```' } },
+      { issue: { number: 42 } },
+    ];
+
+    for (const override of invalidPayloads) {
+      enableExplanations();
+      const payload = { ...explanationPayload(), ...override };
+      if (override.comment) payload.comment = override.comment;
+      const res = await router.fetch(makeRequest(JSON.stringify(payload), 'issue_comment'));
+      expect(res.status).toBe(200);
+      expect(mockGetInstallationToken).not.toHaveBeenCalled();
+      expect(mockRegisterExplanationInvocation).not.toHaveBeenCalled();
+      expect(mockEnqueueExplanation).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps explanations disabled by default without external work', async () => {
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    const res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(200);
+    expect(await readJsonObject(res)).toEqual({ message: 'Explanation disabled' });
+    expect(mockGetInstallationToken).not.toHaveBeenCalled();
+    expect(mockFetchRevisionPinnedSnapshot).not.toHaveBeenCalled();
+    expect(mockRegisterExplanationInvocation).not.toHaveBeenCalled();
+    expect(mockEnqueueExplanation).not.toHaveBeenCalled();
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+  });
+
+  it('honors inherited enablement but lets a repository override disable explanations', async () => {
+    enableExplanations();
+    mockGetEffectiveRepoSettings.mockResolvedValueOnce({
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { ...FAKE_REPO.settings, explanationsEnabled: true },
+      source: 'installation',
+    });
+    let res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(202);
+    expect(mockEnqueueExplanation).toHaveBeenCalledOnce();
+
+    vi.clearAllMocks();
+    mockGetRepoByGithubId.mockResolvedValue(FAKE_REPO);
+    mockGetEffectiveRepoSettings.mockResolvedValue({
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { ...FAKE_REPO.settings, explanationsEnabled: false },
+      source: 'repo',
+    });
+    res = await router.fetch(makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'));
+    expect(res.status).toBe(200);
+    expect(await readJsonObject(res)).toEqual({ message: 'Explanation disabled' });
+    expect(mockGetInstallationToken).not.toHaveBeenCalled();
+    expect(mockFetchRevisionPinnedSnapshot).not.toHaveBeenCalled();
+    expectExplanationNotDispatched();
+  });
+
+  it('fails closed when head acquisition rejects', async () => {
+    enableExplanations();
+    mockFetchPRDetails.mockRejectedValueOnce(new Error('head unavailable'));
+    const res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(200);
+    expect(await readJsonObject(res)).toEqual({ message: 'Explanation stale or unavailable' });
+    expect(mockFetchRevisionPinnedSnapshot).not.toHaveBeenCalled();
+    expectExplanationNotDispatched();
+  });
+
+  it('fails closed when the raw revision snapshot is stale or invalid', async () => {
+    enableExplanations();
+    mockFetchRevisionPinnedSnapshot.mockResolvedValueOnce({
+      repositoryId: '12345',
+      baseSha: 'base-sha',
+      headSha: 'superseding-head',
+      diff: 'diff',
+      files: [],
+    } satisfies GitHubRevisionPinnedSnapshot);
+    let res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(200);
+    expect(await readJsonObject(res)).toEqual({ message: 'Explanation stale or invalid' });
+    expectExplanationNotDispatched();
+
+    vi.clearAllMocks();
+    enableExplanations();
+    mockFetchRevisionPinnedSnapshot.mockResolvedValueOnce({
+      repositoryId: 'wrong-repository',
+      baseSha: 'base-sha',
+      headSha: 'pr-head-sha-abc',
+      diff: 'diff',
+      files: [],
+    } satisfies GitHubRevisionPinnedSnapshot);
+    res = await router.fetch(makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'));
+    expect(res.status).toBe(200);
+    expect(await readJsonObject(res)).toEqual({ message: 'Explanation stale or invalid' });
+    expectExplanationNotDispatched();
+  });
+
+  it('fails closed when raw revision snapshot acquisition rejects', async () => {
+    enableExplanations();
+    mockFetchRevisionPinnedSnapshot.mockRejectedValueOnce(new Error('snapshot unavailable'));
+    const res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(200);
+    expect(await readJsonObject(res)).toEqual({ message: 'Explanation stale or unavailable' });
+    expectExplanationNotDispatched();
+  });
+
+  it('enqueues duplicate pending invocations but acknowledges reserved and terminal duplicates', async () => {
+    for (const [status, enqueues] of [
+      ['PENDING', 1],
+      ['DISPATCH_RESERVED', 0],
+      ['ANSWERED', 0],
+    ] as const) {
+      vi.clearAllMocks();
+      enableExplanations();
+      mockRegisterExplanationInvocation.mockResolvedValue({
+        status: 'duplicate',
+        invocation: explanationInvocationFixture(status),
+      });
+      const res = await router.fetch(
+        makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+      );
+      expect(res.status).toBe(enqueues ? 202 : 200);
+      expect(mockEnqueueExplanation).toHaveBeenCalledTimes(enqueues);
+      if (status === 'PENDING') {
+        expect(mockEnqueueExplanation.mock.calls[0]?.[0]?.invocationKey).toBe(
+          explanationInvocationFixture().invocationKey,
+        );
+      } else {
+        expect(mockAddCommentReaction).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it('does not enqueue on registration mismatch or unavailability', async () => {
+    enableExplanations();
+    mockRegisterExplanationInvocation.mockResolvedValueOnce({ status: 'mismatch' });
+    let res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(500);
+    expect(await readJsonObject(res)).toEqual({ error: 'Explanation registration unavailable' });
+    expect(mockEnqueueExplanation).not.toHaveBeenCalled();
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    enableExplanations();
+    mockRegisterExplanationInvocation.mockResolvedValueOnce({ status: 'unavailable' });
+    res = await router.fetch(makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'));
+    expect(res.status).toBe(500);
+    expect(await readJsonObject(res)).toEqual({ error: 'Explanation registration unavailable' });
+    expect(mockEnqueueExplanation).not.toHaveBeenCalled();
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+  });
+
+  it('returns no false success after exactly one failed enqueue', async () => {
+    enableExplanations();
+    mockEnqueueExplanation.mockRejectedValueOnce(new Error('queue rejected'));
+    const res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(500);
+    expect(await readJsonObject(res)).toEqual({ error: 'Explanation enqueue failed' });
+    expect(mockRegisterExplanationInvocation).toHaveBeenCalledOnce();
+    expect(mockEnqueueExplanation).toHaveBeenCalledOnce();
+    expect(mockEnqueueExplanation.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockRegisterExplanationInvocation.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mockAddCommentReaction).not.toHaveBeenCalled();
+  });
+
+  it('keeps an accepted explanation successful when its post-enqueue reaction fails', async () => {
+    enableExplanations();
+    mockAddCommentReaction.mockRejectedValueOnce(new Error('reaction failed'));
+    const res = await router.fetch(
+      makeRequest(JSON.stringify(explanationPayload()), 'issue_comment'),
+    );
+    expect(res.status).toBe(202);
+    expect(mockEnqueueExplanation).toHaveBeenCalledOnce();
+    expect(mockAddCommentReaction).toHaveBeenCalledOnce();
+    expect(mockAddCommentReaction.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockEnqueueExplanation.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
   it('fetches PR details to include headSha and baseBranch', async () => {
@@ -608,7 +1029,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('No review trigger keyword');
     expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
@@ -621,7 +1042,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('Bot comment ignored');
     expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
@@ -633,7 +1054,7 @@ describe('issue_comment event handling', () => {
       const req = makeRequest(body, 'issue_comment');
       const res = await router.fetch(req);
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = await readJsonObject(res);
       expect(json.message).toContain('ignored');
       expect(mockEnqueueReview).not.toHaveBeenCalled();
     }
@@ -647,7 +1068,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('not on a pull request');
     expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
@@ -660,7 +1081,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('Insufficient permissions');
     expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
@@ -741,7 +1162,7 @@ describe('issue_comment event handling', () => {
     const req = makeRequest(body, 'issue_comment');
     const res = await router.fetch(req);
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('not tracked');
     expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
@@ -1009,7 +1430,7 @@ describe('comment command dispatch', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('Unknown ghagga command');
     expect(mockEnqueueReview).not.toHaveBeenCalled();
   });
@@ -1122,7 +1543,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(202);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json).toHaveProperty('message', 'Triage dispatched');
     expect(json).toHaveProperty('issue', 88);
     expect(json.reviewId).toHaveLength(8);
@@ -1168,7 +1589,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('Insufficient permissions');
     // Gate runs before fetch + enqueue: nothing expensive happened.
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
@@ -1186,7 +1607,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('Bot comment ignored');
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
     expect(mockGetIssue).not.toHaveBeenCalled();
@@ -1207,7 +1628,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('only for issues');
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
     expect(mockEnqueueReview).not.toHaveBeenCalled();
@@ -1219,7 +1640,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('not tracked');
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
   });
@@ -1234,7 +1655,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('Insufficient permissions to trigger triage');
     // No fetch, no enqueue — rejected before any GitHub read or token spend.
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
@@ -1314,7 +1735,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('failed to fetch issue');
     // No useless empty-issue job; comments fetch never even reached.
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
@@ -1344,7 +1765,7 @@ describe('issue triage command (/ghagga triage)', () => {
     const res = await router.fetch(req);
 
     expect(res.status).toBe(200);
-    const json = await res.json();
+    const json = await readJsonObject(res);
     expect(json.message).toContain('GitHub App not configured');
     expect(mockEnqueueIssueAnalysis).not.toHaveBeenCalled();
     expect(mockGetIssue).not.toHaveBeenCalled();
