@@ -2,7 +2,8 @@
 
 > **Estado**: plan para ejecutar MÁS TARDE (no ahora). Self-contained, sourced del repo real.
 > **Objetivo**: primer deploy productivo del `server` + `worker` de ghagga en un VPS barato,
-> dejando todo listo para shippear la feature **issue-triage** (`/ghagga triage`).
+> dejando listo el deploy de la feature **issue-triage** (`/ghagga triage`), que ya está entregada
+> en `main` (PR #336; follow-up code-access en PRs #361–#363). El deploy y la validación live siguen pendientes.
 
 ---
 
@@ -108,7 +109,7 @@ El stack está definido en [`docker-compose.yml`](../docker-compose.yml) (raíz 
 | Servicio | Imagen / Build | Puerto | Volumen | Healthcheck |
 |----------|----------------|--------|---------|-------------|
 | **server** | build `apps/server/Dockerfile`, context = **raíz del monorepo**, `SERVICE_TYPE=server` | `3000:3000` | — | `GET /health` (node fetch) |
-| **worker** | mismo Dockerfile, `SERVICE_TYPE=worker` | — | — | — (no healthcheck) |
+| **worker** | mismo Dockerfile, `SERVICE_TYPE=worker` | — | — | proceso + Redis healthcheck |
 | **postgres** | `postgres:16-alpine` | interno | `postgres-data:/var/lib/postgresql/data` | `pg_isready -U ghagga -d ghagga` |
 | **redis** | `redis:7-alpine`, `--appendonly yes --save 60 1` | interno | `redis-data:/data` | `redis-cli ping` |
 
@@ -215,11 +216,11 @@ El resto son **CONFIG con default** (incluyendo las 3 API keys de LLM, opcionale
 
 ## Parte 6 — Issue-triage específico
 
-> **IMPORTANTE**: la feature issue-triage vive en el branch **`feat/issue-triage-agent`** (NO está
-> en `main` todavía). Está **release-blocked** hasta deployar el server + cerrar la lista PRE-LAUNCH 🔐
-> (ver Pendientes). El código está construido y testeado; el deploy es lo que falta.
+> **IMPORTANTE**: la feature issue-triage ya está en **`main`** (PR #336; follow-up code-access en
+> PRs #361–#363). El código está entregado; el deploy productivo, el consentimiento del permiso
+> `Issues` y la validación live siguen pendientes.
 
-Mecánica real (de `apps/server/src/routes/webhook.ts` y `docs/issue-triage.md` del branch):
+Mecánica real (de `apps/server/src/routes/webhook.ts` y `docs/issue-triage.md` en `main`):
 
 1. Un maintainer comenta **`/ghagga triage`** en un **issue plano** (no PR).
 2. El server lo recibe vía el evento webhook **`issue_comment`** (action `created`) — el **mismo evento
@@ -267,11 +268,11 @@ node apps/server/dist/index.js
 
 - `migrate.ts` (de `packages/db/src/migrate.ts`) corre las migraciones Drizzle de `packages/db/drizzle`
   y luego el SQL custom idempotente `_custom_tsvector.sql` (tsvector + triggers).
-- El **worker NO corre migraciones** (`start.sh` salta directo a `node …/workers/review.js`). Por lo tanto:
+- El **worker NO corre migraciones** (`start.sh` salta directo a los workers de review e issue-analysis). Por lo tanto:
   - [ ] 7.1 Asegurar que el **server arranca al menos una vez ANTES (o junto a)** que el worker procese jobs,
         para que el schema exista. En el compose ambos `depends_on` postgres healthy, pero solo el server migra.
   - [ ] 7.2 La feature issue-triage agrega una migración (`packages/db/drizzle/0001_low_wild_pack.sql`,
-        tabla de issue-drafts) en el branch — correrá igual al deployar ese branch (mismo `migrate.ts`).
+         tabla de issue-drafts) ya presente en `main` — correrá igual al deployar `main` (mismo `migrate.ts`).
 - [ ] 7.3 Verificar en logs del server al primer deploy: `🔄 Running database migrations...` → `✅ Drizzle migrations complete`.
 
 ---
@@ -284,7 +285,7 @@ node apps/server/dist/index.js
       gemini/copilot pueden faltar (WARNING benigno).
 - [ ] 8.4 **Webhook ping**: en la GitHub App → Advanced → Recent Deliveries, reenviar un ping → 200.
 - [ ] 8.5 **E2E de review** (sanity del pipeline base): comentar `ghagga review` en un PR de un repo tracked → review posteado.
-- [ ] 8.6 **E2E de issue-triage** (cuando el branch esté mergeado + permiso `Issues` consentido):
+- [ ] 8.6 **E2E de issue-triage** (cuando el deploy esté activo + permiso `Issues` consentido):
       1. Comentar `/ghagga triage` en un **issue plano** (como OWNER/MEMBER/COLLABORATOR).
       2. Ver la reacción 👀 + el job `issue-analysis` en logs del worker.
       3. En el **Dashboard → Issue Triage**, aparece el **draft**.
@@ -315,14 +316,10 @@ node apps/server/dist/index.js
 
 ## Pendientes antes de shippear
 
-Estos gates son **bloqueantes para usuarios reales** (el código está build+test, falta release):
+Estos gates son **bloqueantes para usuarios reales** (el código está entregado; faltan deploy y validación live):
 
-- [ ] **Mergear `feat/issue-triage-agent` a `main`**. Tiene un **conflicto webhook/cli-bridge**
-      (las tablas de memoria recientes lo marcan: conflicto entre el branch de triage y cambios de
-      cli-bridge). Resolverlo antes del merge.
-      > **VERIFICAR**: el detalle exacto del conflicto está en el plan del branch / engram
-      > (`project_ghagga_issue_triage`), no en `main`. Revisar `git diff main..feat/issue-triage-agent`
-      > sobre `apps/server/src/routes/webhook.ts` y `packages/core/src/providers/cli-bridge.ts`.
+- [x] **Issue-triage entregado en `main`** mediante PR #336; los follow-ups de code-access fueron
+      entregados mediante PRs #361–#363. El deploy productivo y la validación live siguen pendientes.
 - [ ] **Cerrar la lista PRE-LAUNCH 🔐** (hard gate de seguridad pre-launch). Incluye, entre otros:
       SSRF hardening, connection pools, `checklistContext`, etc.
       > **VERIFICAR**: la lista PRE-LAUNCH 🔐 completa NO está como archivo en el repo — vive en
@@ -346,4 +343,4 @@ Estos gates son **bloqueantes para usuarios reales** (el código está build+tes
 - `.env.example` — env vars documentadas (raíz).
 - `docs/self-hosted.md` — setup de la GitHub App de ghagga (permisos + eventos).
 - `docs/HETZNER-COOLIFY-DEPLOY.md` — base provider-agnóstica de Coolify (DNS/SSL/deploy).
-- `docs/issue-triage.md` (branch `feat/issue-triage-agent`) — feature issue-triage en detalle.
+- `docs/issue-triage.md` — feature issue-triage en detalle (entregada en `main`).
