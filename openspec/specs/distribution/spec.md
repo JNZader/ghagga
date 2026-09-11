@@ -208,14 +208,14 @@ The human-readable tag (e.g., `22-slim`, `16-alpine`) MUST be preserved alongsid
 - GIVEN `apps/action/Dockerfile` contains two `FROM` statements (builder + runtime stages)
 - WHEN the Dockerfile is built
 - THEN both `FROM` lines MUST include `@sha256:` digest syntax
-- AND each line MUST retain the human-readable tag (e.g., `node:22-slim@sha256:...`)
+- AND each line MUST retain the human-readable tag (e.g., `node:22.22.2-slim@sha256:...`)
 
 #### Scenario: Server Dockerfile uses pinned images
 
 - GIVEN `apps/server/Dockerfile` contains two `FROM` statements (builder + runner stages)
 - WHEN the Dockerfile is built
 - THEN both `FROM` lines MUST include `@sha256:` digest syntax
-- AND each line MUST retain the human-readable tag (e.g., `node:22-slim@sha256:...`)
+- AND each line MUST retain the human-readable tag (e.g., `node:22.22.2-slim@sha256:...`)
 
 #### Scenario: Docker Compose uses pinned PostgreSQL image
 

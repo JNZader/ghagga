@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | **Easiest setup — install and go** | **SaaS (GitHub App)** ⭐ Recommended | ~5 min | GitHub account | [SaaS Guide](saas-getting-started.md) |
 | CI/CD integration — runs in your pipeline | GitHub Action | ~10 min | Repo admin access | [Action Guide](github-action.md) |
-| Local review from your terminal | CLI | ~5 min | Node.js >= 20 | [CLI Guide](cli.md) |
+| Local review from your terminal | CLI | ~5 min | Node.js >= 22.22.2 | [CLI Guide](cli.md) |
 | Full control — your own server | Self-Hosted (Docker) | ~30 min | Docker, PostgreSQL | [Self-Hosted Guide](self-hosted.md) |
 
 All modes use the same review engine under the hood. [Learn more about the architecture](architecture.md).

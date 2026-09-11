@@ -6,7 +6,7 @@ Thanks for your interest in contributing! This guide covers everything you need 
 
 | Tool | Version | Notes |
 |------|---------|-------|
-| **Node.js** | 22+ | Required for all packages |
+| **Node.js** | 22.22.2+ | Required for all packages |
 | **pnpm** | 9+ | Exact version managed via `packageManager` in root `package.json` |
 | **Docker** | Any recent | For local PostgreSQL (or use a remote Postgres instance) |
 | **Git** | 2.x+ | Conventional commit messages expected |

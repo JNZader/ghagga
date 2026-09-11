@@ -13,12 +13,12 @@
 # Base image pinned by digest for supply-chain reproducibility (SEC-005), shared by
 # both the builder and runner stages so they can never drift apart.
 #
-# Digest resolved 2026-07-10 via `docker buildx imagetools inspect node:22-slim`
-# (multi-arch index digest for the `node:22-slim` tag at pin time). Re-resolve
+# Digest resolved 2026-09-11 via the Docker Hub manifest for `node:22.22.2-slim`
+# (multi-arch index digest for the `node:22.22.2-slim` tag at pin time). Re-resolve
 # periodically to pick up base-image security patches, e.g.:
-#   docker buildx imagetools inspect node:22-slim --format '{{json .Manifest}}'
-# or `crane digest node:22-slim` / `regctl image digest node:22-slim`.
-ARG NODE_BASE_IMAGE=node:22-slim@sha256:53ada149d435c38b14476cb57e4a7da73c15595aba79bd6971b547ceb6d018bf
+#   docker buildx imagetools inspect node:22.22.2-slim --format '{{json .Manifest}}'
+# or `crane digest node:22.22.2-slim` / `regctl image digest node:22.22.2-slim`.
+ARG NODE_BASE_IMAGE=node:22.22.2-slim@sha256:9f6d5975c7dca860947d3915877f85607946403fc55349f39b4bc3688448bb6e
 
 # ── Stage 1: Install + Build ───────────────────────────────────
 FROM ${NODE_BASE_IMAGE} AS builder

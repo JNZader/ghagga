@@ -446,7 +446,7 @@ The published npm package name is `ghagga` (verified: `apps/cli/package.json` `"
 - WHEN the user copies and runs any `npx` command from the Quick Start section
 - THEN the command MUST use `npx ghagga` (not `npx @ghagga/cli`)
 - AND the command resolves to the published `ghagga` npm package
-- AND the command executes successfully (assuming Node.js >= 20 is installed)
+- AND the command executes successfully (assuming Node.js >= 22.22.2 is installed)
 
 #### Scenario: User installs globally from README
 
@@ -759,26 +759,26 @@ The `docs/github-action.md` guide MUST include:
 The `docs/cli.md` guide MUST include a Prerequisites section at the top (after the title/introduction, before the step-by-step flow).
 
 The Prerequisites section MUST list:
-1. **Node.js >= 20** (verified: `apps/cli/package.json` `"engines": { "node": ">=20.0.0" }`)
+1. **Node.js >= 22.22.2** (verified: `apps/cli/package.json` `"engines": { "node": ">=22.22.2" }`)
 2. **Git** (required for `git diff` computation)
 3. **A GitHub account** (required for `ghagga login` and free GitHub Models access)
 
 The Prerequisites section SHOULD:
-- Note that `docs/quick-start.md` says "Node.js 22+" but `package.json` says ">=20.0.0" — the spec MUST use the `package.json` value (>=20) as the source of truth
+- The Node.js requirement MUST match the `package.json` engine floor (>=22.22.2) and `docs/quick-start.md`
 - Include a "Not looking for the CLI?" callout linking to alternative modes
 
 #### Scenario: User checks prerequisites before installing
 
 - GIVEN a user reading `docs/cli.md`
 - WHEN the user reads the Prerequisites section
-- THEN the section lists Node.js >= 20, Git, and a GitHub account
+- THEN the section lists Node.js >= 22.22.2, Git, and a GitHub account
 - AND the user can self-assess whether they can proceed
 
 #### Scenario: User has Node.js 18
 
 - GIVEN a user with Node.js 18 installed
 - WHEN the user reads the Prerequisites section
-- THEN the requirement for Node.js >= 20 is clearly stated
+- THEN the requirement for Node.js >= 22.22.2 is clearly stated
 - AND the user understands they need to upgrade before proceeding
 
 ---
@@ -808,7 +808,7 @@ The `docs/cli.md` guide MUST include a numbered step-by-step getting started flo
 
 #### Scenario: New user follows CLI guide end-to-end
 
-- GIVEN a user with Node.js >= 20, Git, and a GitHub account
+- GIVEN a user with Node.js >= 22.22.2, Git, and a GitHub account
 - WHEN the user follows `docs/cli.md` from Step 1 through Step 4
 - THEN the user sees an AI code review in their terminal
 - AND every step has a verification checkpoint
@@ -1180,7 +1180,7 @@ All links in modified files MUST be valid. In particular:
 | R16 | P1 | Action troubleshooting | 5+ troubleshooting scenarios with symptom/cause/fix |
 | R17 | P1 | Action FAILED status docs | `core.setFailed()` behavior documented, `continue-on-error` shown |
 | R18 | P1 | Action cost/output/diagram/next | Cost section, Mermaid diagram, expected output, Next Steps |
-| R19 | P0 | CLI prerequisites | Prerequisites with Node.js >=20, Git, GitHub account |
+| R19 | P0 | CLI prerequisites | Prerequisites with Node.js >=22.22.2, Git, GitHub account |
 | R20 | P0 | CLI step-by-step flow | 4 numbered steps with verification checkpoints |
 | R21 | P1 | CLI all 4 commands | `login`, `logout`, `status`, `review` each documented |
 | R22 | P1 | CLI troubleshooting | 6+ troubleshooting scenarios with symptom/cause/fix |

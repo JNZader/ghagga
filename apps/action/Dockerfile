@@ -16,8 +16,8 @@
 # fastest startup, or this Docker variant for full static analysis.
 
 # ── Stage 1: Build ──────────────────────────────────────────
-# node:22-slim — pinned 2026-03-07
-FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS builder
+# node:22.22.2-slim — pinned 2026-09-11
+FROM node:22.22.2-slim@sha256:9f6d5975c7dca860947d3915877f85607946403fc55349f39b4bc3688448bb6e AS builder
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
@@ -45,8 +45,8 @@ RUN pnpm --filter ghagga-db build && \
 RUN pnpm prune --prod
 
 # ── Stage 2: Runtime ────────────────────────────────────────
-# node:22-slim — pinned 2026-03-07
-FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9
+# node:22.22.2-slim — pinned 2026-09-11
+FROM node:22.22.2-slim@sha256:9f6d5975c7dca860947d3915877f85607946403fc55349f39b4bc3688448bb6e
 
 # Install system dependencies for static analysis tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
