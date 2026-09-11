@@ -35,6 +35,8 @@ export interface RepoSettings {
   enableTrivy: boolean;
   enableCpd: boolean;
   enableMemory: boolean;
+  /** Enables the isolated PR explanation route. Omitted settings resolve to false. */
+  explanationsEnabled?: boolean;
   customRules: string[];
   ignorePatterns: string[];
   reviewLevel: 'soft' | 'normal' | 'strict';
@@ -330,5 +332,118 @@ export const githubUserMappings = pgTable(
   (t) => [
     index('idx_user_mappings_github_user').on(t.githubUserId),
     unique('uq_user_installation').on(t.githubUserId, t.installationId),
+  ],
+);
+
+// ─── Explanation Invocations ─────────────────────────────────────
+
+export const EXPLANATION_EXECUTION_STATUSES = [
+  'PENDING',
+  'DISPATCH_RESERVED',
+  'ANSWERED',
+  'INVALID',
+  'UNAUTHORIZED',
+  'DISABLED',
+  'STALE',
+  'AI_UNAVAILABLE',
+  'AMBIGUOUS',
+] as const;
+export type ExplanationExecutionStatus = (typeof EXPLANATION_EXECUTION_STATUSES)[number];
+
+export const EXPLANATION_PUBLICATION_STATUSES = [
+  'NOT_STARTED',
+  'CREATE_STARTED',
+  'PATCH_STARTED',
+  'PUBLISHED',
+  'STALE',
+  'AMBIGUOUS',
+] as const;
+export type ExplanationPublicationStatus = (typeof EXPLANATION_PUBLICATION_STATUSES)[number];
+
+/**
+ * Durable, identity-bound explanation work. Identity fields are opaque strings
+ * because forge and installation identifiers are not database-local foreign keys.
+ * Lifecycle transitions are intentionally deferred to later work units.
+ */
+export const explanationInvocations = pgTable(
+  'explanation_invocations',
+  {
+    id: serial('id').primaryKey(),
+    invocationKey: varchar('invocation_key', { length: 64 }).notNull(),
+    forgeInstance: text('forge_instance').notNull(),
+    installationId: text('installation_id').notNull(),
+    actorId: text('actor_id').notNull(),
+    repositoryId: text('repository_id').notNull(),
+    pullRequestNumber: integer('pull_request_number').notNull(),
+    requestedHeadSha: text('requested_head_sha').notNull(),
+    sourceCommentId: text('source_comment_id').notNull(),
+    questionHash: varchar('question_hash', { length: 64 }).notNull(),
+    question: text('question').notNull(),
+
+    executionStatus: varchar('execution_status', { length: 32 })
+      .default('PENDING')
+      .notNull()
+      .$type<ExplanationExecutionStatus>(),
+    executionFence: text('execution_fence'),
+    dispatchReservedAt: timestamp('dispatch_reserved_at'),
+    dispatchLeaseExpiresAt: timestamp('dispatch_lease_expires_at'),
+    outcomeStatus: varchar('outcome_status', { length: 32 }).$type<ExplanationExecutionStatus>(),
+    outcomeAnswer: text('outcome_answer'),
+    outcomePayload: jsonb('outcome_payload'),
+    outcomeCompletedAt: timestamp('outcome_completed_at'),
+
+    progressStatus: varchar('progress_status', { length: 32 }),
+    progressVersion: integer('progress_version').default(0).notNull(),
+    progressPublicationStatus: varchar('progress_publication_status', { length: 32 })
+      .default('NOT_STARTED')
+      .notNull()
+      .$type<ExplanationPublicationStatus>(),
+    progressPublicationCreateStartedAt: timestamp('progress_publication_create_started_at'),
+    progressCommentId: bigint('progress_comment_id', { mode: 'number' }),
+    progressExpectedBotAuthorId: bigint('progress_expected_bot_author_id', { mode: 'number' }),
+    progressPublicationFence: text('progress_publication_fence'),
+    progressPublicationVersion: integer('progress_publication_version').default(0).notNull(),
+
+    answerPublicationStatus: varchar('answer_publication_status', { length: 32 })
+      .default('NOT_STARTED')
+      .notNull()
+      .$type<ExplanationPublicationStatus>(),
+    answerPublicationCreateStartedAt: timestamp('answer_publication_create_started_at'),
+    answerCommentId: bigint('answer_comment_id', { mode: 'number' }),
+    answerExpectedBotAuthorId: bigint('answer_expected_bot_author_id', { mode: 'number' }),
+    answerPublicationFence: text('answer_publication_fence'),
+    answerPublicationVersion: integer('answer_publication_version').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [
+    unique('uq_explanation_invocations_key').on(t.invocationKey),
+    uniqueIndex('uq_explanation_invocations_full_identity').on(
+      t.forgeInstance,
+      t.installationId,
+      t.actorId,
+      t.repositoryId,
+      t.pullRequestNumber,
+      t.requestedHeadSha,
+      t.sourceCommentId,
+      t.questionHash,
+    ),
+    check(
+      'chk_explanation_invocations_execution_status',
+      sql`${t.executionStatus} IN (${sql.raw(
+        EXPLANATION_EXECUTION_STATUSES.map((value) => `'${value}'`).join(', '),
+      )})`,
+    ),
+    check(
+      'chk_explanation_invocations_progress_publication_status',
+      sql`${t.progressPublicationStatus} IN (${sql.raw(
+        EXPLANATION_PUBLICATION_STATUSES.map((value) => `'${value}'`).join(', '),
+      )})`,
+    ),
+    check(
+      'chk_explanation_invocations_answer_publication_status',
+      sql`${t.answerPublicationStatus} IN (${sql.raw(
+        EXPLANATION_PUBLICATION_STATUSES.map((value) => `'${value}'`).join(', '),
+      )})`,
+    ),
   ],
 );

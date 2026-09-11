@@ -24,7 +24,7 @@
  * members at call time, not at module-eval time.
  */
 
-import type { GitHubClientPort } from 'ghagga-forge';
+import type { GitHubClientPort, GitHubExplanationBinding } from 'ghagga-forge';
 import { GitHubForgeAdapter } from 'ghagga-forge';
 // Namespace import (NOT named imports): the GitHubClientPort is assembled from
 // these at runtime. A namespace import accesses members lazily at call time, so
@@ -80,6 +80,21 @@ const githubClientPort: GitHubClientPort = {
   get searchCode() {
     return githubClient.searchCode;
   },
+  get fetchRevisionPinnedSnapshot() {
+    return githubClient.fetchRevisionPinnedSnapshot;
+  },
+  get findExplanationComment() {
+    if (!('findExplanationComment' in githubClient)) return undefined;
+    return githubClient.findExplanationComment;
+  },
+  get createExplanationComment() {
+    if (!('createExplanationComment' in githubClient)) return undefined;
+    return githubClient.createExplanationComment;
+  },
+  get updateExplanationComment() {
+    if (!('updateExplanationComment' in githubClient)) return undefined;
+    return githubClient.updateExplanationComment;
+  },
 };
 
 /** Per-call composition input for {@link makeGitHubAdapter}. */
@@ -90,6 +105,8 @@ export interface MakeGitHubAdapterDeps {
   repo: string;
   /** Installation access token used for all calls on this adapter. */
   token: string;
+  /** Stable identity binding required to advertise explanation-only capabilities. */
+  explanationBinding?: GitHubExplanationBinding;
 }
 
 /**
@@ -104,8 +121,15 @@ export function makeGitHubAdapter({
   owner,
   repo,
   token,
+  explanationBinding,
 }: MakeGitHubAdapterDeps): GitHubForgeAdapter {
-  return new GitHubForgeAdapter({ client: githubClientPort, token, owner, repo });
+  return new GitHubForgeAdapter({
+    client: githubClientPort,
+    token,
+    owner,
+    repo,
+    explanationBinding,
+  });
 }
 
 /**

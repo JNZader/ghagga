@@ -26,8 +26,14 @@
  */
 
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
+import type { ExplanationCommentLookup, ExplanationCommentRef } from 'ghagga-forge';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 import { logger } from '../lib/logger.js';
+import {
+  assertExplanationCommentReference,
+  explanationCommentBody,
+  explanationCommentMarker,
+} from './explanation-marker.js';
 
 // ─── Errors ─────────────────────────────────────────────────────
 
@@ -54,6 +60,19 @@ export class GitHubApiError extends Error {
     Object.setPrototypeOf(this, GitHubApiError.prototype);
   }
 }
+
+export const CURRENT_EXPLANATION_ACTOR_AUTHORIZATION = {
+  AUTHORIZED: 'AUTHORIZED',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  UNCERTAIN: 'UNCERTAIN',
+} as const;
+
+export type CurrentExplanationActorAuthorization =
+  (typeof CURRENT_EXPLANATION_ACTOR_AUTHORIZATION)[keyof typeof CURRENT_EXPLANATION_ACTOR_AUTHORIZATION];
+
+export type CurrentExplanationActorAuthorizationResult = {
+  readonly kind: CurrentExplanationActorAuthorization;
+};
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -118,6 +137,84 @@ function decodePrivateKey(key: string): string {
   }
 
   return cleanKey;
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function explanationAuthorizationHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+
+/**
+ * Revalidates an explanation actor at execution time. A permission response is
+ * insufficient on its own: GitHub's collaborator endpoint must separately
+ * confirm current collaboration with 204. Uncertain API outcomes stay distinct
+ * from explicit identity or role denial so callers do not fabricate revocation.
+ */
+export async function getCurrentExplanationActorAuthorization(
+  owner: string,
+  repo: string,
+  login: string,
+  persistedActorId: string,
+  token: string,
+): Promise<CurrentExplanationActorAuthorizationResult> {
+  try {
+    const permission = await githubCircuitBreaker.execute(async () => {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/collaborators/${login}/permission`,
+        { headers: explanationAuthorizationHeaders(token), signal: AbortSignal.timeout(10_000) },
+      );
+      if (!response.ok) {
+        throw new GitHubApiError(
+          response.status,
+          `GitHub API error reading collaborator permission: ${response.status} ${response.statusText}`,
+        );
+      }
+      return (await response.json()) as unknown;
+    });
+
+    if (typeof permission !== 'object' || permission === null) {
+      return { kind: CURRENT_EXPLANATION_ACTOR_AUTHORIZATION.UNCERTAIN };
+    }
+    const candidate = permission as {
+      user?: { id?: unknown; type?: unknown };
+      permission?: unknown;
+    };
+    if (
+      !isPositiveSafeInteger(candidate.user?.id) ||
+      candidate.user.id !== Number(persistedActorId) ||
+      candidate.user.type !== 'User' ||
+      typeof candidate.permission !== 'string'
+    ) {
+      return { kind: CURRENT_EXPLANATION_ACTOR_AUTHORIZATION.UNAUTHORIZED };
+    }
+    if (candidate.permission === 'none') {
+      return { kind: CURRENT_EXPLANATION_ACTOR_AUTHORIZATION.UNAUTHORIZED };
+    }
+
+    const collaboration = await githubCircuitBreaker.execute(async () => {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/collaborators/${login}`,
+        { headers: explanationAuthorizationHeaders(token), signal: AbortSignal.timeout(10_000) },
+      );
+      if (response.status !== 204) {
+        throw new GitHubApiError(
+          response.status,
+          `GitHub API error checking collaborator membership: ${response.status} ${response.statusText}`,
+        );
+      }
+    });
+    void collaboration;
+    return { kind: CURRENT_EXPLANATION_ACTOR_AUTHORIZATION.AUTHORIZED };
+  } catch {
+    return { kind: CURRENT_EXPLANATION_ACTOR_AUTHORIZATION.UNCERTAIN };
+  }
 }
 
 // ─── PR Data ────────────────────────────────────────────────────
@@ -537,6 +634,239 @@ export async function findExistingComment(
 
     return { latestId, staleIds };
   });
+}
+
+const EXPLANATION_COMMENT_PAGE_SIZE = 100;
+const MAX_EXPLANATION_COMMENT_PAGES = 50;
+
+interface GitHubExplanationCommentUser {
+  readonly id: number;
+  readonly type: string;
+}
+
+interface GitHubExplanationComment {
+  readonly id: number;
+  readonly body: string;
+  readonly user: GitHubExplanationCommentUser;
+}
+
+function readExplanationComment(value: unknown): GitHubExplanationComment | null {
+  if (
+    !isRecord(value) ||
+    !isPositiveSafeInteger(value.id) ||
+    typeof value.body !== 'string' ||
+    !isRecord(value.user) ||
+    !isPositiveSafeInteger(value.user.id) ||
+    typeof value.user.type !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    body: value.body,
+    user: { id: value.user.id, type: value.user.type },
+  };
+}
+
+function isExactOwnedExplanationComment(
+  comment: GitHubExplanationComment,
+  reference: ExplanationCommentRef,
+): boolean {
+  return (
+    comment.user.id === Number(reference.ownerId) &&
+    comment.user.type === 'Bot' &&
+    comment.body.includes(explanationCommentMarker(reference))
+  );
+}
+
+async function readExplanationCommentResponse(
+  response: Response,
+  operation: string,
+): Promise<GitHubExplanationComment> {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new GitHubApiError(502, `GitHub API error ${operation}: malformed JSON response`);
+  }
+  const comment = readExplanationComment(payload);
+  if (!comment) {
+    throw new TypeError(`GitHub API ${operation} response is not a complete issue comment`);
+  }
+  return comment;
+}
+
+/**
+ * Locate exactly one explanation-owned publication comment without consulting
+ * the legacy review marker. Scan uncertainty, malformed payloads, and duplicate
+ * exact matches are incomplete rather than authority to create another comment.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter.
+ */
+export async function findExplanationComment(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  reference: ExplanationCommentRef,
+  token: string,
+): Promise<ExplanationCommentLookup> {
+  assertExplanationCommentReference(prNumber, reference);
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
+
+  try {
+    return await githubCircuitBreaker.execute(async () => {
+      const matches: GitHubExplanationComment[] = [];
+      for (let page = 1; page <= MAX_EXPLANATION_COMMENT_PAGES; page++) {
+        const response = await fetch(
+          `${baseUrl}?per_page=${EXPLANATION_COMMENT_PAGE_SIZE}&page=${page}`,
+          {
+            headers: explanationAuthorizationHeaders(token),
+            signal: AbortSignal.timeout(10_000),
+          },
+        );
+        if (!response.ok) {
+          return {
+            kind: 'INCOMPLETE',
+            reason: `GitHub comment scan failed with ${response.status}`,
+          };
+        }
+        let payload: unknown;
+        try {
+          payload = await response.json();
+        } catch {
+          return { kind: 'INCOMPLETE', reason: 'GitHub comment scan returned malformed JSON' };
+        }
+        if (!Array.isArray(payload)) {
+          return { kind: 'INCOMPLETE', reason: 'GitHub comment scan response is not an array' };
+        }
+        const comments: GitHubExplanationComment[] = [];
+        for (const entry of payload) {
+          const comment = readExplanationComment(entry);
+          if (!comment) {
+            return {
+              kind: 'INCOMPLETE',
+              reason: 'GitHub comment scan contains a malformed comment',
+            };
+          }
+          comments.push(comment);
+          if (isExactOwnedExplanationComment(comment, reference)) matches.push(comment);
+        }
+        if (matches.length > 1) {
+          return { kind: 'INCOMPLETE', reason: 'Multiple exact explanation comments were found' };
+        }
+        if (comments.length < EXPLANATION_COMMENT_PAGE_SIZE) {
+          return matches.length === 1
+            ? {
+                kind: 'FOUND',
+                commentId: { kind: 'github:issue-comment', raw: matches[0].id },
+                reference,
+              }
+            : { kind: 'ABSENT' };
+        }
+      }
+      return { kind: 'INCOMPLETE', reason: 'GitHub comment scan reached its page limit' };
+    });
+  } catch {
+    return { kind: 'INCOMPLETE', reason: 'GitHub comment scan could not be completed' };
+  }
+}
+
+/** @internal INTERNAL — consume via GitHubForgeAdapter. */
+export async function createExplanationComment(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  reference: ExplanationCommentRef,
+  body: string,
+  token: string,
+): Promise<{ id: number }> {
+  assertExplanationCommentReference(prNumber, reference);
+  const response = await githubCircuitBreaker.execute(async () => {
+    const result = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+      {
+        method: 'POST',
+        headers: { ...explanationAuthorizationHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: explanationCommentBody(reference, body) }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!result.ok) {
+      throw new GitHubApiError(
+        result.status,
+        `GitHub API error creating explanation comment: ${result.status} ${result.statusText}`,
+      );
+    }
+    return result;
+  });
+  const created = await readExplanationCommentResponse(response, 'creating explanation comment');
+  if (created.user.id !== Number(reference.ownerId) || created.user.type !== 'Bot') {
+    throw new TypeError('GitHub API created explanation comment without the expected bot owner');
+  }
+  return { id: created.id };
+}
+
+/** @internal INTERNAL — consume via GitHubForgeAdapter. */
+export async function updateExplanationComment(
+  owner: string,
+  repo: string,
+  commentId: number,
+  reference: ExplanationCommentRef,
+  body: string,
+  token: string,
+): Promise<void> {
+  assertExplanationCommentReference(reference.changeRequest.iid, reference);
+  if (!isPositiveSafeInteger(commentId)) {
+    throw new TypeError('Explanation comment id must be a positive safe integer');
+  }
+  const commentUrl = `https://api.github.com/repos/${owner}/${repo}/issues/comments/${commentId}`;
+  const existingResponse = await githubCircuitBreaker.execute(async () => {
+    const result = await fetch(commentUrl, {
+      headers: explanationAuthorizationHeaders(token),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!result.ok) {
+      throw new GitHubApiError(
+        result.status,
+        `GitHub API error confirming explanation comment: ${result.status} ${result.statusText}`,
+      );
+    }
+    return result;
+  });
+  const existing = await readExplanationCommentResponse(
+    existingResponse,
+    'confirming explanation comment',
+  );
+  if (existing.id !== commentId || !isExactOwnedExplanationComment(existing, reference)) {
+    throw new TypeError('GitHub API explanation comment is not exactly owned by this invocation');
+  }
+
+  const updatedResponse = await githubCircuitBreaker.execute(async () => {
+    const result = await fetch(commentUrl, {
+      method: 'PATCH',
+      headers: { ...explanationAuthorizationHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: explanationCommentBody(reference, body) }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!result.ok) {
+      throw new GitHubApiError(
+        result.status,
+        `GitHub API error updating explanation comment: ${result.status} ${result.statusText}`,
+      );
+    }
+    return result;
+  });
+  const updated = await readExplanationCommentResponse(
+    updatedResponse,
+    'updating explanation comment',
+  );
+  if (
+    updated.id !== commentId ||
+    updated.user.id !== Number(reference.ownerId) ||
+    updated.user.type !== 'Bot'
+  ) {
+    throw new TypeError('GitHub API updated explanation comment without the expected bot owner');
+  }
 }
 
 /**
@@ -1176,6 +1506,105 @@ export interface InstallationTokenResult {
  */
 const FALLBACK_INSTALLATION_TOKEN_TTL_MS = 55 * 60 * 1000;
 
+function createGitHubAppJwt(appId: string, privateKey: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iat: now - 60,
+    exp: now + 600,
+    iss: appId,
+  };
+  const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
+  const signer = createSign('RSA-SHA256');
+  signer.update(signingInput);
+  return `${signingInput}.${base64url(signer.sign(decodePrivateKey(privateKey)))}`;
+}
+
+const GITHUB_APP_BOT_AUTHOR_RESOLUTION = {
+  RESOLVED: 'RESOLVED',
+  UNCERTAIN: 'UNCERTAIN',
+} as const;
+
+type GitHubAppBotAuthorResolution =
+  | {
+      kind: typeof GITHUB_APP_BOT_AUTHOR_RESOLUTION.RESOLVED;
+      id: number;
+      slug: string;
+      login: string;
+    }
+  | { kind: typeof GITHUB_APP_BOT_AUTHOR_RESOLUTION.UNCERTAIN };
+
+const SAFE_GITHUB_APP_SLUG = /^[A-Za-z0-9_-]+$/;
+
+function hasForbiddenCredentialCodePoint(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return true;
+  }
+  return false;
+}
+
+function isSafeGitHubAppCredential(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.trim() === value &&
+    !hasForbiddenCredentialCodePoint(value)
+  );
+}
+
+/**
+ * Resolve the numeric GitHub App bot author ID from GitHub's authenticated App
+ * metadata and the matching verified bot user. This deliberately does not use
+ * App metadata IDs as an issue-comment author identity.
+ */
+export async function resolveGitHubAppBotAuthorId(
+  appId: string,
+  privateKey: string,
+  installationToken: string,
+): Promise<GitHubAppBotAuthorResolution> {
+  if (!isSafeGitHubAppCredential(appId) || !isSafeGitHubAppCredential(installationToken)) {
+    return { kind: GITHUB_APP_BOT_AUTHOR_RESOLUTION.UNCERTAIN };
+  }
+
+  try {
+    const appJwt = createGitHubAppJwt(appId, privateKey);
+    const request = async (url: string, token: string): Promise<unknown | null> => {
+      const response = await githubCircuitBreaker.execute(async () =>
+        fetch(url, {
+          method: 'GET',
+          headers: explanationAuthorizationHeaders(token),
+          signal: AbortSignal.timeout(10_000),
+          redirect: 'error',
+        }),
+      );
+      if (!response.ok) return null;
+      return (await response.json()) as unknown;
+    };
+
+    const app = await request('https://api.github.com/app', appJwt);
+    if (!isRecord(app) || typeof app.slug !== 'string' || !SAFE_GITHUB_APP_SLUG.test(app.slug)) {
+      return { kind: GITHUB_APP_BOT_AUTHOR_RESOLUTION.UNCERTAIN };
+    }
+    const login = `${app.slug}[bot]`;
+    const user = await request(
+      `https://api.github.com/users/${encodeURIComponent(login)}`,
+      installationToken,
+    );
+    if (
+      !isRecord(user) ||
+      !isPositiveSafeInteger(user.id) ||
+      user.type !== 'Bot' ||
+      user.login !== login
+    ) {
+      return { kind: GITHUB_APP_BOT_AUTHOR_RESOLUTION.UNCERTAIN };
+    }
+    return { kind: GITHUB_APP_BOT_AUTHOR_RESOLUTION.RESOLVED, id: user.id, slug: app.slug, login };
+  } catch {
+    return { kind: GITHUB_APP_BOT_AUTHOR_RESOLUTION.UNCERTAIN };
+  }
+}
+
 /**
  * Create a JWT for GitHub App authentication and exchange it for an installation
  * access token, returning the token AND its expiry (P2).
@@ -1193,28 +1622,7 @@ export async function getInstallationTokenWithExpiry(
   privateKey: string,
   options?: { repositoryIds?: number[] },
 ): Promise<InstallationTokenResult> {
-  const now = Math.floor(Date.now() / 1000);
-
-  // Create JWT header + payload
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const payload = {
-    iat: now - 60, // 60 seconds in the past for clock skew
-    exp: now + 600, // 10 minutes
-    iss: appId,
-  };
-
-  const encodedHeader = base64url(JSON.stringify(header));
-  const encodedPayload = base64url(JSON.stringify(payload));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-
-  // Decode and sign with RS256
-  const decodedKey = decodePrivateKey(privateKey);
-  const signer = createSign('RSA-SHA256');
-  signer.update(signingInput);
-  const signatureBuffer = signer.sign(decodedKey);
-  const encodedSignature = base64url(signatureBuffer);
-
-  const jwt = `${signingInput}.${encodedSignature}`;
+  const jwt = createGitHubAppJwt(appId, privateKey);
 
   // Exchange JWT for installation access token
   const url = `https://api.github.com/app/installations/${installationId}/access_tokens`;
@@ -1283,4 +1691,510 @@ export async function getInstallationToken(
 function base64url(input: string | Buffer): string {
   const buf = typeof input === 'string' ? Buffer.from(input, 'utf8') : input;
   return buf.toString('base64url');
+}
+
+// ─── Revision-pinned explanation snapshot ───────────────────────
+
+const GIT_SHA = /^[0-9a-f]{40}$/i;
+const MAX_SNAPSHOT_FILES = 100;
+const MAX_SNAPSHOT_INPUT_BYTES = 2 * 1024 * 1024;
+const MAX_SNAPSHOT_DIFF_BYTES = 2 * 1024 * 1024;
+
+interface SnapshotRepository {
+  readonly id: string;
+  readonly owner: string;
+  readonly name: string;
+}
+
+interface SnapshotPullRequest {
+  readonly number: number;
+  readonly baseSha: string;
+  readonly headSha: string;
+  readonly baseRepository: SnapshotRepository;
+  readonly headRepository: SnapshotRepository;
+}
+
+interface SnapshotTreeEntry {
+  readonly path: string;
+  readonly mode: string;
+  readonly type: string;
+  readonly sha: string;
+  readonly size?: number;
+}
+
+interface SnapshotChangedFile {
+  readonly path: string;
+  readonly before: SnapshotTreeEntry | null;
+  readonly after: SnapshotTreeEntry;
+}
+
+/**
+ * Read a complete immutable Git object snapshot for an explanation request.
+ * This deliberately does not use pull-request files or diff endpoints: their
+ * pagination and live PR semantics cannot prove complete revision coverage.
+ */
+export async function fetchRevisionPinnedSnapshot(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  requestedHeadSha: string,
+  token: string,
+): Promise<{
+  repositoryId: string;
+  baseSha: string;
+  headSha: string;
+  diff: string;
+  files: Array<{ path: string; content: string }>;
+} | null> {
+  if (
+    !isSnapshotRepositoryName(owner, repo) ||
+    !Number.isSafeInteger(prNumber) ||
+    prNumber <= 0 ||
+    !GIT_SHA.test(requestedHeadSha)
+  ) {
+    return null;
+  }
+
+  const initial = await readSnapshotPullRequest(owner, repo, prNumber, token);
+  if (
+    !initial ||
+    initial.headSha !== requestedHeadSha ||
+    !sameRepository(initial.baseRepository, owner, repo)
+  ) {
+    return null;
+  }
+
+  const compareHead = sameRepository(initial.headRepository, owner, repo)
+    ? requestedHeadSha
+    : `${initial.headRepository.owner}:${requestedHeadSha}`;
+  const comparison = await fetchSnapshotJson(
+    owner,
+    repo,
+    `compare/${initial.baseSha}...${compareHead}`,
+    token,
+    'comparing immutable commits',
+  );
+  const mergeBaseSha = readMergeBaseSha(comparison, initial.baseSha);
+  if (!mergeBaseSha) return null;
+
+  const baseCommit = await readSnapshotCommit(owner, repo, mergeBaseSha, token);
+  if (!baseCommit) return null;
+  const headCommit = await readSnapshotCommit(
+    initial.headRepository.owner,
+    initial.headRepository.name,
+    requestedHeadSha,
+    token,
+  );
+  if (!headCommit) return null;
+
+  const baseTree = await readSnapshotTree(owner, repo, baseCommit.treeSha, token);
+  if (!baseTree) return null;
+  const headTree = await readSnapshotTree(
+    initial.headRepository.owner,
+    initial.headRepository.name,
+    headCommit.treeSha,
+    token,
+  );
+  if (!headTree) return null;
+
+  const changed = deriveChangedFiles(baseTree, headTree);
+  if (!changed || changed.length === 0 || changed.length > MAX_SNAPSHOT_FILES) return null;
+
+  let knownManifestBytes = 0;
+  for (const file of changed) {
+    const beforeSize = file.before?.size;
+    const afterSize = file.after.size;
+    if (
+      (beforeSize !== undefined && beforeSize > MAX_FILE_BYTES) ||
+      (afterSize !== undefined && afterSize > MAX_FILE_BYTES)
+    )
+      return null;
+    const knownBytes = (beforeSize ?? 0) + (afterSize ?? 0);
+    knownManifestBytes += knownBytes;
+    if (knownManifestBytes > MAX_SNAPSHOT_INPUT_BYTES) return null;
+  }
+
+  let totalBytes = 0;
+  let totalDiffBytes = 0;
+  const files: Array<{ path: string; content: string }> = [];
+  const diffParts: string[] = [];
+  for (const file of changed) {
+    const before = file.before ? await readSnapshotBlob(owner, repo, file.before.sha, token) : '';
+    if (before === null) return null;
+    const after = await readSnapshotBlob(
+      initial.headRepository.owner,
+      initial.headRepository.name,
+      file.after.sha,
+      token,
+    );
+    if (after === null) return null;
+    totalBytes += Buffer.byteLength(before) + Buffer.byteLength(after);
+    if (totalBytes > MAX_SNAPSHOT_INPUT_BYTES) return null;
+    const diff = renderCompleteUnifiedDiff(
+      file.path,
+      file.before === null ? null : before,
+      after,
+      file.after.mode,
+    );
+    totalDiffBytes += Buffer.byteLength(diff);
+    if (totalDiffBytes > MAX_SNAPSHOT_DIFF_BYTES) return null;
+    diffParts.push(diff);
+    files.push({ path: file.path, content: after });
+  }
+
+  const final = await readSnapshotPullRequest(owner, repo, prNumber, token);
+  if (!final || !sameSnapshotPullRequest(initial, final)) return null;
+
+  return {
+    repositoryId: initial.baseRepository.id,
+    baseSha: mergeBaseSha,
+    headSha: requestedHeadSha,
+    diff: diffParts.join(''),
+    files,
+  };
+}
+
+async function fetchSnapshotJson(
+  owner: string,
+  repo: string,
+  resource: string,
+  token: string,
+  operation: string,
+): Promise<unknown> {
+  return githubCircuitBreaker.execute(async () => {
+    const response = await fetch(
+      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${resource}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error ${operation}: ${response.status}`,
+      );
+    }
+    try {
+      return (await response.json()) as unknown;
+    } catch {
+      throw new GitHubApiError(502, `GitHub API error ${operation}: malformed JSON response`);
+    }
+  });
+}
+
+async function readSnapshotPullRequest(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  token: string,
+): Promise<SnapshotPullRequest | null> {
+  const value = await fetchSnapshotJson(
+    owner,
+    repo,
+    `pulls/${prNumber}`,
+    token,
+    'fetching PR snapshot',
+  );
+  if (!isRecord(value) || value.number !== prNumber) return null;
+  const base = readPullSide(value.base);
+  const head = readPullSide(value.head);
+  if (!base || !head) return null;
+  return {
+    number: prNumber,
+    baseSha: base.sha,
+    headSha: head.sha,
+    baseRepository: base.repository,
+    headRepository: head.repository,
+  };
+}
+
+function readPullSide(value: unknown): { sha: string; repository: SnapshotRepository } | null {
+  if (!isRecord(value) || !isGitSha(value.sha) || !isRecord(value.repo)) return null;
+  const repository = readSnapshotRepository(value.repo);
+  return repository ? { sha: value.sha, repository } : null;
+}
+
+function readSnapshotRepository(value: Record<string, unknown>): SnapshotRepository | null {
+  if (
+    typeof value.id !== 'number' ||
+    !Number.isSafeInteger(value.id) ||
+    value.id <= 0 ||
+    !isRecord(value.owner) ||
+    typeof value.owner.login !== 'string' ||
+    !GH_OWNER.test(value.owner.login) ||
+    typeof value.name !== 'string' ||
+    !isSnapshotRepositoryName(value.owner.login, value.name)
+  ) {
+    return null;
+  }
+  return { id: String(value.id), owner: value.owner.login, name: value.name };
+}
+
+function isSnapshotRepositoryName(owner: string, repo: string): boolean {
+  return GH_OWNER.test(owner) && GH_REPO.test(repo) && repo !== '.' && repo !== '..';
+}
+
+function sameRepository(repository: SnapshotRepository, owner: string, repo: string): boolean {
+  return (
+    repository.owner.toLowerCase() === owner.toLowerCase() &&
+    repository.name.toLowerCase() === repo.toLowerCase()
+  );
+}
+
+function sameSnapshotPullRequest(first: SnapshotPullRequest, second: SnapshotPullRequest): boolean {
+  return (
+    first.number === second.number &&
+    first.baseSha === second.baseSha &&
+    first.headSha === second.headSha &&
+    first.baseRepository.id === second.baseRepository.id &&
+    first.headRepository.id === second.headRepository.id &&
+    sameRepository(first.baseRepository, second.baseRepository.owner, second.baseRepository.name) &&
+    sameRepository(first.headRepository, second.headRepository.owner, second.headRepository.name)
+  );
+}
+
+function readMergeBaseSha(value: unknown, expectedBaseSha: string): string | null {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.base_commit) ||
+    value.base_commit.sha !== expectedBaseSha ||
+    !isRecord(value.merge_base_commit) ||
+    !isGitSha(value.merge_base_commit.sha)
+  ) {
+    return null;
+  }
+  return value.merge_base_commit.sha;
+}
+
+async function readSnapshotCommit(
+  owner: string,
+  repo: string,
+  sha: string,
+  token: string,
+): Promise<{ treeSha: string } | null> {
+  const value = await fetchSnapshotJson(
+    owner,
+    repo,
+    `git/commits/${sha}`,
+    token,
+    'fetching pinned commit',
+  );
+  if (!isRecord(value) || value.sha !== sha || !isRecord(value.tree) || !isGitSha(value.tree.sha))
+    return null;
+  return { treeSha: value.tree.sha };
+}
+
+async function readSnapshotTree(
+  owner: string,
+  repo: string,
+  sha: string,
+  token: string,
+): Promise<SnapshotTreeEntry[] | null> {
+  const value = await fetchSnapshotJson(
+    owner,
+    repo,
+    `git/trees/${sha}?recursive=1`,
+    token,
+    'fetching pinned tree',
+  );
+  if (
+    !isRecord(value) ||
+    value.sha !== sha ||
+    value.truncated !== false ||
+    !Array.isArray(value.tree)
+  )
+    return null;
+  const entries: SnapshotTreeEntry[] = [];
+  const paths = new Set<string>();
+  for (const item of value.tree) {
+    const entry = readSnapshotTreeEntry(item);
+    if (!entry || paths.has(entry.path)) return null;
+    paths.add(entry.path);
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function readSnapshotTreeEntry(value: unknown): SnapshotTreeEntry | null {
+  if (
+    !isRecord(value) ||
+    typeof value.path !== 'string' ||
+    !isGitSha(value.sha) ||
+    typeof value.mode !== 'string' ||
+    typeof value.type !== 'string'
+  )
+    return null;
+  try {
+    encodeContentsPath(value.path);
+  } catch {
+    return null;
+  }
+  const valid =
+    (value.type === 'blob' && ['100644', '100755', '120000'].includes(value.mode)) ||
+    (value.type === 'tree' && value.mode === '040000') ||
+    (value.type === 'commit' && value.mode === '160000');
+  if (
+    !valid ||
+    (value.size !== undefined &&
+      (typeof value.size !== 'number' || !Number.isSafeInteger(value.size) || value.size < 0))
+  )
+    return null;
+  return {
+    path: value.path,
+    mode: value.mode,
+    type: value.type,
+    sha: value.sha,
+    ...(typeof value.size === 'number' ? { size: value.size } : {}),
+  };
+}
+
+function deriveChangedFiles(
+  beforeEntries: readonly SnapshotTreeEntry[],
+  afterEntries: readonly SnapshotTreeEntry[],
+): SnapshotChangedFile[] | null {
+  const before = new Map(beforeEntries.map((entry) => [entry.path, entry]));
+  const after = new Map(afterEntries.map((entry) => [entry.path, entry]));
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  const changed: SnapshotChangedFile[] = [];
+  for (const path of [...paths].sort()) {
+    const previous = before.get(path) ?? null;
+    const next = after.get(path) ?? null;
+    if (previous?.type === 'tree' || next?.type === 'tree') {
+      if (
+        (previous === null || previous.type === 'tree') &&
+        (next === null || next.type === 'tree')
+      )
+        continue;
+      return null;
+    }
+    if (
+      previous?.mode === next?.mode &&
+      previous?.type === next?.type &&
+      previous?.sha === next?.sha
+    )
+      continue;
+    if (next?.type !== 'blob' || !['100644', '100755'].includes(next.mode)) return null;
+    if (
+      previous &&
+      (previous.type !== 'blob' ||
+        !['100644', '100755'].includes(previous.mode) ||
+        previous.mode !== next.mode)
+    )
+      return null;
+    changed.push({ path, before: previous, after: next });
+  }
+  return changed;
+}
+
+async function readSnapshotBlob(
+  owner: string,
+  repo: string,
+  sha: string,
+  token: string,
+): Promise<string | null> {
+  const value = await fetchSnapshotJson(
+    owner,
+    repo,
+    `git/blobs/${sha}`,
+    token,
+    'fetching pinned blob',
+  );
+  if (
+    !isRecord(value) ||
+    value.sha !== sha ||
+    typeof value.size !== 'number' ||
+    !Number.isSafeInteger(value.size) ||
+    value.size < 0 ||
+    value.size > MAX_FILE_BYTES ||
+    value.encoding !== 'base64' ||
+    typeof value.content !== 'string'
+  )
+    return null;
+  const compact = compactLineWrappedBase64(value.content);
+  if (compact === null || compact.length !== 4 * Math.ceil(value.size / 3)) return null;
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact))
+    return null;
+  const bytes = Buffer.from(compact, 'base64');
+  if (
+    bytes.byteLength !== value.size ||
+    bytes.byteLength > MAX_FILE_BYTES ||
+    bytes.toString('base64') !== compact
+  )
+    return null;
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+  return text.includes('\0') ? null : text;
+}
+
+function compactLineWrappedBase64(value: string): string | null {
+  if (value === '') return '';
+  if (value.includes('\r') && !/\r\n/.test(value)) return null;
+  const lines = value.split(/\r?\n/);
+  if (lines.length > 1 && lines.at(-1) === '') lines.pop();
+  return lines.every((line) => line.length > 0) ? lines.join('') : null;
+}
+
+function renderCompleteUnifiedDiff(
+  path: string,
+  before: string | null,
+  after: string,
+  afterMode: string,
+): string {
+  const oldLines = before === null ? [] : splitDiffLines(before);
+  const newLines = splitDiffLines(after);
+  const oldPath = before === null ? '/dev/null' : quoteDiffPath(`a/${path}`);
+  const newPath = quoteDiffPath(`b/${path}`);
+  if (before === null && newLines.length === 0) {
+    return `diff --git ${quoteDiffPath(`a/${path}`)} ${newPath}\nnew file mode ${afterMode}\n`;
+  }
+  const header = `--- ${oldPath}\n+++ ${newPath}\n@@ -${diffRange(oldLines.length)} +${diffRange(newLines.length)} @@\n`;
+  return `${header}${renderDiffLines('-', oldLines)}${renderDiffLines('+', newLines)}`;
+}
+
+function splitDiffLines(value: string): string[] {
+  if (value.length === 0) return [];
+  const lines: string[] = [];
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '\n') {
+      lines.push(value.slice(start, index + 1));
+      start = index + 1;
+    }
+  }
+  if (start < value.length) lines.push(value.slice(start));
+  return lines;
+}
+
+function renderDiffLines(prefix: string, lines: readonly string[]): string {
+  return lines
+    .map(
+      (line) =>
+        `${prefix}${line.endsWith('\n') ? line : `${line}\n\\ No newline at end of file\n`}`,
+    )
+    .join('');
+}
+
+function diffRange(count: number): string {
+  return count === 1 ? '1' : `${count === 0 ? 0 : 1},${count}`;
+}
+
+function quoteDiffPath(path: string): string {
+  return /^[A-Za-z0-9._/-]+$/.test(path) ? path : JSON.stringify(path);
+}
+
+function isGitSha(value: unknown): value is string {
+  return typeof value === 'string' && GIT_SHA.test(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

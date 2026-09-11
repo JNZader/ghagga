@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type ForgeAuthError, isForgeAuthError } from '../../errors.js';
 import type {
+  ExplanationCommentLookup,
+  ExplanationCommentRef,
+  ExplanationPublicationCapable,
+  ExplanationSnapshotCapable,
   FileReadCapable,
   ForgeAdapter,
   GraphReadCapable,
@@ -438,5 +442,204 @@ describe('GitHubForgeAdapter — auth-error surfacing (P2 401-recovery)', () => 
     const err = await adapter.upsertSummaryComment(ref, 'body', marker).catch((e) => e);
     expect(isForgeAuthError(err)).toBe(false);
     expect(err).toBe(original);
+  });
+});
+
+// ─── PR-native read-only explanation seams (Unit 3) ──────────────
+
+const explanationIdentity = {
+  forgeInstance: 'github.com',
+  installationId: 'installation-7',
+  actorId: 'actor-9',
+  repositoryId: repo.nativeId,
+  pullRequestNumber: PR,
+  requestedHeadSha: 'head-42',
+  sourceCommentId: 'comment-11',
+  questionHash: 'question-hash-1',
+} as const;
+
+const explanationRef: ExplanationCommentRef = {
+  forgeInstance: 'github.com',
+  installationId: 'installation-7',
+  repositoryId: repo.nativeId,
+  changeRequest: ref,
+  ownerId: 'github-app-bot-77',
+  channel: 'answer',
+  invocationId: 'invocation-13',
+};
+
+function makeExplanationAdapter(client: GitHubClientPort): GitHubForgeAdapter {
+  return new GitHubForgeAdapter({
+    client,
+    token: TOKEN,
+    owner: OWNER,
+    repo: REPO,
+    explanationBinding: {
+      forgeInstance: explanationIdentity.forgeInstance,
+      installationId: explanationIdentity.installationId,
+      repositoryId: explanationIdentity.repositoryId,
+    },
+  });
+}
+
+function snapshotCapability(adapter: GitHubForgeAdapter): ExplanationSnapshotCapable {
+  expect('fetchExplanationSnapshot' in adapter).toBe(true);
+  return adapter as ExplanationSnapshotCapable;
+}
+
+function publicationCapability(adapter: GitHubForgeAdapter): ExplanationPublicationCapable {
+  expect('lookupExplanationComment' in adapter).toBe(true);
+  return adapter as ExplanationPublicationCapable;
+}
+
+describe('GitHubForgeAdapter — revision-pinned explanation snapshot (Unit 3 RED)', () => {
+  it('returns only a repository/head-coherent snapshot from the single pinned client seam', async () => {
+    const client = makeClient({
+      fetchRevisionPinnedSnapshot: vi.fn().mockResolvedValue({
+        repositoryId: repo.nativeId,
+        baseSha: 'base-42',
+        headSha: explanationIdentity.requestedHeadSha,
+        diff: 'diff --git a/src/a.ts b/src/a.ts',
+        files: [{ path: 'src/a.ts', content: 'export const answer = 42;\n' }],
+      }),
+    });
+    const adapter = makeExplanationAdapter(client);
+
+    await expect(
+      snapshotCapability(adapter).fetchExplanationSnapshot(explanationIdentity, ref),
+    ).resolves.toEqual({
+      kind: 'SNAPSHOT',
+      snapshot: {
+        repositoryId: repo.nativeId,
+        baseSha: 'base-42',
+        headSha: explanationIdentity.requestedHeadSha,
+        diff: 'diff --git a/src/a.ts b/src/a.ts',
+        files: [{ path: 'src/a.ts', content: 'export const answer = 42;\n' }],
+      },
+    });
+    expect(client.fetchRevisionPinnedSnapshot).toHaveBeenCalledWith(
+      OWNER,
+      REPO,
+      PR,
+      explanationIdentity.requestedHeadSha,
+      TOKEN,
+    );
+    expect(client.fetchPRDetails).not.toHaveBeenCalled();
+    expect(client.fetchPRDiff).not.toHaveBeenCalled();
+    expect(client.getPRFileList).not.toHaveBeenCalled();
+    expect(client.fetchFileContents).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['identity', { ...explanationIdentity, repositoryId: 'other-repository' }, ref, 'INVALID'],
+    ['head', explanationIdentity, ref, 'STALE', { headSha: 'superseding-head' }],
+    ['base', explanationIdentity, ref, 'INVALID', { baseSha: '' }],
+    ['repository', explanationIdentity, ref, 'INVALID', { repositoryId: 'other-repository' }],
+    ['file payload', explanationIdentity, ref, 'INVALID', { files: [] }],
+  ])(
+    'rejects an unprovable %s binding without a live PR fallback',
+    async (_caseName, identity, changeRequest, expectedKind, snapshotOverride: Partial<{
+      repositoryId: string;
+      baseSha: string;
+      headSha: string;
+      files: { path: string; content: string }[];
+    }> = {}) => {
+      const client = makeClient({
+        fetchRevisionPinnedSnapshot: vi.fn().mockResolvedValue({
+          repositoryId: repo.nativeId,
+          baseSha: 'base-42',
+          headSha: explanationIdentity.requestedHeadSha,
+          diff: 'diff --git a/src/a.ts b/src/a.ts',
+          files: [{ path: 'src/a.ts', content: 'export const answer = 42;\n' }],
+          ...snapshotOverride,
+        }),
+      });
+      const adapter = makeExplanationAdapter(client);
+
+      await expect(
+        snapshotCapability(adapter).fetchExplanationSnapshot(identity, changeRequest),
+      ).resolves.toMatchObject({
+        kind: expectedKind,
+      });
+      expect(client.fetchPRDetails).not.toHaveBeenCalled();
+      expect(client.fetchPRDiff).not.toHaveBeenCalled();
+      expect(client.getPRFileList).not.toHaveBeenCalled();
+      expect(client.fetchFileContents).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe('GitHubForgeAdapter — owner-aware explanation comments (Unit 3 RED)', () => {
+  it('preserves exact found, absent, and incomplete lookup states without creating a comment', async () => {
+    const found: ExplanationCommentLookup = {
+      kind: 'FOUND',
+      commentId: { kind: 'github:issue-comment', raw: 501 },
+      reference: explanationRef,
+    };
+    const client = makeClient({
+      findExplanationComment: vi
+        .fn()
+        .mockResolvedValueOnce(found)
+        .mockResolvedValueOnce({ kind: 'ABSENT' })
+        .mockResolvedValueOnce({ kind: 'INCOMPLETE', reason: 'multiple matching comments' }),
+      createExplanationComment: vi.fn().mockResolvedValue({ id: 502 }),
+      updateExplanationComment: vi.fn().mockResolvedValue(undefined),
+    });
+    const adapter = makeExplanationAdapter(client);
+    const publication = publicationCapability(adapter);
+
+    await expect(publication.lookupExplanationComment(explanationRef)).resolves.toEqual(found);
+    await expect(publication.lookupExplanationComment(explanationRef)).resolves.toEqual({
+      kind: 'ABSENT',
+    });
+    await expect(publication.lookupExplanationComment(explanationRef)).resolves.toEqual({
+      kind: 'INCOMPLETE',
+      reason: 'multiple matching comments',
+    });
+    expect(client.createExplanationComment).not.toHaveBeenCalled();
+    expect(client.updateExplanationComment).not.toHaveBeenCalled();
+  });
+
+  it('rejects owner and cross-reference mismatches before every explanation client write', async () => {
+    const client = makeClient({
+      findExplanationComment: vi.fn().mockResolvedValue({ kind: 'ABSENT' }),
+      createExplanationComment: vi.fn().mockResolvedValue({ id: 502 }),
+      updateExplanationComment: vi.fn().mockResolvedValue(undefined),
+    });
+    const adapter = makeExplanationAdapter(client);
+    const publication = publicationCapability(adapter);
+    const wrongOwner = { ...explanationRef, ownerId: '' };
+    const wrongRepository = { ...explanationRef, repositoryId: 'other-repository' };
+
+    await expect(publication.createExplanationComment(wrongOwner, 'answer')).rejects.toThrow(
+      TypeError,
+    );
+    await expect(
+      publication.updateExplanationComment(
+        wrongRepository,
+        { kind: 'github:issue-comment', raw: 501 },
+        'answer',
+      ),
+    ).rejects.toThrow(TypeError);
+    expect(client.findExplanationComment).not.toHaveBeenCalled();
+    expect(client.createExplanationComment).not.toHaveBeenCalled();
+    expect(client.updateExplanationComment).not.toHaveBeenCalled();
+  });
+
+  it('does not expose partial explanation capabilities when the binding or a client seam is missing', () => {
+    const missingBinding = makeAdapter(
+      makeClient({
+        fetchRevisionPinnedSnapshot: vi.fn(),
+        findExplanationComment: vi.fn(),
+        createExplanationComment: vi.fn(),
+        updateExplanationComment: vi.fn(),
+      }),
+    );
+    const missingClientSeam = makeExplanationAdapter(makeClient());
+
+    expect('fetchExplanationSnapshot' in missingBinding).toBe(false);
+    expect('lookupExplanationComment' in missingBinding).toBe(false);
+    expect('fetchExplanationSnapshot' in missingClientSeam).toBe(false);
+    expect('lookupExplanationComment' in missingClientSeam).toBe(false);
   });
 });

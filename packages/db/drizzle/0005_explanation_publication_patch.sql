@@ -1,0 +1,4 @@
+ALTER TABLE "explanation_invocations" DROP CONSTRAINT "chk_explanation_invocations_progress_publication_status";--> statement-breakpoint
+ALTER TABLE "explanation_invocations" DROP CONSTRAINT "chk_explanation_invocations_answer_publication_status";--> statement-breakpoint
+ALTER TABLE "explanation_invocations" ADD CONSTRAINT "chk_explanation_invocations_progress_publication_status" CHECK ("explanation_invocations"."progress_publication_status" IN ('NOT_STARTED', 'CREATE_STARTED', 'PATCH_STARTED', 'PUBLISHED', 'STALE', 'AMBIGUOUS'));--> statement-breakpoint
+ALTER TABLE "explanation_invocations" ADD CONSTRAINT "chk_explanation_invocations_answer_publication_status" CHECK ("explanation_invocations"."answer_publication_status" IN ('NOT_STARTED', 'CREATE_STARTED', 'PATCH_STARTED', 'PUBLISHED', 'STALE', 'AMBIGUOUS'));

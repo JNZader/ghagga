@@ -152,6 +152,13 @@ export {
   OPENCODE_ENV_BY_PREFIX,
   sanitizeErrorMessage,
 } from './providers/cli-bridge.js';
+export {
+  createExplanationOllamaGenerateFn,
+  type ExplanationGenerateResult,
+  type ExplanationGenerateTextFn,
+  generateExplanation,
+  resolveExplanationGenerateFn,
+} from './providers/explanation-generate-fn.js';
 export type { GatewayOptions, GatewayResponse } from './providers/gateway.js';
 export { generateViaGateway } from './providers/gateway.js';
 export type {
@@ -636,3 +643,18 @@ export type {
 } from './search/index.js';
 
 export { SearchEngine, SearchIndexer, STOP_WORDS, tokenize } from './search/index.js';
+
+// ─── Read-only Explanation Contracts ───────────────────────────
+
+export type {
+  AnsweredExplanationOutcome,
+  ExplanationIdentity,
+  ExplanationMetadata,
+  ExplanationOutcome,
+  ExplanationOutcomeKind,
+  ExplanationRequest,
+  ExplanationSnapshot,
+  ExplanationSnapshotFile,
+  NonAnswerExplanationOutcome,
+} from './explanation.js';
+export { EXPLANATION_OUTCOME } from './explanation.js';

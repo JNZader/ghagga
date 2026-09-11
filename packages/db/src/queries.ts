@@ -1,9 +1,23 @@
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 import type { Database } from './client.js';
 import {
   type DbProviderChainEntry,
   DEFAULT_REPO_SETTINGS,
+  explanationInvocations,
   githubUserMappings,
   type IssueDedupMatch,
   type IssueDraftKind,
@@ -160,8 +174,20 @@ export interface EffectiveSettings {
   providerChain: DbProviderChainEntry[];
   aiReviewEnabled: boolean;
   reviewMode: string;
-  settings: RepoSettings;
+  settings: EffectiveRepoSettings;
   source: 'global' | 'repo';
+}
+
+export type EffectiveRepoSettings = Omit<RepoSettings, 'explanationsEnabled'> & {
+  explanationsEnabled: boolean;
+};
+
+function resolveEffectiveRepoSettings(settings: RepoSettings | unknown): EffectiveRepoSettings {
+  const selectedSettings = (settings ?? DEFAULT_REPO_SETTINGS) as RepoSettings;
+  return {
+    ...selectedSettings,
+    explanationsEnabled: selectedSettings.explanationsEnabled ?? false,
+  };
 }
 
 export async function getEffectiveRepoSettings(
@@ -180,7 +206,7 @@ export async function getEffectiveRepoSettings(
       providerChain: (repo.providerChain ?? []) as DbProviderChainEntry[],
       aiReviewEnabled: repo.aiReviewEnabled,
       reviewMode: repo.reviewMode,
-      settings: (repo.settings ?? DEFAULT_REPO_SETTINGS) as RepoSettings,
+      settings: resolveEffectiveRepoSettings(repo.settings),
       source: 'repo',
     };
   }
@@ -192,7 +218,7 @@ export async function getEffectiveRepoSettings(
       providerChain: (globalSettings.providerChain ?? []) as DbProviderChainEntry[],
       aiReviewEnabled: globalSettings.aiReviewEnabled,
       reviewMode: globalSettings.reviewMode,
-      settings: (globalSettings.settings ?? DEFAULT_REPO_SETTINGS) as RepoSettings,
+      settings: resolveEffectiveRepoSettings(globalSettings.settings),
       source: 'global',
     };
   }
@@ -202,7 +228,7 @@ export async function getEffectiveRepoSettings(
     providerChain: [],
     aiReviewEnabled: true,
     reviewMode: 'simple',
-    settings: DEFAULT_REPO_SETTINGS,
+    settings: resolveEffectiveRepoSettings(DEFAULT_REPO_SETTINGS),
     source: 'global',
   };
 }
@@ -1878,4 +1904,1345 @@ export async function clearEmptyMemorySessions(
     .returning({ id: memorySessions.id });
 
   return { deletedCount: result.length };
+}
+
+// ─── Explanation Invocation Registration ─────────────────────────
+
+export interface ExplanationInvocationIdentity {
+  forgeInstance: string;
+  installationId: string;
+  actorId: string;
+  repositoryId: string;
+  pullRequestNumber: number;
+  requestedHeadSha: string;
+  sourceCommentId: string;
+  questionHash: string;
+}
+
+export interface ExplanationInvocationRequest extends ExplanationInvocationIdentity {
+  question: string;
+}
+
+export type ExplanationInvocationStore = Pick<Database, 'insert' | 'select'>;
+export type ExplanationInvocationRow = typeof explanationInvocations.$inferSelect;
+
+export type ExplanationInvocationRegistration =
+  | { status: 'invalid' }
+  | { status: 'registered'; invocation: ExplanationInvocationRow }
+  | { status: 'duplicate'; invocation: ExplanationInvocationRow }
+  | { status: 'mismatch' }
+  | { status: 'unavailable' };
+
+export type ExplanationInvocationLookup =
+  | { status: 'invalid' }
+  | { status: 'found'; invocation: ExplanationInvocationRow }
+  | { status: 'not_found' }
+  | { status: 'mismatch' };
+
+const explanationIdentityTextFields = [
+  'forgeInstance',
+  'installationId',
+  'actorId',
+  'repositoryId',
+  'requestedHeadSha',
+  'sourceCommentId',
+] as const;
+
+/**
+ * Validates only the immutable identity shape. Opaque forge values are preserved
+ * byte-for-byte; especially, questionHash is never trimmed or case-folded.
+ */
+export function isValidExplanationInvocationIdentity(
+  identity: unknown,
+): identity is ExplanationInvocationIdentity {
+  if (typeof identity !== 'object' || identity === null) return false;
+  const candidate = identity as Partial<ExplanationInvocationIdentity>;
+  const pullRequestNumber = candidate.pullRequestNumber;
+  if (
+    typeof pullRequestNumber !== 'number' ||
+    !Number.isSafeInteger(pullRequestNumber) ||
+    pullRequestNumber <= 0
+  )
+    return false;
+  if (typeof candidate.questionHash !== 'string' || !/^[a-f0-9]{64}$/.test(candidate.questionHash))
+    return false;
+  return explanationIdentityTextFields.every(
+    (field) => typeof candidate[field] === 'string' && candidate[field].length > 0,
+  );
+}
+
+export function isValidExplanationInvocationRequest(
+  request: unknown,
+): request is ExplanationInvocationRequest {
+  if (!isValidExplanationInvocationIdentity(request)) return false;
+  const candidate = request as Partial<ExplanationInvocationRequest>;
+  return (
+    typeof candidate.question === 'string' &&
+    candidate.question.length > 0 &&
+    createHash('sha256').update(candidate.question).digest('hex') === candidate.questionHash
+  );
+}
+
+/**
+ * Produces an unambiguous SHA-256 key from the complete immutable tuple.
+ * JSON array encoding prevents delimiter ambiguity between opaque identifiers.
+ */
+export function deriveExplanationInvocationKey(
+  identity: ExplanationInvocationIdentity,
+): string | null {
+  if (!isValidExplanationInvocationIdentity(identity)) return null;
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        'explanation-invocation-v1',
+        identity.forgeInstance,
+        identity.installationId,
+        identity.actorId,
+        identity.repositoryId,
+        identity.pullRequestNumber,
+        identity.requestedHeadSha,
+        identity.sourceCommentId,
+        identity.questionHash,
+      ]),
+    )
+    .digest('hex');
+}
+
+function matchesExplanationIdentity(
+  row: ExplanationInvocationRow,
+  identity: ExplanationInvocationRequest,
+): boolean {
+  return (
+    row.forgeInstance === identity.forgeInstance &&
+    row.installationId === identity.installationId &&
+    row.actorId === identity.actorId &&
+    row.repositoryId === identity.repositoryId &&
+    row.pullRequestNumber === identity.pullRequestNumber &&
+    row.requestedHeadSha === identity.requestedHeadSha &&
+    row.sourceCommentId === identity.sourceCommentId &&
+    row.questionHash === identity.questionHash &&
+    row.question === identity.question
+  );
+}
+
+async function selectExplanationInvocationByKey(
+  db: ExplanationInvocationStore,
+  invocationKey: string,
+): Promise<ExplanationInvocationRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(explanationInvocations)
+    .where(eq(explanationInvocations.invocationKey, invocationKey))
+    .limit(1);
+  return row;
+}
+
+/**
+ * Inserts the sole pending claim, then separately observes a conflict. The
+ * conflict follow-up is mandatory: a missing row is unavailable, never permission
+ * to dispatch. This function creates no reservation or lifecycle authority.
+ */
+export async function registerExplanationInvocation(
+  db: ExplanationInvocationStore,
+  request: ExplanationInvocationRequest,
+): Promise<ExplanationInvocationRegistration> {
+  if (!isValidExplanationInvocationRequest(request)) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(request);
+  if (invocationKey === null) return { status: 'invalid' };
+
+  const [inserted] = await db
+    .insert(explanationInvocations)
+    .values({
+      invocationKey,
+      forgeInstance: request.forgeInstance,
+      installationId: request.installationId,
+      actorId: request.actorId,
+      repositoryId: request.repositoryId,
+      pullRequestNumber: request.pullRequestNumber,
+      requestedHeadSha: request.requestedHeadSha,
+      sourceCommentId: request.sourceCommentId,
+      questionHash: request.questionHash,
+      question: request.question,
+    })
+    .onConflictDoNothing({ target: explanationInvocations.invocationKey })
+    .returning();
+  if (inserted) return { status: 'registered', invocation: inserted };
+
+  const observed = await selectExplanationInvocationByKey(db, invocationKey);
+  if (!observed) return { status: 'unavailable' };
+  if (!matchesExplanationIdentity(observed, request)) return { status: 'mismatch' };
+  return { status: 'duplicate', invocation: observed };
+}
+
+/**
+ * Fetches an invocation only when the caller supplies its complete expected
+ * identity. A derived-key collision or changed tuple is deliberately opaque.
+ */
+export async function lookupExplanationInvocation(
+  db: ExplanationInvocationStore,
+  request: ExplanationInvocationRequest,
+): Promise<ExplanationInvocationLookup> {
+  if (!isValidExplanationInvocationRequest(request)) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(request);
+  if (invocationKey === null) return { status: 'invalid' };
+
+  const observed = await selectExplanationInvocationByKey(db, invocationKey);
+  if (!observed) return { status: 'not_found' };
+  if (!matchesExplanationIdentity(observed, request)) return { status: 'mismatch' };
+  return { status: 'found', invocation: observed };
+}
+
+export interface ExplanationInvocationDispatchReservationRequest
+  extends ExplanationInvocationRequest {
+  leaseDurationMs: number;
+}
+
+export type ExplanationInvocationDispatchReservation =
+  | { status: 'invalid' }
+  | { status: 'reserved'; invocation: ExplanationInvocationRow; executionFence: string }
+  | { status: 'observed'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+const MIN_EXPLANATION_DISPATCH_LEASE_MS = 1_000;
+const MAX_EXPLANATION_DISPATCH_LEASE_MS = 300_000;
+
+function isValidExplanationInvocationDispatchReservationRequest(
+  value: unknown,
+): value is ExplanationInvocationDispatchReservationRequest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    hasOnlyFields(request, [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+      'question',
+      'leaseDurationMs',
+    ]) &&
+    isValidExplanationInvocationRequest(request) &&
+    typeof request.leaseDurationMs === 'number' &&
+    Number.isSafeInteger(request.leaseDurationMs) &&
+    request.leaseDurationMs >= MIN_EXPLANATION_DISPATCH_LEASE_MS &&
+    request.leaseDurationMs <= MAX_EXPLANATION_DISPATCH_LEASE_MS
+  );
+}
+
+/** A returned reservation authorizes only post-commit external I/O; this function never commits a caller transaction. */
+export async function reserveExplanationInvocationDispatch(
+  db: Pick<Database, 'select' | 'update'>,
+  value: unknown,
+): Promise<ExplanationInvocationDispatchReservation> {
+  if (!isValidExplanationInvocationDispatchReservationRequest(value)) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(value);
+  if (invocationKey === null) return { status: 'invalid' };
+  const [reserved] = await db
+    .update(explanationInvocations)
+    .set({
+      executionStatus: 'DISPATCH_RESERVED',
+      executionFence: sql`gen_random_uuid()::text`,
+      dispatchReservedAt: sql`clock_timestamp()`,
+      dispatchLeaseExpiresAt: sql`clock_timestamp() + (${value.leaseDurationMs} * interval '1 millisecond')`,
+    })
+    .where(
+      and(
+        eq(explanationInvocations.invocationKey, invocationKey),
+        eq(explanationInvocations.forgeInstance, value.forgeInstance),
+        eq(explanationInvocations.installationId, value.installationId),
+        eq(explanationInvocations.actorId, value.actorId),
+        eq(explanationInvocations.repositoryId, value.repositoryId),
+        eq(explanationInvocations.pullRequestNumber, value.pullRequestNumber),
+        eq(explanationInvocations.requestedHeadSha, value.requestedHeadSha),
+        eq(explanationInvocations.sourceCommentId, value.sourceCommentId),
+        eq(explanationInvocations.questionHash, value.questionHash),
+        eq(explanationInvocations.question, value.question),
+        eq(explanationInvocations.executionStatus, 'PENDING'),
+        isNull(explanationInvocations.executionFence),
+        isNull(explanationInvocations.dispatchReservedAt),
+        isNull(explanationInvocations.dispatchLeaseExpiresAt),
+        isNull(explanationInvocations.outcomeStatus),
+        isNull(explanationInvocations.outcomeAnswer),
+        isNull(explanationInvocations.outcomePayload),
+        isNull(explanationInvocations.outcomeCompletedAt),
+      ),
+    )
+    .returning();
+  if (reserved && isNonEmptyText(reserved.executionFence)) {
+    return { status: 'reserved', invocation: reserved, executionFence: reserved.executionFence };
+  }
+  const [observed] = await db
+    .select()
+    .from(explanationInvocations)
+    .where(
+      and(
+        eq(explanationInvocations.invocationKey, invocationKey),
+        eq(explanationInvocations.question, value.question),
+      ),
+    )
+    .limit(1);
+  return observed && matchesExplanationIdentity(observed, value)
+    ? { status: 'observed', invocation: observed }
+    : { status: 'unavailable' };
+}
+
+export interface ExplanationInvocationExpiredDispatchRecoveryRequest
+  extends ExplanationInvocationRequest {
+  executionFence: string;
+}
+
+export type ExplanationInvocationExpiredDispatchRecovery =
+  | { status: 'invalid' }
+  | { status: 'recovered'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+function isValidExplanationInvocationExpiredDispatchRecoveryRequest(
+  value: unknown,
+): value is ExplanationInvocationExpiredDispatchRecoveryRequest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    hasOnlyFields(request, [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+      'question',
+      'executionFence',
+    ]) &&
+    isValidExplanationInvocationRequest(request) &&
+    isNonEmptyText(request.executionFence)
+  );
+}
+
+export async function recoverExpiredExplanationInvocationDispatch(
+  db: Pick<Database, '$with' | 'select' | 'update' | 'with'>,
+  value: unknown,
+): Promise<ExplanationInvocationExpiredDispatchRecovery> {
+  if (!isValidExplanationInvocationExpiredDispatchRecoveryRequest(value))
+    return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(value);
+  if (invocationKey === null) return { status: 'invalid' };
+  const conditions: SQL[] = [
+    eq(explanationInvocations.invocationKey, invocationKey),
+    eq(explanationInvocations.forgeInstance, value.forgeInstance),
+    eq(explanationInvocations.installationId, value.installationId),
+    eq(explanationInvocations.actorId, value.actorId),
+    eq(explanationInvocations.repositoryId, value.repositoryId),
+    eq(explanationInvocations.pullRequestNumber, value.pullRequestNumber),
+    eq(explanationInvocations.requestedHeadSha, value.requestedHeadSha),
+    eq(explanationInvocations.sourceCommentId, value.sourceCommentId),
+    eq(explanationInvocations.questionHash, value.questionHash),
+    eq(explanationInvocations.question, value.question),
+    eq(explanationInvocations.executionStatus, 'DISPATCH_RESERVED'),
+    eq(explanationInvocations.executionFence, value.executionFence),
+    isNull(explanationInvocations.outcomeStatus),
+    isNull(explanationInvocations.outcomeAnswer),
+    isNull(explanationInvocations.outcomePayload),
+    isNull(explanationInvocations.outcomeCompletedAt),
+  ];
+  const locked = db.$with('locked_expired_explanation_invocation').as(
+    db
+      .select({
+        id: explanationInvocations.id,
+        lease: explanationInvocations.dispatchLeaseExpiresAt,
+      })
+      .from(explanationInvocations)
+      .where(and(...conditions))
+      .for('update'),
+  );
+  const outcome = {
+    kind: 'AMBIGUOUS' as const,
+    reason: 'dispatch lease expired before durable completion',
+  };
+  const [recovered] = await db
+    .with(locked)
+    .update(explanationInvocations)
+    .set({
+      executionStatus: 'AMBIGUOUS',
+      outcomeStatus: 'AMBIGUOUS',
+      outcomeAnswer: null,
+      outcomePayload: outcome,
+      outcomeCompletedAt: sql`clock_timestamp()`,
+    })
+    .from(locked)
+    .where(and(eq(explanationInvocations.id, locked.id), lt(locked.lease, sql`clock_timestamp()`)))
+    .returning();
+  return recovered ? { status: 'recovered', invocation: recovered } : { status: 'unavailable' };
+}
+
+// ─── Explanation Invocation Settlement ──────────────────────────
+
+export const EXPLANATION_TERMINAL_OUTCOME_KINDS = [
+  'ANSWERED',
+  'INVALID',
+  'UNAUTHORIZED',
+  'DISABLED',
+  'STALE',
+  'AI_UNAVAILABLE',
+  'AMBIGUOUS',
+] as const;
+export type ExplanationTerminalOutcomeKind = (typeof EXPLANATION_TERMINAL_OUTCOME_KINDS)[number];
+
+export interface ExplanationAnswerMetadata {
+  provider: string;
+  model: string;
+  tokensUsed: number;
+}
+
+export interface ExplanationAnsweredOutcomePayload {
+  kind: 'ANSWERED';
+  answer: string;
+  metadata: ExplanationAnswerMetadata;
+}
+
+export interface ExplanationNonAnswerOutcomePayload {
+  kind: Exclude<ExplanationTerminalOutcomeKind, 'ANSWERED'>;
+  reason: string;
+}
+
+export type ExplanationOutcomePayload =
+  | ExplanationAnsweredOutcomePayload
+  | ExplanationNonAnswerOutcomePayload;
+
+export interface ExplanationInvocationSettlementRequest extends ExplanationInvocationRequest {
+  expectedExecutionStatus: 'PENDING' | 'DISPATCH_RESERVED';
+  executionFence?: string;
+  outcome: ExplanationOutcomePayload;
+}
+
+export type ExplanationInvocationSettlement =
+  | { status: 'invalid' }
+  | { status: 'settled'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+const pendingTerminalOutcomeKinds = [
+  'INVALID',
+  'UNAUTHORIZED',
+  'DISABLED',
+  'STALE',
+  'AI_UNAVAILABLE',
+] as const;
+
+function isNonEmptyText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasOnlyFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
+  return Object.keys(value).every((field) => fields.includes(field));
+}
+
+function isValidExplanationOutcomePayload(value: unknown): value is ExplanationOutcomePayload {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  if (
+    !EXPLANATION_TERMINAL_OUTCOME_KINDS.includes(payload.kind as ExplanationTerminalOutcomeKind)
+  ) {
+    return false;
+  }
+  if (payload.kind === 'ANSWERED') {
+    if (
+      !hasOnlyFields(payload, ['kind', 'answer', 'metadata']) ||
+      !isNonEmptyText(payload.answer)
+    ) {
+      return false;
+    }
+    if (
+      typeof payload.metadata !== 'object' ||
+      payload.metadata === null ||
+      Array.isArray(payload.metadata)
+    ) {
+      return false;
+    }
+    const metadata = payload.metadata as Record<string, unknown>;
+    return (
+      hasOnlyFields(metadata, ['provider', 'model', 'tokensUsed']) &&
+      isNonEmptyText(metadata.provider) &&
+      isNonEmptyText(metadata.model) &&
+      typeof metadata.tokensUsed === 'number' &&
+      Number.isFinite(metadata.tokensUsed) &&
+      Number.isSafeInteger(metadata.tokensUsed) &&
+      metadata.tokensUsed >= 0
+    );
+  }
+  return hasOnlyFields(payload, ['kind', 'reason']) && isNonEmptyText(payload.reason);
+}
+
+/** Validates the complete immutable settlement request before any database access. */
+export function validateExplanationInvocationSettlement(
+  value: unknown,
+): ExplanationInvocationSettlementRequest | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const request = value as Record<string, unknown>;
+  if (
+    !hasOnlyFields(request, [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+      'question',
+      'expectedExecutionStatus',
+      'executionFence',
+      'outcome',
+    ]) ||
+    !isValidExplanationInvocationRequest(request) ||
+    !isValidExplanationOutcomePayload(request.outcome) ||
+    (request.expectedExecutionStatus !== 'PENDING' &&
+      request.expectedExecutionStatus !== 'DISPATCH_RESERVED')
+  ) {
+    return null;
+  }
+  const outcome = request.outcome;
+  if (request.expectedExecutionStatus === 'PENDING') {
+    if (
+      request.executionFence !== undefined ||
+      !pendingTerminalOutcomeKinds.some((kind) => kind === outcome.kind)
+    ) {
+      return null;
+    }
+  } else if (
+    !isNonEmptyText(request.executionFence) ||
+    !['ANSWERED', 'AI_UNAVAILABLE', 'AMBIGUOUS'].includes(outcome.kind)
+  ) {
+    return null;
+  }
+  return value as ExplanationInvocationSettlementRequest;
+}
+
+function outcomeAnswer(payload: ExplanationOutcomePayload): string | null {
+  return payload.kind === 'ANSWERED' ? payload.answer : null;
+}
+
+function isCompleteExplanationInvocationOutcome(row: {
+  executionStatus: string;
+  outcomeStatus: string | null;
+  outcomeAnswer: string | null;
+  outcomePayload: unknown;
+  outcomeCompletedAt: Date | null;
+}): boolean {
+  if (
+    row.outcomeStatus !== row.executionStatus ||
+    row.outcomeCompletedAt === null ||
+    !isValidExplanationOutcomePayload(row.outcomePayload) ||
+    row.outcomePayload.kind !== row.executionStatus
+  ) {
+    return false;
+  }
+  return row.outcomeAnswer === outcomeAnswer(row.outcomePayload);
+}
+
+/**
+ * Performs one fenced conditional update. A zero-row result is observation-only:
+ * it grants no execution authority and never repairs legacy rows.
+ */
+export async function settleExplanationInvocation(
+  db: Pick<Database, 'select' | 'update'>,
+  value: unknown,
+): Promise<ExplanationInvocationSettlement> {
+  const request = validateExplanationInvocationSettlement(value);
+  if (!request) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(request);
+  if (invocationKey === null) return { status: 'invalid' };
+  const conditions: SQL[] = [
+    eq(explanationInvocations.invocationKey, invocationKey),
+    eq(explanationInvocations.forgeInstance, request.forgeInstance),
+    eq(explanationInvocations.installationId, request.installationId),
+    eq(explanationInvocations.actorId, request.actorId),
+    eq(explanationInvocations.repositoryId, request.repositoryId),
+    eq(explanationInvocations.pullRequestNumber, request.pullRequestNumber),
+    eq(explanationInvocations.requestedHeadSha, request.requestedHeadSha),
+    eq(explanationInvocations.sourceCommentId, request.sourceCommentId),
+    eq(explanationInvocations.questionHash, request.questionHash),
+    eq(explanationInvocations.question, request.question),
+    eq(explanationInvocations.executionStatus, request.expectedExecutionStatus),
+    sql`${explanationInvocations.outcomeStatus} IS NULL`,
+    sql`${explanationInvocations.outcomeAnswer} IS NULL`,
+    sql`${explanationInvocations.outcomePayload} IS NULL`,
+    sql`${explanationInvocations.outcomeCompletedAt} IS NULL`,
+  ];
+  const postLockConditions: SQL[] = [];
+  const executionFence = request.executionFence;
+  if (request.expectedExecutionStatus === 'PENDING') {
+    conditions.push(
+      isNull(explanationInvocations.executionFence),
+      isNull(explanationInvocations.dispatchReservedAt),
+      isNull(explanationInvocations.dispatchLeaseExpiresAt),
+    );
+  } else {
+    if (executionFence === undefined) return { status: 'invalid' };
+    conditions.push(eq(explanationInvocations.executionFence, executionFence));
+    if (request.outcome.kind !== 'AMBIGUOUS') {
+      postLockConditions.push(
+        gt(explanationInvocations.dispatchLeaseExpiresAt, sql`clock_timestamp()`),
+      );
+    }
+  }
+  const locked = db
+    .select({
+      id: explanationInvocations.id,
+      dispatchLeaseExpiresAt: explanationInvocations.dispatchLeaseExpiresAt,
+    })
+    .from(explanationInvocations)
+    .where(and(...conditions))
+    .for('update')
+    .as('locked_explanation_invocation');
+  const [settled] = await db
+    .update(explanationInvocations)
+    .set({
+      executionStatus: request.outcome.kind,
+      outcomeStatus: request.outcome.kind,
+      outcomeAnswer: outcomeAnswer(request.outcome),
+      outcomePayload: request.outcome,
+      outcomeCompletedAt: sql`now()`,
+    })
+    .from(locked)
+    .where(and(eq(explanationInvocations.id, locked.id), ...postLockConditions))
+    .returning();
+  if (settled) return { status: 'settled', invocation: settled };
+
+  const [observed] = await db
+    .select()
+    .from(explanationInvocations)
+    .where(
+      and(
+        eq(explanationInvocations.invocationKey, invocationKey),
+        eq(explanationInvocations.forgeInstance, request.forgeInstance),
+        eq(explanationInvocations.installationId, request.installationId),
+        eq(explanationInvocations.actorId, request.actorId),
+        eq(explanationInvocations.repositoryId, request.repositoryId),
+        eq(explanationInvocations.pullRequestNumber, request.pullRequestNumber),
+        eq(explanationInvocations.requestedHeadSha, request.requestedHeadSha),
+        eq(explanationInvocations.sourceCommentId, request.sourceCommentId),
+        eq(explanationInvocations.questionHash, request.questionHash),
+        eq(explanationInvocations.question, request.question),
+        inArray(explanationInvocations.executionStatus, EXPLANATION_TERMINAL_OUTCOME_KINDS),
+        isNotNull(explanationInvocations.outcomeStatus),
+        isNotNull(explanationInvocations.outcomePayload),
+        isNotNull(explanationInvocations.outcomeCompletedAt),
+      ),
+    )
+    .limit(1);
+  return observed && isCompleteExplanationInvocationOutcome(observed)
+    ? { status: 'settled', invocation: observed }
+    : { status: 'unavailable' };
+}
+
+/**
+ * Bounded ingress recovery: convert a claim whose queue admission is unknown
+ * into an explicit terminal ambiguity. The identity and PENDING CAS make this
+ * safe to call repeatedly and prevent a later worker from dispatching it.
+ */
+export async function recoverPendingExplanationInvocation(
+  db: Pick<Database, 'update'>,
+  value: unknown,
+): Promise<ExplanationInvocationSettlement> {
+  if (!isValidExplanationInvocationRequest(value)) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(value);
+  if (invocationKey === null) return { status: 'invalid' };
+  const outcome = {
+    kind: 'AMBIGUOUS' as const,
+    reason: 'Explanation queue admission could not be confirmed.',
+  };
+  const [settled] = await db
+    .update(explanationInvocations)
+    .set({
+      executionStatus: 'AMBIGUOUS',
+      outcomeStatus: 'AMBIGUOUS',
+      outcomeAnswer: null,
+      outcomePayload: outcome,
+      outcomeCompletedAt: sql`now()`,
+    })
+    .where(
+      and(
+        ...explanationPublicationIdentityConditions(invocationKey, value),
+        eq(explanationInvocations.executionStatus, 'PENDING'),
+        isNull(explanationInvocations.executionFence),
+        isNull(explanationInvocations.outcomeStatus),
+        isNull(explanationInvocations.outcomePayload),
+        isNull(explanationInvocations.outcomeCompletedAt),
+      ),
+    )
+    .returning();
+  return settled ? { status: 'settled', invocation: settled } : { status: 'unavailable' };
+}
+
+// ─── Explanation Publication CREATE ─────────────────────────────
+
+export const EXPLANATION_PUBLICATION_CHANNELS = {
+  PROGRESS: 'progress',
+  ANSWER: 'answer',
+} as const;
+export type ExplanationPublicationChannel =
+  (typeof EXPLANATION_PUBLICATION_CHANNELS)[keyof typeof EXPLANATION_PUBLICATION_CHANNELS];
+
+export const EXPLANATION_PUBLICATION_CREATE_OUTCOMES = {
+  ACKNOWLEDGED: 'ACKNOWLEDGED',
+  UNCERTAIN: 'UNCERTAIN',
+} as const;
+export type ExplanationPublicationCreateOutcome =
+  (typeof EXPLANATION_PUBLICATION_CREATE_OUTCOMES)[keyof typeof EXPLANATION_PUBLICATION_CREATE_OUTCOMES];
+
+export interface ExplanationPublicationCreateReservationRequest
+  extends ExplanationInvocationRequest {
+  channel: ExplanationPublicationChannel;
+  expectedPublicationVersion: number;
+  expectedBotAuthorId: number;
+}
+
+export interface ExplanationPublicationCreateSettlementRequest
+  extends ExplanationPublicationCreateReservationRequest {
+  publicationFence: string;
+  outcome: ExplanationPublicationCreateOutcome;
+  commentId?: number;
+}
+
+export type ExplanationPublicationCreateReservation =
+  | { status: 'invalid' }
+  | { status: 'reserved'; invocation: ExplanationInvocationRow; publicationFence: string }
+  | { status: 'observed'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+export type ExplanationPublicationCreateSettlement =
+  | { status: 'invalid' }
+  | { status: 'settled'; invocation: ExplanationInvocationRow }
+  | { status: 'observed'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+export interface ExplanationPublicationStaleRequest extends ExplanationInvocationRequest {
+  channel: ExplanationPublicationChannel;
+}
+
+export type ExplanationPublicationStaleTransition =
+  | { status: 'invalid' }
+  | { status: 'stale'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+export interface ExplanationPublicationPatchReservationRequest
+  extends ExplanationInvocationRequest {
+  channel: ExplanationPublicationChannel;
+  expectedPublicationVersion: number;
+  expectedBotAuthorId: number;
+  commentId: number;
+}
+
+export interface ExplanationPublicationPatchSettlementRequest
+  extends ExplanationPublicationPatchReservationRequest {
+  publicationFence: string;
+  outcome: ExplanationPublicationCreateOutcome;
+}
+
+export type ExplanationPublicationPatchReservation =
+  | { status: 'invalid' }
+  | { status: 'reserved'; invocation: ExplanationInvocationRow; publicationFence: string }
+  | { status: 'observed'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+export type ExplanationPublicationPatchSettlement =
+  | { status: 'invalid' }
+  | { status: 'settled'; invocation: ExplanationInvocationRow }
+  | { status: 'observed'; invocation: ExplanationInvocationRow }
+  | { status: 'unavailable' };
+
+const MAX_POSTGRES_INT32 = 2_147_483_647;
+
+/**
+ * Reservation advances the stored version once and must leave room for the
+ * subsequent fenced settlement to advance it again.
+ */
+function isValidPublicationReservationVersion(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value < MAX_POSTGRES_INT32 - 1
+  );
+}
+
+/** Settlement receives the reservation's current persisted version and advances it once. */
+function isValidPublicationSettlementVersion(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value < MAX_POSTGRES_INT32
+  );
+}
+
+function isValidPositiveSafeId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function isExplanationPublicationChannel(value: unknown): value is ExplanationPublicationChannel {
+  return (
+    value === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS ||
+    value === EXPLANATION_PUBLICATION_CHANNELS.ANSWER
+  );
+}
+
+function isValidExplanationPublicationStaleRequest(
+  value: unknown,
+): value is ExplanationPublicationStaleRequest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    hasOnlyFields(request, [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+      'question',
+      'channel',
+    ]) &&
+    isValidExplanationInvocationRequest(request) &&
+    isExplanationPublicationChannel(request.channel)
+  );
+}
+
+function hasCompleteExplanationPublicationIdentity(
+  request: Record<string, unknown>,
+  isValidVersion: (value: unknown) => value is number,
+): boolean {
+  return (
+    hasOnlyFields(request, [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+      'question',
+      'channel',
+      'expectedPublicationVersion',
+      'expectedBotAuthorId',
+    ]) &&
+    isValidExplanationInvocationRequest(request) &&
+    isExplanationPublicationChannel(request.channel) &&
+    isValidVersion(request.expectedPublicationVersion) &&
+    isValidPositiveSafeId(request.expectedBotAuthorId)
+  );
+}
+
+/** Validates the complete immutable identity and CREATE fence before database access. */
+export function validateExplanationPublicationCreateReservation(
+  value: unknown,
+): ExplanationPublicationCreateReservationRequest | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  return hasCompleteExplanationPublicationIdentity(
+    value as Record<string, unknown>,
+    isValidPublicationReservationVersion,
+  )
+    ? (value as ExplanationPublicationCreateReservationRequest)
+    : null;
+}
+
+/** Validates fenced CREATE settlement input without accepting caller-controlled lifecycle fields. */
+export function validateExplanationPublicationCreateSettlement(
+  value: unknown,
+): ExplanationPublicationCreateSettlementRequest | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const request = value as Record<string, unknown>;
+  if (
+    !hasOnlyFields(request, [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+      'question',
+      'channel',
+      'expectedPublicationVersion',
+      'expectedBotAuthorId',
+      'publicationFence',
+      'outcome',
+      'commentId',
+    ]) ||
+    !isNonEmptyText(request.publicationFence) ||
+    (request.outcome !== EXPLANATION_PUBLICATION_CREATE_OUTCOMES.ACKNOWLEDGED &&
+      request.outcome !== EXPLANATION_PUBLICATION_CREATE_OUTCOMES.UNCERTAIN)
+  ) {
+    return null;
+  }
+  const reservation = {
+    forgeInstance: request.forgeInstance,
+    installationId: request.installationId,
+    actorId: request.actorId,
+    repositoryId: request.repositoryId,
+    pullRequestNumber: request.pullRequestNumber,
+    requestedHeadSha: request.requestedHeadSha,
+    sourceCommentId: request.sourceCommentId,
+    questionHash: request.questionHash,
+    question: request.question,
+    channel: request.channel,
+    expectedPublicationVersion: request.expectedPublicationVersion,
+    expectedBotAuthorId: request.expectedBotAuthorId,
+  };
+  if (!hasCompleteExplanationPublicationIdentity(reservation, isValidPublicationSettlementVersion))
+    return null;
+  if (request.outcome === EXPLANATION_PUBLICATION_CREATE_OUTCOMES.ACKNOWLEDGED) {
+    return isValidPositiveSafeId(request.commentId)
+      ? (value as ExplanationPublicationCreateSettlementRequest)
+      : null;
+  }
+  return request.commentId === undefined
+    ? (value as ExplanationPublicationCreateSettlementRequest)
+    : null;
+}
+
+function explanationPublicationIdentityConditions(
+  invocationKey: string,
+  request: ExplanationInvocationRequest,
+): SQL[] {
+  return [
+    eq(explanationInvocations.invocationKey, invocationKey),
+    eq(explanationInvocations.forgeInstance, request.forgeInstance),
+    eq(explanationInvocations.installationId, request.installationId),
+    eq(explanationInvocations.actorId, request.actorId),
+    eq(explanationInvocations.repositoryId, request.repositoryId),
+    eq(explanationInvocations.pullRequestNumber, request.pullRequestNumber),
+    eq(explanationInvocations.requestedHeadSha, request.requestedHeadSha),
+    eq(explanationInvocations.sourceCommentId, request.sourceCommentId),
+    eq(explanationInvocations.questionHash, request.questionHash),
+    eq(explanationInvocations.question, request.question),
+  ];
+}
+
+async function observeExplanationPublication(
+  db: Pick<Database, 'select'>,
+  invocationKey: string,
+  request: ExplanationInvocationRequest,
+): Promise<ExplanationInvocationRow | undefined> {
+  const [observed] = await db
+    .select()
+    .from(explanationInvocations)
+    .where(and(...explanationPublicationIdentityConditions(invocationKey, request)))
+    .limit(1);
+  return observed;
+}
+
+/**
+ * Records a superseded target without mutating its generation outcome, visible
+ * comment identity, publication version, or the other publication channel.
+ */
+export async function markExplanationPublicationStale(
+  db: Pick<Database, 'select' | 'update'>,
+  value: unknown,
+): Promise<ExplanationPublicationStaleTransition> {
+  if (!isValidExplanationPublicationStaleRequest(value)) {
+    return { status: 'invalid' };
+  }
+  const staleRequest = value;
+  const invocationKey = deriveExplanationInvocationKey(staleRequest);
+  if (invocationKey === null) return { status: 'invalid' };
+  const conditions = explanationPublicationIdentityConditions(invocationKey, staleRequest);
+  const [transitioned] =
+    staleRequest.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? await db
+          .update(explanationInvocations)
+          .set({ progressPublicationStatus: 'STALE' })
+          .where(
+            and(
+              ...conditions,
+              inArray(explanationInvocations.progressPublicationStatus, [
+                'NOT_STARTED',
+                'PUBLISHED',
+              ]),
+            ),
+          )
+          .returning()
+      : await db
+          .update(explanationInvocations)
+          .set({ answerPublicationStatus: 'STALE' })
+          .where(
+            and(
+              ...conditions,
+              inArray(explanationInvocations.answerPublicationStatus, ['NOT_STARTED', 'PUBLISHED']),
+            ),
+          )
+          .returning();
+  if (transitioned) return { status: 'stale', invocation: transitioned };
+
+  const observed = await observeExplanationPublication(db, invocationKey, staleRequest);
+  const status =
+    staleRequest.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? observed?.progressPublicationStatus
+      : observed?.answerPublicationStatus;
+  return observed && status === 'STALE'
+    ? { status: 'stale', invocation: observed }
+    : { status: 'unavailable' };
+}
+
+/**
+ * Persists the CREATE fence in one CAS before any caller can issue a comment POST.
+ * The supplied version is pre-reservation; the returned row carries the current
+ * reserved version that settlement must present exactly.
+ */
+export async function reserveExplanationPublicationCreate(
+  db: Pick<Database, 'select' | 'update'>,
+  value: unknown,
+): Promise<ExplanationPublicationCreateReservation> {
+  const request = validateExplanationPublicationCreateReservation(value);
+  if (!request) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(request);
+  if (invocationKey === null) return { status: 'invalid' };
+  const conditions = explanationPublicationIdentityConditions(invocationKey, request);
+  const [reserved] =
+    request.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? await db
+          .update(explanationInvocations)
+          .set({
+            progressPublicationStatus: 'CREATE_STARTED',
+            progressPublicationCreateStartedAt: sql`clock_timestamp()`,
+            progressExpectedBotAuthorId: request.expectedBotAuthorId,
+            progressPublicationFence: sql`gen_random_uuid()::text`,
+            progressPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.progressPublicationStatus, 'NOT_STARTED'),
+              eq(
+                explanationInvocations.progressPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              isNull(explanationInvocations.progressPublicationCreateStartedAt),
+              isNull(explanationInvocations.progressCommentId),
+              isNull(explanationInvocations.progressExpectedBotAuthorId),
+              isNull(explanationInvocations.progressPublicationFence),
+            ),
+          )
+          .returning()
+      : await db
+          .update(explanationInvocations)
+          .set({
+            answerPublicationStatus: 'CREATE_STARTED',
+            answerPublicationCreateStartedAt: sql`clock_timestamp()`,
+            answerExpectedBotAuthorId: request.expectedBotAuthorId,
+            answerPublicationFence: sql`gen_random_uuid()::text`,
+            answerPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.answerPublicationStatus, 'NOT_STARTED'),
+              eq(
+                explanationInvocations.answerPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              isNull(explanationInvocations.answerPublicationCreateStartedAt),
+              isNull(explanationInvocations.answerCommentId),
+              isNull(explanationInvocations.answerExpectedBotAuthorId),
+              isNull(explanationInvocations.answerPublicationFence),
+            ),
+          )
+          .returning();
+  const fence =
+    request.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? reserved?.progressPublicationFence
+      : reserved?.answerPublicationFence;
+  if (reserved && isNonEmptyText(fence)) {
+    return { status: 'reserved', invocation: reserved, publicationFence: fence };
+  }
+  const observed = await observeExplanationPublication(db, invocationKey, request);
+  return observed ? { status: 'observed', invocation: observed } : { status: 'unavailable' };
+}
+
+/**
+ * Consumes a persisted CREATE fence so a duplicate or late POST result cannot gain authority.
+ * The supplied version is the current reserved version; settlement increments it once.
+ */
+export async function settleExplanationPublicationCreate(
+  db: Pick<Database, 'select' | 'update'>,
+  value: unknown,
+): Promise<ExplanationPublicationCreateSettlement> {
+  const request = validateExplanationPublicationCreateSettlement(value);
+  if (!request) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(request);
+  if (invocationKey === null) return { status: 'invalid' };
+  const conditions = explanationPublicationIdentityConditions(invocationKey, request);
+  const isAcknowledged = request.outcome === EXPLANATION_PUBLICATION_CREATE_OUTCOMES.ACKNOWLEDGED;
+  const [settled] =
+    request.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? await db
+          .update(explanationInvocations)
+          .set({
+            progressPublicationStatus: isAcknowledged ? 'PUBLISHED' : 'AMBIGUOUS',
+            progressCommentId: isAcknowledged ? request.commentId : null,
+            progressPublicationFence: null,
+            progressPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.progressPublicationStatus, 'CREATE_STARTED'),
+              eq(
+                explanationInvocations.progressPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              eq(explanationInvocations.progressExpectedBotAuthorId, request.expectedBotAuthorId),
+              eq(explanationInvocations.progressPublicationFence, request.publicationFence),
+            ),
+          )
+          .returning()
+      : await db
+          .update(explanationInvocations)
+          .set({
+            answerPublicationStatus: isAcknowledged ? 'PUBLISHED' : 'AMBIGUOUS',
+            answerCommentId: isAcknowledged ? request.commentId : null,
+            answerPublicationFence: null,
+            answerPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.answerPublicationStatus, 'CREATE_STARTED'),
+              eq(
+                explanationInvocations.answerPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              eq(explanationInvocations.answerExpectedBotAuthorId, request.expectedBotAuthorId),
+              eq(explanationInvocations.answerPublicationFence, request.publicationFence),
+            ),
+          )
+          .returning();
+  if (settled) return { status: 'settled', invocation: settled };
+  const observed = await observeExplanationPublication(db, invocationKey, request);
+  return observed ? { status: 'observed', invocation: observed } : { status: 'unavailable' };
+}
+
+/** Validates a PATCH reservation against an existing immutable publication comment. */
+export function validateExplanationPublicationPatchReservation(
+  value: unknown,
+): ExplanationPublicationPatchReservationRequest | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const request = value as Record<string, unknown>;
+  const reservation = {
+    forgeInstance: request.forgeInstance,
+    installationId: request.installationId,
+    actorId: request.actorId,
+    repositoryId: request.repositoryId,
+    pullRequestNumber: request.pullRequestNumber,
+    requestedHeadSha: request.requestedHeadSha,
+    sourceCommentId: request.sourceCommentId,
+    questionHash: request.questionHash,
+    question: request.question,
+    channel: request.channel,
+    expectedPublicationVersion: request.expectedPublicationVersion,
+    expectedBotAuthorId: request.expectedBotAuthorId,
+  };
+  return hasOnlyFields(request, [
+    'forgeInstance',
+    'installationId',
+    'actorId',
+    'repositoryId',
+    'pullRequestNumber',
+    'requestedHeadSha',
+    'sourceCommentId',
+    'questionHash',
+    'question',
+    'channel',
+    'expectedPublicationVersion',
+    'expectedBotAuthorId',
+    'commentId',
+  ]) &&
+    hasCompleteExplanationPublicationIdentity(reservation, isValidPublicationReservationVersion) &&
+    isValidPositiveSafeId(request.commentId)
+    ? (value as ExplanationPublicationPatchReservationRequest)
+    : null;
+}
+
+/** Validates fenced PATCH settlement input without accepting caller lifecycle fields. */
+export function validateExplanationPublicationPatchSettlement(
+  value: unknown,
+): ExplanationPublicationPatchSettlementRequest | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const request = value as Record<string, unknown>;
+  if (
+    !hasOnlyFields(request, [
+      'forgeInstance',
+      'installationId',
+      'actorId',
+      'repositoryId',
+      'pullRequestNumber',
+      'requestedHeadSha',
+      'sourceCommentId',
+      'questionHash',
+      'question',
+      'channel',
+      'expectedPublicationVersion',
+      'expectedBotAuthorId',
+      'commentId',
+      'publicationFence',
+      'outcome',
+    ]) ||
+    !isNonEmptyText(request.publicationFence) ||
+    (request.outcome !== EXPLANATION_PUBLICATION_CREATE_OUTCOMES.ACKNOWLEDGED &&
+      request.outcome !== EXPLANATION_PUBLICATION_CREATE_OUTCOMES.UNCERTAIN)
+  ) {
+    return null;
+  }
+  const reservation = {
+    forgeInstance: request.forgeInstance,
+    installationId: request.installationId,
+    actorId: request.actorId,
+    repositoryId: request.repositoryId,
+    pullRequestNumber: request.pullRequestNumber,
+    requestedHeadSha: request.requestedHeadSha,
+    sourceCommentId: request.sourceCommentId,
+    questionHash: request.questionHash,
+    question: request.question,
+    channel: request.channel,
+    expectedPublicationVersion: request.expectedPublicationVersion,
+    expectedBotAuthorId: request.expectedBotAuthorId,
+  };
+  return hasCompleteExplanationPublicationIdentity(
+    reservation,
+    isValidPublicationSettlementVersion,
+  ) && isValidPositiveSafeId(request.commentId)
+    ? (value as ExplanationPublicationPatchSettlementRequest)
+    : null;
+}
+
+/** Persists PATCH_STARTED before caller I/O without changing the CREATE timestamp or comment. */
+export async function reserveExplanationPublicationPatch(
+  db: Pick<Database, 'select' | 'update'>,
+  value: unknown,
+): Promise<ExplanationPublicationPatchReservation> {
+  const request = validateExplanationPublicationPatchReservation(value);
+  if (!request) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(request);
+  if (invocationKey === null) return { status: 'invalid' };
+  const conditions = explanationPublicationIdentityConditions(invocationKey, request);
+  const [reserved] =
+    request.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? await db
+          .update(explanationInvocations)
+          .set({
+            progressPublicationStatus: 'PATCH_STARTED',
+            progressPublicationFence: sql`gen_random_uuid()::text`,
+            progressPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.progressPublicationStatus, 'PUBLISHED'),
+              eq(
+                explanationInvocations.progressPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              eq(explanationInvocations.progressExpectedBotAuthorId, request.expectedBotAuthorId),
+              eq(explanationInvocations.progressCommentId, request.commentId),
+              isNull(explanationInvocations.progressPublicationFence),
+            ),
+          )
+          .returning()
+      : await db
+          .update(explanationInvocations)
+          .set({
+            answerPublicationStatus: 'PATCH_STARTED',
+            answerPublicationFence: sql`gen_random_uuid()::text`,
+            answerPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.answerPublicationStatus, 'PUBLISHED'),
+              eq(
+                explanationInvocations.answerPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              eq(explanationInvocations.answerExpectedBotAuthorId, request.expectedBotAuthorId),
+              eq(explanationInvocations.answerCommentId, request.commentId),
+              isNull(explanationInvocations.answerPublicationFence),
+            ),
+          )
+          .returning();
+  const fence =
+    request.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? reserved?.progressPublicationFence
+      : reserved?.answerPublicationFence;
+  if (reserved && isNonEmptyText(fence)) {
+    return { status: 'reserved', invocation: reserved, publicationFence: fence };
+  }
+  const observed = await observeExplanationPublication(db, invocationKey, request);
+  return observed ? { status: 'observed', invocation: observed } : { status: 'unavailable' };
+}
+
+/** Consumes a matching PATCH fence and preserves the existing comment identity. */
+export async function settleExplanationPublicationPatch(
+  db: Pick<Database, 'select' | 'update'>,
+  value: unknown,
+): Promise<ExplanationPublicationPatchSettlement> {
+  const request = validateExplanationPublicationPatchSettlement(value);
+  if (!request) return { status: 'invalid' };
+  const invocationKey = deriveExplanationInvocationKey(request);
+  if (invocationKey === null) return { status: 'invalid' };
+  const conditions = explanationPublicationIdentityConditions(invocationKey, request);
+  const isAcknowledged = request.outcome === EXPLANATION_PUBLICATION_CREATE_OUTCOMES.ACKNOWLEDGED;
+  const [settled] =
+    request.channel === EXPLANATION_PUBLICATION_CHANNELS.PROGRESS
+      ? await db
+          .update(explanationInvocations)
+          .set({
+            progressPublicationStatus: isAcknowledged ? 'PUBLISHED' : 'AMBIGUOUS',
+            progressPublicationFence: null,
+            progressPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.progressPublicationStatus, 'PATCH_STARTED'),
+              eq(
+                explanationInvocations.progressPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              eq(explanationInvocations.progressExpectedBotAuthorId, request.expectedBotAuthorId),
+              eq(explanationInvocations.progressCommentId, request.commentId),
+              eq(explanationInvocations.progressPublicationFence, request.publicationFence),
+            ),
+          )
+          .returning()
+      : await db
+          .update(explanationInvocations)
+          .set({
+            answerPublicationStatus: isAcknowledged ? 'PUBLISHED' : 'AMBIGUOUS',
+            answerPublicationFence: null,
+            answerPublicationVersion: request.expectedPublicationVersion + 1,
+          })
+          .where(
+            and(
+              ...conditions,
+              eq(explanationInvocations.answerPublicationStatus, 'PATCH_STARTED'),
+              eq(
+                explanationInvocations.answerPublicationVersion,
+                request.expectedPublicationVersion,
+              ),
+              eq(explanationInvocations.answerExpectedBotAuthorId, request.expectedBotAuthorId),
+              eq(explanationInvocations.answerCommentId, request.commentId),
+              eq(explanationInvocations.answerPublicationFence, request.publicationFence),
+            ),
+          )
+          .returning();
+  if (settled) return { status: 'settled', invocation: settled };
+  const observed = await observeExplanationPublication(db, invocationKey, request);
+  return observed ? { status: 'observed', invocation: observed } : { status: 'unavailable' };
 }

@@ -1,18 +1,94 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../lib/logger.js';
 import {
+  createExplanationComment,
   fetchFileContents,
   fetchGraphFromBranch,
   fetchGraphMetadata,
+  fetchRevisionPinnedSnapshot,
   findExistingComment,
+  findExplanationComment,
+  getCurrentExplanationActorAuthorization,
+  getInstallationToken,
+  getInstallationTokenWithExpiry,
   getIssue,
   getPRCommitMessages,
   getPRFileList,
   listIssueComments,
+  resolveGitHubAppBotAuthorId,
   searchCode,
+  updateExplanationComment,
   verifyWebhookSignature,
 } from './client.js';
+
+describe('getCurrentExplanationActorAuthorization', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('requires matching human identity, non-none permission, and a separate collaborator 204 proof', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 42, type: 'User' }, permission: 'read' }),
+      })
+      .mockResolvedValueOnce({ ok: true, status: 204 });
+
+    await expect(
+      getCurrentExplanationActorAuthorization('octo', 'demo', 'alice', '42', 'token'),
+    ).resolves.toEqual({ kind: 'AUTHORIZED' });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[1]?.[0]).toContain('/collaborators/alice');
+  });
+
+  it.each([
+    [{ user: { id: 7, type: 'User' }, permission: 'write' }],
+    [{ user: { id: 42, type: 'Bot' }, permission: 'write' }],
+    [{ user: { id: 42, type: 'User' }, permission: 'none' }],
+  ])(
+    'returns explicit unauthorized only for a confirmed identity or role denial',
+    async (payload) => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(payload) });
+
+      await expect(
+        getCurrentExplanationActorAuthorization('octo', 'demo', 'alice', '42', 'token'),
+      ).resolves.toEqual({ kind: 'UNAUTHORIZED' });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([401, 403, 404, 500])(
+    'keeps permission endpoint HTTP %i operationally uncertain',
+    async (status) => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status, statusText: 'unavailable' });
+
+      await expect(
+        getCurrentExplanationActorAuthorization('octo', 'demo', 'alice', '42', 'token'),
+      ).resolves.toEqual({ kind: 'UNCERTAIN' });
+    },
+  );
+
+  it('does not infer collaboration from read permission when the separate check is not 204', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ user: { id: 42, type: 'User' }, permission: 'read' }),
+      })
+      .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'not found' });
+
+    await expect(
+      getCurrentExplanationActorAuthorization('octo', 'demo', 'alice', '42', 'token'),
+    ).resolves.toEqual({ kind: 'UNCERTAIN' });
+  });
+});
 
 /**
  * Helper: compute a valid sha256 HMAC signature in GitHub's format.
@@ -1127,4 +1203,1180 @@ describe('searchCode (triage-search-discovery T3: throttle-isolated code search)
     const out = await searchCode('octo', 'demo', 'fetchGraph', 2, 'tok');
     expect(out).toEqual(['a.ts', 'b.ts']);
   });
+});
+
+describe('fetchRevisionPinnedSnapshot — revision-pinned snapshot', () => {
+  const mockFetch = vi.fn();
+  const base = 'a'.repeat(40);
+  const head = 'b'.repeat(40);
+  const mergeBase = 'c'.repeat(40);
+  const baseTree = 'd'.repeat(40);
+  const headTree = 'e'.repeat(40);
+
+  const response = (body: unknown, status = 200) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'Failure',
+    headers: { get: () => null },
+    json: () => Promise.resolve(body),
+  });
+  const blob = (text: string, sha = 'f'.repeat(40)) =>
+    response({
+      sha,
+      size: Buffer.byteLength(text),
+      encoding: 'base64',
+      content: Buffer.from(text).toString('base64'),
+    });
+  const pull = (currentHead = head, overrides: Record<string, unknown> = {}) =>
+    response({
+      number: 7,
+      base: { sha: base, repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+      head: { sha: currentHead, repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+      ...overrides,
+    });
+  const commit = (sha: string, tree: string) => response({ sha, tree: { sha: tree } });
+  const tree = (entries: readonly unknown[], sha: string, truncated = false) =>
+    response({ sha, truncated, tree: entries });
+  const entry = (path: string, sha: string, mode = '100644', type = 'blob', size?: number) => ({
+    path,
+    mode,
+    type,
+    sha,
+    ...(size === undefined ? {} : { size }),
+  });
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function queueSnapshot(
+    before: readonly unknown[],
+    after: readonly unknown[],
+    blobs: ReturnType<typeof response>[],
+    finalHead = head,
+    initialPull = pull(),
+    finalPull = pull(finalHead),
+  ) {
+    const requests = [
+      { resource: '/pulls/7', value: initialPull },
+      {
+        resource: `/compare/${base}...`,
+        value: response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+      },
+      { resource: `/git/commits/${mergeBase}`, value: commit(mergeBase, baseTree) },
+      { resource: `/git/commits/${head}`, value: commit(head, headTree) },
+      { resource: `/git/trees/${baseTree}?recursive=1`, value: tree(before, baseTree) },
+      { resource: `/git/trees/${headTree}?recursive=1`, value: tree(after, headTree) },
+      ...blobs.map((value) => ({ resource: '/git/blobs/', value })),
+      { resource: '/pulls/7', value: finalPull },
+    ];
+    mockFetch.mockImplementation((url: string) => {
+      const expected = requests.shift();
+      if (!expected || !url.includes(expected.resource)) {
+        throw new Error(`unexpected GitHub request: ${url}`);
+      }
+      return Promise.resolve(expected.value);
+    });
+  }
+
+  it('acquires a deterministic merge-base snapshot without PR diff/files fallbacks', async () => {
+    const beforeSha = '1'.repeat(40);
+    const afterSha = '2'.repeat(40);
+    queueSnapshot(
+      [entry('lib/a.ts', beforeSha)],
+      [entry('lib/a.ts', afterSha), entry('new.ts', '3'.repeat(40))],
+      [blob('before\n', beforeSha), blob('after\n', afterSha), blob('added\n', '3'.repeat(40))],
+    );
+    const result = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token');
+    expect(result).toEqual({
+      repositoryId: '11',
+      baseSha: mergeBase,
+      headSha: head,
+      diff: '--- a/lib/a.ts\n+++ b/lib/a.ts\n@@ -1 +1 @@\n-before\n+after\n--- /dev/null\n+++ b/new.ts\n@@ -0,0 +1 @@\n+added\n',
+      files: [
+        { path: 'lib/a.ts', content: 'after\n' },
+        { path: 'new.ts', content: 'added\n' },
+      ],
+    });
+    expect(mockFetch.mock.calls.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([expect.stringContaining(`/compare/${base}...${head}`)]),
+    );
+  });
+
+  it('uses the fork head repository while keeping merge-base reads in the target repository', async () => {
+    const forkPull = pull(head, {
+      head: { sha: head, repo: { id: 22, owner: { login: 'forker' }, name: 'fork' } },
+    });
+    queueSnapshot(
+      [entry('shared.ts', '1'.repeat(40))],
+      [entry('shared.ts', '2'.repeat(40))],
+      [blob('before\n', '1'.repeat(40)), blob('after\n', '2'.repeat(40))],
+      head,
+      forkPull,
+      forkPull,
+    );
+    const result = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token');
+    expect(result?.baseSha).toBe(mergeBase);
+    const urls = mockFetch.mock.calls.map(([url]) => String(url));
+    expect(urls).toContain(
+      `https://api.github.com/repos/octo/demo/compare/${base}...forker:${head}`,
+    );
+    expect(urls).toContain(`https://api.github.com/repos/octo/demo/git/blobs/${'1'.repeat(40)}`);
+    expect(urls).toContain(`https://api.github.com/repos/forker/fork/git/blobs/${'2'.repeat(40)}`);
+  });
+
+  it('returns null before I/O for unsafe identity inputs', async () => {
+    await expect(
+      fetchRevisionPinnedSnapshot('octo/evil', 'demo', 7, head, 'token'),
+    ).resolves.toBeNull();
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 0, head, 'token')).resolves.toBeNull();
+    await expect(
+      fetchRevisionPinnedSnapshot('octo', 'demo', 7, 'short', 'token'),
+    ).resolves.toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for PR identity races and missing fork metadata', async () => {
+    queueSnapshot(
+      [],
+      [entry('new.ts', '3'.repeat(40))],
+      [blob('added\n', '3'.repeat(40))],
+      '9'.repeat(40),
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(
+      response({
+        number: 7,
+        base: { sha: base, repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+        head: { sha: head, repo: null },
+      }),
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+  });
+
+  it.each([
+    ['deleted path', () => queueSnapshot([entry('gone.ts', '1'.repeat(40))], [], [])],
+    [
+      'mode change',
+      () =>
+        queueSnapshot(
+          [entry('a.ts', '1'.repeat(40))],
+          [entry('a.ts', '2'.repeat(40), '100755')],
+          [],
+        ),
+    ],
+    [
+      'duplicate path',
+      () => queueSnapshot([], [entry('a.ts', '1'.repeat(40)), entry('a.ts', '2'.repeat(40))], []),
+    ],
+  ])('fails closed for %s manifest evidence', async (_name, arrange) => {
+    arrange();
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+  });
+
+  it('rejects malformed, non-text, and oversized blob evidence without truncating', async () => {
+    const sha = '1'.repeat(40);
+    queueSnapshot(
+      [],
+      [entry('a.ts', sha)],
+      [response({ sha, size: 1, encoding: 'base64', content: 'not*base64' })],
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    mockFetch.mockReset();
+    queueSnapshot(
+      [],
+      [entry('a.ts', sha)],
+      [
+        response({
+          sha,
+          size: 2,
+          encoding: 'base64',
+          content: Buffer.from([0xff, 0xff]).toString('base64'),
+        }),
+      ],
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    mockFetch.mockReset();
+    queueSnapshot(
+      [],
+      [entry('a.ts', sha)],
+      [response({ sha, size: 512 * 1024 + 1, encoding: 'base64', content: '' })],
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+  });
+
+  it('preserves CRLF and missing final newlines in complete-file unified diffs', async () => {
+    const beforeSha = '1'.repeat(40);
+    const afterSha = '2'.repeat(40);
+    queueSnapshot(
+      [entry('a b.ts', beforeSha)],
+      [entry('a b.ts', afterSha)],
+      [blob('old\r\nlast', beforeSha), blob('new\r\nlast', afterSha)],
+    );
+    const result = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token');
+    expect(result?.diff).toContain('--- "a/a b.ts"\n+++ "b/a b.ts"\n');
+    expect(result?.diff).toContain(
+      '-old\r\n-last\n\\ No newline at end of file\n+new\r\n+last\n\\ No newline at end of file\n',
+    );
+  });
+
+  it('propagates operational GitHub errors rather than converting them to null', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { get: () => null },
+    });
+    await expect(
+      fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+    ).rejects.toMatchObject({ status: 401 });
+    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).rejects.toThrow(
+      'network down',
+    );
+  });
+
+  it('requires immutable compare, commit, and root-tree identities before reading manifests', async () => {
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: 'not-a-sha' } }),
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockResolvedValueOnce(commit('0'.repeat(40), baseTree));
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockResolvedValueOnce(commit(mergeBase, baseTree));
+    mockFetch.mockResolvedValueOnce(commit(head, headTree));
+    mockFetch.mockResolvedValueOnce(tree([], '0'.repeat(40)));
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+  });
+
+  it('rejects mismatched head commit and root-tree identities before blob hydration', async () => {
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockResolvedValueOnce(commit(mergeBase, baseTree));
+    mockFetch.mockResolvedValueOnce(commit('0'.repeat(40), headTree));
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockResolvedValueOnce(commit(mergeBase, baseTree));
+    mockFetch.mockResolvedValueOnce(commit(head, headTree));
+    mockFetch.mockResolvedValueOnce(tree([], baseTree));
+    mockFetch.mockResolvedValueOnce(tree([], '0'.repeat(40)));
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+  });
+
+  it('rejects explicitly truncated base and head trees before blob hydration', async () => {
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockResolvedValueOnce(commit(mergeBase, baseTree));
+    mockFetch.mockResolvedValueOnce(commit(head, headTree));
+    mockFetch.mockResolvedValueOnce(tree([], baseTree, true));
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockResolvedValueOnce(commit(mergeBase, baseTree));
+    mockFetch.mockResolvedValueOnce(commit(head, headTree));
+    mockFetch.mockResolvedValueOnce(tree([], baseTree));
+    mockFetch.mockResolvedValueOnce(tree([], headTree, true));
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+  });
+
+  it('rejects a Compare base-commit race before fetching immutable commits', async () => {
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: '9'.repeat(40) }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockImplementation(() => {
+      throw new Error('unexpected GitHub request after invalid Compare response');
+    });
+
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a mismatched merge-base commit before fetching the head commit', async () => {
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({ base_commit: { sha: base }, merge_base_commit: { sha: mergeBase } }),
+    );
+    mockFetch.mockResolvedValueOnce(commit('0'.repeat(40), baseTree));
+    mockFetch.mockImplementation(() => {
+      throw new Error('unexpected GitHub request after invalid base commit');
+    });
+
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects a known per-blob limit before hydrating any blob', async () => {
+    queueSnapshot([], [entry('large.ts', '1'.repeat(40), '100644', 'blob', 512 * 1024 + 1)], []);
+
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+  });
+
+  it('ignores added directory entries while hydrating the changed regular file beneath them', async () => {
+    const fileSha = '1'.repeat(40);
+    queueSnapshot(
+      [],
+      [entry('directory', '2'.repeat(40), '040000', 'tree'), entry('directory/new.ts', fileSha)],
+      [blob('added\n', fileSha)],
+    );
+
+    await expect(
+      fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+    ).resolves.toMatchObject({
+      files: [{ path: 'directory/new.ts', content: 'added\n' }],
+    });
+  });
+
+  it('fails closed before downstream I/O for invalid PR metadata and determinable manifest limits', async () => {
+    for (const invalidPull of [
+      response({
+        number: '7',
+        base: { sha: base, repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+        head: { sha: head, repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+      }),
+      response({
+        number: 7,
+        base: { sha: base, repo: { id: 1.5, owner: { login: 'octo' }, name: 'demo' } },
+        head: { sha: head, repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+      }),
+      response({
+        number: 7,
+        base: { sha: base, repo: { id: 11, owner: { login: 'elsewhere' }, name: 'demo' } },
+        head: { sha: head, repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+      }),
+    ]) {
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValueOnce(invalidPull);
+      await expect(
+        fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+      ).resolves.toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    }
+
+    mockFetch.mockReset();
+    queueSnapshot(
+      [],
+      Array.from({ length: 101 }, (_, index) =>
+        entry(`f-${index}.ts`, `${index}`.padStart(40, '0')),
+      ),
+      [],
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+
+    mockFetch.mockReset();
+    queueSnapshot([], [entry('large.ts', '1'.repeat(40), '100644', 'blob', 512 * 1024 + 1)], []);
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+
+    mockFetch.mockReset();
+    queueSnapshot(
+      [],
+      Array.from({ length: 5 }, (_, index) =>
+        entry(`size-${index}.ts`, `${index + 1}`.repeat(40), '100644', 'blob', 512 * 1024),
+      ),
+      [],
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+  });
+
+  it('preserves byte fidelity and rejects blob identity, canonical encoding, UTF-8, and NUL failures', async () => {
+    const sha = '1'.repeat(40);
+    queueSnapshot([], [entry('bytes.ts', sha)], [blob('\uFEFFone\rtwo', sha)]);
+    const result = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token');
+    expect(result?.files).toEqual([{ path: 'bytes.ts', content: '\uFEFFone\rtwo' }]);
+    expect(result?.diff).toBe(
+      '--- /dev/null\n+++ b/bytes.ts\n@@ -0,0 +1 @@\n+\uFEFFone\rtwo\n\\ No newline at end of file\n',
+    );
+
+    for (const evidence of [
+      response({ sha: '2'.repeat(40), size: 1, encoding: 'base64', content: 'YQ==' }),
+      response({ sha, size: 1, encoding: 'base64', content: 'YQ==\rX' }),
+      response({ sha, size: 1, encoding: 'base64', content: 'YQ=' }),
+      response({ sha, size: 2, encoding: 'base64', content: 'YQ==' }),
+      response({
+        sha,
+        size: 2,
+        encoding: 'base64',
+        content: Buffer.from([0xff, 0xff]).toString('base64'),
+      }),
+      response({ sha, size: 1, encoding: 'base64', content: 'AA==' }),
+    ]) {
+      mockFetch.mockReset();
+      queueSnapshot([], [entry('bytes.ts', sha)], [evidence]);
+      await expect(
+        fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+      ).resolves.toBeNull();
+    }
+  });
+
+  it('accepts line-wrapped base64, ignores untrusted compare payloads, and rejects all changed unsupported entries', async () => {
+    const sha = '1'.repeat(40);
+    queueSnapshot(
+      [],
+      [entry('wrapped.ts', sha)],
+      [response({ sha, size: 4, encoding: 'base64', content: 'YWJj\nZA==' })],
+    );
+    const result = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token');
+    expect(result?.files).toEqual([{ path: 'wrapped.ts', content: 'abcd' }]);
+
+    for (const [before, after] of [
+      [[entry('gone.ts', sha)], []],
+      [[], [entry('link.ts', sha, '120000')]],
+      [[], [entry('submodule', sha, '160000', 'commit')]],
+      [[], [entry('folder', sha, '040000', 'tree')]],
+      [[entry('same.ts', sha)], [entry('same.ts', sha, '100755')]],
+    ] as const) {
+      mockFetch.mockReset();
+      queueSnapshot(before, after, []);
+      await expect(
+        fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+      ).resolves.toBeNull();
+    }
+  });
+
+  it.each([
+    ['unsafe repository', 'octo', '../demo', 7, head],
+    ['non-positive-safe PR', 'octo', 'demo', Number.MAX_SAFE_INTEGER + 1, head],
+    ['initial requested-head mismatch', 'octo', 'demo', 7, '9'.repeat(40)],
+  ])(
+    'rejects %s without consuming immutable object responses',
+    async (_name, owner, repository, number, sha) => {
+      if (sha !== head) {
+        mockFetch.mockResolvedValueOnce(pull());
+      }
+
+      await expect(
+        fetchRevisionPinnedSnapshot(owner, repository, number, sha, 'token'),
+      ).resolves.toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(sha === head ? 0 : 1);
+    },
+  );
+
+  it('rejects malformed initial/final repository bindings without inventing expected repository ids', async () => {
+    const invalidHead = pull(head, {
+      head: { sha: head, repo: { id: 22, owner: { login: 'bad/owner' }, name: 'fork' } },
+    });
+    mockFetch.mockResolvedValueOnce(invalidHead);
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+
+    mockFetch.mockReset();
+    const finalBaseRace = pull(head, {
+      base: { sha: '9'.repeat(40), repo: { id: 11, owner: { login: 'octo' }, name: 'demo' } },
+    });
+    queueSnapshot(
+      [],
+      [entry('new.ts', '1'.repeat(40))],
+      [blob('new\n', '1'.repeat(40))],
+      head,
+      pull(),
+      finalBaseRace,
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+
+    mockFetch.mockReset();
+    const finalRepositoryRace = pull(head, {
+      head: { sha: head, repo: { id: 22, owner: { login: 'forker' }, name: 'fork' } },
+    });
+    queueSnapshot(
+      [],
+      [entry('new.ts', '1'.repeat(40))],
+      [blob('new\n', '1'.repeat(40))],
+      head,
+      pull(),
+      finalRepositoryRace,
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+  });
+
+  it('rejects malformed head repository numeric and path bindings before downstream reads', async () => {
+    for (const invalidHeadRepository of [
+      { id: 1.5, owner: { login: 'forker' }, name: 'fork' },
+      { id: 22, owner: { login: 'forker' }, name: 'fork/path' },
+    ]) {
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValueOnce(
+        pull(head, { head: { sha: head, repo: invalidHeadRepository } }),
+      );
+      await expect(
+        fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+      ).resolves.toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('rejects malformed immutable manifests and does not trust Compare file payloads', async () => {
+    for (const invalidEntry of [
+      null,
+      { mode: '100644', type: 'blob', sha: '1'.repeat(40) },
+      { path: 'a.ts', mode: '100644', type: 'blob', sha: 'not-a-sha' },
+      { path: '../a.ts', mode: '100644', type: 'blob', sha: '1'.repeat(40) },
+    ]) {
+      mockFetch.mockReset();
+      queueSnapshot([], [invalidEntry], []);
+      await expect(
+        fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+      ).resolves.toBeNull();
+    }
+
+    mockFetch.mockReset();
+    const sha = '1'.repeat(40);
+    mockFetch.mockResolvedValueOnce(pull());
+    mockFetch.mockResolvedValueOnce(
+      response({
+        base_commit: { sha: base },
+        merge_base_commit: { sha: mergeBase },
+        files: [
+          {
+            patch: 'untrusted',
+            raw_url: 'https://evil.invalid',
+            contents_url: 'https://evil.invalid',
+          },
+        ],
+      }),
+    );
+    mockFetch.mockResolvedValueOnce(commit(mergeBase, baseTree));
+    mockFetch.mockResolvedValueOnce(commit(head, headTree));
+    mockFetch.mockResolvedValueOnce(tree([], baseTree));
+    mockFetch.mockResolvedValueOnce(tree([entry('new.ts', sha)], headTree));
+    mockFetch.mockResolvedValueOnce(blob('trusted\n', sha));
+    mockFetch.mockResolvedValueOnce(pull());
+    await expect(
+      fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+    ).resolves.toMatchObject({
+      files: [{ path: 'new.ts', content: 'trusted\n' }],
+    });
+    expect(mockFetch.mock.calls.map(([url]) => String(url)).join('\n')).not.toContain(
+      'evil.invalid',
+    );
+  });
+
+  it.each([
+    ['empty changed set', [], []],
+    ['rename evidence', [entry('old.ts', '1'.repeat(40))], [entry('new.ts', '2'.repeat(40))]],
+    [
+      'blob-to-tree transition',
+      [entry('node', '1'.repeat(40))],
+      [entry('node', '2'.repeat(40), '040000', 'tree')],
+    ],
+    [
+      'commit transition',
+      [entry('node', '1'.repeat(40))],
+      [entry('node', '2'.repeat(40), '160000', 'commit')],
+    ],
+  ])('fails closed for %s changed-set evidence', async (_name, before, after) => {
+    queueSnapshot(before, after, []);
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+  });
+
+  it('hydrates executable blobs, ignores unchanged special entries, and accepts an empty text blob', async () => {
+    const executable = '1'.repeat(40);
+    const unchangedLink = '2'.repeat(40);
+    const unchangedGitlink = '3'.repeat(40);
+    queueSnapshot(
+      [
+        entry('link', unchangedLink, '120000'),
+        entry('module', unchangedGitlink, '160000', 'commit'),
+      ],
+      [
+        entry('bin/run', executable, '100755'),
+        entry('link', unchangedLink, '120000'),
+        entry('module', unchangedGitlink, '160000', 'commit'),
+      ],
+      [blob('', executable)],
+    );
+    await expect(
+      fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+    ).resolves.toMatchObject({
+      files: [{ path: 'bin/run', content: '' }],
+    });
+  });
+
+  it('rejects runtime input and generated-diff limits without continuing to the final PR read', async () => {
+    const inputBefore = Array.from({ length: 4 }, (_, index) =>
+      entry(`input-${index}.ts`, `${index + 1}`.repeat(40)),
+    );
+    const inputAfter = Array.from({ length: 4 }, (_, index) =>
+      entry(`input-${index}.ts`, `${index + 5}`.repeat(40)),
+    );
+    const inputBlob = 'a'.repeat(270 * 1024);
+    queueSnapshot(
+      inputBefore,
+      inputAfter,
+      inputBefore.flatMap((before, index) => [
+        blob(inputBlob, before.sha),
+        blob('b'.repeat(270 * 1024), inputAfter[index].sha),
+      ]),
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(14);
+
+    mockFetch.mockReset();
+    const diffBefore = Array.from({ length: 100 }, (_, index) =>
+      entry(`diff-${String(index).padStart(3, '0')}.ts`, `${index}`.padStart(40, '1')),
+    );
+    const diffAfter = Array.from({ length: 100 }, (_, index) =>
+      entry(`diff-${String(index).padStart(3, '0')}.ts`, `${index}`.padStart(40, '2')),
+    );
+    queueSnapshot(
+      diffBefore,
+      diffAfter,
+      diffBefore.flatMap((before, index) => [
+        blob('a\n'.repeat(5000), before.sha),
+        blob('b\n'.repeat(5000), diffAfter[index].sha),
+      ]),
+    );
+    await expect(fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token')).resolves.toBeNull();
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(6);
+    expect(mockFetch.mock.calls.length).toBeLessThan(207);
+  });
+
+  it('sorts manifests deterministically and renders documented empty added-file headers', async () => {
+    const first = '1'.repeat(40);
+    const second = '2'.repeat(40);
+    queueSnapshot(
+      [],
+      [entry('z.ts', second), entry('a.ts', first)],
+      [blob('', first), blob('z\n', second)],
+    );
+    const result = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token');
+    expect(result?.files.map((file) => file.path)).toEqual(['a.ts', 'z.ts']);
+    expect(result?.diff).toBe(
+      'diff --git a/a.ts b/a.ts\nnew file mode 100644\n--- /dev/null\n+++ b/z.ts\n@@ -0,0 +1 @@\n+z\n',
+    );
+
+    mockFetch.mockReset();
+    queueSnapshot([], [entry('bin/run', first, '100755')], [blob('', first)]);
+    const executable = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token');
+    expect(executable?.diff).toBe('diff --git a/bin/run b/bin/run\nnew file mode 100755\n');
+  });
+
+  it('renders same-path empty-before and empty-after modifications as ordinary unified hunks', async () => {
+    const beforeSha = '1'.repeat(40);
+    const afterSha = '2'.repeat(40);
+    queueSnapshot(
+      [entry('a.ts', beforeSha)],
+      [entry('a.ts', afterSha)],
+      [blob('', beforeSha), blob('after\n', afterSha)],
+    );
+    await expect(
+      fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+    ).resolves.toMatchObject({
+      diff: '--- a/a.ts\n+++ b/a.ts\n@@ -0,0 +1 @@\n+after\n',
+      files: [{ path: 'a.ts', content: 'after\n' }],
+    });
+
+    mockFetch.mockReset();
+    queueSnapshot(
+      [entry('a.ts', beforeSha)],
+      [entry('a.ts', afterSha)],
+      [blob('before\n', beforeSha), blob('', afterSha)],
+    );
+    await expect(
+      fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token'),
+    ).resolves.toMatchObject({
+      diff: '--- a/a.ts\n+++ b/a.ts\n@@ -1 +0,0 @@\n-before\n',
+      files: [{ path: 'a.ts', content: '' }],
+    });
+  });
+
+  it.each([403, 500])(
+    'propagates operational %i failures without exposing credentials or blob content',
+    async (status) => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status,
+        statusText: 'failure with token secret-content',
+        headers: { get: () => null },
+      });
+      const error = await fetchRevisionPinnedSnapshot('octo', 'demo', 7, head, 'token').catch(
+        (reason: unknown) => reason,
+      );
+      expect(error).toMatchObject({ status });
+      expect(error).toBeInstanceOf(Error);
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toBe(`GitHub API error fetching PR snapshot: ${status}`);
+      expect(error.message).not.toContain('token');
+      expect(error.message).not.toContain('secret-content');
+    },
+  );
+});
+
+describe('explanation publication transport', () => {
+  const mockFetch = vi.fn();
+  const reference = {
+    forgeInstance: 'github.com',
+    installationId: 'installation-42',
+    repositoryId: 'repository-99',
+    changeRequest: {
+      repo: { kind: 'github' as const, nativeId: 'repository-99', path: 'octo/demo' },
+      iid: 7,
+      globalId: 'PR_7',
+    },
+    ownerId: '42',
+    channel: 'answer' as const,
+    invocationId: 'invocation-1',
+  };
+
+  const marker = (value = reference) => {
+    const encoded = Buffer.from(
+      JSON.stringify([
+        value.forgeInstance,
+        value.installationId,
+        value.repositoryId,
+        value.changeRequest.repo.kind,
+        value.changeRequest.repo.nativeId,
+        value.changeRequest.iid,
+        value.changeRequest.globalId,
+        value.ownerId,
+        value.channel,
+        value.invocationId,
+      ]),
+    ).toString('base64url');
+    return `<!-- ghagga-explanation:v1:${encoded} -->`;
+  };
+
+  const ownedComment = (id: unknown, body = marker()) => ({
+    id,
+    body,
+    user: { id: 42, type: 'Bot' },
+  });
+
+  const response = (body: unknown, status = 200) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'Failure',
+    json: () => Promise.resolve(body),
+  });
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('finds only one exact, bot-owned explanation marker and rejects review-marker spoofs', async () => {
+    mockFetch.mockResolvedValueOnce(
+      response([
+        ownedComment(11, '<!-- ghagga-review -->'),
+        { ...ownedComment(12, 'answer'), user: { id: 99, type: 'Bot' } },
+      ]),
+    );
+
+    await expect(findExplanationComment('octo', 'demo', 7, reference, 'token')).resolves.toEqual({
+      kind: 'ABSENT',
+    });
+  });
+
+  it('returns the exact FOUND record for one exact, bot-owned explanation marker', async () => {
+    mockFetch.mockResolvedValueOnce(response([ownedComment(501)]));
+
+    await expect(findExplanationComment('octo', 'demo', 7, reference, 'token')).resolves.toEqual({
+      kind: 'FOUND',
+      commentId: { kind: 'github:issue-comment', raw: 501 },
+      reference,
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns incomplete for duplicate markers, incomplete scans, and malformed payloads', async () => {
+    const referenceWithProgress = { ...reference, channel: 'progress' as const };
+    mockFetch.mockResolvedValueOnce(response([ownedComment(11), ownedComment(12)]));
+    await expect(
+      findExplanationComment('octo', 'demo', 7, reference, 'token'),
+    ).resolves.toMatchObject({ kind: 'INCOMPLETE' });
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(
+      response(Array.from({ length: 100 }, (_, index) => ownedComment(index + 1))),
+    );
+    await expect(
+      findExplanationComment('octo', 'demo', 7, referenceWithProgress, 'token'),
+    ).resolves.toMatchObject({ kind: 'INCOMPLETE' });
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(response({ comments: [] }));
+    await expect(
+      findExplanationComment('octo', 'demo', 7, reference, 'token'),
+    ).resolves.toMatchObject({ kind: 'INCOMPLETE' });
+  });
+
+  it('creates one marker-bearing comment and rejects HTTP or malformed responses', async () => {
+    mockFetch.mockResolvedValueOnce(response(ownedComment(501, 'answer')));
+    await expect(
+      createExplanationComment('octo', 'demo', 7, reference, 'answer', 'token'),
+    ).resolves.toEqual({ id: 501 });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ body: `answer\n\n${marker()}` }),
+    });
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(response({}, 500));
+    await expect(
+      createExplanationComment('octo', 'demo', 7, reference, 'answer', 'token'),
+    ).rejects.toMatchObject({ status: 500 });
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(response(ownedComment('not-a-number')));
+    await expect(
+      createExplanationComment('octo', 'demo', 7, reference, 'answer', 'token'),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it('rejects a create response with the wrong bot type without extra I/O', async () => {
+    mockFetch.mockResolvedValueOnce(
+      response({ ...ownedComment(501), user: { id: 42, type: 'User' } }),
+    );
+
+    await expect(
+      createExplanationComment('octo', 'demo', 7, reference, 'answer', 'token'),
+    ).rejects.toThrow(TypeError);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a create response with the wrong numeric owner without extra I/O', async () => {
+    mockFetch.mockResolvedValueOnce(
+      response({ ...ownedComment(501), user: { id: 43, type: 'Bot' } }),
+    );
+
+    await expect(
+      createExplanationComment('octo', 'demo', 7, reference, 'answer', 'token'),
+    ).rejects.toThrow(TypeError);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms the exact owned comment before one update attempt and rejects mismatches', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(ownedComment(501, `previous answer\n${marker()}`)))
+      .mockResolvedValueOnce(response(ownedComment(501, 'answer')));
+    await expect(
+      updateExplanationComment('octo', 'demo', 501, reference, 'answer', 'token'),
+    ).resolves.toBeUndefined();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[1]?.[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ body: `answer\n\n${marker()}` }),
+    });
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(
+      response({ id: 501, body: 'spoof', user: { id: 42, type: 'Bot' } }),
+    );
+    await expect(
+      updateExplanationComment('octo', 'demo', 501, reference, 'answer', 'token'),
+    ).rejects.toThrow(TypeError);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an update response with the wrong bot type after exact owned preflight', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(ownedComment(501, `previous answer\n${marker()}`)))
+      .mockResolvedValueOnce(response({ ...ownedComment(501), user: { id: 42, type: 'User' } }));
+
+    await expect(
+      updateExplanationComment('octo', 'demo', 501, reference, 'answer', 'token'),
+    ).rejects.toThrow(TypeError);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an update response with the wrong numeric owner after exact owned preflight', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(ownedComment(501, `previous answer\n${marker()}`)))
+      .mockResolvedValueOnce(response({ ...ownedComment(501), user: { id: 43, type: 'Bot' } }));
+
+    await expect(
+      updateExplanationComment('octo', 'demo', 501, reference, 'answer', 'token'),
+    ).rejects.toThrow(TypeError);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('GitHub App bot author resolution and shared JWT minting', () => {
+  const mockFetch = vi.fn();
+  const fixedNow = 1_700_000_000_000;
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const privateKeyPem = privateKey.export({ format: 'pem', type: 'pkcs1' }).toString();
+  const appId = 'github-app-id';
+  const installationToken = 'installation-token';
+
+  const response = (body: unknown, status = 200) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'failure',
+    json: () => Promise.resolve(body),
+  });
+  const resolveWithRuntimeCredentials = (...credentials: unknown[]) =>
+    Reflect.apply(resolveGitHubAppBotAuthorId, undefined, credentials);
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('resolves only a verified numeric bot user after separately authenticated fixed-origin requests', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response({ id: 11, owner: { id: 12 }, slug: 'trusted-app' }))
+      .mockResolvedValueOnce(response({ id: 42, login: 'trusted-app[bot]', type: 'Bot' }));
+
+    await expect(
+      resolveGitHubAppBotAuthorId(appId, privateKeyPem, installationToken),
+    ).resolves.toEqual({
+      kind: 'RESOLVED',
+      id: 42,
+      slug: 'trusted-app',
+      login: 'trusted-app[bot]',
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0]?.[0]).toBe('https://api.github.com/app');
+    expect(mockFetch.mock.calls[1]?.[0]).toBe('https://api.github.com/users/trusted-app%5Bbot%5D');
+    const appRequest = mockFetch.mock.calls[0]?.[1] as RequestInit;
+    const userRequest = mockFetch.mock.calls[1]?.[1] as RequestInit;
+    expect(appRequest).toMatchObject({ method: 'GET', redirect: 'error' });
+    expect(userRequest).toMatchObject({ method: 'GET', redirect: 'error' });
+    expect(appRequest.headers).toMatchObject({
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    });
+    expect(userRequest.headers).toMatchObject({
+      Authorization: `Bearer ${installationToken}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    });
+    expect((appRequest.headers as Record<string, string>).Authorization).not.toBe(
+      (userRequest.headers as Record<string, string>).Authorization,
+    );
+    expect((userRequest.headers as Record<string, string>).Authorization).not.toContain('.');
+  });
+
+  it.each([
+    ['empty app id', '', privateKeyPem, installationToken],
+    ['blank app id', ' ', privateKeyPem, installationToken],
+    ['surrounding app-id whitespace', ' app', privateKeyPem, installationToken],
+    ['app-id control character', 'app\nname', privateKeyPem, installationToken],
+    ['empty installation token', appId, privateKeyPem, ''],
+    ['blank installation token', appId, privateKeyPem, ' '],
+    ['surrounding installation-token whitespace', appId, privateKeyPem, ' token'],
+    ['installation-token control character', appId, privateKeyPem, 'token\tvalue'],
+    ['malformed private key', appId, 'not a private key', installationToken],
+  ])(
+    'fails closed before I/O for %s',
+    async (_name, candidateAppId, candidateKey, candidateToken) => {
+      await expect(
+        resolveGitHubAppBotAuthorId(candidateAppId, candidateKey, candidateToken),
+      ).resolves.toEqual({ kind: 'UNCERTAIN' });
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['missing app id', [undefined, privateKeyPem, installationToken]],
+    ['null app id', [null, privateKeyPem, installationToken]],
+    ['numeric app id', [42, privateKeyPem, installationToken]],
+    ['missing private key', [appId, undefined, installationToken]],
+    ['null private key', [appId, null, installationToken]],
+    ['numeric private key', [appId, 42, installationToken]],
+    ['missing installation token', [appId, privateKeyPem, undefined]],
+    ['null installation token', [appId, privateKeyPem, null]],
+    ['numeric installation token', [appId, privateKeyPem, 42]],
+  ])('fails closed before I/O for runtime %s', async (_name, credentials) => {
+    await expect(resolveWithRuntimeCredentials(...credentials)).resolves.toEqual({
+      kind: 'UNCERTAIN',
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['HTTP 401', () => response({}, 401)],
+    ['HTTP 403', () => response({}, 403)],
+    ['HTTP 404', () => response({}, 404)],
+    ['HTTP 500', () => response({}, 500)],
+    ['thrown timeout', () => Promise.reject(new Error('credential=private-key timeout'))],
+    [
+      'JSON parse failure',
+      () => ({ ok: true, status: 200, json: () => Promise.reject(new Error('bad json')) }),
+    ],
+    ['null payload', () => response(null)],
+    ['array payload', () => response([])],
+    ['missing slug', () => response({ id: 11 })],
+    ['dangerous dot slug', () => response({ slug: 'trusted.app' })],
+    ['dangerous slash slug', () => response({ slug: 'trusted/app' })],
+    ['dangerous backslash slug', () => response({ slug: 'trusted\\app' })],
+    ['dangerous percent slug', () => response({ slug: 'trusted%app' })],
+    ['dangerous space slug', () => response({ slug: 'trusted app' })],
+    ['dangerous query slug', () => response({ slug: 'trusted?app' })],
+    ['dangerous hash slug', () => response({ slug: 'trusted#app' })],
+    ['dangerous control slug', () => response({ slug: 'trusted\napp' })],
+  ])(
+    'returns uncertain without a user lookup when app metadata has %s',
+    async (_name, appResponse) => {
+      mockFetch.mockImplementationOnce(appResponse);
+      await expect(
+        resolveGitHubAppBotAuthorId(appId, privateKeyPem, installationToken),
+      ).resolves.toEqual({ kind: 'UNCERTAIN' });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    ['HTTP 401', () => response({}, 401)],
+    ['HTTP 403', () => response({}, 403)],
+    ['HTTP 404', () => response({}, 404)],
+    ['HTTP 500', () => response({}, 500)],
+    ['thrown timeout', () => Promise.reject(new Error('token=installation-token timeout'))],
+    [
+      'JSON parse failure',
+      () => ({ ok: true, status: 200, json: () => Promise.reject(new Error('bad json')) }),
+    ],
+    ['null payload', () => response(null)],
+    ['array payload', () => response([])],
+    ['missing id', () => response({ login: 'trusted-app[bot]', type: 'Bot' })],
+    ['string id', () => response({ id: '42', login: 'trusted-app[bot]', type: 'Bot' })],
+    ['decimal id', () => response({ id: 1.5, login: 'trusted-app[bot]', type: 'Bot' })],
+    ['zero id', () => response({ id: 0, login: 'trusted-app[bot]', type: 'Bot' })],
+    ['negative id', () => response({ id: -1, login: 'trusted-app[bot]', type: 'Bot' })],
+    [
+      'unsafe id',
+      () => response({ id: Number.MAX_SAFE_INTEGER + 1, login: 'trusted-app[bot]', type: 'Bot' }),
+    ],
+    ['missing type', () => response({ id: 42, login: 'trusted-app[bot]' })],
+    ['wrong type', () => response({ id: 42, login: 'trusted-app[bot]', type: 'User' })],
+    ['login mismatch', () => response({ id: 42, login: 'other-app[bot]', type: 'Bot' })],
+  ])('returns uncertain without retries when the bot user has %s', async (_name, userResponse) => {
+    mockFetch.mockResolvedValueOnce(response({ slug: 'trusted-app' }));
+    mockFetch.mockImplementationOnce(userResponse);
+    await expect(
+      resolveGitHubAppBotAuthorId(appId, privateKeyPem, installationToken),
+    ).resolves.toEqual({ kind: 'UNCERTAIN' });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses a fresh 10000ms abort signal for each request and does not cache successful resolution', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue({} as AbortSignal);
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(
+        response({ slug: 'trusted-app', id: 42, login: 'trusted-app[bot]', type: 'Bot' }),
+      ),
+    );
+
+    await resolveGitHubAppBotAuthorId(appId, privateKeyPem, installationToken);
+    await resolveGitHubAppBotAuthorId(appId, privateKeyPem, installationToken);
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(timeout).toHaveBeenCalledTimes(4);
+    expect(timeout).toHaveBeenNthCalledWith(1, 10_000);
+    expect(timeout).toHaveBeenNthCalledWith(4, 10_000);
+  });
+
+  it('never exposes raw failures or credentials in its generic uncertain outcome or logs', async () => {
+    const secret = 'private-key-and-token-secret';
+    const errorSpy = vi.spyOn(logger, 'error');
+    mockFetch.mockRejectedValueOnce(new Error(secret));
+
+    const result = await resolveGitHubAppBotAuthorId(appId, privateKeyPem, secret);
+
+    expect(result).toEqual({ kind: 'UNCERTAIN' });
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('shares a cryptographically valid RS256 App JWT with installation minting and preserves mint semantics', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
+    mockFetch.mockResolvedValueOnce(
+      response({ token: 'minted-installation-token', expires_at: '2024-01-02T03:04:05.000Z' }),
+    );
+
+    await expect(
+      getInstallationTokenWithExpiry(99, appId, privateKeyPem, { repositoryIds: [7, 8] }),
+    ).resolves.toEqual({
+      token: 'minted-installation-token',
+      expiresAtMs: Date.parse('2024-01-02T03:04:05.000Z'),
+    });
+
+    const request = mockFetch.mock.calls[0]?.[1] as RequestInit;
+    const jwt = (request.headers as Record<string, string>).Authorization.slice('Bearer '.length);
+    const [encodedHeader, encodedPayload, encodedSignature] = jwt.split('.');
+    expect(JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8'))).toEqual({
+      alg: 'RS256',
+      typ: 'JWT',
+    });
+    expect(JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))).toEqual({
+      iat: fixedNow / 1000 - 60,
+      exp: fixedNow / 1000 + 600,
+      iss: appId,
+    });
+    const verifier = createVerify('RSA-SHA256');
+    verifier.update(`${encodedHeader}.${encodedPayload}`);
+    expect(verifier.verify(publicKey, Buffer.from(encodedSignature, 'base64url'))).toBe(true);
+    expect(mockFetch.mock.calls[0]?.[0]).toBe(
+      'https://api.github.com/app/installations/99/access_tokens',
+    );
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ repository_ids: [7, 8] }),
+    });
+  });
+
+  it.each([undefined, 'not a date'])(
+    'uses the legacy fallback expiry and string wrapper when expires_at is %s',
+    async (expiresAt) => {
+      vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
+      mockFetch.mockResolvedValueOnce(response({ token: 'first-token', expires_at: expiresAt }));
+      await expect(getInstallationTokenWithExpiry(99, appId, privateKeyPem)).resolves.toEqual({
+        token: 'first-token',
+        expiresAtMs: fixedNow + 55 * 60 * 1000,
+      });
+
+      mockFetch.mockResolvedValueOnce(response({ token: 'wrapper-token' }));
+      await expect(getInstallationToken(99, appId, privateKeyPem)).resolves.toBe('wrapper-token');
+    },
+  );
 });
