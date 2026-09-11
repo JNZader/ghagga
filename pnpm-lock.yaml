@@ -223,8 +223,8 @@ importers:
         specifier: ^0.5.3
         version: 0.5.3(hono@4.13.5)
       ioredis:
-        specifier: ^5.11.1
-        version: 5.11.1
+        specifier: ^6.0.0
+        version: 6.0.0
       node-cron:
         specifier: ^4.6.0
         version: 4.6.0
