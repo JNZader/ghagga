@@ -22,6 +22,11 @@ ghagga health [path]
 
 The health score is a number from 0 to 100 based on the severity and count of issues found by static analysis. Higher is better.
 
+**Implementation status (delivered):** the health scoring, trend, recommendation, and CLI command
+were delivered in commits `175838b` and `94662a9`; the v2.5.0 OpenSpec tasks were subsequently
+marked complete in `2d3bf4e` and archived in `5cd968f`. The examples below are illustrative output,
+not a recorded score for this repository.
+
 ### Grading Scale
 
 | Grade | Score | Meaning |
@@ -90,21 +95,36 @@ ghagga health --output json
 
 ```json
 {
-  "score": 74,
-  "grade": "B",
-  "trend": "+6",
-  "issues": [
+  "score": {
+    "score": 74,
+    "grade": "B",
+    "findingCounts": { "critical": 0, "high": 1, "medium": 2, "low": 1, "info": 0 },
+    "totalFindings": 4
+  },
+  "trend": {
+    "previous": 68,
+    "delta": 6,
+    "direction": "up"
+  },
+  "topIssues": [
     {
       "severity": "HIGH",
       "tool": "lizard",
       "category": "complexity",
       "message": "3 functions exceed cyclomatic complexity threshold",
-      "files": ["src/pipeline.ts", "src/agents/workflow.ts"]
+      "file": "src/pipeline.ts",
+      "line": 42,
+      "source": "lizard"
     }
   ],
   "recommendations": [
-    "Refactor complex functions in src/pipeline.ts and src/agents/workflow.ts"
+    {
+      "category": "complexity",
+      "action": "Refactor complex functions in src/pipeline.ts and src/agents/workflow.ts",
+      "impact": "high"
+    }
   ],
+  "toolsRun": ["lizard"],
   "timestamp": "2026-03-08T12:00:00Z"
 }
 ```
@@ -114,7 +134,7 @@ ghagga health --output json
 Use the health command in CI to enforce a minimum score:
 
 ```bash
-SCORE=$(ghagga health --output json | jq '.score')
+SCORE=$(ghagga health --output json | jq '.score.score')
 if [ "$SCORE" -lt 60 ]; then
   echo "Health score $SCORE is below threshold (60)"
   exit 1
