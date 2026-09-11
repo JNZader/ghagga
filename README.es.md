@@ -12,7 +12,7 @@
   <a href="https://www.npmjs.com/package/ghagga"><img src="https://img.shields.io/npm/v/ghagga?color=blue" alt="npm version" /></a>
   <a href="https://github.com/JNZader/ghagga/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/JNZader/ghagga/ci.yml?branch=main&label=CI" alt="CI status" /></a>
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" />
-  <img src="https://img.shields.io/badge/node-%3E%3D20-black" alt="Node.js >= 20" />
+  <img src="https://img.shields.io/badge/node-%3E%3D22.22.2-black" alt="Node.js >= 22.22.2" />
   <img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript strict" />
 </p>
 

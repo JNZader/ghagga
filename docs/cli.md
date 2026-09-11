@@ -20,7 +20,7 @@ The CLI is best for:
 
 ## Prerequisites
 
-- **Node.js >= 20.0.0** (check: `node --version`)
+- **Node.js >= 22.22.2** (check: `node --version`)
 - **Git** (required for computing diffs)
 - **A GitHub account** (required for `ghagga login` and free GitHub Models access)
 

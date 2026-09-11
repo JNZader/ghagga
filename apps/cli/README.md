@@ -266,7 +266,7 @@ With `ghagga hooks install`, steps 1-7 run automatically on every commit via pre
 
 ## Requirements
 
-- Node.js >= 20
+- Node.js >= 22.22.2
 - Git (for diff detection)
 - A GitHub account (for free AI models)
 

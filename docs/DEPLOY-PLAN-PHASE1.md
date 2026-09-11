@@ -113,7 +113,7 @@ El stack está definido en [`docker-compose.yml`](../docker-compose.yml) (raíz 
 | **redis** | `redis:7-alpine`, `--appendonly yes --save 60 1` | interno | `redis-data:/data` | `redis-cli ping` |
 
 Notas de build (de `apps/server/Dockerfile`):
-- **Build context = raíz del monorepo** (`context: .`), dockerfile `apps/server/Dockerfile`. Multi-stage (node:22-slim, pnpm@9).
+- **Build context = raíz del monorepo** (`context: .`), dockerfile `apps/server/Dockerfile`. Multi-stage (node:22.22.2-slim, pnpm@9).
 - **Build-args** (con defaults, normalmente NO hace falta tocarlos): `CLI_TOOLS_VERSION=4`,
   `OPENCODE_VERSION=1.2.27`. Bumpealos solo para invalidar cache o subir versión de OpenCode.
 - La imagen hornea los **CLIs del cli-bridge**: OpenCode (binario x86), Gemini CLI y GitHub Copilot CLI
