@@ -307,13 +307,16 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
     readonly close = vi.fn(async () => {});
   }
 
-  class FakeWorker {
-    readonly close = vi.fn(async () => {});
-  }
-
   const closeServer = vi.fn((callback: CloseCallback) => callback());
   const closeWorkerSpy = vi.fn(closeWorker);
-  const createWorker = vi.fn(() => ({ close: closeWorkerSpy }));
+  const createWorker = vi.fn();
+  class FakeWorker {
+    readonly close = closeWorkerSpy;
+
+    constructor(...args: unknown[]) {
+      createWorker(...args);
+    }
+  }
   const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
   vi.stubEnv('NODE_ENV', 'test');
@@ -383,10 +386,6 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
     createRunnerCallbackRouter: vi.fn(() => new Hono()),
   }));
   vi.doMock('./routes/webhook.js', () => ({ createWebhookRouter: vi.fn(() => new Hono()) }));
-  vi.doMock('./queues/explanation.js', () => ({
-    closeExplanationQueue: vi.fn(async () => {}),
-    createExplanationWorker: createWorker,
-  }));
   vi.doMock('hono/body-limit', () => ({ bodyLimit: vi.fn(() => async () => {}) }));
   vi.doMock('hono/cors', () => ({ cors: vi.fn(() => async () => {}) }));
   vi.doMock('hono/secure-headers', () => ({ secureHeaders: vi.fn(() => async () => {}) }));
@@ -430,7 +429,6 @@ describe('Explanation worker lifecycle', () => {
     vi.doUnmock('./routes/oauth.js');
     vi.doUnmock('./routes/runner-callback.js');
     vi.doUnmock('./routes/webhook.js');
-    vi.doUnmock('./queues/explanation.js');
     vi.doUnmock('bullmq');
     vi.doUnmock('hono/body-limit');
     vi.doUnmock('hono/cors');
@@ -453,16 +451,17 @@ describe('Explanation worker lifecycle', () => {
 
     expect(harness.createWorker).toHaveBeenCalledOnce();
     expect(harness.createWorker).toHaveBeenCalledWith(
-      1,
+      'explanation',
+      expect.any(Function),
       expect.objectContaining({
-        publisher: expect.any(Function),
-        progressPublisher: expect.any(Function),
+        connection: expect.any(Object),
+        concurrency: 1,
       }),
     );
     expect(harness.closeWorker).not.toHaveBeenCalled();
     expect(harness.getSignalHandler()).toEqual(expect.any(Function));
     expect(harness.getUnexpectedFetchCalls()).toBe(0);
-    expect(harness.getRedisConstructionCalls()).toBe(3);
+    expect(harness.getRedisConstructionCalls()).toBe(4);
   });
 
   it('waits for worker closure before exiting successfully', async () => {
@@ -484,7 +483,7 @@ describe('Explanation worker lifecycle', () => {
 
     expect(harness.closeWorker).toHaveBeenCalledOnce();
     expect(harness.exit).toHaveBeenCalledWith(0);
-    expect(harness.getRedisQuitCalls()).toBe(3);
+    expect(harness.getRedisQuitCalls()).toBe(4);
     expect(harness.getRedisDisconnectCalls()).toBe(0);
   });
 
