@@ -302,7 +302,10 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
       return { close: closeServer };
     }),
   }));
-  vi.doMock('ghagga-core', () => ({ initializeDefaultTools: vi.fn() }));
+  vi.doMock('ghagga-core', () => ({
+    initializeDefaultTools: vi.fn(),
+    REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
+  }));
   vi.doMock('ghagga-db', () => ({
     createDatabaseFromEnv: vi.fn(() => ({ execute: vi.fn() })),
     sql: vi.fn(),
