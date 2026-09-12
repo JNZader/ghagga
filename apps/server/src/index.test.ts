@@ -321,9 +321,11 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
     githubCircuitBreaker: { getState: vi.fn(() => 'closed') },
   }));
   vi.doMock('./lib/get-client-ip.js', () => ({ getClientIp: vi.fn(() => '127.0.0.1') }));
-  vi.doMock('./lib/logger.js', () => ({
-    logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
-  }));
+  vi.doMock('./lib/logger.js', () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn(), child: vi.fn() };
+    logger.child.mockReturnValue(logger);
+    return { logger };
+  });
   vi.doMock('./lib/redis.js', () => ({
     createRedisClient: vi.fn(() => {
       redisConstructionCalls += 1;
