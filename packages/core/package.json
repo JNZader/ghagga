@@ -51,12 +51,12 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.56",
-    "@ai-sdk/openai-compatible": "^3.0.43",
+    "@ai-sdk/openai": "^4.0.60",
+    "@ai-sdk/openai-compatible": "^3.0.44",
     "@bufbuild/protobuf": "^2.14.1",
     "@cursorless/tree-sitter-wasms": "^0.10.0",
-    "@scip-code/scip": "^0.9.0",
-    "ai": "^7.0.90",
+    "@scip-code/scip": "^0.10.0",
+    "ai": "^7.0.93",
     "fts5-sql-bundle": "^1.0.2",
     "minimatch": "^10.2.6",
     "web-tree-sitter": "^0.27.0",
