@@ -15,7 +15,8 @@
  */
 
 import { logger } from '../lib/logger.js';
-import { createReviewWorker } from '../queues/review.js';
+import { closeRedis } from '../lib/redis.js';
+import { closeReviewQueue, createReviewWorker } from '../queues/review.js';
 
 logger.info('🚀 Starting GHAGGA Review Worker...');
 
@@ -56,18 +57,29 @@ worker.on('progress', (job, progress) => {
 logger.info(`✅ Worker started with concurrency: ${WORKER_CONCURRENCY}`);
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
+let shutdownPromise: Promise<void> | undefined;
+const shutdown = (): Promise<void> => {
+  if (!shutdownPromise) {
+    shutdownPromise = worker
+      .close()
+      .then(closeReviewQueue)
+      .then(closeRedis)
+      .then(() => {
+        logger.info('Worker and Redis clients closed');
+        process.exit(0);
+      });
+  }
+  return shutdownPromise;
+};
+
+process.on('SIGTERM', () => {
   logger.info('SIGTERM received, closing worker gracefully...');
-  await worker.close();
-  logger.info('Worker closed');
-  process.exit(0);
+  void shutdown();
 });
 
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   logger.info('SIGINT received, closing worker gracefully...');
-  await worker.close();
-  logger.info('Worker closed');
-  process.exit(0);
+  void shutdown();
 });
 
 // Keep the process alive

@@ -271,15 +271,52 @@ interface LifecycleHarness {
   readonly getSignalHandler: () => (() => void) | undefined;
   readonly getUnexpectedFetchCalls: () => number;
   readonly getRedisConstructionCalls: () => number;
+  readonly getRedisQuitCalls: () => number;
+  readonly getRedisDisconnectCalls: () => number;
 }
 
 function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHarness {
   let signalHandler: (() => void) | undefined;
   let unexpectedFetchCalls = 0;
-  let redisConstructionCalls = 0;
+  const redisClients: Array<{
+    status: string;
+    on: ReturnType<typeof vi.fn>;
+    quit: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+  }> = [];
+
+  const createFakeRedisClient = vi.fn(() => {
+    const client = {
+      status: 'ready',
+      on: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      quit: vi.fn(async () => {
+        client.status = 'end';
+      }),
+      disconnect: vi.fn(() => {
+        client.status = 'end';
+      }),
+    };
+    redisClients.push(client);
+    return client;
+  });
+  const redis = createFakeRedisClient();
+
+  class FakeQueue {
+    readonly close = vi.fn(async () => {});
+  }
+
   const closeServer = vi.fn((callback: CloseCallback) => callback());
   const closeWorkerSpy = vi.fn(closeWorker);
-  const createWorker = vi.fn(() => ({ close: closeWorkerSpy }));
+  const createWorker = vi.fn();
+  class FakeWorker {
+    readonly close = closeWorkerSpy;
+
+    constructor(...args: unknown[]) {
+      createWorker(...args);
+    }
+  }
   const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
   vi.stubEnv('NODE_ENV', 'test');
@@ -302,7 +339,10 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
       return { close: closeServer };
     }),
   }));
-  vi.doMock('ghagga-core', () => ({ initializeDefaultTools: vi.fn() }));
+  vi.doMock('ghagga-core', () => ({
+    initializeDefaultTools: vi.fn(),
+    REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
+  }));
   vi.doMock('ghagga-db', () => ({
     createDatabaseFromEnv: vi.fn(() => ({ execute: vi.fn() })),
     sql: vi.fn(),
@@ -321,13 +361,20 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
     githubCircuitBreaker: { getState: vi.fn(() => 'closed') },
   }));
   vi.doMock('./lib/get-client-ip.js', () => ({ getClientIp: vi.fn(() => '127.0.0.1') }));
-  vi.doMock('./lib/logger.js', () => ({
-    logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
-  }));
+  vi.doMock('./lib/logger.js', () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn(), child: vi.fn() };
+    logger.child.mockReturnValue(logger);
+    return { logger };
+  });
   vi.doMock('./lib/redis.js', () => ({
-    createRedisClient: vi.fn(() => {
-      redisConstructionCalls += 1;
-      throw new Error('Unexpected Redis construction during entrypoint import');
+    createRedisClient: createFakeRedisClient,
+    redis,
+    closeRedis: vi.fn(async () => {
+      await Promise.all(
+        redisClients.map(async (client) => {
+          if (client.status !== 'end') await client.quit();
+        }),
+      );
     }),
     describeRedisConfig: vi.fn(() => ({ auth: false, source: 'host', tls: false })),
   }));
@@ -339,13 +386,11 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
     createRunnerCallbackRouter: vi.fn(() => new Hono()),
   }));
   vi.doMock('./routes/webhook.js', () => ({ createWebhookRouter: vi.fn(() => new Hono()) }));
-  vi.doMock('./queues/explanation.js', () => ({
-    createExplanationWorker: createWorker,
-  }));
   vi.doMock('hono/body-limit', () => ({ bodyLimit: vi.fn(() => async () => {}) }));
   vi.doMock('hono/cors', () => ({ cors: vi.fn(() => async () => {}) }));
   vi.doMock('hono/secure-headers', () => ({ secureHeaders: vi.fn(() => async () => {}) }));
   vi.doMock('hono-rate-limiter', () => ({ rateLimiter: vi.fn(() => async () => {}) }));
+  vi.doMock('bullmq', () => ({ Queue: FakeQueue, Worker: FakeWorker }));
 
   return {
     closeServer,
@@ -354,7 +399,11 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
     exit,
     getSignalHandler: () => signalHandler,
     getUnexpectedFetchCalls: () => unexpectedFetchCalls,
-    getRedisConstructionCalls: () => redisConstructionCalls,
+    getRedisConstructionCalls: () => createFakeRedisClient.mock.calls.length,
+    getRedisQuitCalls: () =>
+      redisClients.filter((client) => client.quit.mock.calls.length > 0).length,
+    getRedisDisconnectCalls: () =>
+      redisClients.filter((client) => client.disconnect.mock.calls.length > 0).length,
   };
 }
 
@@ -380,7 +429,7 @@ describe('Explanation worker lifecycle', () => {
     vi.doUnmock('./routes/oauth.js');
     vi.doUnmock('./routes/runner-callback.js');
     vi.doUnmock('./routes/webhook.js');
-    vi.doUnmock('./queues/explanation.js');
+    vi.doUnmock('bullmq');
     vi.doUnmock('hono/body-limit');
     vi.doUnmock('hono/cors');
     vi.doUnmock('hono/secure-headers');
@@ -402,16 +451,17 @@ describe('Explanation worker lifecycle', () => {
 
     expect(harness.createWorker).toHaveBeenCalledOnce();
     expect(harness.createWorker).toHaveBeenCalledWith(
-      1,
+      'explanation',
+      expect.any(Function),
       expect.objectContaining({
-        publisher: expect.any(Function),
-        progressPublisher: expect.any(Function),
+        connection: expect.any(Object),
+        concurrency: 1,
       }),
     );
     expect(harness.closeWorker).not.toHaveBeenCalled();
     expect(harness.getSignalHandler()).toEqual(expect.any(Function));
     expect(harness.getUnexpectedFetchCalls()).toBe(0);
-    expect(harness.getRedisConstructionCalls()).toBe(0);
+    expect(harness.getRedisConstructionCalls()).toBe(4);
   });
 
   it('waits for worker closure before exiting successfully', async () => {
@@ -429,10 +479,12 @@ describe('Explanation worker lifecycle', () => {
     expect(harness.exit).not.toHaveBeenCalledWith(0);
 
     resolveClose?.();
-    await vi.runAllTicks();
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(harness.closeWorker).toHaveBeenCalledOnce();
     expect(harness.exit).toHaveBeenCalledWith(0);
+    expect(harness.getRedisQuitCalls()).toBe(4);
+    expect(harness.getRedisDisconnectCalls()).toBe(0);
   });
 
   it('does not exit successfully or leak rejection when worker closure fails', async () => {
