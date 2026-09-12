@@ -1107,4 +1107,9 @@ export function setupQueueEvents(): void {
   logger.info('Queue events setup complete');
 }
 
+/** Close the API-owned review queue before its Redis clients are closed. */
+export async function closeReviewQueue(): Promise<void> {
+  await reviewQueue.close();
+}
+
 export default reviewQueue;

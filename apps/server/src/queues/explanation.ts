@@ -229,6 +229,11 @@ export function createExplanationWorker(
   );
 }
 
+/** Close the lazily-created explanation queue before its Redis clients are closed. */
+export async function closeExplanationQueue(): Promise<void> {
+  await explanationQueue?.close();
+}
+
 type ExplanationInvocationRequest = Parameters<typeof lookupExplanationInvocation>[1];
 
 function toExplanationInvocationRequest(request: ExplanationRequest): ExplanationInvocationRequest {

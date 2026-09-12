@@ -8,17 +8,42 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+const { redisClients } = vi.hoisted(() => ({
+  redisClients: [] as Array<{ quit: ReturnType<typeof vi.fn> }>,
+}));
+
 vi.mock('ioredis', () => {
   // Minimal stub: `new RedisMock(opts)` is a no-op; quit() resolves. No socket.
   class RedisMock {
-    quit(): Promise<'OK'> {
-      return Promise.resolve('OK');
+    readonly quit = vi.fn(() => Promise.resolve('OK' as const));
+
+    constructor() {
+      redisClients.push(this);
+    }
+
+    on(): this {
+      return this;
     }
   }
   return { default: RedisMock };
 });
 
-import { CALLBACK_RESULT_TTL, callbackResultKey } from './redis.js';
+import { CALLBACK_RESULT_TTL, callbackResultKey, closeRedis, createRedisClient } from './redis.js';
+
+describe('Redis client lifecycle', () => {
+  it('closes every application-created client exactly once and is idempotent', async () => {
+    const initialClients = redisClients.length;
+    const first = createRedisClient();
+    const second = createRedisClient();
+
+    await closeRedis();
+    await closeRedis();
+
+    expect(redisClients).toHaveLength(initialClients + 2);
+    expect(first.quit).toHaveBeenCalledOnce();
+    expect(second.quit).toHaveBeenCalledOnce();
+  });
+});
 
 describe('callbackResultKey', () => {
   it('formats the key as ghagga:callback:{callbackId}', () => {

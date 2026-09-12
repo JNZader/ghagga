@@ -26,7 +26,8 @@
 import { createDatabaseFromEnv } from 'ghagga-db';
 import { getInstallationToken, listIssueComments } from '../github/client.js';
 import { logger } from '../lib/logger.js';
-import { createIssueAnalysisWorker } from '../queues/issue-analysis.js';
+import { closeRedis } from '../lib/redis.js';
+import { closeIssueAnalysisQueue, createIssueAnalysisWorker } from '../queues/issue-analysis.js';
 import { startIssueDraftReaper } from '../queues/issue-draft-reaper.js';
 
 logger.info('🚀 Starting GHAGGA Issue-Analysis Worker...');
@@ -114,20 +115,30 @@ worker.on('progress', (job, progress) => {
 logger.info(`✅ Issue-analysis worker started with concurrency: ${WORKER_CONCURRENCY}`);
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
+let shutdownPromise: Promise<void> | undefined;
+const shutdown = (): Promise<void> => {
+  if (!shutdownPromise) {
+    shutdownPromise = Promise.resolve()
+      .then(() => stopReaper?.())
+      .then(() => worker.close())
+      .then(closeIssueAnalysisQueue)
+      .then(closeRedis)
+      .then(() => {
+        logger.info('Issue-analysis worker and Redis clients closed');
+        process.exit(0);
+      });
+  }
+  return shutdownPromise;
+};
+
+process.on('SIGTERM', () => {
   logger.info('SIGTERM received, closing issue-analysis worker gracefully...');
-  stopReaper?.();
-  await worker.close();
-  logger.info('Issue-analysis worker closed');
-  process.exit(0);
+  void shutdown();
 });
 
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   logger.info('SIGINT received, closing issue-analysis worker gracefully...');
-  stopReaper?.();
-  await worker.close();
-  logger.info('Issue-analysis worker closed');
-  process.exit(0);
+  void shutdown();
 });
 
 // Keep the process alive

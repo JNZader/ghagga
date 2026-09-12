@@ -32,6 +32,7 @@ vi.mock('../queues/review.js', () => ({
     },
     close: vi.fn().mockResolvedValue(undefined),
   })),
+  closeReviewQueue: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('review worker event handlers', () => {

@@ -735,4 +735,9 @@ export function createIssueAnalysisWorker(
   });
 }
 
+/** Close the API-owned issue-analysis queue before its Redis clients are closed. */
+export async function closeIssueAnalysisQueue(): Promise<void> {
+  await issueAnalysisQueue.close();
+}
+
 export default issueAnalysisQueue;
