@@ -19,11 +19,13 @@ import { rateLimiter } from 'hono-rate-limiter';
 import { githubCircuitBreaker } from './lib/circuit-breaker.js';
 import { getClientIp } from './lib/get-client-ip.js';
 import { logger } from './lib/logger.js';
-import { describeRedisConfig } from './lib/redis.js';
+import { closeRedis, describeRedisConfig } from './lib/redis.js';
 import { validateEnvironment } from './lib/validate-env.js';
 import { authMiddleware } from './middleware/auth.js';
-import { createExplanationWorker } from './queues/explanation.js';
+import { closeExplanationQueue, createExplanationWorker } from './queues/explanation.js';
 import { createPersistedExplanationPublisher } from './queues/explanation-publisher-factory.js';
+import { closeIssueAnalysisQueue } from './queues/issue-analysis.js';
+import { closeReviewQueue } from './queues/review.js';
 import { createApiRouter } from './routes/api/index.js';
 import { createOAuthRouter } from './routes/oauth.js';
 import { createRunnerCallbackRouter } from './routes/runner-callback.js';
@@ -319,22 +321,43 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 
 const SHUTDOWN_TIMEOUT_MS = 30_000;
 
-process.on('SIGTERM', () => {
-  logger.info('Received SIGTERM, draining connections...');
-  const forcedExit = setTimeout(() => {
+let shutdownPromise: Promise<void> | undefined;
+let forcedExit: NodeJS.Timeout | undefined;
+
+function shutdown(): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = new Promise((resolve) => {
+    server.close(() => {
+      void explanationWorker
+        .close()
+        .then(() =>
+          Promise.all([closeReviewQueue(), closeIssueAnalysisQueue(), closeExplanationQueue()]),
+        )
+        .then(() => closeRedis())
+        .then(() => {
+          if (forcedExit) clearTimeout(forcedExit);
+          logger.info('Server and Redis clients closed gracefully');
+          resolve();
+          process.exit(0);
+        })
+        .catch((err: unknown) => {
+          logger.error({ err }, 'Server shutdown failed');
+          resolve();
+        });
+    });
+  });
+  return shutdownPromise;
+}
+
+function handleShutdownSignal(signal: NodeJS.Signals): void {
+  logger.info(`Received ${signal}, draining connections...`);
+  if (shutdownPromise) return;
+  forcedExit = setTimeout(() => {
     logger.warn('Forced shutdown after timeout');
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS);
-  server.close(() => {
-    void explanationWorker
-      .close()
-      .then(() => {
-        clearTimeout(forcedExit);
-        logger.info('Server closed gracefully');
-        process.exit(0);
-      })
-      .catch((err: unknown) => {
-        logger.error({ err }, 'Explanation worker failed to close gracefully');
-      });
-  });
-});
+  void shutdown();
+}
+
+process.on('SIGTERM', () => handleShutdownSignal('SIGTERM'));
+process.on('SIGINT', () => handleShutdownSignal('SIGINT'));

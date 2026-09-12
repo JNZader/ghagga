@@ -17,12 +17,31 @@
  */
 
 import Redis, { type RedisOptions } from 'ioredis';
+import { logger } from './logger.js';
 
 /** Options every ghagga Redis client needs (BullMQ compatibility). */
 const BASE_OPTIONS: RedisOptions = {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
 };
+
+const applicationClients = new Set<Redis>();
+let closePromise: Promise<void> | undefined;
+
+function registerRedisClient(client: Redis): Redis {
+  applicationClients.add(client);
+  // Keep lightweight test doubles compatible while real ioredis clients get
+  // lifecycle observability from their EventEmitter interface.
+  if (typeof client.on === 'function') {
+    client.on('error', (error: Error) => {
+      logger.warn({ error: error.message }, 'Redis client error');
+    });
+    client.on('reconnecting', (delay: number) => {
+      logger.info({ delay }, 'Redis client reconnecting');
+    });
+  }
+  return client;
+}
 
 /**
  * Describe how the Redis connection is being built, WITHOUT leaking secrets.
@@ -70,7 +89,7 @@ export function createRedisClient(
     // ioredis parses username/password/db from the URL and enables TLS for
     // rediss://. BASE_OPTIONS/overrides tune BullMQ behaviour without dropping
     // the URL's credentials.
-    return new Redis(url, { ...BASE_OPTIONS, ...overrides });
+    return registerRedisClient(new Redis(url, { ...BASE_OPTIONS, ...overrides }));
   }
 
   const options: RedisOptions = {
@@ -82,7 +101,7 @@ export function createRedisClient(
   if (env.REDIS_USERNAME) options.username = env.REDIS_USERNAME;
   if (env.REDIS_PASSWORD) options.password = env.REDIS_PASSWORD;
   if (env.REDIS_TLS === 'true') options.tls = {};
-  return new Redis(options);
+  return registerRedisClient(new Redis(options));
 }
 
 /**
@@ -96,7 +115,15 @@ export const redis = createRedisClient();
  * Should be called on shutdown to prevent connection leaks.
  */
 export async function closeRedis(): Promise<void> {
-  await redis.quit();
+  if (!closePromise) {
+    const clients = [...applicationClients];
+    closePromise = Promise.all(
+      clients.map((client) => (client.status === 'end' ? Promise.resolve() : client.quit())),
+    ).then(() => {
+      logger.info({ clients: clients.length }, 'Redis clients closed');
+    });
+  }
+  await closePromise;
 }
 
 export default redis;
