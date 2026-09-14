@@ -34,7 +34,7 @@
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.0",
     "@types/node-cron": "^3.0.11",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
