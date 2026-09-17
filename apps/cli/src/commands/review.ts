@@ -183,6 +183,11 @@ interface GhaggaConfig {
    */
   contrarianCount?: number;
   /**
+   * Opt-in batched 2-of-K refuters over critical fan-out findings.
+   * When set, must be a JSON number that is an integer >= 2.
+   */
+  refuterCount?: number;
+  /**
    * Per-voice cross-engine provider chain (BL-CLI-PROVIDER-CHAIN). When set,
    * consensus (3-vote) and fan-out (N-lens) modes round-robin each voice
    * across these gateway entries instead of hammering a single engine.
@@ -1001,6 +1006,20 @@ function loadConfigFile(repoPath: string, configPath?: string): GhaggaConfig {
     }
   }
 
+  if (parsed.refuterCount !== undefined) {
+    if (
+      typeof parsed.refuterCount !== 'number' ||
+      !Number.isInteger(parsed.refuterCount) ||
+      parsed.refuterCount < 2
+    ) {
+      tui.log.error(
+        `❌ Invalid .ghagga.json refuterCount: expected integer >= 2, got ${JSON.stringify(parsed.refuterCount)}`,
+      );
+      process.exit(1);
+      return {};
+    }
+  }
+
   return parsed;
 }
 
@@ -1243,6 +1262,11 @@ function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): Review
     Number.isInteger(fileConfig.contrarianCount) &&
     fileConfig.contrarianCount >= 1
       ? { contrarianCount: fileConfig.contrarianCount }
+      : {}),
+    ...(typeof fileConfig.refuterCount === 'number' &&
+    Number.isInteger(fileConfig.refuterCount) &&
+    fileConfig.refuterCount >= 2
+      ? { refuterCount: fileConfig.refuterCount }
       : {}),
   };
 }

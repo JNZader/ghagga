@@ -261,6 +261,11 @@ export interface ReviewSettings {
    * When set, must be an integer >= 1. Requires pinLensesToFirst.
    */
   contrarianCount?: number;
+  /**
+   * Opt-in batched 2-of-K refuters over critical fan-out findings.
+   * When set, must be an integer >= 2. Requires pinLensesToFirst.
+   */
+  refuterCount?: number;
 
   /** Enable bidirectional code-doc validation. Default: false. */
   enableDocValidation?: boolean;

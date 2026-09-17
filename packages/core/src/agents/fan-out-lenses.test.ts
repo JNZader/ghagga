@@ -26,6 +26,7 @@ import {
   LENS_TYPING,
   loadLensesFromDir,
   mergeFindings,
+  parseRefuterVerdicts,
   type ReviewLens,
   registerLens,
   resetLensRegistry,
@@ -283,6 +284,28 @@ describe('stampFindingLedger', () => {
       ledgerStatus: 'open',
       evidence: 'No lens',
     });
+  });
+});
+
+// ─── parseRefuterVerdicts ───────────────────────────
+
+describe('parseRefuterVerdicts', () => {
+  it('maps two IDs with one refute and one stands', () => {
+    const verdicts = parseRefuterVerdicts('security-001: refute\nsecurity-002: stands');
+    expect(verdicts.get('security-001')).toBe('refute');
+    expect(verdicts.get('security-002')).toBe('stands');
+    expect(verdicts.size).toBe(2);
+  });
+
+  it('omits missing IDs from the map', () => {
+    const verdicts = parseRefuterVerdicts('security-001: refute');
+    expect(verdicts.has('security-002')).toBe(false);
+    expect(verdicts.get('security-001')).toBe('refute');
+  });
+
+  it('returns an empty map for garbage text', () => {
+    expect(parseRefuterVerdicts('not a verdict block at all')).toEqual(new Map());
+    expect(parseRefuterVerdicts('')).toEqual(new Map());
   });
 });
 
@@ -654,6 +677,153 @@ FINDINGS:
     await expect(runFanOutReview(makeInput({ ...base, contrarianCount: 1.5 }))).rejects.toThrow(
       /contrarianCount/,
     );
+  });
+
+  it('2-of-2 refute marks the critical finding refuted and does not FAILED from hasCritical', async () => {
+    const lensFn = makeFakeGenerateFn(
+      FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection'),
+    );
+    const refuter1 = makeFakeGenerateFn('security-001: refute');
+    const refuter2 = makeFakeGenerateFn('security-001: refute');
+
+    const result = await runFanOutReview(
+      makeInput({
+        generateFns: [lensFn, refuter1, refuter2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        refuterCount: 2,
+      }),
+    );
+
+    expect(result.findings[0]).toMatchObject({
+      id: 'security-001',
+      ledgerStatus: 'refuted',
+    });
+    expect(result.status).not.toBe('FAILED');
+    expect(lensFn).toHaveBeenCalledTimes(1);
+    expect(refuter1).toHaveBeenCalledTimes(1);
+    expect(refuter2).toHaveBeenCalledTimes(1);
+  });
+
+  it('1 refute + 1 stands keeps the critical finding open', async () => {
+    const lensFn = makeFakeGenerateFn(
+      FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection'),
+    );
+    const refuter1 = makeFakeGenerateFn('security-001: refute');
+    const refuter2 = makeFakeGenerateFn('security-001: stands');
+
+    const result = await runFanOutReview(
+      makeInput({
+        generateFns: [lensFn, refuter1, refuter2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        refuterCount: 2,
+      }),
+    );
+
+    expect(result.findings[0]?.ledgerStatus).toBe('open');
+    expect(refuter1).toHaveBeenCalledTimes(1);
+    expect(refuter2).toHaveBeenCalledTimes(1);
+  });
+
+  it('both refuters omitting the id keeps the critical finding open', async () => {
+    const lensFn = makeFakeGenerateFn(
+      FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection'),
+    );
+    const refuter1 = makeFakeGenerateFn('unrelated-999: refute');
+    const refuter2 = makeFakeGenerateFn('');
+
+    const result = await runFanOutReview(
+      makeInput({
+        generateFns: [lensFn, refuter1, refuter2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        refuterCount: 2,
+      }),
+    );
+
+    expect(result.findings[0]?.ledgerStatus).toBe('open');
+  });
+
+  it('skips refuter generateFns when there are no critical findings', async () => {
+    const lensFn = makeFakeGenerateFn(PASSED_RESPONSE);
+    const refuter1 = makeFakeGenerateFn('security-001: refute');
+    const refuter2 = makeFakeGenerateFn('security-001: refute');
+
+    await runFanOutReview(
+      makeInput({
+        generateFns: [lensFn, refuter1, refuter2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        refuterCount: 2,
+      }),
+    );
+
+    expect(lensFn).toHaveBeenCalledTimes(1);
+    expect(refuter1).toHaveBeenCalledTimes(0);
+    expect(refuter2).toHaveBeenCalledTimes(0);
+  });
+
+  it('fails closed for refuterCount without pin, count 1, or short generateFns', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn2 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn3 = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    await expect(
+      runFanOutReview(
+        makeInput({
+          generateFns: [fn1, fn2, fn3],
+          lenses: ['security'],
+          refuterCount: 2,
+        }),
+      ),
+    ).rejects.toThrow(/refuterCount/);
+
+    await expect(
+      runFanOutReview(
+        makeInput({
+          generateFns: [fn1, fn2, fn3],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+          refuterCount: 1,
+        }),
+      ),
+    ).rejects.toThrow(/refuterCount/);
+
+    await expect(
+      runFanOutReview(
+        makeInput({
+          generateFns: [fn1, fn2],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+          refuterCount: 2,
+        }),
+      ),
+    ).rejects.toThrow(/refuterCount/);
+  });
+
+  it('indexes lenses [0], contrarian [1], refuters [2][3] when pin + contrarian 1 + refuter 2', async () => {
+    const lensFn = makeFakeGenerateFn(
+      FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection'),
+    );
+    const contrarianFn = makeFakeGenerateFn(PASSED_RESPONSE);
+    const refuter1 = makeFakeGenerateFn('security-001: refute');
+    const refuter2 = makeFakeGenerateFn('security-001: refute');
+
+    await runFanOutReview(
+      makeInput({
+        generateFns: [lensFn, contrarianFn, refuter1, refuter2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        contrarianCount: 1,
+        refuterCount: 2,
+      }),
+    );
+
+    expect(lensFn).toHaveBeenCalledTimes(1);
+    expect(contrarianFn).toHaveBeenCalledTimes(1);
+    expect(refuter1).toHaveBeenCalledTimes(1);
+    expect(refuter2).toHaveBeenCalledTimes(1);
   });
 
   it('applies custom registered lenses', async () => {

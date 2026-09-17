@@ -693,6 +693,26 @@ describe('golden: baseline & modes', () => {
     );
   });
 
+  it('mode: fan-out forwards refuterCount only when pin and integer >= 2', async () => {
+    await runGolden(makeInput({ mode: 'fan-out' }));
+    expect(runFanOutReview).toHaveBeenCalledOnce();
+    expect((runFanOutReview as M<typeof runFanOutReview>).mock.calls[0]?.[0]).not.toHaveProperty(
+      'refuterCount',
+    );
+
+    (runFanOutReview as M<typeof runFanOutReview>).mockClear();
+
+    await runGolden(
+      makeInput({
+        mode: 'fan-out',
+        settings: makeSettings({ pinLensesToFirst: true, refuterCount: 2 }),
+      }),
+    );
+    expect(runFanOutReview).toHaveBeenCalledWith(
+      expect.objectContaining({ pinLensesToFirst: true, refuterCount: 2 }),
+    );
+  });
+
   it('mode: diagnostic falls back to simple on gateway', async () => {
     const run = await runGolden(makeInput({ mode: 'diagnostic' }));
     expect(runDiagnosticReview).not.toHaveBeenCalled();
