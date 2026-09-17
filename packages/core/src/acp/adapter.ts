@@ -40,7 +40,14 @@ import type {
 
 const AGENT_NAME = 'ghagga';
 const AGENT_VERSION = '2.8.1';
-const SUPPORTED_MODES: ReviewMode[] = ['simple', 'workflow', 'consensus', 'diagnostic', 'fan-out'];
+const SUPPORTED_MODES: ReviewMode[] = [
+  'simple',
+  'workflow',
+  'consensus',
+  'diagnostic',
+  'fan-out',
+  'hybrid-4r',
+];
 
 // ─── Task Store ────────────────────────────────────────────────
 
