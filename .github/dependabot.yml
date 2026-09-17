@@ -37,6 +37,10 @@ updates:
       tanstack:
         patterns:
           - "@tanstack/*"
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
       # Everything else: minor+patch batched into one PR; other majors get
       # individual PRs (breaking changes).
       minor-and-patch:
