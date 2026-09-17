@@ -51,16 +51,16 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.62",
-    "@ai-sdk/openai-compatible": "^3.0.45",
-    "@bufbuild/protobuf": "^2.14.1",
+    "@ai-sdk/openai": "^4.0.66",
+    "@ai-sdk/openai-compatible": "^3.0.48",
+    "@bufbuild/protobuf": "^2.15.0",
     "@cursorless/tree-sitter-wasms": "^0.10.0",
     "@scip-code/scip": "^0.10.0",
     "ai": "^7.0.99",
     "fts5-sql-bundle": "^1.0.2",
     "minimatch": "^10.2.6",
     "web-tree-sitter": "^0.27.0",
-    "zod": "^4.5.4"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
