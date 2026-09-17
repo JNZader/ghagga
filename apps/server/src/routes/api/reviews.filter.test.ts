@@ -166,6 +166,20 @@ describe('GET /api/reviews — server-side filtering (PRODOPS-005)', () => {
     expect(mockCountReviewsByRepoId).not.toHaveBeenCalled();
   });
 
+  it('per-repo: accepts status=INCONCLUSIVE', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce({ id: 42, installationId: 42, fullName: 'o/r' });
+    const db = makeDb([[dbRow({ id: 11, status: 'INCONCLUSIVE' })], [{ total: 1 }]]);
+
+    const app = appWith(db);
+    const res = await app.request('/api/reviews?repo=o/r&status=INCONCLUSIVE');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveLength(1);
+    expect(json.data[0].status).toBe('INCONCLUSIVE');
+    expect(mockGetReviewsByRepoId).not.toHaveBeenCalled();
+  });
+
   it('per-repo: search filter routes to the server-side path', async () => {
     mockGetRepoByFullName.mockResolvedValueOnce({ id: 42, installationId: 42, fullName: 'o/r' });
     const db = makeDb([[dbRow({ id: 9, summary: 'matches query' })], [{ total: 1 }]]);

@@ -238,6 +238,7 @@ describe('GitHub Action', () => {
         NEEDS_HUMAN_REVIEW: '\u26a0\ufe0f NEEDS_HUMAN_REVIEW',
         SKIPPED: '\u23ed\ufe0f SKIPPED',
         PARTIAL: '\u26a1 PARTIAL',
+        INCONCLUSIVE: '\u2753 INCONCLUSIVE',
       };
 
       expect(STATUS_EMOJI.PASSED).toContain('PASSED');
@@ -245,6 +246,7 @@ describe('GitHub Action', () => {
       expect(STATUS_EMOJI.NEEDS_HUMAN_REVIEW).toContain('NEEDS_HUMAN_REVIEW');
       expect(STATUS_EMOJI.SKIPPED).toContain('SKIPPED');
       expect(STATUS_EMOJI.PARTIAL).toContain('PARTIAL');
+      expect(STATUS_EMOJI.INCONCLUSIVE).toContain('INCONCLUSIVE');
     });
 
     it('SEVERITY_EMOJI maps all valid severities', () => {

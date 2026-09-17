@@ -318,7 +318,13 @@ export interface Hypothesis {
 
 // ─── Review Output ──────────────────────────────────────────────
 
-export type ReviewStatus = 'PASSED' | 'FAILED' | 'NEEDS_HUMAN_REVIEW' | 'SKIPPED' | 'PARTIAL';
+export type ReviewStatus =
+  | 'PASSED'
+  | 'FAILED'
+  | 'NEEDS_HUMAN_REVIEW'
+  | 'SKIPPED'
+  | 'PARTIAL'
+  | 'INCONCLUSIVE';
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type FindingSource = 'ai' | 'semgrep' | 'trivy' | 'cpd' | (string & {});
 

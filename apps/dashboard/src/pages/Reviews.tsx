@@ -334,6 +334,7 @@ export function Reviews() {
           <option value="NEEDS_HUMAN_REVIEW">Needs Review</option>
           <option value="SKIPPED">Skipped</option>
           <option value="PARTIAL">Partial</option>
+          <option value="INCONCLUSIVE">Inconclusive</option>
         </select>
 
         <input

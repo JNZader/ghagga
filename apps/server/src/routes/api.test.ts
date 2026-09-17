@@ -506,6 +506,37 @@ describe('GET /api/reviews', () => {
       coverageComplete: false,
     });
   });
+
+  it('passes INCONCLUSIVE status through verbatim in the API response', async () => {
+    mockGetRepoByFullName.mockResolvedValueOnce(FAKE_REPO);
+    const inconclusiveRow = fakeDbReviewRow({
+      id: 100,
+      prNumber: 43,
+      status: 'INCONCLUSIVE' as const,
+      summary: 'Reviewers did not converge on a verdict.',
+      metadata: { mode: 'consensus' },
+    });
+    mockGetReviewsByRepoId.mockResolvedValueOnce([inconclusiveRow]);
+    mockCountReviewsByRepoId.mockResolvedValueOnce(1);
+
+    const app = createApp();
+    const res = await app.request('/api/reviews?repo=owner/repo');
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveLength(1);
+    expect(json.data[0].status).toBe('INCONCLUSIVE');
+    expect(json.data[0]).toEqual({
+      id: 100,
+      repo: 'owner/repo',
+      prNumber: 43,
+      status: 'INCONCLUSIVE',
+      mode: 'simple',
+      summary: 'Reviewers did not converge on a verdict.',
+      findings: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════

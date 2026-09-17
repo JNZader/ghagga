@@ -160,7 +160,7 @@ export const reviews = pgTable(
       .references(() => repositories.id, { onDelete: 'cascade' })
       .notNull(),
     prNumber: integer('pr_number').notNull(),
-    status: varchar('status', { length: 30 }).notNull(), // PASSED | FAILED | NEEDS_HUMAN_REVIEW | SKIPPED
+    status: varchar('status', { length: 30 }).notNull(), // PASSED | FAILED | NEEDS_HUMAN_REVIEW | SKIPPED | PARTIAL | INCONCLUSIVE
     mode: varchar('mode', { length: 20 }).notNull(),
     summary: text('summary'),
     findings: jsonb('findings').$type<unknown[]>(),

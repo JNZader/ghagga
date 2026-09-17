@@ -1384,6 +1384,7 @@ function getExitCode(status: ReviewStatus): number {
     case 'FAILED':
     case 'NEEDS_HUMAN_REVIEW':
     case 'PARTIAL':
+    case 'INCONCLUSIVE':
       return 1;
     default: {
       const _exhaustive: never = status;
