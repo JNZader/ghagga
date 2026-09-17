@@ -30,6 +30,7 @@ import {
   registerLens,
   resetLensRegistry,
   runFanOutReview,
+  stampFindingLedger,
   validateLens,
 } from './fan-out-lenses.js';
 
@@ -218,6 +219,73 @@ describe('mergeFindings', () => {
   });
 });
 
+// ─── stampFindingLedger ─────────────────────────────────────────
+
+describe('stampFindingLedger', () => {
+  it('stamps per-lens ids without mutating inputs', () => {
+    const security1 = makeFinding({
+      category: 'security',
+      file: 'auth.ts',
+      line: 10,
+      message: 'SQL injection',
+    });
+    const security2 = makeFinding({
+      category: 'security',
+      file: 'session.ts',
+      line: 4,
+      message: 'Weak session',
+    });
+    const contrarian = makeFinding({
+      category: 'contrarian',
+      file: 'index.ts',
+      line: 7,
+      message: 'Whole-diff issue',
+    });
+
+    const stamped = stampFindingLedger([security1, security2, contrarian]);
+
+    expect(stamped.map((f) => f.id)).toEqual(['security-001', 'security-002', 'contrarian-001']);
+    expect(stamped[0]).toMatchObject({
+      lens: 'security',
+      location: 'auth.ts:10',
+      ledgerStatus: 'open',
+      evidence: 'SQL injection',
+    });
+    expect(stamped[1]).toMatchObject({
+      lens: 'security',
+      location: 'session.ts:4',
+      ledgerStatus: 'open',
+      evidence: 'Weak session',
+    });
+    expect(stamped[2]).toMatchObject({
+      lens: 'contrarian',
+      location: 'index.ts:7',
+      ledgerStatus: 'open',
+      evidence: 'Whole-diff issue',
+    });
+
+    expect(security1.id).toBeUndefined();
+    expect(security1.ledgerStatus).toBeUndefined();
+    expect(security1.lens).toBeUndefined();
+    expect(security2.id).toBeUndefined();
+    expect(contrarian.id).toBeUndefined();
+  });
+
+  it('uses unknown lens and file-only location when category or line is missing', () => {
+    const stamped = stampFindingLedger([
+      makeFinding({ category: '', file: 'orphan.ts', line: undefined, message: 'No lens' }),
+    ]);
+
+    expect(stamped[0]).toMatchObject({
+      id: 'unknown-001',
+      lens: 'unknown',
+      location: 'orphan.ts',
+      ledgerStatus: 'open',
+      evidence: 'No lens',
+    });
+  });
+});
+
 // ─── runFanOutReview ────────────────────────────────────────────
 
 describe('runFanOutReview', () => {
@@ -315,6 +383,22 @@ describe('runFanOutReview', () => {
 
     // Same file:line from 2 lenses → deduped to 1
     expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]?.id).toBeDefined();
+  });
+
+  it('stamps a ledger on merged fan-out findings', async () => {
+    const fn = makeFakeGenerateFn(
+      FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection'),
+    );
+
+    const result = await runFanOutReview(makeInput({ generateFns: [fn], lenses: ['security'] }));
+
+    expect(result.findings[0]).toMatchObject({
+      id: 'security-001',
+      lens: 'security',
+      location: 'auth.ts:10',
+      ledgerStatus: 'open',
+    });
   });
 
   it('keeps overall PASSED when a lens is INCONCLUSIVE with no findings', async () => {

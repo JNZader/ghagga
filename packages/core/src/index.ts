@@ -14,6 +14,7 @@ export { reviewPipeline } from './pipeline.js';
 export type {
   ConsensusStance,
   ConsensusVote,
+  FindingLedgerStatus,
   FindingSeverity,
   FindingSource,
   // Diagnostic types
@@ -83,6 +84,7 @@ export {
   registerLens,
   resetLensRegistry,
   runFanOutReview,
+  stampFindingLedger,
   validateLens,
 } from './agents/fan-out-lenses.js';
 
@@ -101,6 +103,7 @@ export {
   DEFAULT_MODELS,
   DEFAULT_SETTINGS,
   DEFAULT_VERSIONING_CONFIG,
+  FINDING_LEDGER_STATUS,
 } from './types.js';
 
 // ─── Utilities (for advanced usage) ─────────────────────────────

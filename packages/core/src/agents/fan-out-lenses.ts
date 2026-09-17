@@ -19,10 +19,12 @@ import type {
   FindingSeverity,
   LLMProvider,
   ProgressCallback,
+  ReviewFinding,
   ReviewLevel,
   ReviewResult,
   ReviewStatus,
 } from '../types.js';
+import { FINDING_LEDGER_STATUS } from '../types.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import {
   buildMemoryContext,
@@ -510,6 +512,31 @@ export function mergeFindings(
   });
 }
 
+/**
+ * Stamp a first-class per-finding ledger onto fan-out results.
+ * Does not mutate inputs; returns new objects.
+ */
+export function stampFindingLedger(findings: ReviewFinding[]): ReviewFinding[] {
+  const counters = new Map<string, number>();
+
+  return findings.map((finding) => {
+    const lens = finding.category || 'unknown';
+    const next = (counters.get(lens) ?? 0) + 1;
+    counters.set(lens, next);
+    const location =
+      typeof finding.line === 'number' ? `${finding.file}:${finding.line}` : finding.file;
+
+    return {
+      ...finding,
+      id: `${lens}-${String(next).padStart(3, '0')}`,
+      lens,
+      location,
+      ledgerStatus: FINDING_LEDGER_STATUS.open,
+      evidence: finding.message,
+    };
+  });
+}
+
 // ─── Main Function ─────────────────────────────────────────────
 
 /**
@@ -788,8 +815,8 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     message: `Merging ${allFindings.length} findings from ${resolvedLenses.length} lenses...`,
   });
 
-  // ── Step 3: Merge and deduplicate ───────────────────────────
-  const mergedFindings = mergeFindings(allFindings);
+  // ── Step 3: Merge and deduplicate, then stamp the ledger ───
+  const mergedFindings = stampFindingLedger(mergeFindings(allFindings));
 
   // ── Step 4: Determine overall status ────────────────────────
   const hasCritical = mergedFindings.some((f) => f.severity === 'critical');
