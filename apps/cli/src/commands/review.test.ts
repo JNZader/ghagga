@@ -1564,3 +1564,141 @@ describe('reviewCommand — blast-radius glue integration (R4-002)', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// Fail-closed --anchor (hybrid-4r-anchor)
+// process.exit is mocked as a no-op — every fail-closed path MUST
+// return after exit(1) so reviewPipeline is never reached.
+// ═══════════════════════════════════════════════════════════════
+
+describe('reviewCommand — fail-closed --anchor', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: mock spy type
+  let logSpy: any;
+  // biome-ignore lint/suspicious/noExplicitAny: mock spy type
+  let errorSpy: any;
+  // biome-ignore lint/suspicious/noExplicitAny: mock spy type
+  let exitSpy: any;
+
+  const DIFF = 'diff --git a/file.ts b/file.ts\n+line';
+  const MATCHING_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const OTHER_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // biome-ignore lint/suspicious/noExplicitAny: mock cast
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
+    mockExistsSync.mockReturnValue(false);
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  function mockGitDiffAndRevs(headSha: string, verifySha: string) {
+    mockExecSync.mockImplementation((cmd: unknown) => {
+      const c = String(cmd);
+      if (c.includes('--verify')) {
+        return `${verifySha}\n` as never;
+      }
+      if (c.includes('rev-parse HEAD')) {
+        return `${headSha}\n` as never;
+      }
+      return DIFF as never;
+    });
+  }
+
+  it('calls reviewPipeline when options.anchor matches HEAD', async () => {
+    mockGitDiffAndRevs(MATCHING_SHA, MATCHING_SHA);
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ anchor: 'aaaaaaaa' }));
+
+    expect(mockReviewPipeline).toHaveBeenCalledTimes(1);
+  });
+
+  it('exits 1 on HEAD/anchor mismatch and does not run the pipeline', async () => {
+    mockGitDiffAndRevs(MATCHING_SHA, OTHER_SHA);
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ anchor: 'aaaaaaaa' }));
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('anchor'));
+    expect(mockReviewPipeline).not.toHaveBeenCalled();
+  });
+
+  it('skips the mismatch check when fileConfig.anchor is "auto"', async () => {
+    mockExecSync.mockReturnValue(DIFF as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ anchor: 'auto' }));
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    expect(mockReviewPipeline).toHaveBeenCalledTimes(1);
+  });
+
+  it('exits 1 on invalid anchor values and does not run the pipeline', async () => {
+    mockExecSync.mockReturnValue(DIFF as never);
+    const { reviewCommand } = await import('./review.js');
+
+    await reviewCommand('.', defaultOptions({ anchor: '../x' }));
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('anchor'));
+    expect(mockReviewPipeline).not.toHaveBeenCalled();
+
+    exitSpy.mockClear();
+    errorSpy.mockClear();
+    mockReviewPipeline.mockClear();
+
+    await reviewCommand('.', defaultOptions({ anchor: 'main' }));
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(mockReviewPipeline).not.toHaveBeenCalled();
+  });
+
+  it('lets options.anchor override config auto and still mismatch-fails', async () => {
+    mockGitDiffAndRevs(MATCHING_SHA, OTHER_SHA);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ anchor: 'auto' }));
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ anchor: 'aaaaaaaa' }));
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('anchor'));
+    expect(mockReviewPipeline).not.toHaveBeenCalled();
+  });
+
+  it('exits 1 when git rev-parse throws and does not run the pipeline', async () => {
+    mockExecSync.mockImplementation((cmd: unknown) => {
+      const c = String(cmd);
+      if (c.includes('rev-parse')) {
+        throw new Error('fatal: not a git repository');
+      }
+      return DIFF as never;
+    });
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ anchor: 'aaaaaaaa' }));
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('anchor'));
+    expect(mockReviewPipeline).not.toHaveBeenCalled();
+  });
+
+  it('exits 1 when resolved HEAD or verify SHA is empty and does not run the pipeline', async () => {
+    mockGitDiffAndRevs('', MATCHING_SHA);
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ anchor: 'aaaaaaaa' }));
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('anchor'));
+    expect(mockReviewPipeline).not.toHaveBeenCalled();
+  });
+});

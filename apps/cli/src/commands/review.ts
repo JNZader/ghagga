@@ -126,6 +126,11 @@ export interface ReviewOptions {
   /** Path to custom lens definitions directory (from --lens-dir flag). */
   lensDir?: string;
   /**
+   * Fail-closed review anchor. When a hex SHA, HEAD must resolve to that
+   * commit before the pipeline runs. `"auto"` skips the mismatch check.
+   */
+  anchor?: string;
+  /**
    * Explicit blast-radius override from `--no-blast-radius`. `false` forces
    * blast-radius off regardless of graph presence / config; `undefined`
    * defers to `.ghagga.json`/auto-detection (see `resolveBlastRadiusEnabled`).
@@ -202,6 +207,8 @@ interface GhaggaConfig {
    * over this config key.
    */
   enableBlastRadius?: boolean;
+  /** Fail-closed review anchor. Hex SHA or `"auto"`. CLI `--anchor` wins. */
+  anchor?: string;
 }
 
 // ─── Main Command ───────────────────────────────────────────────
@@ -290,6 +297,17 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
 
     // Step 2: Load optional config file
     const fileConfig = loadConfigFile(repoPath, options.config);
+
+    // Step 2.5: Fail-closed --anchor. CLI flag wins over `.ghagga.json`.
+    // Omitted / "auto" skip the mismatch check. Anything else must be a
+    // hex SHA that resolves to the same commit as HEAD — never checkout.
+    const resolvedAnchor = options.anchor !== undefined ? options.anchor : fileConfig.anchor;
+    const anchorCheck = checkReviewAnchor(repoPath, resolvedAnchor);
+    if (!anchorCheck.ok) {
+      tui.log.error(anchorCheck.message);
+      process.exit(1);
+      return;
+    }
 
     // Step 3: Merge settings (CLI options take priority over config file)
     const settings = mergeSettings(options, fileConfig);
@@ -870,6 +888,67 @@ function issueLog(options: ReviewOptions, message: string): void {
   } else {
     tui.log.success(message);
   }
+}
+
+// ─── Fail-closed review anchor ───────────────────────────────────
+
+const ANCHOR_SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+/** Result of {@link checkReviewAnchor}. `ok: false` must exit(1) and return. */
+interface AnchorCheckResult {
+  ok: boolean;
+  message: string;
+}
+
+/**
+ * Enforce fail-closed `--anchor` / `.ghagga.json` `anchor`.
+ * Does not mutate the worktree. Does not require a clean index.
+ */
+function checkReviewAnchor(repoPath: string, anchor: string | undefined): AnchorCheckResult {
+  if (anchor === undefined || anchor === 'auto') {
+    return { ok: true, message: '' };
+  }
+
+  if (!ANCHOR_SHA_RE.test(anchor)) {
+    return {
+      ok: false,
+      message: `❌ Invalid anchor "${anchor}". Expected a git SHA (7–40 hex chars) or "auto".`,
+    };
+  }
+
+  let headSha = '';
+  let requestedSha = '';
+  try {
+    headSha = execSync('git rev-parse HEAD', {
+      cwd: repoPath,
+      encoding: 'utf-8',
+    }).trim();
+    requestedSha = execSync(`git rev-parse --verify ${anchor}^{commit}`, {
+      cwd: repoPath,
+      encoding: 'utf-8',
+    }).trim();
+  } catch {
+    return {
+      ok: false,
+      message: `❌ Could not resolve git HEAD or requested anchor ${anchor}.`,
+    };
+  }
+
+  if (!headSha || !requestedSha) {
+    return {
+      ok: false,
+      message: `❌ Could not resolve git HEAD or requested anchor ${anchor}.`,
+    };
+  }
+
+  if (headSha !== requestedSha) {
+    return {
+      ok: false,
+      message: `❌ HEAD ${headSha} does not match requested anchor ${requestedSha}.`,
+    };
+  }
+
+  return { ok: true, message: '' };
 }
 
 // ─── Git Diff ───────────────────────────────────────────────────

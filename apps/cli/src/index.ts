@@ -145,6 +145,10 @@ program
     '--issue <target>',
     'Create/update a GitHub issue with review results (use "new" or issue number)',
   )
+  .option(
+    '--anchor <sha>',
+    'Fail closed unless HEAD resolves to this commit SHA (use "auto" to skip)',
+  )
   .option('--lenses <names>', 'Comma-separated lens names for fan-out mode (e.g., "security,wcag")')
   .option(
     '--lens-dir <path>',
@@ -334,6 +338,7 @@ program
       listTools: options.listTools ?? false,
       lenses: options.lenses,
       lensDir: options.lensDir,
+      anchor: options.anchor,
     });
   });
 
@@ -483,6 +488,8 @@ interface ReviewCommandOptions {
   // Pluggable review lenses (fan-out mode)
   lenses?: string;
   lensDir?: string;
+  /** Fail-closed review anchor SHA, or "auto". */
+  anchor?: string;
 }
 
 interface AuditCommandOptions {
