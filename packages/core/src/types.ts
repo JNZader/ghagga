@@ -256,6 +256,11 @@ export interface ReviewSettings {
    * Default/omit keeps round-robin assignment across generateFns.
    */
   pinLensesToFirst?: boolean;
+  /**
+   * Opt-in unlensed whole-diff contrarian voices in fan-out.
+   * When set, must be an integer >= 1. Requires pinLensesToFirst.
+   */
+  contrarianCount?: number;
 
   /** Enable bidirectional code-doc validation. Default: false. */
   enableDocValidation?: boolean;

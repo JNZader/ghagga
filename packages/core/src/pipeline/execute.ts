@@ -271,6 +271,11 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             // Forward lens selection from settings (CLI flags > config > defaults)
             ...(input.settings.lenses ? { lenses: input.settings.lenses } : {}),
             ...(input.settings.pinLensesToFirst === true ? { pinLensesToFirst: true } : {}),
+            ...(typeof input.settings.contrarianCount === 'number' &&
+            Number.isInteger(input.settings.contrarianCount) &&
+            input.settings.contrarianCount >= 1
+              ? { contrarianCount: input.settings.contrarianCount }
+              : {}),
           });
           break;
 

@@ -481,6 +481,97 @@ FINDINGS:
     ).rejects.toThrow(/pinLensesToFirst requires a non-empty generateFns array/);
   });
 
+  it('pins lenses to fn1 and runs one unlensed contrarian on fn2', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn2 = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    await runFanOutReview(
+      makeInput({
+        generateFns: [fn1, fn2],
+        lenses: ['security', 'performance', 'error-handling'],
+        pinLensesToFirst: true,
+        contrarianCount: 1,
+      }),
+    );
+
+    expect(fn1).toHaveBeenCalledTimes(3);
+    expect(fn2).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects contrarianCount without pinLensesToFirst', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn2 = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    await expect(
+      runFanOutReview(
+        makeInput({
+          generateFns: [fn1, fn2],
+          lenses: ['security'],
+          contrarianCount: 1,
+        }),
+      ),
+    ).rejects.toThrow(/contrarianCount/);
+  });
+
+  it('rejects pin + contrarianCount 1 when generateFns is too short', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    await expect(
+      runFanOutReview(
+        makeInput({
+          generateFns: [fn1],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+          contrarianCount: 1,
+        }),
+      ),
+    ).rejects.toThrow(/contrarianCount/);
+  });
+
+  it('merges unlensed contrarian findings with category contrarian', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn2 = makeFakeGenerateFn(
+      FINDING_RESPONSE('high', 'security', 'auth.ts', 10, 'Unlensed whole-diff issue'),
+    );
+
+    const result = await runFanOutReview(
+      makeInput({
+        generateFns: [fn1, fn2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        contrarianCount: 1,
+      }),
+    );
+
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          file: 'auth.ts',
+          message: 'Unlensed whole-diff issue',
+          category: 'contrarian',
+          source: 'ai',
+        }),
+      ]),
+    );
+  });
+
+  it('fails closed when contrarianCount is 0 or 1.5', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn2 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const base = {
+      generateFns: [fn1, fn2],
+      lenses: ['security'] as string[],
+      pinLensesToFirst: true,
+    };
+
+    await expect(runFanOutReview(makeInput({ ...base, contrarianCount: 0 }))).rejects.toThrow(
+      /contrarianCount/,
+    );
+    await expect(runFanOutReview(makeInput({ ...base, contrarianCount: 1.5 }))).rejects.toThrow(
+      /contrarianCount/,
+    );
+  });
+
   it('applies custom registered lenses', async () => {
     registerLens({
       name: 'i18n',
