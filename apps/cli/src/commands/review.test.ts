@@ -905,6 +905,55 @@ describe('reviewCommand — functional tests', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('contrarianCount'));
   });
 
+  it('sets settings.refuterCount when .ghagga.json refuterCount is 2', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ refuterCount: 2 }));
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const settings = callArgs.settings as Record<string, unknown>;
+    expect(settings.refuterCount).toBe(2);
+  });
+
+  it('leaves settings.refuterCount undefined when .ghagga.json omits refuterCount', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ reviewLevel: 'strict' }));
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const settings = callArgs.settings as Record<string, unknown>;
+    expect(settings.refuterCount).toBeUndefined();
+  });
+
+  it('rejects a non-integer or below-2 refuterCount with a clear error and exits 1', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+
+    mockReadFileSync.mockReturnValue(JSON.stringify({ refuterCount: 'yes' }));
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('refuterCount'));
+
+    exitSpy.mockClear();
+    errorSpy.mockClear();
+    mockReadFileSync.mockReturnValue(JSON.stringify({ refuterCount: 1 }));
+    await reviewCommand('.', defaultOptions());
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('refuterCount'));
+  });
+
   it('should handle non-Error thrown objects in catch block', async () => {
     mockExecSync.mockReturnValue('diff' as never);
     mockReviewPipeline.mockRejectedValue('string error');

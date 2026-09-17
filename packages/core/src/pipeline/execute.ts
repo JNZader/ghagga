@@ -276,6 +276,11 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             input.settings.contrarianCount >= 1
               ? { contrarianCount: input.settings.contrarianCount }
               : {}),
+            ...(typeof input.settings.refuterCount === 'number' &&
+            Number.isInteger(input.settings.refuterCount) &&
+            input.settings.refuterCount >= 2
+              ? { refuterCount: input.settings.refuterCount }
+              : {}),
           });
           break;
 

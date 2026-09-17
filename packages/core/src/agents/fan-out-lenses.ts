@@ -447,6 +447,14 @@ export interface FanOutReviewInput {
    */
   contrarianCount?: number;
 
+  /**
+   * Opt-in batched 2-of-K refuters over the closed critical ledger.
+   * When set, must be an integer >= 2, requires pinLensesToFirst === true,
+   * and generateFns.length >= 1 + (contrarianCount or 0) + refuterCount.
+   * Refuter i uses generateFns[1 + (contrarianCount or 0) + i].
+   */
+  refuterCount?: number;
+
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
 }
@@ -469,6 +477,34 @@ FINDINGS:
   SUGGESTION: [specific fix]
 
 FAILED if: Any critical or high issues. PASSED otherwise.`;
+
+/** Batched closed-list refuter. Not a lens and not SIMPLE_REVIEW_SYSTEM. */
+const REFUTER_SYSTEM = `You are a batched finding refuter. You are not a review lens.
+
+You receive a closed candidate list. Do not add findings. Do not invent ids.
+For each candidate id, emit exactly one verdict: stands or refute.
+A missing or malformed verdict is treated as stands.
+
+Format each verdict on its own line as:
+<id>: stands
+<id>: refute`;
+
+/**
+ * Parse per-id refuter verdicts from model text.
+ * Only explicit `refute` or `stands` lines count. Unknown ids are kept in the
+ * map for the caller to ignore. Missing candidate ids have no map entry.
+ */
+export function parseRefuterVerdicts(text: string): Map<string, 'refute' | 'stands'> {
+  const verdicts = new Map<string, 'refute' | 'stands'>();
+  const pattern = /^\s*([A-Za-z0-9][A-Za-z0-9_-]*)\s*:\s*(refute|stands)\b/gim;
+  for (const match of text.matchAll(pattern)) {
+    const id = match[1];
+    const verdict = match[2]?.toLowerCase();
+    if (!id || (verdict !== 'refute' && verdict !== 'stands')) continue;
+    verdicts.set(id, verdict);
+  }
+  return verdicts;
+}
 
 // ─── Merge Logic ───────────────────────────────────────────────
 
@@ -598,6 +634,27 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     if (resolvedGenerateFns.length < 1 + contrarianCount) {
       throw new Error(
         `contrarianCount ${contrarianCount} requires generateFns.length >= ${1 + contrarianCount}`,
+      );
+    }
+  }
+
+  const refuterCount = input.refuterCount;
+  if (refuterCount !== undefined) {
+    if (!Number.isInteger(refuterCount) || refuterCount < 2) {
+      throw new Error(`refuterCount must be an integer >= 2, received: ${refuterCount}`);
+    }
+    if (input.pinLensesToFirst !== true) {
+      throw new Error('refuterCount requires pinLensesToFirst === true');
+    }
+    const contrarianN =
+      typeof contrarianCount === 'number' &&
+      Number.isInteger(contrarianCount) &&
+      contrarianCount >= 1
+        ? contrarianCount
+        : 0;
+    if (resolvedGenerateFns.length < 1 + contrarianN + refuterCount) {
+      throw new Error(
+        `refuterCount ${refuterCount} requires generateFns.length >= ${1 + contrarianN + refuterCount}`,
       );
     }
   }
@@ -816,11 +873,85 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   });
 
   // ── Step 3: Merge and deduplicate, then stamp the ledger ───
-  const mergedFindings = stampFindingLedger(mergeFindings(allFindings));
+  let mergedFindings = stampFindingLedger(mergeFindings(allFindings));
+
+  if (typeof refuterCount === 'number' && Number.isInteger(refuterCount) && refuterCount >= 2) {
+    const candidates = mergedFindings.filter((f) => f.severity === 'critical' && f.id);
+    if (candidates.length > 0) {
+      const contrarianN =
+        typeof contrarianCount === 'number' &&
+        Number.isInteger(contrarianCount) &&
+        contrarianCount >= 1
+          ? contrarianCount
+          : 0;
+      const refuterStart = 1 + contrarianN;
+      const candidateBlock = candidates
+        .map((c) =>
+          [
+            `- ID: ${c.id}`,
+            `  LENS: ${c.lens ?? c.category}`,
+            `  LOCATION: ${c.location ?? c.file}`,
+            `  SEVERITY: ${c.severity}`,
+            `  EVIDENCE: ${c.evidence ?? c.message}`,
+          ].join('\n'),
+        )
+        .join('\n');
+      const refuterUser = `${userPrompt}\n\nCANDIDATES:\n${candidateBlock}`;
+      const refuterSystem = [REFUTER_SYSTEM, UNTRUSTED_CONTENT_POLICY].join('\n');
+
+      const refuteVotes = new Map<string, number>();
+      for (const candidate of candidates) {
+        if (candidate.id) refuteVotes.set(candidate.id, 0);
+      }
+
+      const refuterTasks = Array.from({ length: refuterCount }, (_, i) => {
+        return async () => {
+          const generateFn = resolvedGenerateFns[refuterStart + i] as GenerateTextFn;
+          const result = await generateFn(refuterSystem, refuterUser);
+          const deadReason = getDeadVoiceReason(result.text);
+          if (deadReason) {
+            throw new Error(`Refuter ${i + 1} (${result.provider}/${result.model}): ${deadReason}`);
+          }
+          return result;
+        };
+      });
+
+      emit({
+        step: 'fan-out-refuter',
+        message: `Launching ${refuterCount} batched refuter voice(s) on ${candidates.length} critical finding(s)`,
+      });
+
+      const refuterResults = await runWithConcurrency(refuterTasks, { concurrency, delayMs });
+      for (const result of refuterResults) {
+        if (result.status !== 'fulfilled') continue;
+        totalTokens += result.value.tokensUsed;
+        const verdicts = parseRefuterVerdicts(result.value.text);
+        for (const candidate of candidates) {
+          if (!candidate.id) continue;
+          if (verdicts.get(candidate.id) === 'refute') {
+            refuteVotes.set(candidate.id, (refuteVotes.get(candidate.id) ?? 0) + 1);
+          }
+        }
+      }
+
+      mergedFindings = mergedFindings.map((finding) => {
+        if (finding.severity !== 'critical' || !finding.id) return finding;
+        const votes = refuteVotes.get(finding.id) ?? 0;
+        if (votes >= 2) {
+          return { ...finding, ledgerStatus: FINDING_LEDGER_STATUS.refuted };
+        }
+        return finding;
+      });
+    }
+  }
 
   // ── Step 4: Determine overall status ────────────────────────
-  const hasCritical = mergedFindings.some((f) => f.severity === 'critical');
-  const highCount = mergedFindings.filter((f) => f.severity === 'high').length;
+  const hasCritical = mergedFindings.some(
+    (f) => f.severity === 'critical' && f.ledgerStatus !== FINDING_LEDGER_STATUS.refuted,
+  );
+  const highCount = mergedFindings.filter(
+    (f) => f.severity === 'high' && f.ledgerStatus !== FINDING_LEDGER_STATUS.refuted,
+  ).length;
   const anyFailed = lensStatuses.includes('FAILED');
 
   let status: ReviewStatus;
