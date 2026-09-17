@@ -856,6 +856,55 @@ describe('reviewCommand — functional tests', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('pinLensesToFirst'));
   });
 
+  it('sets settings.contrarianCount when .ghagga.json contrarianCount is 1', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ contrarianCount: 1 }));
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const settings = callArgs.settings as Record<string, unknown>;
+    expect(settings.contrarianCount).toBe(1);
+  });
+
+  it('leaves settings.contrarianCount undefined when .ghagga.json omits contrarianCount', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ reviewLevel: 'strict' }));
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const settings = callArgs.settings as Record<string, unknown>;
+    expect(settings.contrarianCount).toBeUndefined();
+  });
+
+  it('rejects a non-integer or zero contrarianCount with a clear error and exits 1', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+
+    mockReadFileSync.mockReturnValue(JSON.stringify({ contrarianCount: 'yes' }));
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('contrarianCount'));
+
+    exitSpy.mockClear();
+    errorSpy.mockClear();
+    mockReadFileSync.mockReturnValue(JSON.stringify({ contrarianCount: 0 }));
+    await reviewCommand('.', defaultOptions());
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('contrarianCount'));
+  });
+
   it('should handle non-Error thrown objects in catch block', async () => {
     mockExecSync.mockReturnValue('diff' as never);
     mockReviewPipeline.mockRejectedValue('string error');

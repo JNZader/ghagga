@@ -178,6 +178,11 @@ interface GhaggaConfig {
    */
   pinLensesToFirst?: boolean;
   /**
+   * Opt-in unlensed whole-diff contrarian voices in fan-out.
+   * When set, must be a JSON number that is an integer >= 1.
+   */
+  contrarianCount?: number;
+  /**
    * Per-voice cross-engine provider chain (BL-CLI-PROVIDER-CHAIN). When set,
    * consensus (3-vote) and fan-out (N-lens) modes round-robin each voice
    * across these gateway entries instead of hammering a single engine.
@@ -982,6 +987,20 @@ function loadConfigFile(repoPath: string, configPath?: string): GhaggaConfig {
     return {};
   }
 
+  if (parsed.contrarianCount !== undefined) {
+    if (
+      typeof parsed.contrarianCount !== 'number' ||
+      !Number.isInteger(parsed.contrarianCount) ||
+      parsed.contrarianCount < 1
+    ) {
+      tui.log.error(
+        `❌ Invalid .ghagga.json contrarianCount: expected integer >= 1, got ${JSON.stringify(parsed.contrarianCount)}`,
+      );
+      process.exit(1);
+      return {};
+    }
+  }
+
   return parsed;
 }
 
@@ -1220,6 +1239,11 @@ function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): Review
     lenses,
     lensDir,
     ...(fileConfig.pinLensesToFirst === true ? { pinLensesToFirst: true } : {}),
+    ...(typeof fileConfig.contrarianCount === 'number' &&
+    Number.isInteger(fileConfig.contrarianCount) &&
+    fileConfig.contrarianCount >= 1
+      ? { contrarianCount: fileConfig.contrarianCount }
+      : {}),
   };
 }
 

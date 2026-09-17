@@ -673,6 +673,26 @@ describe('golden: baseline & modes', () => {
     );
   });
 
+  it('mode: fan-out forwards contrarianCount only when pin and count are set', async () => {
+    await runGolden(makeInput({ mode: 'fan-out' }));
+    expect(runFanOutReview).toHaveBeenCalledOnce();
+    expect((runFanOutReview as M<typeof runFanOutReview>).mock.calls[0]?.[0]).not.toHaveProperty(
+      'contrarianCount',
+    );
+
+    (runFanOutReview as M<typeof runFanOutReview>).mockClear();
+
+    await runGolden(
+      makeInput({
+        mode: 'fan-out',
+        settings: makeSettings({ pinLensesToFirst: true, contrarianCount: 1 }),
+      }),
+    );
+    expect(runFanOutReview).toHaveBeenCalledWith(
+      expect.objectContaining({ pinLensesToFirst: true, contrarianCount: 1 }),
+    );
+  });
+
   it('mode: diagnostic falls back to simple on gateway', async () => {
     const run = await runGolden(makeInput({ mode: 'diagnostic' }));
     expect(runDiagnosticReview).not.toHaveBeenCalled();

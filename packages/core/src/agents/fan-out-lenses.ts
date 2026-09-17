@@ -438,9 +438,35 @@ export interface FanOutReviewInput {
    */
   pinLensesToFirst?: boolean;
 
+  /**
+   * Opt-in count of unlensed whole-diff contrarian voices.
+   * When set, must be an integer >= 1, requires pinLensesToFirst === true,
+   * and generateFns.length >= 1 + N. Contrarian i uses generateFns[1 + i].
+   */
+  contrarianCount?: number;
+
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
 }
+
+/** Unlensed whole-diff voice. Not a specialty lens and not SIMPLE_REVIEW_SYSTEM. */
+const CONTRARIAN_SYSTEM = `You are an unlensed whole-diff code reviewer. You have no specialty lens.
+
+Report only real defects you are confident about. Do not invent issues.
+
+Format your response EXACTLY as:
+
+STATUS: [PASSED or FAILED]
+SUMMARY: [1-2 sentence assessment]
+FINDINGS:
+- SEVERITY: [critical|high|medium|low|info]
+  CATEGORY: contrarian
+  FILE: [file path]
+  LINE: [line number or "N/A"]
+  MESSAGE: [clear description of the defect]
+  SUGGESTION: [specific fix]
+
+FAILED if: Any critical or high issues. PASSED otherwise.`;
 
 // ─── Merge Logic ───────────────────────────────────────────────
 
@@ -534,6 +560,21 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     throw new Error('pinLensesToFirst requires a non-empty generateFns array');
   }
 
+  const contrarianCount = input.contrarianCount;
+  if (contrarianCount !== undefined) {
+    if (!Number.isInteger(contrarianCount) || contrarianCount < 1) {
+      throw new Error(`contrarianCount must be an integer >= 1, received: ${contrarianCount}`);
+    }
+    if (input.pinLensesToFirst !== true) {
+      throw new Error('contrarianCount requires pinLensesToFirst === true');
+    }
+    if (resolvedGenerateFns.length < 1 + contrarianCount) {
+      throw new Error(
+        `contrarianCount ${contrarianCount} requires generateFns.length >= ${1 + contrarianCount}`,
+      );
+    }
+  }
+
   const concurrency = input.concurrency ?? 3;
   const delayMs = input.delayMs ?? 0;
 
@@ -600,6 +641,56 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
   const results = await runWithConcurrency(lensTasks, { concurrency, delayMs });
 
+  type VoiceCallResult = {
+    name: string;
+    label: string;
+    text: string;
+    tokensUsed: number;
+    providerUsed: string;
+    modelUsed: string;
+  };
+
+  let contrarianResults: Array<
+    { status: 'fulfilled'; value: VoiceCallResult } | { status: 'rejected'; reason: unknown }
+  > = [];
+
+  if (
+    typeof contrarianCount === 'number' &&
+    Number.isInteger(contrarianCount) &&
+    contrarianCount >= 1
+  ) {
+    const contrarianTasks = Array.from({ length: contrarianCount }, (_, i) => {
+      return async (): Promise<VoiceCallResult> => {
+        const generateFn = resolvedGenerateFns[1 + i] as GenerateTextFn;
+        const system = [CONTRARIAN_SYSTEM, UNTRUSTED_CONTENT_POLICY].join('\n');
+        const result = await generateFn(system, userPrompt);
+
+        const deadReason = getDeadVoiceReason(result.text);
+        if (deadReason) {
+          throw new Error(
+            `Contrarian ${i + 1} (${result.provider}/${result.model}): ${deadReason}`,
+          );
+        }
+
+        return {
+          name: 'contrarian',
+          label: `Contrarian ${i + 1}`,
+          text: result.text,
+          tokensUsed: result.tokensUsed,
+          providerUsed: result.provider,
+          modelUsed: result.model,
+        };
+      };
+    });
+
+    emit({
+      step: 'fan-out-contrarian',
+      message: `Launching ${contrarianCount} unlensed contrarian voice(s)`,
+    });
+
+    contrarianResults = await runWithConcurrency(contrarianTasks, { concurrency, delayMs });
+  }
+
   // ── Step 2: Collect findings from all lenses ────────────────
   let totalTokens = 0;
   const allFindings: import('../types.js').ReviewFinding[] = [];
@@ -649,6 +740,45 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       emit({
         step: `lens-${lens.name}`,
         message: `✗ ${lens.label} — FAILED: ${reason}`,
+      });
+    }
+  }
+
+  for (let i = 0; i < contrarianResults.length; i++) {
+    const result = contrarianResults[i];
+    const voiceName = `contrarian-${i + 1}`;
+    if (!result) continue;
+
+    if (result.status === 'fulfilled') {
+      totalTokens += result.value.tokensUsed;
+      modelsUsed.push(`${voiceName}:${result.value.providerUsed}/${result.value.modelUsed}`);
+
+      const findings = parseFindingsBlock(result.value.text);
+      for (const finding of findings) {
+        finding.source = 'ai';
+        if (!finding.category.includes('contrarian')) {
+          finding.category = 'contrarian';
+        }
+      }
+      allFindings.push(...findings);
+
+      const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED|INCONCLUSIVE)/i.exec(
+        result.value.text,
+      );
+      const voiceStatus = (statusMatch?.[1]?.toUpperCase() ?? 'NEEDS_HUMAN_REVIEW') as ReviewStatus;
+      lensStatuses.push(voiceStatus);
+
+      emit({
+        step: voiceName,
+        message: `✓ ${result.value.label} — ${findings.length} finding(s), ${result.value.tokensUsed} tokens`,
+        detail: result.value.text,
+      });
+    } else {
+      const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      modelsUsed.push(`${voiceName}:FAILED`);
+      emit({
+        step: voiceName,
+        message: `✗ Contrarian ${i + 1} — FAILED: ${reason}`,
       });
     }
   }
