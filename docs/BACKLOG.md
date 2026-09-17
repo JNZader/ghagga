@@ -4,70 +4,6 @@ Tracked-but-deferred work. OPEN items at the top.
 
 ## OPEN
 
-### BL-ERE-TRANSFER — import ERE's evidence discipline into the triage path (provenance + strategic frame)
-
-Umbrella entry for a small family of transfers from the **evidence-review-engine**
-(ERE, `~/programacion/ere-reviewer-authority-hardening-v2`) — a sibling project
-that is a content-addressed *verification kernel* for auditing an issue backlog
-against real code. This entry records where the sub-items came from, the
-strategic call, and what NOT to port. Sub-items: BL-TRIAGE-QUEUE-ATOMIC,
-BL-TRIAGE-CITED-VERDICT, BL-TRIAGE-SERVER-CODE-BLIND.
-
-**Provenance (2026-08-25):** three blind agents (fable/opus/sonnet), each reading
-BOTH codebases independently with no shared context, then cross-checked. Only
-findings that survived the cross-check (or were verified by hand) are recorded
-here — single-voice claims were re-read against the source before filing.
-
-**Strategic call — different centers of gravity, transfer discipline not
-machinery.** ghagga is a *delivery* product: three surfaces (Server/Action/CLI),
-BullMQ workers, a human-approval dashboard, an injection-defense layer, and a
-trust model that is *human-in-the-loop* (nothing auto-posts —
-`packages/triage-engine/src/engine.ts`). ERE is a *verification kernel*: its
-trust model is *cryptographic* (a verdict is invalid unless it cites
-content-addressed frozen evidence, and a baseline is invalid unless the real
-verifier re-derives every digest). Merging them wholesale would bolt a
-manifest-verifying lifecycle onto a system whose actual guarantee is "a human
-read the draft". The right relationship: ERE stays the R&D bench where the
-verification *contracts* get proven; ghagga imports the contracts (fail-closed
-verdict schema, cite-or-abstain gate, atomic persistence, revision pinning) as
-ordinary TypeScript — without the manifest/promote kernel.
-
-**Note this cuts toward what ghagga already wants:** BL-HYBRID-4R-MODE
-independently specifies a schema-validated ledger (feature 3) and `--anchor
-<sha>` frozen-tree anchoring (feature 4) as *unbuilt* future work — ERE ships
-tested implementations of both ideas. These triage transfers are the same
-discipline arriving on the triage path first, where the gap is widest.
-
-**Anti-recommendations (do NOT do these):**
-
-1. **Do not port ERE's 8-stage lifecycle** (`collect→freeze→diff→impact→assess→
-   adjudicate→verify→promote`) into triage. Triage's unit of work is one issue →
-   one human-approved draft; a per-draft promoted baseline verifies nothing a
-   human isn't already gating.
-2. **Do not sandbox** (ERE's bwrap template) ghagga's static-analysis tools yet.
-   ghagga runs them directly *by design* (`docs/architecture.md` — "no separate
-   microservices … no SSRF concerns"); there is no untrusted-local-compute threat
-   today, and the real injection surface (untrusted issue text) is already fenced
-   in `packages/core/src/agents/issue-triage.ts`. Revisit only if ghagga starts
-   running tools against fully untrusted third-party repos.
-3. **Do not replace dedup** with an ERE `duplicate` disposition — ghagga's
-   memory-backed `findIssueDuplicates` (pre-LLM short-circuit) is strictly
-   stronger.
-4. **Do not chase ERE's determinism for *verdicts*.** ghagga's consensus/critique
-   modes treat LLM non-determinism as signal (voting). Determinism matters only
-   for *evidence identity* (revision pinning, staleness hashing), not verdict
-   identity. NOTE: ghagga's *review* verdicts are already mechanical
-   (`ReviewStatus` from severities, consensus 60/30 thresholds) — the prose/lenient
-   gap is the *triage* path only.
-
-**Deferred architectural bet (not yet filed as its own item):** a
-content-addressed baseline + carry-forward for triage/audit (re-triage only what
-changed, carry the rest — ERE's `classifyImpact`). No content-addressing exists
-anywhere in `packages/core` today. Effort L; it only pays for itself once
-re-triage-from-zero is an LLM-cost pain, which the current OPEN priorities
-(review-mode depth, GitLab parity) say it is not yet. Revisit when triage volume
-makes it hurt.
-
 ### BL-GITLAB-MR-WRITE-E2E — run the GitLab `--mr` write-path live, against a real instance
 
 The `--mr` (GitLab MR post-back) path is fully unit/contract-tested
@@ -99,6 +35,17 @@ If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardene
 so the risk is low). (Deferred here pending the PAT + throwaway MR.)
 
 ## RESOLVED
+
+### BL-ERE-TRANSFER — import ERE's evidence discipline into the triage path
+
+**Status: RESOLVED** as an umbrella. Sub-items already shipped:
+BL-TRIAGE-QUEUE-ATOMIC, BL-TRIAGE-CITED-VERDICT, BL-TRIAGE-SERVER-CODE-BLIND
+(plus follow-ons code-fence / search-discovery). Hybrid-4r ledger + `--anchor`
+landed on the review path separately (#408, #410).
+
+Still policy, not OPEN work: do not port ERE's 8-stage lifecycle, bwrap sandbox,
+`duplicate` disposition, or verdict determinism. The content-addressed
+re-triage baseline stays unfiled until re-triage-from-zero is an LLM-cost pain.
 
 ### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity
 
