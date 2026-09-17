@@ -440,6 +440,17 @@ export interface ReviewResult {
   coverageComplete?: boolean;
 }
 
+export const FINDING_LEDGER_STATUS = {
+  open: 'open',
+  fixed: 'fixed',
+  verified: 'verified',
+  refuted: 'refuted',
+  'wont-fix': 'wont-fix',
+  info: 'info',
+} as const;
+export type FindingLedgerStatus =
+  (typeof FINDING_LEDGER_STATUS)[keyof typeof FINDING_LEDGER_STATUS];
+
 export interface ReviewFinding {
   /** Severity level */
   severity: FindingSeverity;
@@ -455,6 +466,21 @@ export interface ReviewFinding {
 
   /** Description of the finding */
   message: string;
+
+  /** Per-lens ledger id (e.g. "security-001"). Optional for existing findings. */
+  id?: string;
+
+  /** Lens name that produced this finding (usually category). */
+  lens?: string;
+
+  /** Location as file:line when line is a number, otherwise file. */
+  location?: string;
+
+  /** First-class ledger status. Optional so existing findings stay valid. */
+  ledgerStatus?: FindingLedgerStatus;
+
+  /** Evidence text for the ledger (typically the finding message). */
+  evidence?: string;
 
   /** Suggested fix or improvement */
   suggestion?: string;
