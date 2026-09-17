@@ -39,6 +39,23 @@ vi.mock('../queues/review.js', () => ({
   enqueueReview: (...args: unknown[]) => mockEnqueueReview(...args),
 }));
 
+// Vitest 5 treats leftover ioredis reconnect logs as EnvironmentTeardownError
+// (Closing rpc while onUserConsoleLog was pending). This file never needs a
+// real Redis: enqueueReview is mocked.
+vi.mock('../lib/redis.js', () => ({
+  redis: {
+    on: vi.fn(),
+    quit: vi.fn().mockResolvedValue('OK'),
+    disconnect: vi.fn(),
+    status: 'end',
+    set: vi.fn(),
+  },
+  closeRedis: vi.fn().mockResolvedValue(undefined),
+  createRedisClient: vi.fn(),
+  callbackResultKey: (id: string) => `ghagga:callback:${id}`,
+  CALLBACK_RESULT_TTL: 720,
+}));
+
 const mockAddCommentReaction = vi.fn();
 const mockGetInstallationToken = vi.fn();
 const mockFetchPRDetails = vi.fn();

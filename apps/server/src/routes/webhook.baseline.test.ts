@@ -57,6 +57,20 @@ vi.mock('../queues/review.js', () => ({
   enqueueReview: (...args: unknown[]) => mockEnqueueReview(...args),
 }));
 
+vi.mock('../lib/redis.js', () => ({
+  redis: {
+    on: vi.fn(),
+    quit: vi.fn().mockResolvedValue('OK'),
+    disconnect: vi.fn(),
+    status: 'end',
+    set: vi.fn(),
+  },
+  closeRedis: vi.fn().mockResolvedValue(undefined),
+  createRedisClient: vi.fn(),
+  callbackResultKey: (id: string) => `ghagga:callback:${id}`,
+  CALLBACK_RESULT_TTL: 720,
+}));
+
 // ─── GitHub client: RECORDING adapters (mirrors review.baseline.test.ts) ──
 //
 // Each forge function pushes a structured (method + endpoint + body) record
