@@ -813,6 +813,49 @@ describe('reviewCommand — functional tests', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('providerChain'));
   });
 
+  it('sets settings.pinLensesToFirst when .ghagga.json pinLensesToFirst is true', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ pinLensesToFirst: true }));
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const settings = callArgs.settings as Record<string, unknown>;
+    expect(settings.pinLensesToFirst).toBe(true);
+  });
+
+  it('leaves settings.pinLensesToFirst undefined when .ghagga.json omits pinLensesToFirst', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ reviewLevel: 'strict' }));
+    mockReviewPipeline.mockResolvedValue(makeReviewResult());
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    const callArgs = mockReviewPipeline.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+    const settings = callArgs.settings as Record<string, unknown>;
+    expect(settings.pinLensesToFirst).toBeUndefined();
+  });
+
+  it('rejects a non-boolean pinLensesToFirst with a clear error and exits 1', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+line';
+    mockExecSync.mockReturnValue(diff as never);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({ pinLensesToFirst: 'yes' }));
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions());
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('pinLensesToFirst'));
+  });
+
   it('should handle non-Error thrown objects in catch block', async () => {
     mockExecSync.mockReturnValue('diff' as never);
     mockReviewPipeline.mockRejectedValue('string error');

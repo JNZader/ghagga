@@ -251,6 +251,11 @@ export interface ReviewSettings {
   lenses?: string[];
   /** Path to directory containing custom lens JSON definitions. Default: .ghagga/lenses/ */
   lensDir?: string;
+  /**
+   * When true, fan-out pins every lens to generateFns[0].
+   * Default/omit keeps round-robin assignment across generateFns.
+   */
+  pinLensesToFirst?: boolean;
 
   /** Enable bidirectional code-doc validation. Default: false. */
   enableDocValidation?: boolean;

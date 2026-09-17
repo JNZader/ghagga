@@ -425,10 +425,18 @@ export interface FanOutReviewInput {
 
   /**
    * Backend-agnostic generation functions for lenses (round-robin).
-   * When provided, each lens uses generateFns[index % generateFns.length].
+   * When provided, each lens uses generateFns[index % generateFns.length],
+   * unless pinLensesToFirst is true (every lens uses generateFns[0]).
    * When omitted, pipeline creates them from provider/model/apiKey.
    */
   generateFns?: GenerateTextFn[];
+
+  /**
+   * When true, every resolved lens uses generateFns[0] instead of round-robin.
+   * Default undefined/false keeps current round-robin assignment.
+   * Fails closed if generateFns is missing or empty.
+   */
+  pinLensesToFirst?: boolean;
 
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
@@ -522,6 +530,10 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   // ── Resolve GenerateTextFn array ────────────────────────────
   const resolvedGenerateFns: GenerateTextFn[] = input.generateFns ?? [];
 
+  if (input.pinLensesToFirst === true && resolvedGenerateFns.length === 0) {
+    throw new Error('pinLensesToFirst requires a non-empty generateFns array');
+  }
+
   const concurrency = input.concurrency ?? 3;
   const delayMs = input.delayMs ?? 0;
 
@@ -539,10 +551,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   // ── Step 1: Run lenses with bounded concurrency ─────────────
   const lensTasks = resolvedLenses.map((lens, index) => {
     return async () => {
-      // Round-robin generateFn assignment (fall back to first if provided)
+      // Round-robin generateFn assignment unless pinLensesToFirst pins all to [0].
       const generateFn =
         resolvedGenerateFns.length > 0
-          ? (resolvedGenerateFns[index % resolvedGenerateFns.length] as GenerateTextFn)
+          ? input.pinLensesToFirst === true
+            ? (resolvedGenerateFns[0] as GenerateTextFn)
+            : (resolvedGenerateFns[index % resolvedGenerateFns.length] as GenerateTextFn)
           : null;
 
       if (!generateFn) {

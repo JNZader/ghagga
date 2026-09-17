@@ -173,9 +173,16 @@ interface GhaggaConfig {
   // Pluggable review lenses (fan-out mode)
   lenses?: string[];
   /**
+   * When true, fan-out pins every lens to generateFns[0] (the first
+   * providerChain / generateFn entry). Default/omit keeps round-robin.
+   */
+  pinLensesToFirst?: boolean;
+  /**
    * Per-voice cross-engine provider chain (BL-CLI-PROVIDER-CHAIN). When set,
    * consensus (3-vote) and fan-out (N-lens) modes round-robin each voice
    * across these gateway entries instead of hammering a single engine.
+   * Fan-out opt-in `pinLensesToFirst: true` pins every lens to generateFns[0]
+   * instead of round-robin.
    */
   providerChain?: GhaggaConfigProviderChainEntry[];
   /**
@@ -967,6 +974,14 @@ function loadConfigFile(repoPath: string, configPath?: string): GhaggaConfig {
     }
   }
 
+  if (parsed.pinLensesToFirst !== undefined && typeof parsed.pinLensesToFirst !== 'boolean') {
+    tui.log.error(
+      `❌ Invalid .ghagga.json pinLensesToFirst: expected boolean, got ${JSON.stringify(parsed.pinLensesToFirst)}`,
+    );
+    process.exit(1);
+    return {};
+  }
+
   return parsed;
 }
 
@@ -1204,6 +1219,7 @@ function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): Review
     enabledTools: Array.from(enabledTools),
     lenses,
     lensDir,
+    ...(fileConfig.pinLensesToFirst === true ? { pinLensesToFirst: true } : {}),
   };
 }
 
