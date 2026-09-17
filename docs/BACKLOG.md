@@ -68,19 +68,6 @@ re-triage-from-zero is an LLM-cost pain, which the current OPEN priorities
 (review-mode depth, GitLab parity) say it is not yet. Revisit when triage volume
 makes it hurt.
 
-### BL-TRIAGE-SEARCH-DISCOVERY — find referenced code by identifier, not just explicit path
-
-Follow-on to BL-TRIAGE-SERVER-CODE-BLIND (RESOLVED). Today code discovery is
-path-only: `discoverCodePaths` (`packages/core/src/agents/issue-code-discovery.ts`)
-extracts explicit `dir/file.ext` tokens from the issue text. When an issue names a
-symbol/function but no path, no code is fetched. Port ERE's `discoverSearchTerms`
-(snake_case + backtick identifiers, ReDoS-hardened) + add a forge `searchCode` /
-`getTree` capability (GitHub `/search/code`, git trees API — ERE `github-code.ts`
-already has both) so triage can locate code by the identifiers an issue names.
-Deferred deliberately: build it when path-only discovery proves too narrow in
-real triage, not speculatively (the feature just shipped, unused). Effort M
-(new forge capability + a discovery mode).
-
 ### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity, cleanly separated
 
 Hybrid of the 4R lens protocol (risk/reliability/resilience/readability with
@@ -186,6 +173,16 @@ If it fails against real GitLab → patch 3.1.1 (the code is already 4vr-hardene
 so the risk is low). (Deferred here pending the PAT + throwaway MR.)
 
 ## RESOLVED
+
+### BL-TRIAGE-SEARCH-DISCOVERY — find referenced code by identifier, not just explicit path
+
+**Status: RESOLVED** in current `main` (worker + forge + core already shipped;
+this entry was stale OPEN copy). Path discovery remains `discoverCodePaths`;
+when it finds fewer than 2 paths, `discoverSearchTerms` (backtick identifiers,
+ReDoS-hardened) drives sequential `adapter.searchCode` (`issue-code-evidence.ts`,
+`client.searchCode`, capability-gated). Faults degrade, never abort triage.
+`getTree` was listed in the original sketch and was **not** implemented — search
+by identifier does not need a git tree walk. No extra slice here.
 
 ### BL-TRIAGE-CODE-FENCE — give issue triage a dedicated fenced source-code input (not the memory channel)
 

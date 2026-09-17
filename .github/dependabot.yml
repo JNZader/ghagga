@@ -43,10 +43,18 @@ updates:
           - "@vitest/*"
       # Everything else: minor+patch batched into one PR; other majors get
       # individual PRs (breaking changes).
+      # exclude-patterns: first-match grouping has leaked lockstep families
+      # into this catch-all (@ai-sdk/* in #397/#404). Belt-and-suspenders.
       minor-and-patch:
         update-types:
           - "minor"
           - "patch"
+        exclude-patterns:
+          - "ai"
+          - "@ai-sdk/*"
+          - "@tanstack/*"
+          - "vitest"
+          - "@vitest/*"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
