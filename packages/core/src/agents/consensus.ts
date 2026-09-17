@@ -9,7 +9,7 @@
  * Thresholds:
  *   - 60% weighted votes for approve/reject → that decision wins
  *   - 30% minimum confidence gap between approve and reject
- *   - If thresholds not met → NEEDS_HUMAN_REVIEW
+ *   - If thresholds not met → INCONCLUSIVE
  */
 
 import type { GenerateTextFn } from '../providers/generate-fn.js';
@@ -140,7 +140,7 @@ export function parseVote(
  * Decision rules:
  *   - If approve ratio ≥ 60% → PASSED
  *   - If reject ratio ≥ 60% → FAILED
- *   - If confidence gap < 30% → NEEDS_HUMAN_REVIEW
+ *   - If totalWeight is 0, confidence gap < 30%, or neither ratio ≥ 60% → INCONCLUSIVE
  */
 export function calculateConsensus(votes: ConsensusVote[]): {
   status: ReviewStatus;
@@ -164,7 +164,7 @@ export function calculateConsensus(votes: ConsensusVote[]): {
   // Prevent division by zero
   if (totalWeight === 0) {
     return {
-      status: 'NEEDS_HUMAN_REVIEW',
+      status: 'INCONCLUSIVE',
       summary: 'All models abstained. Manual review is recommended.',
     };
   }
@@ -176,7 +176,7 @@ export function calculateConsensus(votes: ConsensusVote[]): {
   // Check confidence gap
   if (gap < CONFIDENCE_GAP_THRESHOLD) {
     return {
-      status: 'NEEDS_HUMAN_REVIEW',
+      status: 'INCONCLUSIVE',
       summary: `Consensus inconclusive (approve: ${(approveRatio * 100).toFixed(0)}%, reject: ${(rejectRatio * 100).toFixed(0)}%). The confidence gap (${(gap * 100).toFixed(0)}%) is below the ${(CONFIDENCE_GAP_THRESHOLD * 100).toFixed(0)}% threshold. Manual review recommended.`,
     };
   }
@@ -197,7 +197,7 @@ export function calculateConsensus(votes: ConsensusVote[]): {
   }
 
   return {
-    status: 'NEEDS_HUMAN_REVIEW',
+    status: 'INCONCLUSIVE',
     summary: `No clear consensus reached (approve: ${(approveRatio * 100).toFixed(0)}%, reject: ${(rejectRatio * 100).toFixed(0)}%). Manual review recommended.`,
   };
 }
