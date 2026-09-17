@@ -50,17 +50,17 @@
   "dependencies": {
     "@clack/prompts": "^1.8.0",
     "chalk": "^6.0.0",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
     "fts5-sql-bundle": "^1.0.2",
     "ghagga-core": "workspace:*",
     "ghagga-forge": "workspace:*",
-    "ghagga-triage-engine": "workspace:*",
-    "commander": "^15.0.0",
-    "dotenv": "^17.4.2"
+    "ghagga-triage-engine": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^26.5.0",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11",
-    "@types/node": "^26.5.0"
+    "vitest": "^5.0.1"
   }
 }
