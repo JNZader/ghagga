@@ -518,6 +518,21 @@ describe('reviewCommand — functional tests', () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
+  it('should call reviewPipeline with hybrid-4r mode', async () => {
+    const diff = 'diff --git a/file.ts b/file.ts\n+console.log("hello");';
+    mockExecSync.mockReturnValue(diff as never);
+    mockReviewPipeline.mockResolvedValue(makeReviewResult({ status: 'PASSED' }));
+
+    const { reviewCommand } = await import('./review.js');
+    await reviewCommand('.', defaultOptions({ mode: 'hybrid-4r' }));
+
+    expect(mockReviewPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'hybrid-4r',
+      }),
+    );
+  });
+
   it('should exit 1 when review status is FAILED', async () => {
     mockExecSync.mockReturnValue('diff content' as never);
     mockReviewPipeline.mockResolvedValue(makeReviewResult({ status: 'FAILED' }));

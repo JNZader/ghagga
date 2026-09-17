@@ -207,7 +207,7 @@ program
     }
 
     // ── Validate mode ─────────────────────────────────────────
-    const validModes: ReviewMode[] = ['simple', 'workflow', 'consensus', 'fan-out'];
+    const validModes: ReviewMode[] = ['simple', 'workflow', 'consensus', 'fan-out', 'hybrid-4r'];
     if (!validModes.includes(options.mode as ReviewMode)) {
       tui.log.error(`❌ Invalid mode "${options.mode}". Choose from: ${validModes.join(', ')}`);
       process.exit(1);

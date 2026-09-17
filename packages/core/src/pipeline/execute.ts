@@ -250,6 +250,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
           });
           break;
 
+        case 'hybrid-4r':
         case 'fan-out':
           // Load custom lenses from directory (if configured)
           if (input.settings.lensDir) {
@@ -270,7 +271,9 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             generateFns,
             // Forward lens selection from settings (CLI flags > config > defaults)
             ...(input.settings.lenses ? { lenses: input.settings.lenses } : {}),
-            ...(input.settings.pinLensesToFirst === true ? { pinLensesToFirst: true } : {}),
+            ...(effectiveMode === 'hybrid-4r' || input.settings.pinLensesToFirst === true
+              ? { pinLensesToFirst: true }
+              : {}),
             ...(typeof input.settings.contrarianCount === 'number' &&
             Number.isInteger(input.settings.contrarianCount) &&
             input.settings.contrarianCount >= 1

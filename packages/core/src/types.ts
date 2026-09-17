@@ -11,7 +11,13 @@ export type { EmbeddingProvider, EmbeddingProviderFactory } from './embed.js';
 
 // ─── Review Input ───────────────────────────────────────────────
 
-export type ReviewMode = 'simple' | 'workflow' | 'consensus' | 'diagnostic' | 'fan-out';
+export type ReviewMode =
+  | 'simple'
+  | 'workflow'
+  | 'consensus'
+  | 'diagnostic'
+  | 'fan-out'
+  | 'hybrid-4r';
 
 /**
  * Supported LLM provider modes.

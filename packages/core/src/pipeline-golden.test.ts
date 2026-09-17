@@ -656,6 +656,13 @@ describe('golden: baseline & modes', () => {
     expect(run.golden).toMatchSnapshot();
   });
 
+  it('mode: hybrid-4r forces pinLensesToFirst true even when settings omit it', async () => {
+    await runGolden(makeInput({ mode: 'hybrid-4r' }));
+    expect(runFanOutReview).toHaveBeenCalledWith(
+      expect.objectContaining({ pinLensesToFirst: true }),
+    );
+  });
+
   it('mode: fan-out forwards pinLensesToFirst only when settings pin is true', async () => {
     await runGolden(makeInput({ mode: 'fan-out' }));
     expect(runFanOutReview).toHaveBeenCalledOnce();
