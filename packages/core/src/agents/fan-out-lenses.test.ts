@@ -426,6 +426,61 @@ FINDINGS:
     expect(fn2).toHaveBeenCalledTimes(1);
   });
 
+  it('pins every lens to generateFns[0] when pinLensesToFirst is true', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn2 = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    await runFanOutReview(
+      makeInput({
+        generateFns: [fn1, fn2],
+        lenses: ['security', 'performance', 'error-handling'],
+        pinLensesToFirst: true,
+      }),
+    );
+
+    expect(fn1).toHaveBeenCalledTimes(3);
+    expect(fn2).toHaveBeenCalledTimes(0);
+  });
+
+  it('keeps round-robin when pinLensesToFirst is false', async () => {
+    const fn1 = makeFakeGenerateFn(PASSED_RESPONSE);
+    const fn2 = makeFakeGenerateFn(PASSED_RESPONSE);
+
+    await runFanOutReview(
+      makeInput({
+        generateFns: [fn1, fn2],
+        lenses: ['security', 'performance', 'error-handling'],
+        pinLensesToFirst: false,
+      }),
+    );
+
+    expect(fn1).toHaveBeenCalledTimes(2);
+    expect(fn2).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when pinLensesToFirst is true and generateFns is empty', async () => {
+    await expect(
+      runFanOutReview(
+        makeInput({
+          generateFns: [],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+        }),
+      ),
+    ).rejects.toThrow(/pinLensesToFirst requires a non-empty generateFns array/);
+  });
+
+  it('fails closed when pinLensesToFirst is true and generateFns is omitted', async () => {
+    await expect(
+      runFanOutReview(
+        makeInput({
+          lenses: ['security'],
+          pinLensesToFirst: true,
+        }),
+      ),
+    ).rejects.toThrow(/pinLensesToFirst requires a non-empty generateFns array/);
+  });
+
   it('applies custom registered lenses', async () => {
     registerLens({
       name: 'i18n',

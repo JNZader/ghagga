@@ -270,6 +270,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             generateFns,
             // Forward lens selection from settings (CLI flags > config > defaults)
             ...(input.settings.lenses ? { lenses: input.settings.lenses } : {}),
+            ...(input.settings.pinLensesToFirst === true ? { pinLensesToFirst: true } : {}),
           });
           break;
 

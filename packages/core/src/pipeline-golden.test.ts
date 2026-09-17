@@ -656,6 +656,23 @@ describe('golden: baseline & modes', () => {
     expect(run.golden).toMatchSnapshot();
   });
 
+  it('mode: fan-out forwards pinLensesToFirst only when settings pin is true', async () => {
+    await runGolden(makeInput({ mode: 'fan-out' }));
+    expect(runFanOutReview).toHaveBeenCalledOnce();
+    expect((runFanOutReview as M<typeof runFanOutReview>).mock.calls[0]?.[0]).not.toHaveProperty(
+      'pinLensesToFirst',
+    );
+
+    (runFanOutReview as M<typeof runFanOutReview>).mockClear();
+
+    await runGolden(
+      makeInput({ mode: 'fan-out', settings: makeSettings({ pinLensesToFirst: true }) }),
+    );
+    expect(runFanOutReview).toHaveBeenCalledWith(
+      expect.objectContaining({ pinLensesToFirst: true }),
+    );
+  });
+
   it('mode: diagnostic falls back to simple on gateway', async () => {
     const run = await runGolden(makeInput({ mode: 'diagnostic' }));
     expect(runDiagnosticReview).not.toHaveBeenCalled();
