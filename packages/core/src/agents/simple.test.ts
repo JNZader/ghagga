@@ -38,6 +38,12 @@ describe('parseReviewResponse', () => {
     expect(result.status).toBe('FAILED');
   });
 
+  it('parses INCONCLUSIVE status correctly', () => {
+    const text = 'STATUS: INCONCLUSIVE\nSUMMARY: Evidence is insufficient.\nFINDINGS:\n';
+    const result = callParse(text);
+    expect(result.status).toBe('INCONCLUSIVE');
+  });
+
   it('defaults to NEEDS_HUMAN_REVIEW when STATUS line is missing', () => {
     const text = 'SUMMARY: Could not determine status.\nFINDINGS:\n';
     const result = callParse(text);
@@ -150,6 +156,7 @@ describe('parseReviewResponse', () => {
   it('status is case-insensitive', () => {
     expect(callParse('STATUS: passed\nSUMMARY: ok\nFINDINGS:\n').status).toBe('PASSED');
     expect(callParse('STATUS: Failed\nSUMMARY: bad\nFINDINGS:\n').status).toBe('FAILED');
+    expect(callParse('STATUS: inconclusive\nSUMMARY: ok\nFINDINGS:\n').status).toBe('INCONCLUSIVE');
   });
 
   it('findings severity validated against VALID_SEVERITIES set', () => {

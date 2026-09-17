@@ -317,6 +317,20 @@ describe('runFanOutReview', () => {
     expect(result.findings).toHaveLength(1);
   });
 
+  it('keeps overall PASSED when a lens is INCONCLUSIVE with no findings', async () => {
+    const inconclusive = `STATUS: INCONCLUSIVE
+SUMMARY: Could not decide.
+FINDINGS:
+`;
+    const result = await runFanOutReview(
+      makeInput({ generateFns: [makeFakeGenerateFn(inconclusive)], lenses: ['security'] }),
+    );
+
+    expect(result.status).toBe('PASSED');
+    expect(result.findings).toHaveLength(0);
+    expect(result.summary).toContain('INCONCLUSIVE');
+  });
+
   it('returns NEEDS_HUMAN_REVIEW when some lenses FAIL and no critical', async () => {
     const fn = makeFakeGenerateFn(
       FINDING_RESPONSE('high', 'security', 'auth.ts', 10, 'High issue'),

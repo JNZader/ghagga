@@ -618,7 +618,7 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       allFindings.push(...findings);
 
       // Track individual lens status
-      const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED)/i.exec(
+      const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED|INCONCLUSIVE)/i.exec(
         result.value.text,
       );
       const lensStatus = (statusMatch?.[1]?.toUpperCase() ?? 'NEEDS_HUMAN_REVIEW') as ReviewStatus;
@@ -674,7 +674,7 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   const summary =
     mergedFindings.length > 0
       ? `Fan-out review with ${resolvedLenses.length} lenses found ${mergedFindings.length} unique finding(s). Lenses: ${lensSummaryParts.join(', ')}.`
-      : `Fan-out review with ${resolvedLenses.length} lenses found no issues. All lenses passed.`;
+      : `Fan-out review with ${resolvedLenses.length} lenses found no issues. Lenses: ${lensSummaryParts.join(', ')}.`;
 
   return {
     status,

@@ -72,7 +72,9 @@ function parseReviewResponse(
   memoryContext: string | null,
 ): ReviewResult {
   // Extract STATUS
-  const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED)/i.exec(text);
+  const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED|INCONCLUSIVE)/i.exec(
+    text,
+  );
   const status: ReviewStatus =
     (statusMatch?.[1]?.toUpperCase() as ReviewStatus) ?? 'NEEDS_HUMAN_REVIEW';
 
