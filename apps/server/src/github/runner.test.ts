@@ -412,7 +412,10 @@ describe('verifyCallbackSignature', () => {
 
   // ─── Logger assertions ────────────────────────────────────────
 
-  it('creates a child logger with { module: "runner" }', () => {
+  it('creates a child logger with { module: "runner" }', async () => {
+    // Vitest 5 clearMocks=true wipes module-load call history before each test.
+    vi.resetModules();
+    await import('./runner.js');
     expect(mockRootChildFn).toHaveBeenCalledWith({ module: 'runner' });
   });
 });

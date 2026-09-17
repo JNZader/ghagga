@@ -96,7 +96,9 @@ beforeEach(() => {
 
 describe('logger initialisation', () => {
   it('creates a child logger with { module: "runner-callback" }', async () => {
-    // The child call happens at module load time
+    // Vitest 5 clearMocks=true wipes module-load call history before each test.
+    vi.resetModules();
+    await import('./runner-callback.js');
     expect(mockChildFn).toHaveBeenCalledWith({ module: 'runner-callback' });
   });
 });
