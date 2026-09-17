@@ -247,7 +247,7 @@ export async function runDualCritique(
   const refinedResponse = await generateFn(refinedSystem, refinedPrompt);
 
   // Extract refined status and summary from response
-  const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED)/i.exec(
+  const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED|INCONCLUSIVE)/i.exec(
     refinedResponse.text,
   );
   const refinedStatus =

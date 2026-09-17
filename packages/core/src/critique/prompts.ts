@@ -57,7 +57,7 @@ Do NOT add new findings that weren't in the initial review.
 Do NOT change the meaning of valid findings.
 
 OUTPUT FORMAT (same as standard review):
-STATUS: <PASSED|FAILED|NEEDS_HUMAN_REVIEW>
+STATUS: <PASSED|FAILED|NEEDS_HUMAN_REVIEW|INCONCLUSIVE>
 SUMMARY: <refined summary reflecting the actual issues>
 FINDINGS:
 - SEVERITY: <severity>

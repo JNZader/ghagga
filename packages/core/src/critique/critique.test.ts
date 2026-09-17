@@ -377,6 +377,34 @@ CRITIQUES:
     expect(result.findings.every((f) => f.source !== 'ai')).toBe(true);
   });
 
+  it('keeps refined STATUS: INCONCLUSIVE on DualCritiqueResult.status', async () => {
+    const review = makeReviewResult([makeFinding('Issue')]);
+
+    const generateFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        text: `OVERALL_ASSESSMENT: OK
+CRITIQUES:
+- FINDING_INDEX: 0
+  VERDICT: valid
+  REASONING: Correct`,
+        tokensUsed: 100,
+        provider: 'gateway',
+        model: 'test',
+      })
+      .mockResolvedValueOnce({
+        text: 'STATUS: INCONCLUSIVE\nSUMMARY: Evidence is insufficient.\nFINDINGS:\n',
+        tokensUsed: 100,
+        provider: 'gateway',
+        model: 'test',
+      });
+
+    const result = await runDualCritique(review, defaultInput, generateFn);
+
+    expect(result.status).toBe('INCONCLUSIVE');
+    expect(result.summary).toBe('Evidence is insufficient.');
+  });
+
   it('respects includeCritiqueMetadata config', async () => {
     const review = makeReviewResult([makeFinding('Issue')]);
 
