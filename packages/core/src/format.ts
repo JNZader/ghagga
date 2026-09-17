@@ -108,6 +108,7 @@ export const STATUS_EMOJI: Record<ReviewStatus, string> = {
   NEEDS_HUMAN_REVIEW: '\u26a0\ufe0f NEEDS_HUMAN_REVIEW',
   SKIPPED: '\u23ed\ufe0f SKIPPED',
   PARTIAL: '\u26a1 PARTIAL',
+  INCONCLUSIVE: '\u2753 INCONCLUSIVE',
 };
 
 export const SEVERITY_EMOJI: Record<string, string> = {

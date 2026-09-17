@@ -63,11 +63,13 @@ function makeFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
 // ─── Exported Constants ─────────────────────────────────────────
 
 describe('STATUS_EMOJI', () => {
-  it('maps all four ReviewStatus values', () => {
+  it('maps all ReviewStatus values', () => {
     expect(STATUS_EMOJI.PASSED).toContain('PASSED');
     expect(STATUS_EMOJI.FAILED).toContain('FAILED');
     expect(STATUS_EMOJI.NEEDS_HUMAN_REVIEW).toContain('NEEDS_HUMAN_REVIEW');
     expect(STATUS_EMOJI.SKIPPED).toContain('SKIPPED');
+    expect(STATUS_EMOJI.PARTIAL).toContain('PARTIAL');
+    expect(STATUS_EMOJI.INCONCLUSIVE).toContain('INCONCLUSIVE');
   });
 });
 

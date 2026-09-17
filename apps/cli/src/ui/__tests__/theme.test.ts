@@ -27,13 +27,14 @@ describe('BRAND', () => {
 });
 
 describe('STATUS_EMOJI', () => {
-  it('should have all 5 ReviewStatus keys', () => {
+  it('should have all 6 ReviewStatus keys', () => {
     expect(STATUS_EMOJI).toHaveProperty('PASSED');
     expect(STATUS_EMOJI).toHaveProperty('FAILED');
     expect(STATUS_EMOJI).toHaveProperty('NEEDS_HUMAN_REVIEW');
     expect(STATUS_EMOJI).toHaveProperty('SKIPPED');
     expect(STATUS_EMOJI).toHaveProperty('PARTIAL');
-    expect(Object.keys(STATUS_EMOJI)).toHaveLength(5);
+    expect(STATUS_EMOJI).toHaveProperty('INCONCLUSIVE');
+    expect(Object.keys(STATUS_EMOJI)).toHaveLength(6);
   });
 });
 

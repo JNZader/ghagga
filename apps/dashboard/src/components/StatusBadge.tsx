@@ -27,6 +27,10 @@ const statusConfig: Record<ReviewStatus, { label: string; classes: string }> = {
     label: 'Partial',
     classes: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
   },
+  INCONCLUSIVE: {
+    label: 'Inconclusive',
+    classes: 'bg-orange-500/15 text-orange-400 border-orange-500/25',
+  },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

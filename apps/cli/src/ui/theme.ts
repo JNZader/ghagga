@@ -20,6 +20,7 @@ export const STATUS_EMOJI: Record<ReviewStatus, string> = {
   NEEDS_HUMAN_REVIEW: '⚠️  NEEDS HUMAN REVIEW',
   SKIPPED: '⏭️  SKIPPED',
   PARTIAL: '⚡ PARTIAL',
+  INCONCLUSIVE: '❓ INCONCLUSIVE',
 };
 
 /** Severity indicator with colored emoji. */

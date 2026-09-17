@@ -35,7 +35,14 @@ import { generateErrorId, logger } from './utils.js';
 type SqlCondition = ReturnType<typeof eq>;
 
 /** Valid persisted review statuses (mirrors ReviewStatus in ghagga-core). */
-const REVIEW_STATUSES = ['PASSED', 'FAILED', 'NEEDS_HUMAN_REVIEW', 'SKIPPED', 'PARTIAL'] as const;
+const REVIEW_STATUSES = [
+  'PASSED',
+  'FAILED',
+  'NEEDS_HUMAN_REVIEW',
+  'SKIPPED',
+  'PARTIAL',
+  'INCONCLUSIVE',
+] as const;
 
 /**
  * Runtime validation for GET /api/reviews query params (PRODOPS-007).
