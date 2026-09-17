@@ -205,25 +205,25 @@ describe('calculateConsensus', () => {
     expect(result.status).toBe('FAILED');
   });
 
-  // ── NEEDS_HUMAN_REVIEW cases ──
+  // ── INCONCLUSIVE cases ──
 
-  it('returns NEEDS_HUMAN_REVIEW when all models abstain', () => {
+  it('returns INCONCLUSIVE when all models abstain', () => {
     const votes = [
       makeVote({ decision: 'abstain', confidence: 0.5 }),
       makeVote({ decision: 'abstain', confidence: 0.6 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
     expect(result.summary).toContain('abstained');
   });
 
-  it('returns NEEDS_HUMAN_REVIEW for empty votes array', () => {
+  it('returns INCONCLUSIVE for empty votes array', () => {
     const result = calculateConsensus([]);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
     expect(result.summary).toContain('abstained');
   });
 
-  it('returns NEEDS_HUMAN_REVIEW when confidence gap is below 30%', () => {
+  it('returns INCONCLUSIVE when confidence gap is below 30%', () => {
     // approve weight: 0.6, reject weight: 0.5
     // total = 1.1, approve ratio = ~55%, reject ratio = ~45%, gap = ~10%
     const votes = [
@@ -231,12 +231,12 @@ describe('calculateConsensus', () => {
       makeVote({ decision: 'reject', confidence: 0.5 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
     expect(result.summary).toContain('inconclusive');
     expect(result.summary).toContain('threshold');
   });
 
-  it('returns NEEDS_HUMAN_REVIEW for evenly split votes', () => {
+  it('returns INCONCLUSIVE for evenly split votes', () => {
     // approve weight: 0.8, reject weight: 0.8
     // ratio both 50%, gap = 0
     const votes = [
@@ -244,7 +244,7 @@ describe('calculateConsensus', () => {
       makeVote({ decision: 'reject', confidence: 0.8 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
   });
 
   // ── Abstain handling ──
@@ -335,7 +335,7 @@ describe('calculateConsensus', () => {
   it('handles single abstain vote (all abstained)', () => {
     const votes = [makeVote({ decision: 'abstain', confidence: 0.9 })];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
   });
 
   // ── Boundary conditions ──
@@ -351,7 +351,7 @@ describe('calculateConsensus', () => {
     expect(result.status).toBe('PASSED');
   });
 
-  it('checks gap BEFORE decision threshold (gap below 30% → human review even with majority)', () => {
+  it('checks gap BEFORE decision threshold (gap below 30% → INCONCLUSIVE even with majority)', () => {
     // approve weight: 0.51, reject weight: 0.49
     // total = 1.0, approve ratio = 51%, reject = 49%, gap = 2% < 30%
     // Even though one side has more, gap check happens first
@@ -360,7 +360,7 @@ describe('calculateConsensus', () => {
       makeVote({ decision: 'reject', confidence: 0.49 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
   });
 
   // ── Zero confidence ──
@@ -372,7 +372,7 @@ describe('calculateConsensus', () => {
       makeVote({ decision: 'reject', confidence: 0 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
   });
 
   // ── Exact boundary tests (kills >= → > mutants) ──
@@ -380,7 +380,7 @@ describe('calculateConsensus', () => {
   it('returns PASSED at exactly 60.0% approve ratio (boundary: >= not >)', () => {
     // approve weight: 0.6, reject weight: 0.4
     // total = 1.0, approve ratio = exactly 60%, gap = 20% < 30%
-    // BUT gap is checked first! gap = 20% < 30% → NEEDS_HUMAN_REVIEW
+    // BUT gap is checked first! gap = 20% < 30% → INCONCLUSIVE
     // We need gap >= 30% AND ratio exactly 60%:
     // approve = 0.6, reject = 0.3 → total = 0.9
     // ratio = 0.6/0.9 = 66.7%, gap = 33.3% → passes both (but ratio > 60%)
@@ -414,18 +414,18 @@ describe('calculateConsensus', () => {
     expect(result.summary).toContain('65%');
   });
 
-  it('returns NEEDS_HUMAN_REVIEW at exactly 30% gap (boundary: < not <=)', () => {
+  it('returns INCONCLUSIVE at exactly 30% gap (boundary: < not <=)', () => {
     // gap = exactly 0.30, which is NOT < 0.30, so gap check passes
     // Then decision threshold: ratio = 65% >= 60% → decision is made
-    // So at exactly 30% gap, the system SHOULD make a decision (not human review)
+    // So at exactly 30% gap, the system SHOULD make a decision (not INCONCLUSIVE)
     // Confirmed in previous test. Let's test gap just barely below 30%:
-    // approve = 0.649, reject = 0.351 → ratio = 64.9%, gap = 29.8% < 30% → HUMAN REVIEW
+    // approve = 0.649, reject = 0.351 → ratio = 64.9%, gap = 29.8% < 30% → INCONCLUSIVE
     const votes = [
       makeVote({ decision: 'approve', confidence: 0.649 }),
       makeVote({ decision: 'reject', confidence: 0.351 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
     expect(result.summary).toContain('inconclusive');
   });
 
@@ -526,10 +526,10 @@ describe('parseVote (mutant killers)', () => {
 
   it('returns FAILED at exactly 60% reject ratio with 40% gap (kills >= → > on rejectRatio)', () => {
     // To get exactly 60% reject ratio: reject=0.6, approve=0.4
-    // total=1.0, reject ratio=60%, approve=40%, gap=20% < 30% → HUMAN REVIEW
+    // total=1.0, reject ratio=60%, approve=40%, gap=20% < 30% → INCONCLUSIVE
     // We need gap >= 30% for the decision to be reached.
     // reject=0.65, approve=0.35 → ratio=65%, gap=30% → FAILED (tested above)
-    // For exactly 60%: reject=3, approve=2 → ratio=60%, gap=20% → HUMAN REVIEW
+    // For exactly 60%: reject=3, approve=2 → ratio=60%, gap=20% → INCONCLUSIVE
     // The ONLY way to get exactly 60% with gap>=30% is impossible
     // (at 60/40 gap=20%). So this boundary is tested indirectly:
     // at 65%, it passes. If mutated to >, 65% > 60% still passes.
@@ -609,13 +609,13 @@ describe('parseVote (mutant killers)', () => {
 
   // ── More mutant killers for calculateConsensus ──────────────
 
-  it('calculateConsensus: all abstain → NEEDS_HUMAN_REVIEW', () => {
+  it('calculateConsensus: all abstain → INCONCLUSIVE', () => {
     const votes = [
       makeVote({ decision: 'abstain', confidence: 0.5 }),
       makeVote({ decision: 'abstain', confidence: 0.8 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
     expect(result.summary).toContain('abstained');
   });
 
@@ -635,7 +635,7 @@ describe('parseVote (mutant killers)', () => {
       makeVote({ decision: 'reject', confidence: 0.5 }),
     ];
     const result = calculateConsensus(votes);
-    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+    expect(result.status).toBe('INCONCLUSIVE');
     expect(result.summary).toContain('50%');
     expect(result.summary).toContain('threshold');
   });
