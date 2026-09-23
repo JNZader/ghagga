@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@ghagga/types": "workspace:*",
-    "@tanstack/react-query": "^5.102.8",
-    "@tanstack/react-virtual": "^3.14.12",
+    "@tanstack/react-query": "^5.103.1",
+    "@tanstack/react-virtual": "^3.14.13",
     "clsx": "^2.1.1",
     "focus-trap-react": "^12.0.3",
     "react": "^19.3.0",
