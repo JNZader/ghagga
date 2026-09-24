@@ -1,5 +1,11 @@
 # ghagga-db
 
+## 3.4.0
+
+### Minor Changes
+
+- bbdd7a4: Add issue_drafts approval-queue table + typed queries.
+
 ## 3.3.0
 
 ## 3.2.0

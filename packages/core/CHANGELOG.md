@@ -1,5 +1,26 @@
 # ghagga-core
 
+## 3.4.0
+
+### Minor Changes
+
+- fefa99e: Add `codex` and `claude` CLI adapters to the cli-bridge (selectable via a new optional `cli` config field on the triage config; default stays `opencode`), giving triage/review a reliable gpt-5.x (codex) or Claude (claude CLI) backend instead of the flaky opencode-go path.
+
+  SECURITY: while adding them, fixed a command-injection RCE that affected ALL cli-bridge adapters (opencode/copilot/gemini too): commands were built as shell strings with `JSON.stringify`-quoted args and run via `execSync` → `/bin/sh -c`. `JSON.stringify` does not escape `$`/backtick, so an untrusted issue body containing `$(...)` or backticks executed on the host. All adapters now use `execFileSync(command, argsArray)` with no shell — the prompt is an inert argv element. Verified with a security regression test.
+
+- 56dca64: Consensus now persists `INCONCLUSIVE` when votes do not decide (gap, abstain/empty/zero confidence, or no 60% threshold).
+- a86a886: Add first-class `INCONCLUSIVE` review ledger status to `ReviewStatus` and the exhaustive compile/API surfaces (filter, format, CLI exit code, dashboard badge). Consensus vote summaries remain `NEEDS_HUMAN_REVIEW`; this does not remap them.
+- 3a25d6f: LLM STATUS parsers in simple, fan-out, and critique now accept `INCONCLUSIVE` instead of coercing it to `NEEDS_HUMAN_REVIEW`.
+
+### Patch Changes
+
+- 8411136: Multi-voice review modes (workflow, consensus, fan-out) now validate FULFILLED voice responses before counting them as successes. A voice whose generateFn resolves with empty/whitespace-only text, or whose entire body is a JSON error envelope (`is_error: true`, or Claude CLI's `{"type":"result","subtype":"error_*"}` shape), is routed into the existing failure path (✗ progress event, `[FAILED]` synthesis note, `[FAILED:reason]` modelsUsed tag, tokens not counted) instead of polluting the synthesis/vote/merge step. Previously a gateway returning HTTP 200 with a raw CLI error envelope was logged as `✓ — 0 tokens` and a 5-voice review silently ran with 4 voices. The heuristic is narrow: only the whole trimmed text parsing as such a JSON object counts, so legitimate reviews that merely contain the word "error" (or embed an error JSON snippet in prose) are never rejected.
+- a1239d3: Opt-in `contrarianCount` for fan-out: N unlensed whole-diff voices on `generateFns[1..N]` after `pinLensesToFirst`. Requires integer >= 1, pin true, and a long enough provider chain. Invalid `.ghagga.json` values fail closed.
+- fdfacff: Fan-out stamps a per-finding ledger after merge: `id`, `lens`, `location`, `ledgerStatus` (`open`), and `evidence`. Fields are optional on `ReviewFinding` so other modes stay compatible. No persistence or refuters yet.
+- 089a5b6: Opt-in `pinLensesToFirst` so fan-out lenses all use `generateFns[0]` instead of round-robin. Set `"pinLensesToFirst": true` in `.ghagga.json`; omit to keep current assignment. Non-boolean config fail-closes.
+- 91930f4: Opt-in `refuterCount` (integer >= 2) for fan-out: one batched generateFn per refuter over the closed critical ledger. 2-of-K `refute` votes set `ledgerStatus` to `refuted`. Requires `pinLensesToFirst`. Invalid `.ghagga.json` values fail closed.
+- 8f11441: Add `hybrid-4r` review mode as sugar over fan-out with `pinLensesToFirst` forced on. Contrarian, refuter, and anchor settings stay opt-in.
+
 ## 3.3.0
 
 ### Minor Changes

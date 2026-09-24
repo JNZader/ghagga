@@ -1,5 +1,40 @@
 # ghagga
 
+## 3.4.0
+
+### Minor Changes
+
+- 26d43fd: Add memory-backed issue dedup to the local `ghagga triage` command. Before running the LLM analysis, an incoming issue is checked against previously-triaged issues (stored locally under `~/.config/ghagga/memory.db`, scoped per repo) via the backend-agnostic keyword-overlap dedup engine; a likely duplicate short-circuits to a DUPLICATE draft (no LLM spend) citing the matched issues, and non-duplicates are persisted for future matching. Opt-out via `"dedup": { "enabled": false }` in the triage config. Self-identity is keyed on the stable repo+iid (robust to title edits), stored content is length-bounded, and a broken/corrupt memory DB degrades gracefully to running without dedup.
+
+### Patch Changes
+
+- 31a5ba6: `ghagga triage <iid> --reproduce` now wires live-app login credentials into the REPRODUCE harness, sourced from `GHAGGA_TRIAGE_LOGIN_EMAIL` / `GHAGGA_TRIAGE_LOGIN_PASSWORD` environment variables (so the password stays out of the config file, referenced via the `{{password}}` placeholder in the loginRecipe steps). Without this, a steps-based loginRecipe filled an empty password and login always failed.
+- a1239d3: Opt-in `contrarianCount` for fan-out: N unlensed whole-diff voices on `generateFns[1..N]` after `pinLensesToFirst`. Requires integer >= 1, pin true, and a long enough provider chain. Invalid `.ghagga.json` values fail closed.
+- 089a5b6: Opt-in `pinLensesToFirst` so fan-out lenses all use `generateFns[0]` instead of round-robin. Set `"pinLensesToFirst": true` in `.ghagga.json`; omit to keep current assignment. Non-boolean config fail-closes.
+- 91930f4: Opt-in `refuterCount` (integer >= 2) for fan-out: one batched generateFn per refuter over the closed critical ledger. 2-of-K `refute` votes set `ledgerStatus` to `refuted`. Requires `pinLensesToFirst`. Invalid `.ghagga.json` values fail closed.
+- 8f11441: Add `hybrid-4r` review mode as sugar over fan-out with `pinLensesToFirst` forced on. Contrarian, refuter, and anchor settings stay opt-in.
+- 0fcdc3b: Add fail-closed `--anchor <sha>` (and `.ghagga.json` `anchor`). HEAD must resolve to that commit or the review exits 1 before the pipeline. `"auto"` skips the check. Does not checkout or add a worktree.
+- Updated dependencies [fefa99e]
+- Updated dependencies [56dca64]
+- Updated dependencies [8411136]
+- Updated dependencies [a1239d3]
+- Updated dependencies [fdfacff]
+- Updated dependencies [089a5b6]
+- Updated dependencies [91930f4]
+- Updated dependencies [5789cde]
+- Updated dependencies [8f11441]
+- Updated dependencies [a86a886]
+- Updated dependencies [26d43fd]
+- Updated dependencies [832af1b]
+- Updated dependencies [862923f]
+- Updated dependencies [de3689d]
+- Updated dependencies [6e1b3a6]
+- Updated dependencies [80cf082]
+- Updated dependencies [3a25d6f]
+  - ghagga-core@3.4.0
+  - ghagga-triage-engine@0.3.0
+  - ghagga-forge@3.4.0
+
 ## 3.3.0
 
 ### Minor Changes
