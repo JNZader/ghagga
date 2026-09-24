@@ -204,18 +204,10 @@ Add `continue-on-error: true` to make reviews informational — findings are pos
 
 ### Node.js (Default)
 
-Uses `node20` runtime. Static analysis tools are **auto-installed and cached** on the GitHub Actions runner. First run takes ~3-5 minutes for tool installation; subsequent runs use `@actions/cache` (~1-2 minutes).
+Uses `node24` runtime (`action.yml` `using: node24`). Static analysis tools are **auto-installed and cached** on the GitHub Actions runner. First run takes ~3-5 minutes for tool installation; subsequent runs use `@actions/cache` (~1-2 minutes). There is no published GHCR action image; `apps/action/Dockerfile` is unused by `action.yml`.
 
 ```yaml
 - uses: JNZader/ghagga@v3.4.0
-```
-
-### Docker
-
-Uses the `apps/action/Dockerfile` which includes all static analysis tools pre-installed. No first-run delay.
-
-```yaml
-- uses: docker://ghcr.io/jnzader/ghagga-action:latest
 ```
 
 ---
@@ -241,43 +233,7 @@ Uses the `apps/action/Dockerfile` which includes all static analysis tools pre-i
     github-token: ${{ secrets.MY_GITHUB_TOKEN }}
 ```
 
-### OpenAI
-
-```yaml
-- uses: JNZader/ghagga@v3.4.0
-  with:
-    provider: openai
-    api-key: ${{ secrets.OPENAI_API_KEY }}
-    mode: workflow
-```
-
-### Anthropic
-
-```yaml
-- uses: JNZader/ghagga@v3.4.0
-  with:
-    provider: anthropic
-    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-    mode: consensus
-```
-
-### Google
-
-```yaml
-- uses: JNZader/ghagga@v3.4.0
-  with:
-    provider: google
-    api-key: ${{ secrets.GOOGLE_API_KEY }}
-```
-
-### Qwen (Alibaba Cloud)
-
-```yaml
-- uses: JNZader/ghagga@v3.4.0
-  with:
-    provider: qwen
-    api-key: ${{ secrets.DASHSCOPE_API_KEY }}
-```
+BYOK is `provider: gateway` plus `api-key`. Do not set `provider` to `openai`, `anthropic`, `google`, or `qwen`.
 
 ### Ollama (self-hosted runner)
 
@@ -441,17 +397,17 @@ Also ensure the workflow file is committed to the branch that the PR targets (us
 
 ### "API key is required for provider X"
 
-**Symptom**: Action fails with `API key is required for provider "anthropic"`.
+**Symptom**: Action fails because the provider needs a credential and `api-key` is missing.
 
-**Cause**: You set a non-GitHub provider but didn't provide the `api-key` input.
+**Cause**: `gateway` and `cli-bridge` need `api-key`. `ollama` does not.
 
-**Fix**: Add the API key as a repository secret and reference it:
+**Fix**: Store the gateway credential as a repository secret:
 
 ```yaml
 - uses: JNZader/ghagga@v3.4.0
   with:
-    provider: anthropic
-    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    provider: gateway
+    api-key: ${{ secrets.GHAGGA_API_KEY }}
 ```
 
 ---

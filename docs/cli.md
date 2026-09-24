@@ -205,7 +205,7 @@ ghagga review
 ghagga review ./src
 
 # Review with all options
-ghagga review --mode workflow --provider openai --api-key sk-xxx --verbose
+ghagga review --mode workflow --provider gateway --verbose
 ```
 
 ### `ghagga memory`
@@ -424,8 +424,8 @@ Transitive re-export resolution (a barrel re-exporting from another barrel) and 
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `[path]` | — | `.` | Optional path to repository or subdirectory |
-| `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus` |
-| `--provider <provider>` | `-p` | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
+| `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus`, `fan-out`, `hybrid-4r`. The CLI rejects `diagnostic`. |
+| `--provider <provider>` | `-p` | `gateway` | LLM provider: `gateway`, `cli-bridge`, `ollama`. Legacy SDK names exit 1. |
 | `--model <model>` | — | Auto | Model identifier (auto-selects best model per provider) |
 | `--api-key <key>` | — | — | LLM provider API key (or use env vars) |
 | `--output <format>` | `-o` | `markdown` | Output format: `markdown`, `json`, `sarif` |
@@ -434,7 +434,7 @@ Transitive re-export resolution (a barrel re-exporting from another barrel) and 
 | `--issue <target>` | — | — | Create (`new`) or update (`<number>`) a GitHub issue with review results |
 | `--enable-tool <name>` | — | — | Force-enable a specific tool (can be repeated) |
 | `--disable-tool <name>` | — | — | Force-disable a specific tool (can be repeated) |
-| `--list-tools` | — | — | Show all 16 available tools with status, tier, and languages |
+| `--list-tools` | — | — | Show all 17 available tools with status, tier, and languages |
 | `--no-semgrep` | — | — | **Deprecated** — use `--disable-tool semgrep` |
 | `--no-trivy` | — | — | **Deprecated** — use `--disable-tool trivy` |
 | `--no-cpd` | — | — | **Deprecated** — use `--disable-tool cpd` |
@@ -487,7 +487,7 @@ The CLI resolves configuration in this order (highest to lowest priority):
 
 ### `GITHUB_TOKEN` Fallback
 
-If the provider is `github` and no `--api-key` is provided, the CLI automatically falls back to the `GITHUB_TOKEN` environment variable, then to the stored token from `ghagga login`. This means you can skip `ghagga login` in CI environments where `GITHUB_TOKEN` is already set:
+If the provider is `gateway` or `cli-bridge` and no `--api-key` is provided, the CLI falls back to the stored token from `ghagga login`, then to `GITHUB_TOKEN`. That token is forge/PR auth, not an LLM credential:
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
@@ -503,7 +503,7 @@ Place a `.ghagga.json` in your project root for project-level defaults:
 ```json
 {
   "mode": "workflow",
-  "provider": "github",
+  "provider": "gateway",
   "enabledTools": ["ruff", "bandit"],
   "disabledTools": ["markdownlint"],
   "customRules": [".semgrep/custom-rules.yml"],
@@ -552,31 +552,9 @@ ghagga review
 
 The command uses `provider: gateway`. Point that gateway at mcp-llm-bridge. The login token is not an LLM credential.
 
-### OpenAI
+BYOK is a gateway credential, not `--provider openai` (or anthropic/google/qwen). Those names exit 1.
 
-```bash
-ghagga review --provider openai --api-key sk-xxx
-```
-
-### Anthropic
-
-```bash
-ghagga review --provider anthropic --api-key sk-ant-xxx
-```
-
-### Google
-
-```bash
-ghagga review --provider google --api-key AIzaXXX
-```
-
-### Qwen (Alibaba Cloud)
-
-```bash
-ghagga review --provider qwen --api-key sk-xxx
-```
-
-### Ollama (local, free, 100% offline)
+### Ollama (local, no API key)
 
 Requires [Ollama](https://ollama.com/) installed locally. No API key or internet needed:
 
@@ -796,11 +774,11 @@ export PATH="$(npm config get prefix)/bin:$PATH"
 
 **Cause**: Not logged in and no API key provided via flag or environment variable.
 
-**Fix**: Run `ghagga login` to authenticate with GitHub (free), or pass `--api-key` directly:
+**Fix**: Run `ghagga login` to store the GitHub token (forge access; it does not grant a model). Configure `gateway` or use Ollama. BYOK goes through `gateway`:
 
 ```bash
 ghagga login                              # saves provider gateway
-ghagga review --provider openai --api-key sk-xxx  # BYOK
+ghagga review --provider gateway --api-key <gateway-key>  # BYOK via gateway
 ```
 
 ### "No changes detected"

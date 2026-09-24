@@ -20,8 +20,8 @@ The landing, README, Docsify guides, Action marketplace blurb, and package READM
 - [x] T1 Landing, both READMEs, `action.yml`
 - [x] T2 Docsify guides that repeat the false GitHub Models default, the 3-mode list, the 16-tool count, or `ghagga-action@v1`
 - [x] T3 Package READMEs that `npm` shows (`apps/cli`, `packages/core`)
-- [x] T4 Kill leftover GitHub Models / free-model buyer strings (`Login.tsx`, CLI package description, `login --help`, CLI README requirements, `docs/cli.md` login/defaults)
-- [ ] T5 Operator docs still lying: fake `ghagga --help` dump, `--mode`/`--provider`/`--list-tools` tables, `ghcr.io/jnzader/ghagga-action` docker pin
+- [x] T4 Kill leftover GitHub Models / free-model buyer strings (`Login.tsx`, CLI package description, `login --help`, CLI README requirements, `docs/cli.md` login/defaults) — `dcdba42`
+- [x] T5 Operator docs still lying: fake `ghagga --help` dump, `--mode`/`--provider`/`--list-tools` tables, `ghcr.io/jnzader/ghagga-action` docker pin
 - [ ] T6 Remaining count/forge lies on public docs: 16 tools, 13 regex patterns, Gitea as a shipped adapter. Do not add dashboard review-mode radios.
 
 Commit `c21a208` landed T1–T3 on `docs/align-public-claims` (unpushed). T4–T6 are leftovers from the same audit.
