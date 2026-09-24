@@ -52,7 +52,7 @@ graph TB
   end
 
   subgraph Core["@ghagga/core"]
-    SA["Static Analysis<br/>16-tool registry"]
+    SA["Static Analysis<br/>17-tool registry"]
     Agents["AI Agents<br/>Simple · Workflow · Consensus"]
     Memory["Memory<br/>Search · Persist · Privacy"]
   end

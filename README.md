@@ -50,7 +50,7 @@ What makes it different:
 
 ## Architecture
 
-A reusable core owns the review pipeline; thin adapters translate transport and IO. `ghagga-core` knows nothing about HTTP, dashboard auth, or terminal rendering, and `ghagga-forge` keeps it from knowing whether it's talking to GitHub, GitLab, or Gitea.
+A reusable core owns the review pipeline; thin adapters translate transport and IO. `ghagga-core` knows nothing about HTTP, dashboard auth, or terminal rendering, and `ghagga-forge` keeps it from knowing whether it's talking to GitHub or GitLab. Gitea is a forge kind on the port types; there is no Gitea adapter.
 
 ```mermaid
 graph TB

@@ -2,7 +2,7 @@
 
 > Reference document for evaluating new static analysis tools to integrate into GHAGGA's inline static-analysis workflow. See [current tools](static-analysis.md) and the [architecture overview](architecture.md#inline-static-analysis-workflow).
 
-## Current Toolset (16 tools — plugin registry)
+## Current Toolset (17-tool plugin registry — 16 runner binaries + SonarQube MCP)
 
 | Tool | Category | What It Finds | Status |
 |------|----------|---------------|--------|
@@ -22,6 +22,7 @@
 | **clippy** | Rust linting | Rust code quality and idiom checks | Auto-detect |
 | **Hadolint** | Dockerfile linting | Dockerfile best practices and security anti-patterns | Auto-detect |
 | **zizmor** 1.23.1 | GitHub Actions security | Template injection, unpinned actions, excessive permissions, credential leaks | Auto-detect |
+| **SonarQube** | SAST + code quality (MCP) | Server-backed analysis; inert unless an MCP server is configured | Auto-detect (MCP) |
 
 ## Integration Requirements
 
@@ -279,7 +280,7 @@ These tools **cannot run in GHAGGA's ephemeral runner model** or have significan
 | **Category** | SAST + Code Quality |
 | **Why skip** | **Requires a persistent SonarQube server** or SonarCloud SaaS. Cannot produce standalone JSON/SARIF without a server endpoint. The tool uploads results to its platform; it doesn't generate local reports |
 | **License** | SSALv1 (source-available, NOT OSI open source). Community edition limited |
-| **Verdict** | Incompatible with ephemeral runner. The entire value prop (dashboards, quality gates, history) requires a running server |
+| **Verdict** | Incompatible as a runner binary. Shipped in the 17-tool registry via MCP; inert unless an MCP server is configured. Dashboards, quality gates, and history still need a running server |
 
 #### CodeQL (GitHub)
 
@@ -340,7 +341,7 @@ These tools **cannot run in GHAGGA's ephemeral runner model** or have significan
 
 ## Recommended Additions by Priority
 
-Tools that fill genuine gaps beyond the current 16-tool registry:
+Tools that fill genuine gaps beyond the current 17-tool registry:
 
 | Priority | Tool | Gap Filled | Effort | Status |
 |----------|------|-----------|--------|--------|

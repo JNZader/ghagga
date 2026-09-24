@@ -35,7 +35,7 @@ flowchart TB
   subgraph Persist["Memory Persist (Step 8)"]
     direction TB
     Filter["Significance filter<br/>critical/high/medium only"]
-    Strip["stripPrivateData()<br/>13 regex patterns"]
+    Strip["stripPrivateData()<br/>24 regex patterns"]
     Session["Create session"]
     Obs["Save observations"]
     Summary["Save PR summary<br/>topic-key upsert"]
@@ -63,7 +63,7 @@ All six review modes receive the same `memoryContext` in their system prompts.
 After the review completes, observations are extracted and stored (fire-and-forget -- this step never blocks the response):
 
 1. **Significance filter**: Only findings with **critical**, **high**, or **medium** severity are saved. Low and informational findings are discarded.
-2. **`stripPrivateData()`**: Applies 13 regex patterns to redact secrets before storage (see [Privacy Stripping](#privacy-stripping)).
+2. **`stripPrivateData()`**: Applies 24 regex patterns to redact secrets before storage (see [Privacy Stripping](#privacy-stripping)).
 3. **Create session**: A new memory session is created, scoped to the repository and PR number.
 4. **Save observations**: Extracted observations are saved with content deduplication:
    - **Content hash**: SHA-256 of `type:title:content`
@@ -172,21 +172,29 @@ Full-text search uses SQLite's **FTS5** extension with **BM25** ranking. The FTS
 
 ## Privacy Stripping
 
-Before any observation is stored, `stripPrivateData()` applies **13 regex patterns** to remove sensitive data:
+Before any observation is stored, `stripPrivateData()` applies **24 regex patterns** to remove sensitive data:
 
 | Pattern | Example | Redacted As |
 |---------|---------|-------------|
 | Anthropic API keys | `sk-ant-api03-...` | `[REDACTED_ANTHROPIC_KEY]` |
 | OpenAI API keys | `sk-proj-...` | `[REDACTED_OPENAI_KEY]` |
 | AWS Access Key IDs | `AKIA...` | `[REDACTED_AWS_KEY]` |
+| AWS Secret Access Keys | `AWS_SECRET_ACCESS_KEY=...` | `[REDACTED_AWS_SECRET]` |
 | GitHub tokens | `ghp_...`, `gho_...`, `ghs_...`, `ghr_...`, `github_pat_...` | `[REDACTED_GITHUB_*]` |
+| GitLab PATs | `glpat-...` | `[REDACTED_GITLAB_PAT]` |
+| npm tokens | `npm_...` | `[REDACTED_NPM_TOKEN]` |
+| Stripe keys | `sk_live_...`, `whsec_...` | `[REDACTED_STRIPE_*]` |
+| Hugging Face tokens | `hf_...` | `[REDACTED_HF_TOKEN]` |
+| SendGrid API keys | `SG....` | `[REDACTED_SENDGRID_KEY]` |
 | Google API keys | `AIza...` | `[REDACTED_GOOGLE_KEY]` |
 | Slack tokens | `xoxb-...`, `xoxp-...` | `[REDACTED_SLACK_TOKEN]` |
 | Bearer tokens | `Bearer eyJ...` | `Bearer [REDACTED_TOKEN]` |
 | JWT tokens | `eyJ...eyJ...xxx` | `[REDACTED_JWT]` |
 | PEM private keys | `-----BEGIN PRIVATE KEY-----` | `[REDACTED_PRIVATE_KEY]` |
 | Password/secret assignments | `password = "..."` | `[REDACTED]` |
+| Unquoted `.env`-style secrets | `SECRET=...` | `[REDACTED]` |
 | Base64 credentials | `SECRET=aGVsbG8...` | `[REDACTED_BASE64]` |
+| URL userinfo passwords | `https://user:pass@host` | `[REDACTED_URL_PASSWORD]` |
 
 ## Content Deduplication
 

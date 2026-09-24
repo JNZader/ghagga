@@ -6,7 +6,7 @@
     "access": "public"
   },
   "type": "module",
-  "description": "Forge-agnostic ports and domain types for GHAGGA (GitHub / GitLab / Gitea)",
+  "description": "Forge-agnostic ports and domain types for GHAGGA (GitHub and GitLab adapters; Gitea is a kind only)",
   "author": "JNZader",
   "license": "MIT",
   "repository": {

@@ -100,9 +100,9 @@ There is nothing to enable manually — when GHAGGA dispatches a review, it inje
 | Component | Behavior |
 |-----------|---------|
 | AI review (LLM analysis) | Always runs once a provider is configured |
-| Static analysis (16 tools) | Runs on every dispatch via the inline workflow |
+| Static analysis (16 runner tools) | Runs on every dispatch via the inline workflow |
 
-The inline workflow provides access to the full 16-tool plugin registry: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. Tools are automatically selected based on the detected tech stack in your PR.
+The inline workflow runs the 16 runner-bundled tools: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. The full plugin registry is 17; SonarQube is MCP-only and stays inert unless an MCP server is configured. Tools are automatically selected based on the detected tech stack in your PR.
 
 The workflow uses **GitHub Actions free minutes** on public repos (unlimited; 7GB RAM per run). First run takes ~3–5 minutes (tool installation); subsequent runs take ~18 seconds (cached). On private repos, runs consume your GitHub Actions quota.
 
@@ -146,7 +146,7 @@ sequenceDiagram
     App->>Server: Webhook event
     Server->>Server: Parse diff, detect stack
     Server->>Inline: Inject ghagga.yml + workflow_dispatch
-    Inline->>Inline: Static analysis (16 tools)
+    Inline->>Inline: Static analysis (16 runner tools)
     Inline->>Server: HMAC-signed callback with findings
     Server->>LLM: Diff + findings + memory
     LLM->>Server: Structured review
@@ -156,7 +156,7 @@ sequenceDiagram
 
 1. GitHub sends a **webhook** to the GHAGGA server when your PR is opened or updated.
 2. The server **parses the diff**, detects the tech stack, and checks your token budget.
-3. The server **injects** `.github/workflows/ghagga.yml` into your repo (if not present) and **dispatches** the inline workflow (16 tools via plugin registry).
+3. The server **injects** `.github/workflows/ghagga.yml` into your repo (if not present) and **dispatches** the inline workflow (16 runner-bundled tools; SonarQube is MCP-only).
 4. The inline workflow runs, signs its results with the per-dispatch HMAC secret, and POSTs to `/runner/callback`.
 5. The server sends the diff + static findings + project memory to your configured **LLM provider**.
 6. The LLM returns a structured review, which is **posted as a PR comment**.

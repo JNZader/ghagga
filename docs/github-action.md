@@ -122,7 +122,7 @@ sequenceDiagram
 ```
 
 1. A **pull request event** triggers the GitHub Actions workflow
-2. The Action **checks out the code** and runs **static analysis** (up to 16 tools — always-on + auto-detected) directly on the runner
+2. The Action **checks out the code** and runs **static analysis** (16 runner-bundled binaries — always-on + auto-detected; SonarQube is MCP-only) directly on the runner
 3. The PR **diff is fetched** via the GitHub API
 4. The diff and the static findings go to the configured provider (`gateway` by default)
 5. The LLM returns a structured review, which is **posted as a PR comment**
@@ -417,6 +417,6 @@ Also ensure the workflow file is committed to the branch that the PR targets (us
 - **[CLI Guide](cli.md)** — Review local changes from your terminal
 - **[Configuration](configuration.md)** — Environment variables and config file options
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
-- **[Static Analysis](static-analysis.md)** — 16 tools, tier system, per-tool control
+- **[Static Analysis](static-analysis.md)** — 17-tool registry (SonarQube via MCP), tier system, per-tool control
 - **[Self-Hosted Guide](self-hosted.md)** — Full deployment with memory and dashboard
 - **[SaaS Guide](saas-getting-started.md)** — Zero-config GitHub App with Dashboard

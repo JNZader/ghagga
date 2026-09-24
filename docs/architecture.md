@@ -19,7 +19,7 @@ graph TB
 
   subgraph Core["@ghagga/core"]
     direction TB
-    SA["Static Analysis<br/>16-tool plugin registry"]
+    SA["Static Analysis<br/>17-tool plugin registry"]
     Agents["AI Agents<br/>Simple · Workflow · Consensus"]
     Memory["Memory<br/>Search · Persist · Privacy"]
   end
@@ -50,7 +50,7 @@ Each adapter does the minimum work necessary to bridge between its I/O world and
 | **Action** | PR event in GitHub Actions | PR comment via Octokit | Yes (SQLite) | Direct on the Actions runner |
 | **CLI** | Local `git diff` | Terminal output (markdown/json/sarif) | Yes (SQLite or Engram) | If installed locally |
 
-> Memory uses PostgreSQL + tsvector FTS in Server mode, SQLite (via `sql.js` WASM) with FTS5 in Action mode, and SQLite or [Engram](https://github.com/Gentleman-Programming/engram) in CLI mode (`--memory-backend engram`). All three backends implement the same `MemoryStorage` interface. Content is deduplicated via SHA-256 hashing with a 15-minute dedup window, and all data passes through `stripPrivateData()` (13 regex patterns) before storage. See [Memory System](memory-system.md) for full details.
+> Memory uses PostgreSQL + tsvector FTS in Server mode, SQLite (via `sql.js` WASM) with FTS5 in Action mode, and SQLite or [Engram](https://github.com/Gentleman-Programming/engram) in CLI mode (`--memory-backend engram`). All three backends implement the same `MemoryStorage` interface. Content is deduplicated via SHA-256 hashing with a 15-minute dedup window, and all data passes through `stripPrivateData()` (24 regex patterns) before storage. See [Memory System](memory-system.md) for full details.
 
 ## Monorepo Structure
 
@@ -62,7 +62,7 @@ ghagga/
 │   │       ├── pipeline.ts     # Main orchestrator
 │   │       ├── types.ts        # All TypeScript interfaces
 │   │       ├── agents/         # Simple, Workflow, Consensus
-│   │       ├── tools/          # 16-tool plugin registry
+│   │       ├── tools/          # 17-tool plugin registry
 │   │       ├── memory/         # Search, persist, privacy, engram.ts
 │   │       ├── providers/      # Vercel AI SDK multi-provider
 │   │       └── utils/          # Diff parsing, stack detect, tokens
@@ -96,7 +96,7 @@ sequenceDiagram
 
     S->>GH: Inject/update ghagga.yml (Contents: write)
     S->>GH: workflow_dispatch with callbackId + callbackSecret
-    Repo->>Repo: Install + run static analysis (16 tools)
+    Repo->>Repo: Install + run static analysis (16 runner tools)
     Repo->>S: POST /runner/callback (HMAC-signed)
     S->>S: Verify HMAC (timestamp + STATE_SECRET), merge findings
 ```

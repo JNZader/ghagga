@@ -131,7 +131,7 @@ flowchart LR
 
 1. The CLI runs `git diff` (staged changes first, then falls back to uncommitted changes; `--staged` forces `git diff --cached` only)
 2. The diff is parsed and the tech stack is auto-detected from file extensions
-3. If static analysis tools are installed locally, they run first (zero LLM tokens) — up to 16 tools via the plugin registry
+3. If static analysis tools are installed locally, they run first (zero LLM tokens) — up to 16 runner binaries from the 17-tool registry (SonarQube needs MCP)
 4. Relevant observations are retrieved from the local memory database via FTS5 full-text search
 5. The diff, static findings, and memory context go to the configured provider (`gateway` unless you set another mode)
 6. The LLM returns a structured review with findings, severity, and suggestions
@@ -843,6 +843,6 @@ pip install semgrep
 - **[GitHub Action Guide](github-action.md)** — Automated PR reviews in CI
 - **[Configuration](configuration.md)** — Environment variables and config file options
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
-- **[Static Analysis](static-analysis.md)** — 16 tools, tier system, per-tool control
+- **[Static Analysis](static-analysis.md)** — 17-tool registry (SonarQube via MCP), tier system, per-tool control
 - **[SaaS Guide](saas-getting-started.md)** — Zero-config GitHub App with Dashboard
 - **[Self-Hosted Guide](self-hosted.md)** — Full deployment with memory and dashboard
