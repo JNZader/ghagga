@@ -4,7 +4,7 @@
  * GHAGGA CLI — AI-powered code review from the command line.
  *
  * Quick start:
- *   ghagga login                   Authenticate with GitHub (free!)
+ *   ghagga login                   Authenticate with GitHub for forge/PR access
  *   ghagga review [path]           Review staged or uncommitted changes
  *   ghagga status                  Show current auth and config
  *   ghagga logout                  Clear stored credentials
@@ -72,7 +72,7 @@ program.hook('preAction', (thisCommand) => {
 
 program
   .command('login')
-  .description('Authenticate with GitHub (uses free AI models)')
+  .description('Authenticate with GitHub for forge and PR access')
   .action(async () => {
     await loginCommand();
   });

@@ -271,7 +271,7 @@ With `ghagga hooks install`, steps 1-7 run automatically on every commit via pre
 
 - Node.js >= 22.22.2
 - Git (for diff detection)
-- A GitHub account (for free AI models)
+- A GitHub account (for forge and PR access)
 
 ## License
 

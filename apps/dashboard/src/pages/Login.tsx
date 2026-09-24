@@ -147,7 +147,7 @@ export function Login() {
               )}
 
               <p className="mt-4 text-center text-xs text-text-muted">
-                Free — uses GitHub Models for AI-powered code review.
+                GitHub login is for forge and PR access, not a free LLM.
               </p>
 
               {/* Toggle between methods */}

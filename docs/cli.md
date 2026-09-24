@@ -157,7 +157,7 @@ The CLI has 7 commands:
 
 ### `ghagga login`
 
-Authenticate with GitHub using Device Flow. Stores your token at `~/.config/ghagga/config.json` and sets the default provider to `github` with model `gpt-4o-mini` (free).
+Authenticate with GitHub using Device Flow. Stores your token at `~/.config/ghagga/config.json` and sets `defaultProvider: gateway` and `defaultModel: auto`. Login is for forge and PR access, not a free LLM.
 
 ```bash
 ghagga login
@@ -188,8 +188,8 @@ Example output:
 
    Config: /home/user/.config/ghagga/config.json
    Auth:   Logged in as octocat
-   Provider: github
-   Model:    gpt-4o-mini
+   Provider: gateway
+   Model:    auto
    Session: Valid (octocat)
 ```
 
@@ -483,7 +483,7 @@ The CLI resolves configuration in this order (highest to lowest priority):
 1. **CLI flags** (`--provider`, `--model`, `--api-key`)
 2. **Environment variables** (`GHAGGA_PROVIDER`, `GHAGGA_MODEL`, `GHAGGA_API_KEY`)
 3. **Stored config** (from `ghagga login` — saved at `~/.config/ghagga/config.json`)
-4. **Defaults** (`provider: github`, `model: gpt-4o-mini`)
+4. **Defaults** (`provider: gateway`, `model: auto`)
 
 ### `GITHUB_TOKEN` Fallback
 
@@ -550,7 +550,7 @@ This file is created by `ghagga login` and contains your GitHub token, username,
 ghagga review
 ```
 
-The command uses `provider: gateway`. Point that gateway at mcp-llm-bridge. It does not call GitHub Models with the login token.
+The command uses `provider: gateway`. Point that gateway at mcp-llm-bridge. The login token is not an LLM credential.
 
 ### OpenAI
 
