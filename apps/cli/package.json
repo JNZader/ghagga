@@ -3,7 +3,7 @@
   "version": "3.4.0",
   "private": false,
   "type": "module",
-  "description": "AI-powered code review from the command line — free with GitHub Models",
+  "description": "AI-powered code review from the command line",
   "author": "JNZader",
   "license": "MIT",
   "repository": {

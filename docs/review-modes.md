@@ -1,6 +1,6 @@
 # Review Modes
 
-GHAGGA supports three review modes, each with different tradeoffs between speed, cost, and thoroughness.
+GHAGGA supports six review modes: `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, and `hybrid-4r`. Each trades speed, token cost, and how many models see the diff.
 
 ## Simple Mode
 
@@ -86,13 +86,27 @@ Each stance returns a decision (`PASSED`, `FAILED`, or `NEEDS_HUMAN_REVIEW`) wit
    - The gap between the winning side and losing side must be **>= 30%** of total weight
    - The winning side must hold **>= 60%** of total weight
 4. If both thresholds are met, the winning decision is the final status
-5. If either threshold is not met, the result is `NEEDS_HUMAN_REVIEW`
+5. If either threshold is not met, the result is `INCONCLUSIVE`
 
 ### Failure Handling
 
 Consensus uses `Promise.allSettled` for the 3 parallel LLM calls:
 - If **1 vote fails**, the remaining 2 still count and are fed to `calculateConsensus()`
-- If **all 3 fail**, the result is `NEEDS_HUMAN_REVIEW`
+- If **all 3 fail**, the result is `INCONCLUSIVE`
+
+## Fan-out Mode
+
+Five default lenses (security, typing, performance, accessibility, error handling) review the same diff in parallel. Findings are merged by severity. Custom lenses come from `--lenses` and `--lens-dir`.
+
+`pinLensesToFirst` sends every lens to `generateFns[0]`. `contrarianCount` adds unlensed voices on the following generate functions. `refuterCount` (at least 2) runs one batched call per refuter over the critical findings. Two `refute` votes set `ledgerStatus` to `refuted`.
+
+## Diagnostic Mode
+
+The diagnostic agent writes 1–5 ranked hypotheses. Each hypothesis has conditions, verification steps, and a confidence. The response still includes the standard findings block.
+
+## hybrid-4r Mode
+
+`hybrid-4r` is fan-out with `pinLensesToFirst` forced on. It is not a second engine. Contrarians, refuters, and `--anchor` stay opt-in. The result reports `metadata.mode` as `fan-out`.
 
 ### When to Use Each Mode
 

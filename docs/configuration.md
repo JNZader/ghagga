@@ -37,8 +37,8 @@
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GHAGGA_API_KEY` | No | LLM provider API key (not needed for GitHub Models — use `ghagga login` instead) |
-| `GHAGGA_PROVIDER` | No | Provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` (default: `github`) |
+| `GHAGGA_API_KEY` | No | Credential for `gateway` or `cli-bridge` |
+| `GHAGGA_PROVIDER` | No | `gateway` (default), `cli-bridge`, or `ollama` |
 | `GHAGGA_MODEL` | No | Model identifier (auto-selects best per provider) |
 | `GHAGGA_MEMORY_BACKEND` | No | Memory backend: `sqlite` (default, FTS5 at `~/.config/ghagga/memory.db`) or `engram` (HTTP API for cross-tool memory sharing) |
 | `GHAGGA_ENGRAM_HOST` | No | Engram server URL (default: `http://localhost:7437`). Falls back to SQLite if unreachable. |
@@ -109,14 +109,11 @@ Place a `.ghagga.json` in your repo root for project-level defaults:
 
 ## Default Models
 
-| Provider | Default Model |
-|----------|--------------|
-| GitHub Models | `gpt-4o-mini` |
-| Anthropic | `claude-sonnet-4-20250514` |
-| OpenAI | `gpt-4o` |
-| Google | `gemini-2.5-flash` |
-| Ollama | `qwen2.5-coder:7b` |
-| Qwen | `qwen-coder-plus` |
+| Mode | What "default model" means |
+|------|------------------------------|
+| `gateway` | `auto`, unless you set one |
+| `cli-bridge` | The CLI's own default |
+| `ollama` | The model you pass |
 | Groq | `llama-3.3-70b-versatile` |
 | Cerebras | `llama-3.3-70b` |
 | DeepSeek | `deepseek-chat` |
@@ -179,9 +176,9 @@ ghagga review --config .ghagga.json
 
 In the SaaS dashboard, you can configure an ordered **provider chain** as a fallback list. If the primary provider fails (rate limit, API error), GHAGGA automatically tries the next provider in the chain.
 
-Example chain: `GitHub Models → OpenAI → Anthropic`
+Example chain: `gateway (model A) → gateway (model B) → ollama`
 
-In **SaaS/server mode**, GitHub Models needs a PAT with `models:read` on that provider entry. GitHub App installation tokens do not include that scope, so a `github` entry without an explicit token is skipped at review time. This limitation does **not** apply to the CLI (`ghagga login`) or GitHub Action (`github-token` / `GITHUB_TOKEN`) flows.
+Chain entries are `gateway`, `cli-bridge`, or `ollama`. A legacy name such as `github` is normalized to `gateway`. There is no `models:read` skip. `ghagga login` and the Action's `GITHUB_TOKEN` do not themselves call a model.
 
 Provider chains are configured per-repo or globally (see Global Settings).
 
@@ -223,7 +220,7 @@ For server deployments, you can delegate all LLM calls to a running [mcp-llm-bri
 - Centralized credential management — one vault for all projects
 - Advanced routing — epsilon-greedy latency-based provider selection, circuit breakers, group balancing
 - Built-in OTel tracing and RBAC per API key
-- Free model fallback (GitHub Models, OpenCode free tier) handled automatically
+- If the first chain entry fails, the next `gateway`, `cli-bridge`, or `ollama` entry is tried
 
 **Configuration:**
 

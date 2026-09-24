@@ -104,7 +104,7 @@ Observations are extracted from the review and stored to the memory database -- 
 
 **Persist pipeline**:
 1. **Significance filter**: Only **critical**, **high**, and **medium** severity findings are saved
-2. **`stripPrivateData()`**: 13 regex patterns redact secrets (API keys, tokens, passwords, PEM keys, JWTs) before storage
+2. **`stripPrivateData()`**: 24 regex patterns redact secrets (API keys, tokens, passwords, PEM keys, JWTs) before storage
 3. **Create session**: Scoped to the repository and PR number
 4. **Save observations**: Content deduplication via SHA-256 hash (`type:title:content`) with a 15-minute dedup window
 5. **Save PR summary**: Topic-key upsert -- re-reviews of the same PR update the existing summary instead of duplicating

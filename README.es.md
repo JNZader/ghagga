@@ -33,8 +33,8 @@ Lo que lo hace distinto:
 
 - **El análisis estático corre primero.** 17 herramientas deterministas (Semgrep, Trivy, Gitleaks, Ruff, clippy, …) detectan problemas conocidos antes de gastar un solo token de LLM. Los hallazgos se inyectan en el prompt del review para que el modelo dedique su atención a la lógica y la arquitectura, no al lint.
 - **Recuerda.** Decisiones, bugfixes y patrones del pasado persisten entre reviews (PostgreSQL, SQLite o [Engram](https://github.com/Gentleman-Programming/engram)) y se realimentan hacia los siguientes — con búsqueda full-text, decaimiento de fuerza (strength decay) y limpieza de datos sensibles.
-- **Cinco estrategias de orquestación.** Desde una única pasada rápida hasta la votación por consenso multi-agente, elegida por review según el tradeoff costo/confianza que quieras.
-- **Núcleo forge-agnóstico.** El motor de review habla mediante ports neutrales al proveedor; la CLI publica los hallazgos de vuelta en **pull requests de GitHub** (`--pr`) y **merge requests de GitLab** (`--mr`), con Gitea modelado en la misma abstracción.
+- **Seis estrategias de orquestación.** Desde una única pasada rápida hasta fan-out multi-agente y `hybrid-4r`, elegida por review según el tradeoff costo/confianza que quieras.
+- **Núcleo forge-agnóstico.** El motor de review habla mediante ports neutrales al proveedor. La CLI publica los hallazgos en **pull requests de GitHub** (`--pr`) y **merge requests de GitLab** (`--mr`). Gitea existe como kind en los tipos del port. No hay adapter de Gitea.
 - **Sin infraestructura de runners.** El modo server inyecta un workflow inline de GitHub Actions en cada repo objetivo y lo dispara — el análisis pesado corre sobre los minutos de CI gratuitos del propio repo, asegurado con secrets HMAC por despacho.
 
 ## En números
@@ -45,12 +45,12 @@ Lo que lo hace distinto:
 | **Código de tests** | ~73.000 líneas — *más código de tests que de producción* |
 | **Suite de tests** | 4.500+ casos de test en 231 archivos (Vitest), más mutation testing con Stryker |
 | **Análisis estático** | 17 herramientas — 7 siempre activas, 10 autodetectadas por stack |
-| **Modos de review** | 5 estrategias de orquestación (una pasada → consenso multi-agente) |
+| **Modos de review** | 6 estrategias de orquestación (`simple` hasta `hybrid-4r`) |
 | **Distribución** | GitHub App (SaaS) · GitHub Action · CLI de npm · self-hosted con Docker |
 
 ## Arquitectura
 
-Un núcleo reutilizable es dueño del pipeline de review; adaptadores finos traducen el transporte y la IO. `ghagga-core` no sabe nada de HTTP, de la auth del dashboard ni del render en terminal, y `ghagga-forge` evita que sepa si está hablando con GitHub, GitLab o Gitea.
+Un núcleo reutilizable es dueño del pipeline de review; adaptadores finos traducen el transporte y la IO. `ghagga-core` no sabe nada de HTTP, de la auth del dashboard ni del render en terminal, y `ghagga-forge` evita que sepa si está hablando con GitHub o GitLab.
 
 ```mermaid
 graph TB
@@ -71,13 +71,13 @@ graph TB
 
   subgraph Core["ghagga-core"]
     SA["Static Analysis<br/>17-tool registry"]
-    Agents["AI Agents<br/>5 review modes"]
+    Agents["AI Agents<br/>6 review modes"]
     Memory["Memory<br/>Search / Persist / Decay / Versioning"]
     Scope["Scope<br/>Tree-sitter symbol extraction"]
   end
 
   subgraph Forge["ghagga-forge"]
-    Ports["Forge-agnostic ports<br/>GitHub / GitLab / Gitea"]
+    Ports["Forge-agnostic ports<br/>GitHub / GitLab adapters"]
   end
 
   subgraph DB["ghagga-db"]
@@ -132,14 +132,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3
+      - uses: JNZader/ghagga@v3.4.0
 ```
 
 **CLI** — revisá tus cambios locales antes de que lleguen a CI:
 
 ```bash
 npm install -g ghagga
-ghagga login                    # autenticarse con GitHub (modelos de IA gratuitos)
+ghagga login                    # Device Flow de GitHub; guarda el provider "gateway"
 ghagga review --staged          # revisar cambios en staging
 ghagga review --mode consensus  # voto multi-agente
 ghagga review --pr 42           # revisar un PR de GitHub y publicar los hallazgos
@@ -161,7 +161,7 @@ Guías completas de setup: [Quick Start](https://ghagga.javierzader.com/docs/qui
 
 ## Modos de review
 
-Cinco estrategias con tradeoffs de costo/confianza explícitos:
+Seis estrategias con tradeoffs de costo/confianza explícitos:
 
 | Modo | Cómo funciona | Costo en tokens | Ideal para |
 |------|---------------|:---:|------------|
@@ -169,7 +169,8 @@ Cinco estrategias con tradeoffs de costo/confianza explícitos:
 | `consensus` | 3 posturas (advocate / critic / observer) + voto algorítmico | ~3x | Decisiones de aprobación de alta confianza |
 | `fan-out` | 5 lentes independientes (seguridad, tipado, performance, a11y, manejo de errores) fusionadas por severidad | ~5x | Cobertura amplia por categoría, lentes propias |
 | `workflow` | 5 especialistas en paralelo + paso de síntesis | ~6x | Reviews minuciosos multi-ángulo |
-| `diagnostic` | Análisis guiado por hipótesis con follow-ups adaptativos | varía | Escarbar en cambios sospechosos |
+| `diagnostic` | Análisis por hipótesis, con pasos de verificación para cada una | varía | Escarbar en cambios sospechosos |
+| `hybrid-4r` | Fan-out con `pinLensesToFirst` forzado. Contrarians, refuters y `--anchor` siguen siendo opt-in. `metadata.mode` queda en `fan-out` | ~5x | Un motor para todos los lentes y otras familias en voces sin lente |
 
 `fan-out` es el caballo de batalla multi-agente: lentes independientes revisan el mismo diff en paralelo y después los hallazgos se fusionan por severidad en un único resultado. Podés aportar lentes propias con `--lenses` y `--lens-dir`.
 
@@ -208,7 +209,7 @@ La parte que hace que los reviews se acumulen con el tiempo:
 - **Persistir después del review** — los hallazgos significativos se guardan como observaciones tipadas (`decision`, `pattern`, `bugfix`, `architecture`, …) con deduplicación.
 - **Decaimiento de fuerza** — las observaciones viejas se desvanecen del contexto en vez de contaminarlo para siempre.
 - **Versionado** — branch / snapshot / merge / rollback estilo git sobre el estado de la memoria.
-- **Limpieza de datos sensibles** — 16 patrones de redacción (API keys, tokens de proveedores, JWTs, claves PEM/SSH, secrets de entorno, credenciales embebidas en URLs) corren antes de cualquier escritura.
+- **Limpieza de datos sensibles** — 24 patrones de redacción (API keys, tokens de proveedores, JWTs, claves PEM/SSH, secrets de entorno, credenciales embebidas en URLs) corren antes de cualquier escritura.
 
 Backends: PostgreSQL (`tsvector` + `ts_rank`) para modo server, SQLite (FTS5 + BM25) para CLI/Action, o Engram sobre HTTP.
 
@@ -219,7 +220,7 @@ Backends: PostgreSQL (`tsvector` + `ts_rank`) para modo server, SQLite (FTS5 + B
 | API keys de proveedores | Cifrado AES-256-GCM en reposo, claves por instalación |
 | Webhooks de GitHub | HMAC-SHA256 con comparación de tiempo constante |
 | Callbacks del runner | Secrets HMAC derivados por despacho + TTL con timestamp embebido |
-| Escrituras de memoria | Limpieza de datos sensibles (16 patrones de redacción) |
+| Escrituras de memoria | Limpieza de datos sensibles (24 patrones de redacción) |
 | URLs de gateway salientes | Guarda anti-SSRF — validación de rango de IP + DNS al persistir, revalidada en ejecución |
 | Prompts de LLM | Frontera de confianza — contenido del repo, memoria y hallazgos previos enmarcados y saneados como entrada no confiable |
 | Cola de jobs | Las credenciales nunca entran a los payloads de Redis — los workers re-obtienen las claves cifradas desde PostgreSQL |
@@ -235,7 +236,8 @@ ghagga/
 ├── packages/
 │   ├── core/        # Review engine: agents, 17-tool registry, memory, tree-sitter scoping
 │   ├── db/          # Drizzle schema, PostgreSQL queries, AES-256-GCM crypto, migrations
-│   ├── forge/       # Forge-agnostic ports & domain types (GitHub / GitLab / Gitea)
+│   ├── forge/       # Ports forge-agnósticos. Adapters: GitHub, GitLab
+│   ├── triage-engine/ # Triage de issues y reproduce
 │   └── types/       # Shared API contracts
 ├── apps/
 │   ├── server/      # Hono API + BullMQ workers + GitHub App integration
@@ -243,14 +245,14 @@ ghagga/
 │   ├── cli/         # npm CLI: review, memory, hooks, health, audit, feedback
 │   └── dashboard/   # React 19 SPA: provider chains, review history, memory browser
 ├── templates/       # Inline static-analysis workflow template
-└── docs/            # Documentation site (GitHub Pages)
+└── docs/            # Manual Docsify, publicado con la landing por deploy-pages.yml
 ```
 
-Paquetes publicados: `ghagga` (CLI), `ghagga-core`, `ghagga-db` y `ghagga-forge`.
+Paquetes publicados: `ghagga` (CLI), `ghagga-core`, `ghagga-db`, `ghagga-forge` y `ghagga-triage-engine`.
 
 **Stack:** TypeScript (strict) · Hono · BullMQ + Redis · PostgreSQL 16 + Drizzle · React 19 + Vite + Tailwind 4 · Vitest + Stryker · Biome · pnpm + Turborepo
 
-**Proveedores de LLM:** todo se rutea a través de una cadena de proveedores con fallback ordenado — `gateway` (cualquier modelo vía [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge)), `cli-bridge` (CLIs locales de Claude / Gemini / Copilot) u `ollama` (modelos locales).
+**Proveedores de LLM:** tres modos, con fallback ordenado. `gateway` (cualquier modelo vía [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge)), `cli-bridge` (CLIs locales, incluidos Claude, Codex, Gemini y Copilot) u `ollama`. `ghagga login` guarda `gateway`. Los nombres viejos (`github`, `anthropic`, `openai`) son legacy: la config guardada se remapea a `gateway`, y pasarlos explícito falla.
 
 ## Notas de ingeniería
 

@@ -1,23 +1,25 @@
 # GHAGGA CLI
 
-AI-powered code review from the command line. **Free** with GitHub Models.
+AI-powered code review from the command line. The CLI is MIT-licensed. A review still needs a configured `gateway`, `cli-bridge`, or `ollama` provider.
 
 ```bash
 npx ghagga login
 npx ghagga review
 ```
 
-That's it. Zero config, zero cost.
+Login only stores the GitHub token and selects `gateway`. The model call still needs a gateway, a local CLI, or Ollama.
 
 ## What is GHAGGA?
 
-GHAGGA is a multi-agent AI code reviewer that analyzes your code changes using LLMs. It supports three review modes with increasing depth:
+GHAGGA is a multi-agent AI code reviewer. CLI `--mode` values: `simple`, `workflow`, `consensus`, `fan-out`, and `hybrid-4r`. The CLI rejects `diagnostic`.
 
 | Mode | Speed | Depth | LLM Calls |
 |------|-------|-------|-----------|
 | **simple** | ~2s | Single-pass review | 1 |
 | **workflow** | ~15s | 5 specialist agents + synthesis | 6 |
-| **consensus** | ~7s | Same model, three perspectives + algorithmic vote | 3 |
+| **consensus** | ~7s | Three perspectives + algorithmic vote | 3 |
+| **fan-out** | varies | Parallel lenses | ~5 |
+| **hybrid-4r** | varies | Fan-out with lenses pinned to the first model | ~5 |
 
 ## Quick Start
 
@@ -27,7 +29,7 @@ GHAGGA is a multi-agent AI code reviewer that analyzes your code changes using L
 npx ghagga login
 ```
 
-This authenticates with GitHub using Device Flow. Your GitHub token gives you **free access** to AI models via [GitHub Models](https://github.com/marketplace/models).
+This authenticates with GitHub using Device Flow and saves `defaultProvider: gateway`. Configure the gateway (mcp-llm-bridge), a local CLI, or Ollama before a review can call a model.
 
 ### 2. Review your code
 
@@ -96,9 +98,9 @@ ghagga review -m workflow -v
 Usage: ghagga review [options] [path]
 
 Options:
-  -m, --mode <mode>          Review mode: simple, workflow, consensus (default: "simple")
-  -p, --provider <provider>  LLM provider: github, anthropic, openai, google, ollama, qwen
-  --model <model>            LLM model identifier
+  -m, --mode <mode>          Review mode: simple, workflow, consensus, fan-out, hybrid-4r (default: "simple")
+  -p, --provider <provider>  LLM provider: gateway, cli-bridge, ollama (default: "gateway")
+  --model <model>            LLM model identifier (default: auto)
   --api-key <key>            LLM provider API key
   -o, --output <format>      Output format: markdown, json, sarif (default: "markdown")
   --enhance                  AI-powered post-analysis enhancement (groups findings, adds fix suggestions)
@@ -106,7 +108,7 @@ Options:
   -v, --verbose              Show detailed progress during review
   --enable-tool <name>       Force-enable a specific tool (can be repeated)
   --disable-tool <name>      Force-disable a specific tool (can be repeated)
-  --list-tools               Show all 15 available tools with status
+  --list-tools               Show all 17 available tools with status
   --no-memory                Disable review memory (skip search and persist)
   --memory-backend <type>    Memory backend: sqlite (default) or engram
   --staged                   Review only staged files (for pre-commit hook)
@@ -183,27 +185,16 @@ Options:
 
 ## BYOK (Bring Your Own Key)
 
-Use any supported LLM provider:
+CLI providers are `gateway`, `cli-bridge`, and `ollama`. A BYOK key goes through `gateway` (mcp-llm-bridge), not a removed SDK name. Legacy `--provider github|anthropic|openai|google|qwen|...` exits 1.
 
 ```bash
-# GitHub Models (default, free)
-ghagga review --provider github
+# gateway (default; saved by ghagga login)
+ghagga review
+ghagga review --provider gateway --api-key <gateway-key>
 
-# Ollama (local, free, 100% offline)
+# Ollama (local, no API key)
 ghagga review --provider ollama
 ghagga review --provider ollama --model codellama:13b
-
-# OpenAI
-ghagga review --provider openai --api-key sk-...
-
-# Anthropic
-ghagga review --provider anthropic --api-key sk-ant-...
-
-# Google
-ghagga review --provider google --api-key AIza...
-
-# Qwen (Alibaba Cloud)
-ghagga review --provider qwen --api-key sk-...
 ```
 
 ## Local Models with Ollama
@@ -268,7 +259,7 @@ With `ghagga hooks install`, steps 1-7 run automatically on every commit via pre
 
 - Node.js >= 22.22.2
 - Git (for diff detection)
-- A GitHub account (for free AI models)
+- A GitHub account (for forge and PR access)
 
 ## License
 

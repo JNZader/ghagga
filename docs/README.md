@@ -2,7 +2,7 @@
 
 > **AI-Powered Multi-Agent Code Review**
 
-GHAGGA is a code review tool that posts intelligent comments on your Pull Requests. It combines LLM analysis with up to 16 static analysis tools and a project memory system that learns across reviews.
+GHAGGA is a code review tool that posts comments on pull requests. It combines LLM analysis, a 17-tool static-analysis registry, and project memory.
 
 ## New Here? Start with Your Guide
 
@@ -27,14 +27,14 @@ GHAGGA is a code review tool that posts intelligent comments on your Pull Reques
 
 | Feature | Description |
 |---------|-------------|
-| **3 Review Modes** | Simple (single LLM), Workflow (5 specialist agents), Consensus (same model, three perspectives + algorithmic vote) |
-| **16 Static Analysis Tools** | Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard + 9 auto-detect tools — zero tokens |
+| **6 Review Modes** | `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, `hybrid-4r` |
+| **17 Static Analysis Tools** | 7 always-on, 10 auto-detect. SonarQube runs only with MCP |
 | **Inline Static-Analysis Workflow** | Server injects `.github/workflows/ghagga.yml` into each target repo and dispatches it — no separate runner repo to provision |
 | **Project Memory** | Learns patterns, decisions, and bug fixes across reviews. 3 backends: PostgreSQL + tsvector (Server), SQLite + FTS5 (CLI & Action), Engram (optional cross-tool sharing) |
-| **Multi-Provider** | 6 providers: GitHub Models (free), Anthropic, OpenAI, Google, Ollama (local), Qwen (Alibaba) — bring your own key |
-| **3 Distribution Modes** | SaaS, GitHub Action, CLI |
+| **3 Provider Modes** | `gateway`, `cli-bridge`, `ollama`. Legacy names such as `github` remap to `gateway` |
+| **4 Distribution Modes** | GitHub App, GitHub Action, CLI, self-hosted |
 | **Comment Trigger** | Type `ghagga review` on any PR to re-trigger a review on demand |
-| **Dashboard** | React SPA on GitHub Pages — review history, stats, settings, memory browser |
+| **Dashboard** | React SPA at `/app/` on the Pages deploy — review history, stats, settings, memory browser |
 | **BYOK Security** | AES-256-GCM encryption, HMAC-SHA256 webhook verification, privacy stripping |
 
 ## Architecture at a Glance
@@ -52,7 +52,7 @@ graph TB
   end
 
   subgraph Core["@ghagga/core"]
-    SA["Static Analysis<br/>16-tool registry"]
+    SA["Static Analysis<br/>17-tool registry"]
     Agents["AI Agents<br/>Simple · Workflow · Consensus"]
     Memory["Memory<br/>Search · Persist · Privacy"]
   end

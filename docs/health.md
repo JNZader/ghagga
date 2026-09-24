@@ -146,5 +146,5 @@ fi
 ## Next Steps
 
 - **[CLI Guide](cli.md)** — Full CLI reference
-- **[Static Analysis](static-analysis.md)** — 16 tools, tier system, per-tool control
+- **[Static Analysis](static-analysis.md)** — 17-tool registry (SonarQube via MCP), tier system, per-tool control
 - **[Configuration](configuration.md)** — Environment variables and config files

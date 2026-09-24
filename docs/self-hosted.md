@@ -6,7 +6,7 @@ Complete step-by-step guide to deploy GHAGGA on a Hetzner VPS with Coolify, usin
 
 - A **Hetzner VPS** (or any Linux server with 2GB+ RAM) — CX22 or higher recommended
 - A **GitHub account** (to create a GitHub App)
-- **Optional**: LLM API key from Anthropic, OpenAI, Google, or Qwen. For GitHub Models in server mode, use a PAT with `models:read`.
+- **Optional**: a credential for `gateway` or `cli-bridge`. `ollama` needs no API key.
 
 ## Overview
 
@@ -367,8 +367,8 @@ Once deployed, configure your LLM providers:
 
 1. Open the GHAGGA dashboard
 2. Go to **Global Settings** to set installation-wide defaults
-3. Configure a **provider chain** — ordered list of providers with fallback (e.g., GitHub Models -> OpenAI -> Anthropic)
-4. Each provider needs an API key or token. For **GitHub Models** in server mode, use a PAT with `models:read` because GitHub App installation tokens do not have that scope.
+3. Configure a **provider chain** of `gateway`, `cli-bridge`, or `ollama`
+4. `gateway` and `cli-bridge` need the credential that mode uses. `ollama` does not. There is no GitHub Models path on the installation token.
 5. Choose review mode (Simple, Workflow, or Consensus)
 6. Configure which static analysis tools to enable
 7. Individual repos can override global settings via **Settings** -> toggle "Use global settings" off

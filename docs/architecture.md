@@ -19,7 +19,7 @@ graph TB
 
   subgraph Core["@ghagga/core"]
     direction TB
-    SA["Static Analysis<br/>16-tool plugin registry"]
+    SA["Static Analysis<br/>17-tool plugin registry"]
     Agents["AI Agents<br/>Simple · Workflow · Consensus"]
     Memory["Memory<br/>Search · Persist · Privacy"]
   end
@@ -50,7 +50,7 @@ Each adapter does the minimum work necessary to bridge between its I/O world and
 | **Action** | PR event in GitHub Actions | PR comment via Octokit | Yes (SQLite) | Direct on the Actions runner |
 | **CLI** | Local `git diff` | Terminal output (markdown/json/sarif) | Yes (SQLite or Engram) | If installed locally |
 
-> Memory uses PostgreSQL + tsvector FTS in Server mode, SQLite (via `sql.js` WASM) with FTS5 in Action mode, and SQLite or [Engram](https://github.com/Gentleman-Programming/engram) in CLI mode (`--memory-backend engram`). All three backends implement the same `MemoryStorage` interface. Content is deduplicated via SHA-256 hashing with a 15-minute dedup window, and all data passes through `stripPrivateData()` (13 regex patterns) before storage. See [Memory System](memory-system.md) for full details.
+> Memory uses PostgreSQL + tsvector FTS in Server mode, SQLite (via `sql.js` WASM) with FTS5 in Action mode, and SQLite or [Engram](https://github.com/Gentleman-Programming/engram) in CLI mode (`--memory-backend engram`). All three backends implement the same `MemoryStorage` interface. Content is deduplicated via SHA-256 hashing with a 15-minute dedup window, and all data passes through `stripPrivateData()` (24 regex patterns) before storage. See [Memory System](memory-system.md) for full details.
 
 ## Monorepo Structure
 
@@ -62,7 +62,7 @@ ghagga/
 │   │       ├── pipeline.ts     # Main orchestrator
 │   │       ├── types.ts        # All TypeScript interfaces
 │   │       ├── agents/         # Simple, Workflow, Consensus
-│   │       ├── tools/          # 16-tool plugin registry
+│   │       ├── tools/          # 17-tool plugin registry
 │   │       ├── memory/         # Search, persist, privacy, engram.ts
 │   │       ├── providers/      # Vercel AI SDK multi-provider
 │   │       └── utils/          # Diff parsing, stack detect, tokens
@@ -74,7 +74,7 @@ ghagga/
 │   └── types/          # @ghagga/types — Shared TypeScript interfaces
 ├── apps/
 │   ├── server/         # Hono API (webhook + REST + BullMQ + runner)
-│   │   └── Dockerfile  # Multi-stage with 16 static analysis tools
+│   │   └── Dockerfile  # Multi-stage image for the server
 │   ├── dashboard/      # React SPA (GitHub Pages)
 │   ├── cli/            # CLI tool (Commander.js)
 │   └── action/         # GitHub Action (node20 + Docker)
@@ -96,7 +96,7 @@ sequenceDiagram
 
     S->>GH: Inject/update ghagga.yml (Contents: write)
     S->>GH: workflow_dispatch with callbackId + callbackSecret
-    Repo->>Repo: Install + run static analysis (16 tools)
+    Repo->>Repo: Install + run static analysis (16 runner tools)
     Repo->>S: POST /runner/callback (HMAC-signed)
     S->>S: Verify HMAC (timestamp + STATE_SECRET), merge findings
 ```
@@ -107,7 +107,7 @@ Per-dispatch callback secrets are derived deterministically as `HMAC-SHA256(STAT
 
 ### Vercel AI SDK over LangChain/LangGraph
 
-GHAGGA's review flow is **predictable** (Layer 0 → 1 → 2 → 3), not a dynamic graph. Vercel AI SDK gives multi-provider support (6 providers: GitHub Models, Anthropic, OpenAI, Google, Ollama, Qwen) with streaming, structured output, and tool calling — without the overhead of graph management.
+GHAGGA's review flow is **predictable** (Layer 0 → 1 → 2 → 3), not a dynamic graph. Model calls go through one of three provider modes: `gateway`, `cli-bridge`, or `ollama`.
 
 ### Hono over Express/Fastify
 
@@ -125,11 +125,9 @@ Zero-overhead SQL with excellent TypeScript inference. No binary dependencies (u
 
 GHAGGA migrated from Inngest (SaaS) to BullMQ + Redis (self-hosted). BullMQ eliminates the external SaaS dependency, runs entirely on infrastructure we control (Hetzner VPS), and uses Redis as a battle-tested job queue backend. No vendor lock-in, no event quotas, no external webhooks to register. The worker process runs alongside the API server in the same docker-compose stack.
 
-### Provider Chain Filtering in SaaS Mode
+### Provider chain in SaaS mode
 
-In SaaS mode, the server uses GitHub App **installation tokens** (`ghs_*`) to authenticate with GitHub. These tokens do **not** have the `models:read` scope required by GitHub Models. As a result, the server silently filters out `github` provider entries from the provider chain when no explicit PAT is configured for that entry.
-
-If a user adds "GitHub Models" to their provider chain in the Dashboard without providing a PAT with `models:read`, the entry is skipped at review time and the next provider in the chain is used instead. A warning is logged on the server side. This does **not** affect CLI or GitHub Action modes, where a user-controlled GitHub token is used directly.
+Provider chain entries are `gateway`, `cli-bridge`, or `ollama`. A legacy stored name such as `github` is normalized to `gateway` before the call. There is no GitHub Models path that uses the GitHub App installation token, and there is no `models:read` filter in the server. A review without a usable chain degrades to static analysis.
 
 ### Binary Execution for Static Analysis
 

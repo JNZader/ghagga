@@ -61,26 +61,21 @@ Navigate to **Dashboard** > **Settings** (or **Global Settings** for installatio
 
 ### Choose a provider
 
-| Provider | Model | Cost | API Key Needed? | Notes |
-|----------|-------|------|-----------------|-------|
-| **GitHub Models** | `gpt-4o-mini` | GitHub-side pricing | Yes | In SaaS mode, add a PAT with `models:read`; dashboard OAuth alone is not enough for server-side reviews |
-| Anthropic | `claude-sonnet-4-20250514` | BYOK | Yes | Highest quality reviews |
-| OpenAI | `gpt-4o` | BYOK | Yes | Fast and capable |
-| Google | `gemini-2.5-flash` | BYOK | Yes | Low cost per token |
-| Ollama | `qwen2.5-coder:7b` | **Free** (local) | No | Requires local Ollama server |
-| Qwen | `qwen-coder-plus` | BYOK | Yes | Alibaba Cloud |
-| Groq | `llama-3.3-70b-versatile` | **Free** tier | Yes | Free tier, fast inference |
-| Cerebras | `llama-3.3-70b` | **Free** tier | Yes | Ultra-fast (~3000 tok/s) |
-| DeepSeek | `deepseek-chat` | Near-free ($0.004/day) | Yes | High quality, low cost |
-| OpenRouter | `deepseek/deepseek-chat` | BYOK | Yes | Multi-model gateway |
+| Mode | What you configure | API key |
+|------|--------------------|---------|
+| `gateway` | mcp-llm-bridge URL and the model the bridge should call | Gateway credential |
+| `cli-bridge` | A local CLI (Claude, Codex, OpenCode, Gemini, Copilot) | Only if that CLI asks for one |
+| `ollama` | A local Ollama model | No |
 
-### GitHub Models setup (server mode)
+Dashboard login does not select a model. Add a provider chain before a review calls an LLM. Legacy provider names are normalized to `gateway`.
 
-1. In **Settings**, select **"GitHub"** as the provider
-2. Paste a GitHub Personal Access Token with `models:read`
-3. Save the provider; the default model is `gpt-4o-mini`
+### Gateway setup
 
-> **Important**: The dashboard login token is used for dashboard/API access and runner setup. Reviews triggered by the SaaS server run with GitHub App installation credentials, so GitHub Models needs its own PAT in the provider chain.
+1. In **Settings**, choose `gateway`
+2. Set the bridge URL and the model
+3. Save the credential
+
+> The dashboard OAuth token is for the dashboard and the GitHub App. It is not a model credential.
 
 ### BYOK setup (Bring Your Own Key)
 
@@ -105,9 +100,9 @@ There is nothing to enable manually — when GHAGGA dispatches a review, it inje
 | Component | Behavior |
 |-----------|---------|
 | AI review (LLM analysis) | Always runs once a provider is configured |
-| Static analysis (16 tools) | Runs on every dispatch via the inline workflow |
+| Static analysis (16 runner tools) | Runs on every dispatch via the inline workflow |
 
-The inline workflow provides access to the full 16-tool plugin registry: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. Tools are automatically selected based on the detected tech stack in your PR.
+The inline workflow runs the 16 runner-bundled tools: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. The full plugin registry is 17; SonarQube is MCP-only and stays inert unless an MCP server is configured. Tools are automatically selected based on the detected tech stack in your PR.
 
 The workflow uses **GitHub Actions free minutes** on public repos (unlimited; 7GB RAM per run). First run takes ~3–5 minutes (tool installation); subsequent runs take ~18 seconds (cached). On private repos, runs consume your GitHub Actions quota.
 
@@ -151,7 +146,7 @@ sequenceDiagram
     App->>Server: Webhook event
     Server->>Server: Parse diff, detect stack
     Server->>Inline: Inject ghagga.yml + workflow_dispatch
-    Inline->>Inline: Static analysis (16 tools)
+    Inline->>Inline: Static analysis (16 runner tools)
     Inline->>Server: HMAC-signed callback with findings
     Server->>LLM: Diff + findings + memory
     LLM->>Server: Structured review
@@ -161,7 +156,7 @@ sequenceDiagram
 
 1. GitHub sends a **webhook** to the GHAGGA server when your PR is opened or updated.
 2. The server **parses the diff**, detects the tech stack, and checks your token budget.
-3. The server **injects** `.github/workflows/ghagga.yml` into your repo (if not present) and **dispatches** the inline workflow (16 tools via plugin registry).
+3. The server **injects** `.github/workflows/ghagga.yml` into your repo (if not present) and **dispatches** the inline workflow (16 runner-bundled tools; SonarQube is MCP-only).
 4. The inline workflow runs, signs its results with the per-dispatch HMAC secret, and POSTs to `/runner/callback`.
 5. The server sends the diff + static findings + project memory to your configured **LLM provider**.
 6. The LLM returns a structured review, which is **posted as a PR comment**.
@@ -183,7 +178,7 @@ sequenceDiagram
 
 ### No review comment posted
 
-1. **Check your LLM provider**: Go to [Dashboard](https://ghagga.javierzader.com/app/) > Settings and verify a provider is configured with a valid API key. For **GitHub Models** in SaaS mode, that means a PAT with `models:read`.
+1. **Check your provider chain**: Dashboard → Settings. You need a `gateway`, `cli-bridge`, or `ollama` entry. Dashboard login is not a model credential.
 2. **Check the App is installed on that repo**: Go to your GitHub Settings > Applications > GHAGGA > Configure — make sure the repo is in the list
 3. **Check the PR is on the right event type**: GHAGGA triggers on `opened`, `synchronize`, and `reopened` events. Draft PRs may not trigger reviews depending on your config.
 
@@ -208,9 +203,8 @@ sequenceDiagram
 |-----------|------|
 | **GHAGGA** | Free and open source (MIT license) |
 | **Hosted SaaS** | Free to use |
-| **GitHub Models** (`gpt-4o-mini`) | Requires your own PAT with `models:read` in SaaS/server mode |
-| **Other LLM providers** (Anthropic, OpenAI, Google, Qwen) | BYOK — you pay those providers directly at their standard rates |
-| **Ollama** | Free — runs on your own machine |
+| **gateway / cli-bridge** | You pay whoever serves that model |
+| **Ollama** | Local. No API key |
 | **Static analysis** (Semgrep, Trivy, CPD) | Free — runs on GitHub Actions runners (unlimited free minutes for public repos) |
 
 ---

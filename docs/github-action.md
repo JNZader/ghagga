@@ -20,12 +20,11 @@ Add AI-powered code reviews to any repository in under 5 minutes. GHAGGA runs di
 |-----------|------|
 | **GHAGGA** | Free and open source (MIT license) |
 | **GitHub Actions minutes** | **Free unlimited** for public repos. Private repos: 2,000 free minutes/month (then [paid by GitHub](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)) |
-| **GitHub Models** (`gpt-4o-mini`) | Uses the workflow's GitHub token by default — no separate API key needed |
-| **Other LLM providers** (Anthropic, OpenAI, Google, Qwen) | BYOK — you pay those providers directly at their standard rates |
-| **Ollama** | Free — runs on a self-hosted runner with Ollama installed |
-| **Static analysis** (up to 16 tools) | Free — runs on the GitHub Actions runner |
+| **LLM** | Not included. Set `provider` to `gateway`, `cli-bridge`, or `ollama`. The default is `gateway`. `api-key` is the gateway credential |
+| **Ollama** | Runs on a self-hosted runner with Ollama installed. No API key |
+| **Static analysis** (17-tool registry; SonarQube only with MCP) | Runs on the GitHub Actions runner |
 
-> 💡 **TL;DR**: Public repos can use the default GitHub Models provider with the workflow token you already have. No separate provider key is required.
+> The Action does not call GitHub Models with `GITHUB_TOKEN`. Legacy `provider: github` is remapped to `gateway`.
 
 ---
 
@@ -49,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga-action@v1
+      - uses: JNZader/ghagga@v3.4.0
 ```
 
 ### What each section does
@@ -59,7 +58,7 @@ jobs:
 | `on: pull_request` | Triggers the review when a PR is opened, updated, or reopened |
 | `permissions: pull-requests: write` | Allows the Action to post comments on the PR |
 | `actions/checkout@v4` | Checks out the repository code for static analysis |
-| `JNZader/ghagga-action@v1` | Runs the GHAGGA review (defaults: GitHub Models `gpt-4o-mini`, all static analysis enabled) |
+| `JNZader/ghagga@v3.4.0` | Runs the GHAGGA review. Default provider is `gateway`, default mode is `simple` |
 
 > ✅ **Verification**: You should now have a file at `.github/workflows/ghagga.yml` in your repository.
 
@@ -123,9 +122,9 @@ sequenceDiagram
 ```
 
 1. A **pull request event** triggers the GitHub Actions workflow
-2. The Action **checks out the code** and runs **static analysis** (up to 16 tools — always-on + auto-detected) directly on the runner
+2. The Action **checks out the code** and runs **static analysis** (16 runner-bundled binaries — always-on + auto-detected; SonarQube is MCP-only) directly on the runner
 3. The PR **diff is fetched** via the GitHub API
-4. The diff + static findings are sent to the configured **LLM provider** (default: GitHub Models `gpt-4o-mini`)
+4. The diff and the static findings go to the configured provider (`gateway` by default)
 5. The LLM returns a structured review, which is **posted as a PR comment**
 
 > 💡 **Memory**: The Action includes a local SQLite memory database (via `sql.js` WASM) that persists across workflow runs using `@actions/cache`. Past observations are searched using FTS5 full-text search and injected into agent prompts, so your project memory grows over time — just like the Server mode, but without PostgreSQL.
@@ -138,10 +137,10 @@ All configuration is done via Action inputs in the workflow YAML. The Action doe
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `provider` | No | `github` | LLM provider: `github`, `anthropic`, `openai`, `google`, `ollama`, `qwen`, `groq`, `cerebras`, `deepseek`, `openrouter` |
-| `model` | No | Auto | Model identifier (auto-selects best model per provider, e.g. `gpt-4o-mini` for GitHub) |
-| `mode` | No | `simple` | Review mode: `simple` (1 LLM call), `workflow` (5 specialists), `consensus` (3 perspectives + algorithmic vote) |
-| `api-key` | No | — | LLM provider API key. **Not required** for `github` provider unless you want to override the token used for GitHub Models |
+| `provider` | No | `gateway` | `gateway`, `cli-bridge`, or `ollama`. Legacy names are remapped to `gateway` |
+| `model` | No | provider default | Model id. `auto` lets the gateway or CLI pick |
+| `mode` | No | `simple` | `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, or `hybrid-4r` |
+| `api-key` | No | — | Credential for `gateway` or `cli-bridge`. Not used by `ollama` |
 | `github-token` | No | `${{ github.token }}` | GitHub token for fetching PR diffs and posting comments. Automatic. |
 | `enabled-tools` | No | — | Comma-separated list of tools to force-enable (e.g., `ruff,bandit`). Properly forwarded through webhooks in SaaS mode. |
 | `disabled-tools` | No | — | Comma-separated list of tools to force-disable (e.g., `markdownlint`). Properly forwarded through webhooks in SaaS mode. |
@@ -172,7 +171,7 @@ This is intentional: `FAILED` means the review found critical issues that should
 Review failures block merging. For teams that want strict enforcement:
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   id: review
   with:
     mode: workflow
@@ -183,7 +182,7 @@ Review failures block merging. For teams that want strict enforcement:
 Add `continue-on-error: true` to make reviews informational — findings are posted as comments but the CI check always passes:
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   id: review
   continue-on-error: true  # Don't fail CI on review findings
 ```
@@ -191,7 +190,7 @@ Add `continue-on-error: true` to make reviews informational — findings are pos
 ### Use review status in subsequent steps
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   id: review
 
 - name: Check review result
@@ -205,77 +204,36 @@ Add `continue-on-error: true` to make reviews informational — findings are pos
 
 ### Node.js (Default)
 
-Uses `node20` runtime. Static analysis tools are **auto-installed and cached** on the GitHub Actions runner. First run takes ~3-5 minutes for tool installation; subsequent runs use `@actions/cache` (~1-2 minutes).
+Uses `node24` runtime (`action.yml` `using: node24`). Static analysis tools are **auto-installed and cached** on the GitHub Actions runner. First run takes ~3-5 minutes for tool installation; subsequent runs use `@actions/cache` (~1-2 minutes). There is no published GHCR action image; `apps/action/Dockerfile` is unused by `action.yml`.
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
-```
-
-### Docker
-
-Uses the `apps/action/Dockerfile` which includes all static analysis tools pre-installed. No first-run delay.
-
-```yaml
-- uses: docker://ghcr.io/jnzader/ghagga-action:latest
+- uses: JNZader/ghagga@v3.4.0
 ```
 
 ---
 
 ## Provider Examples
 
-### GitHub Models (default — free)
+### gateway (the default)
 
-No separate provider key needed. Uses `github-token` or `GITHUB_TOKEN` automatically:
+`github-token` only reads the diff and posts the comment. The model call uses `api-key` as the gateway credential:
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
+  with:
+    provider: gateway
+    api-key: ${{ secrets.GHAGGA_API_KEY }}
 ```
 
-You can also pass your own GitHub token explicitly:
+`github-token` stays the automatic `GITHUB_TOKEN` unless you override it:
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   with:
     github-token: ${{ secrets.MY_GITHUB_TOKEN }}
 ```
 
-### OpenAI
-
-```yaml
-- uses: JNZader/ghagga-action@v1
-  with:
-    provider: openai
-    api-key: ${{ secrets.OPENAI_API_KEY }}
-    mode: workflow
-```
-
-### Anthropic
-
-```yaml
-- uses: JNZader/ghagga-action@v1
-  with:
-    provider: anthropic
-    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-    mode: consensus
-```
-
-### Google
-
-```yaml
-- uses: JNZader/ghagga-action@v1
-  with:
-    provider: google
-    api-key: ${{ secrets.GOOGLE_API_KEY }}
-```
-
-### Qwen (Alibaba Cloud)
-
-```yaml
-- uses: JNZader/ghagga-action@v1
-  with:
-    provider: qwen
-    api-key: ${{ secrets.DASHSCOPE_API_KEY }}
-```
+BYOK is `provider: gateway` plus `api-key`. Do not set `provider` to `openai`, `anthropic`, `google`, or `qwen`.
 
 ### Ollama (self-hosted runner)
 
@@ -287,7 +245,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga-action@v1
+      - uses: JNZader/ghagga@v3.4.0
         with:
           provider: ollama
           model: qwen2.5-coder:7b
@@ -297,7 +255,7 @@ jobs:
 
 ## Static Analysis Tools
 
-GHAGGA runs up to **16 static analysis tools** before the LLM review. Zero LLM tokens consumed for known issues — the AI focuses on logic, architecture, and things static analysis can't detect. See [Static Analysis](static-analysis.md) for the full tool table.
+GHAGGA runs the 17-tool registry before the LLM review. SonarQube stays inert without MCP. See [Static Analysis](static-analysis.md).
 
 - **7 always-on tools** run on every review: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard
 - **9 auto-detect tools** activate when matching files are in the diff: Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, zizmor
@@ -305,7 +263,7 @@ GHAGGA runs up to **16 static analysis tools** before the LLM review. Zero LLM t
 Control tools with the `enabled-tools` and `disabled-tools` inputs:
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   with:
     enabled-tools: 'ruff,bandit'
     disabled-tools: 'markdownlint'
@@ -387,7 +345,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga-action@v1
+      - uses: JNZader/ghagga@v3.4.0
 ```
 
 Or check repo **Settings** → **Actions** → **General** → **Workflow permissions** → select "Read and write permissions".
@@ -433,23 +391,23 @@ Also ensure the workflow file is committed to the branch that the PR targets (us
 **Fix**: If you want advisory-only reviews (non-blocking), add `continue-on-error: true`:
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   continue-on-error: true
 ```
 
 ### "API key is required for provider X"
 
-**Symptom**: Action fails with `API key is required for provider "anthropic"`.
+**Symptom**: Action fails because the provider needs a credential and `api-key` is missing.
 
-**Cause**: You set a non-GitHub provider but didn't provide the `api-key` input.
+**Cause**: `gateway` and `cli-bridge` need `api-key`. `ollama` does not.
 
-**Fix**: Add the API key as a repository secret and reference it:
+**Fix**: Store the gateway credential as a repository secret:
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   with:
-    provider: anthropic
-    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    provider: gateway
+    api-key: ${{ secrets.GHAGGA_API_KEY }}
 ```
 
 ---
@@ -459,6 +417,6 @@ Also ensure the workflow file is committed to the branch that the PR targets (us
 - **[CLI Guide](cli.md)** — Review local changes from your terminal
 - **[Configuration](configuration.md)** — Environment variables and config file options
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
-- **[Static Analysis](static-analysis.md)** — 16 tools, tier system, per-tool control
+- **[Static Analysis](static-analysis.md)** — 17-tool registry (SonarQube via MCP), tier system, per-tool control
 - **[Self-Hosted Guide](self-hosted.md)** — Full deployment with memory and dashboard
 - **[SaaS Guide](saas-getting-started.md)** — Zero-config GitHub App with Dashboard
