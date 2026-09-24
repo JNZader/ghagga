@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga-action@v1
+      - uses: JNZader/ghagga@v3.4.0
 ```
 
 See [GitHub Action](github-action.md) for all inputs and outputs.
@@ -43,10 +43,10 @@ Review local changes from your terminal. No server required.
 # Install globally
 npm install -g ghagga
 
-# Login with GitHub (free — uses GitHub Models, no API key needed)
+# Login with GitHub Device Flow. Saves provider "gateway".
 ghagga login
 
-# Review staged changes (default: simple mode, GitHub Models (free))
+# Review staged changes (default mode: simple). Needs a configured gateway, CLI, or Ollama.
 ghagga review
 
 # Review with options
@@ -89,7 +89,7 @@ If you're using the hosted GHAGGA SaaS, static analysis runs as an **inline GitH
 
 > **Important**: After installing the GitHub App, you must configure an LLM provider in the [Dashboard](https://ghagga.javierzader.com/app/) before reviews will work. See the [SaaS Getting Started Guide](saas-getting-started.md) for the full setup flow.
 
-> **Auth note**: The dashboard signs in with GitHub OAuth Web Flow. That login is separate from GitHub Models credentials in SaaS/server mode.
+> **Auth note**: Dashboard login is GitHub OAuth. It does not select a model. Configure a provider chain (`gateway`, `cli-bridge`, or `ollama`) before reviews call an LLM.
 
 There is nothing to enable manually for static analysis — on each PR review, the server:
 
@@ -103,21 +103,14 @@ See [Architecture — Inline Static-Analysis Workflow](architecture.md#inline-st
 
 ## BYOK — Bring Your Own Key
 
-> **Mode note**: GHAGGA is free and open source, but GitHub Models auth differs by mode. SaaS/server mode needs a PAT with `models:read`; CLI and GitHub Action mode can use the GitHub token you already control.
+> **Mode note**: GHAGGA is MIT-licensed. The model call is separate: `gateway`, `cli-bridge`, or `ollama`.
 
-GHAGGA never sees or stores your keys in plaintext. They're encrypted with AES-256-GCM at rest. You bring your own API key from any supported provider:
+GHAGGA stores provider credentials encrypted with AES-256-GCM. The provider modes are:
 
-| Provider | Default Model |
-|----------|--------------|
-| GitHub Models | `gpt-4o-mini` |
-| Anthropic | `claude-sonnet-4-20250514` |
-| OpenAI | `gpt-4o` |
-| Google | `gemini-2.5-flash` |
-| Ollama | `qwen2.5-coder:7b` |
-| Qwen | `qwen-coder-plus` |
-| Groq | `llama-3.3-70b-versatile` |
-| Cerebras | `llama-3.3-70b` |
-| DeepSeek | `deepseek-chat` |
-| OpenRouter | `deepseek/deepseek-chat` |
+| Mode | What it calls |
+|------|----------------|
+| `gateway` | mcp-llm-bridge. This is what `ghagga login` saves |
+| `cli-bridge` | A local CLI (Claude, Codex, OpenCode, Gemini, Copilot) |
+| `ollama` | A local Ollama model |
 
 Static analysis tools (Semgrep, Trivy, CPD) are always free — they run on GitHub Actions runners (unlimited free minutes for public repos).

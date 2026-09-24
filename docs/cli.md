@@ -22,7 +22,7 @@ The CLI is best for:
 
 - **Node.js >= 22.22.2** (check: `node --version`)
 - **Git** (required for computing diffs)
-- **A GitHub account** (required for `ghagga login` and free GitHub Models access)
+- **A GitHub account** for `ghagga login` (Device Flow). Login selects `gateway`. It does not grant a model
 
 ---
 
@@ -30,13 +30,13 @@ The CLI is best for:
 
 | Component | Cost |
 |-----------|------|
-| **GHAGGA CLI** | Free and open source (MIT license) |
-| **GitHub Models** (`gpt-4o-mini`) | **Free** — default provider, no API key needed |
-| **Ollama** | **Free** — runs locally, 100% offline, no API key |
-| **Other LLM providers** (Anthropic, OpenAI, Google, Qwen) | BYOK — you pay those providers directly at their standard rates |
-| **Static analysis** (up to 16 tools) | Free — runs locally if installed |
+| **GHAGGA CLI** | MIT license |
+| **gateway** | Your mcp-llm-bridge and whatever model it bills |
+| **cli-bridge** | A local CLI you already run |
+| **Ollama** | Local. No API key |
+| **Static analysis** | The 17-tool registry. SonarQube runs only with MCP. Other tools run when installed |
 
-> 💡 **TL;DR**: 100% free with `ghagga login` (GitHub Models) or `--provider ollama` (local). No credit card, no signup beyond GitHub.
+> `ghagga login` does not make the review free. It saves `gateway`. Ollama is the local no-key mode.
 
 ---
 
@@ -58,7 +58,7 @@ npx ghagga --version
 
 ## Step 2: Login
 
-Authenticate with GitHub to get free access to AI models via [GitHub Models](https://github.com/marketplace/models):
+Authenticate with GitHub Device Flow. This saves `defaultProvider: gateway` and does not call a model:
 
 ```bash
 ghagga login
@@ -133,7 +133,7 @@ flowchart LR
 2. The diff is parsed and the tech stack is auto-detected from file extensions
 3. If static analysis tools are installed locally, they run first (zero LLM tokens) — up to 16 tools via the plugin registry
 4. Relevant observations are retrieved from the local memory database via FTS5 full-text search
-5. The diff + static findings + memory context are sent to the configured LLM provider (default: GitHub Models `gpt-4o-mini`)
+5. The diff, static findings, and memory context go to the configured provider (`gateway` unless you set another mode)
 6. The LLM returns a structured review with findings, severity, and suggestions
 7. New observations (decisions, patterns, bugs) are extracted and persisted to memory
 8. The result is formatted as markdown (default) or JSON and printed to stdout
@@ -491,7 +491,7 @@ If the provider is `github` and no `--api-key` is provided, the CLI automaticall
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-ghagga review  # Uses GITHUB_TOKEN for GitHub Models
+ghagga review  # uses the saved gateway provider
 ```
 
 ---
@@ -544,15 +544,13 @@ This file is created by `ghagga login` and contains your GitHub token, username,
 
 ## Provider Examples
 
-### GitHub Models (default — free)
-
-No API key needed after `ghagga login`:
+### gateway (what `ghagga login` saves)
 
 ```bash
 ghagga review
 ```
 
-> **SaaS mode note**: In the SaaS server (GitHub App), GitHub Models requires a personal access token with `models:read` scope configured in the provider chain. Installation tokens (`ghs_*`) do not have this permission, so `github` provider entries without an explicit API key are silently filtered out at review time. This does not affect CLI or GitHub Action usage.
+The command uses `provider: gateway`. Point that gateway at mcp-llm-bridge. It does not call GitHub Models with the login token.
 
 ### OpenAI
 
@@ -595,7 +593,7 @@ ghagga review --provider ollama --model codellama:13b
 
 ## Static Analysis
 
-The CLI supports up to **16 static analysis tools** organized in two tiers — zero tokens consumed for known issues. See [Static Analysis](static-analysis.md) for the full tool table.
+The CLI uses the 17-tool registry. SonarQube runs only with MCP. See [Static Analysis](static-analysis.md).
 
 ### Tool Tiers
 
@@ -801,7 +799,7 @@ export PATH="$(npm config get prefix)/bin:$PATH"
 **Fix**: Run `ghagga login` to authenticate with GitHub (free), or pass `--api-key` directly:
 
 ```bash
-ghagga login                              # Free GitHub Models
+ghagga login                              # saves provider gateway
 ghagga review --provider openai --api-key sk-xxx  # BYOK
 ```
 

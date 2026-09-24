@@ -1,7 +1,8 @@
 name: 'GHAGGA Code Review'
 description: >-
   AI-powered multi-agent code review for PRs with built-in static analysis.
-  Runs 16 static analysis tools directly on the GitHub Actions runner (cached).
+  Runs the static-analysis registry on the GitHub Actions runner (cached).
+  SonarQube stays inert unless an MCP server is configured.
   3 provider modes: gateway (mcp-llm-bridge), cli-bridge (local CLIs), ollama.
 
 branding:
@@ -12,7 +13,7 @@ inputs:
   provider:
     description: >-
       LLM provider to use. Options: gateway (default — route via mcp-llm-bridge),
-      cli-bridge (local CLI tools: Claude Code, OpenCode, Copilot), ollama (local).
+      cli-bridge (local CLIs: Claude Code, Codex, OpenCode, Copilot), ollama (local).
       Legacy values (github, anthropic, openai, google, etc.) are automatically
       remapped to "gateway" for backward compatibility.
     required: false
@@ -26,8 +27,8 @@ inputs:
 
   mode:
     description: >-
-      Review mode. "simple" = single LLM call, "workflow" = 5 specialist agents,
-      "consensus" = for/against/neutral voting.
+      Review mode. simple, workflow, consensus, diagnostic, fan-out, or hybrid-4r.
+      Default is simple. hybrid-4r is fan-out with pinLensesToFirst forced on.
     required: false
     default: 'simple'
 
@@ -47,14 +48,14 @@ inputs:
   enabled-tools:
     description: >-
       Comma-separated list of tool names to force-enable (overrides auto-detect).
-      Example: "ruff,clippy,bandit". See README for the full list of 16 tools.
+      Example: "ruff,clippy,bandit". See README for the 17-tool registry.
     required: false
     default: ''
 
   disabled-tools:
     description: >-
       Comma-separated list of tool names to force-disable (overrides always-on and auto-detect).
-      Example: "gitleaks,cpd". See README for the full list of 16 tools.
+      Example: "gitleaks,cpd". See README for the 17-tool registry.
     required: false
     default: ''
 

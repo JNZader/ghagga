@@ -4,7 +4,7 @@ Layer 0 analysis runs **before** any LLM call. Zero tokens consumed. Known issue
 
 ## Tools
 
-GHAGGA supports 16 static analysis tools across 5 categories, organized into two tiers:
+GHAGGA registers 17 static analysis tools across 5 categories, in two tiers. SonarQube is the MCP entry and stays inert unless an MCP server exposes `sonarqube_issues`.
 
 | Tool | Category | Tier | Languages |
 |------|----------|------|-----------|
@@ -24,6 +24,7 @@ GHAGGA supports 16 static analysis tools across 5 categories, organized into two
 | **clippy** | lint | auto-detect | Rust (`*.rs`) |
 | **Hadolint** | lint | auto-detect | Docker (`Dockerfile*`) |
 | **zizmor** | security | auto-detect | GitHub Actions (`.github/workflows/*.yml\|yaml`) |
+| **SonarQube** | security | auto-detect | Files under review, via MCP (`sonarqube_issues`). Inert when MCP is not configured |
 
 ## Tool Tiers
 
@@ -33,7 +34,7 @@ These 7 tools run on **every review** regardless of what languages are in the di
 
 ### auto-detect
 
-These 9 tools activate **only when matching files are detected** in the diff. For example, Ruff and Bandit only run when the diff contains `*.py` files. This keeps reviews fast — no time wasted on tools that have nothing to scan.
+These 10 tools activate only when matching files are detected in the diff, or, for SonarQube, when MCP is configured. For example, Ruff and Bandit only run when the diff contains `*.py` files.
 
 ### Tool Resolution Order
 
@@ -83,7 +84,7 @@ ghagga review --list-tools
 ### GitHub Action
 
 ```yaml
-- uses: JNZader/ghagga-action@v1
+- uses: JNZader/ghagga@v3.4.0
   with:
     enabled-tools: 'ruff,bandit'
     disabled-tools: 'markdownlint'

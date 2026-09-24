@@ -56,7 +56,7 @@ Memory search runs **in parallel** with static analysis (Step 5):
 2. Retrieves a maximum of **3 past observations** via full-text search
 3. **`formatMemoryContext()`** formats matched observations as markdown and injects them into the LLM prompt under a `## Past Review Memory` section
 
-All 3 review modes (simple, workflow, consensus) receive the same `memoryContext` in their system prompts.
+All six review modes receive the same `memoryContext` in their system prompts.
 
 ### Persist Phase (Step 8)
 

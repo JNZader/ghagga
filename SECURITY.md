@@ -26,11 +26,11 @@ If you discover a security vulnerability, please do not open a public issue with
 - Self-hosted/server dashboard auth requires `GITHUB_CLIENT_SECRET` and `STATE_SECRET`
 - PAT fallback remains available when the dashboard cannot complete server-backed OAuth
 
-## GitHub Models Notes
+## Provider modes
 
-- In SaaS/server mode, GitHub Models requires a PAT with `models:read`
-- GitHub App installation tokens do not have `models:read`, so a `github` provider entry without an explicit PAT is skipped at review time
-- CLI and GitHub Action modes can use a GitHub token already controlled by the user or workflow
+- The runtime providers are `gateway`, `cli-bridge`, and `ollama`
+- `ghagga login` stores a GitHub token and sets the provider to `gateway`. It does not grant a free model
+- Legacy names (`github`, `anthropic`, `openai`, and the rest of that list) are remapped to `gateway` when read from saved config. Passing them explicitly fails
 
 ## Operational Guidance
 

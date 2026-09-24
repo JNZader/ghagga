@@ -1,23 +1,26 @@
 # GHAGGA CLI
 
-AI-powered code review from the command line. **Free** with GitHub Models.
+AI-powered code review from the command line. The CLI is MIT-licensed. A review still needs a configured `gateway`, `cli-bridge`, or `ollama` provider.
 
 ```bash
 npx ghagga login
 npx ghagga review
 ```
 
-That's it. Zero config, zero cost.
+Login only stores the GitHub token and selects `gateway`. The model call still needs a gateway, a local CLI, or Ollama.
 
 ## What is GHAGGA?
 
-GHAGGA is a multi-agent AI code reviewer that analyzes your code changes using LLMs. It supports three review modes with increasing depth:
+GHAGGA is a multi-agent AI code reviewer. Review modes: `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, and `hybrid-4r`.
 
 | Mode | Speed | Depth | LLM Calls |
 |------|-------|-------|-----------|
 | **simple** | ~2s | Single-pass review | 1 |
 | **workflow** | ~15s | 5 specialist agents + synthesis | 6 |
-| **consensus** | ~7s | Same model, three perspectives + algorithmic vote | 3 |
+| **consensus** | ~7s | Three perspectives + algorithmic vote | 3 |
+| **diagnostic** | varies | Ranked hypotheses | varies |
+| **fan-out** | varies | Parallel lenses | ~5 |
+| **hybrid-4r** | varies | Fan-out with lenses pinned to the first model | ~5 |
 
 ## Quick Start
 
@@ -27,7 +30,7 @@ GHAGGA is a multi-agent AI code reviewer that analyzes your code changes using L
 npx ghagga login
 ```
 
-This authenticates with GitHub using Device Flow. Your GitHub token gives you **free access** to AI models via [GitHub Models](https://github.com/marketplace/models).
+This authenticates with GitHub using Device Flow and saves `defaultProvider: gateway`. Configure the gateway (mcp-llm-bridge), a local CLI, or Ollama before a review can call a model.
 
 ### 2. Review your code
 
@@ -186,7 +189,7 @@ Options:
 Use any supported LLM provider:
 
 ```bash
-# GitHub Models (default, free)
+# gateway (saved by ghagga login)
 ghagga review --provider github
 
 # Ollama (local, free, 100% offline)
