@@ -7,9 +7,9 @@
   "license": "MIT",
   "engines": {
     "node": ">=22.22.2",
-    "pnpm": ">=9.0.0"
+    "pnpm": ">=10.0.0"
   },
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -30,6 +30,14 @@
     "turbo": "^2.10.13"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [],
+    "ignoredBuiltDependencies": [
+      "cpu-features",
+      "esbuild",
+      "msgpackr-extract",
+      "protobufjs",
+      "ssh2"
+    ],
     "overrides": {
       "undici": ">=7.28.0 <8",
       "esbuild@<=0.24.2": ">=0.25.0",
