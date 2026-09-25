@@ -77,7 +77,7 @@ jobs:
           # endpoint), so `pnpm audit` fails unconditionally. Use OSV.dev, which
           # scans the pnpm lockfile directly. Advisory-only (job is
           # continue-on-error): findings are surfaced, never block the merge.
-          curl -sSfL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_amd64"
+          curl -sSfL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v2.6.0/osv-scanner_linux_amd64"
           chmod +x osv-scanner
           ./osv-scanner --lockfile=pnpm-lock.yaml \
             || echo "::warning::OSV advisories found (advisory-only, non-blocking) — review the report above and address separately"
