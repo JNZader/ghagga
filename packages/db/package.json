@@ -3,7 +3,7 @@
   "version": "3.4.0",
   "private": false,
   "type": "module",
-  "description": "Database layer for GHAGGA — AI-powered code reviewer",
+  "description": "Database layer for GHAGGA \u2014 AI-powered code reviewer",
   "author": "JNZader",
   "license": "MIT",
   "repository": {
@@ -61,7 +61,7 @@
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }
 }
