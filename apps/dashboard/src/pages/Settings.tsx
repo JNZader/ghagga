@@ -682,7 +682,8 @@ export function Settings() {
                       </div>
                       <p className="mt-1 text-xs text-text-secondary">
                         Simple: 1 LLM call &middot; Workflow: 5 specialist agents &middot;
-                        Consensus: 3 stances debate
+                        Consensus: 3 stances debate. SaaS settings persist only these three modes;
+                        fan-out is `/ghagga fan-out` on the PR.
                       </p>
                     </div>
                   </div>
