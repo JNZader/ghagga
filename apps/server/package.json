@@ -20,7 +20,7 @@
     "@hono/node-server": "^2.1.1",
     "@octokit/rest": "^22.0.1",
     "bullmq": "^6.3.8",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.3",
     "ghagga-core": "workspace:*",
     "ghagga-db": "workspace:*",
     "ghagga-forge": "workspace:*",
