@@ -7,9 +7,9 @@
   "license": "MIT",
   "engines": {
     "node": ">=22.22.2",
-    "pnpm": ">=10.0.0"
+    "pnpm": ">=11.0.0"
   },
-  "packageManager": "pnpm@10.34.5",
+  "packageManager": "pnpm@11.27.1",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -28,25 +28,5 @@
     "@changesets/cli": "^3.0.3",
     "@vitest/coverage-v8": "^5.0.0",
     "turbo": "^2.11.4"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [],
-    "ignoredBuiltDependencies": [
-      "cpu-features",
-      "esbuild",
-      "msgpackr-extract",
-      "protobufjs",
-      "ssh2"
-    ],
-    "overrides": {
-      "undici": ">=7.28.0 <8",
-      "esbuild@<=0.24.2": ">=0.25.0",
-      "hono@<4.12.7": ">=4.12.7",
-      "fast-xml-parser@>=4.0.0-beta.3 <=5.5.5": ">=5.5.6",
-      "lodash-es@<4.18.0": ">=4.18.0",
-      "qs@>=6.0.0 <6.15.2": ">=6.15.2",
-      "js-yaml@>=3.0.0 <3.15.0": ">=3.15.0 <4",
-      "@babel/core@>=7.0.0 <7.29.6": ">=7.29.6 <8"
-    }
   }
 }
