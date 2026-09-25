@@ -24,7 +24,7 @@ ARG NODE_BASE_IMAGE=node:22.22.2-slim@sha256:9f6d5975c7dca860947d3915877f8560794
 FROM ${NODE_BASE_IMAGE} AS builder
 
 # Pin pnpm to an exact version (not a floating major) so `corepack prepare` is reproducible.
-RUN corepack enable && corepack prepare pnpm@11.27.1 --activate
+RUN corepack enable && corepack prepare pnpm@12.6.0 --activate
 
 ENV CI=true
 
@@ -77,7 +77,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@11.27.1 --activate
+RUN corepack enable && corepack prepare pnpm@12.6.0 --activate
 
 # Install CLI tools for cli-bridge provider
 # Bump CLI_TOOLS_VERSION to force Docker cache invalidation when tools change
