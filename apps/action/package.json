@@ -2,8 +2,9 @@
   "name": "@ghagga/action",
   "version": "3.0.4",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt -t -e @xenova/transformers",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/index.js --sourcemap --external:@xenova/transformers --legal-comments=none",
     "build:tsc": "tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -25,8 +26,8 @@
     "@stryker-mutator/typescript-checker": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.6.1",
-    "@vercel/ncc": "^0.45.0",
-    "typescript": "^6.0.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }
 }

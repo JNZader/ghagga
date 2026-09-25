@@ -1,5 +1,5 @@
 /**
- * Build-config assertions for the Action's `ncc` bundle (design D7, task 7.3).
+ * Build-config assertions for the Action's esbuild bundle (design D7, task 7.3).
  *
  * `@xenova/transformers` is an UNDECLARED optional peer of `ghagga-core`,
  * installed by the user (`pnpm add @xenova/transformers`) only when they opt
@@ -11,7 +11,7 @@
  * runs, so at RUNTIME the import is never attempted (covered by
  * index.test.ts's "coerces embedding-provider local to none" case). This
  * file additionally asserts the BUILD-TIME contract that would otherwise
- * silently regress: the `ncc build` script must externalize/exclude the
+ * silently regress: the esbuild `build` script must externalize the
  * package so it can never end up embedded in `dist/index.js`.
  */
 
@@ -24,14 +24,14 @@ const corePackageJsonPath = fileURLToPath(
   new URL('../../../packages/core/package.json', import.meta.url),
 );
 
-describe('Action ncc build excludes @xenova/transformers', () => {
-  it('the "build" script passes -e @xenova/transformers to ncc', () => {
+describe('Action esbuild build excludes @xenova/transformers', () => {
+  it('the "build" script passes --external:@xenova/transformers to esbuild', () => {
     const pkg = JSON.parse(readFileSync(actionPackageJsonPath, 'utf-8')) as {
       scripts: Record<string, string>;
     };
     const buildScript = pkg.scripts.build;
-    expect(buildScript).toContain('ncc build');
-    expect(buildScript).toContain('-e @xenova/transformers');
+    expect(buildScript).toContain('esbuild ');
+    expect(buildScript).toContain('--external:@xenova/transformers');
   });
 
   it('the Action package.json does NOT declare @xenova/transformers as a direct/dev dependency', () => {

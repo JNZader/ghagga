@@ -3,7 +3,7 @@
   "version": "3.4.0",
   "private": false,
   "type": "module",
-  "description": "Core review engine for GHAGGA — AI-powered multi-agent code reviewer",
+  "description": "Core review engine for GHAGGA \u2014 AI-powered multi-agent code reviewer",
   "author": "JNZader",
   "license": "MIT",
   "repository": {
@@ -66,7 +66,7 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.6.1",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }
 }
