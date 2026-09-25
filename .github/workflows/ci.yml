@@ -149,3 +149,24 @@ jobs:
             apps/*/coverage/
           retention-days: 7
           if-no-files-found: ignore
+
+  # ── Required-status wrap-up (always reports; path-skip = skipped, not fail) ──
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: always()
+    needs: [changes, check, lint, test]
+    steps:
+      - name: Fail unless required jobs succeeded or skipped
+        run: |
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "Detect Changes must succeed (got ${{ needs.changes.result }})"
+            exit 1
+          fi
+          for result in "${{ needs.check.result }}" "${{ needs.lint.result }}" "${{ needs.test.result }}"; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "Required job ended with $result (want success or skipped)"
+              exit 1
+            fi
+          done
