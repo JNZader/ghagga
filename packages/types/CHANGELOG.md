@@ -1,5 +1,12 @@
 # @ghagga/types
 
+## 3.0.5
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.5.0
+
 ## 3.0.4
 
 ### Patch Changes
