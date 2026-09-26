@@ -145,9 +145,7 @@ describe('GitLab MR summary post-back — LIVE E2E (manual gate, R-GITLAB)', () 
       const markerNotes = afterSecond.filter((n) => n.body.includes(MARKER.html));
       expect(markerNotes.length, 'exactly one marker note after update-in-place').toBe(1);
       expect(markerNotes[0]?.id).toBe(first.createdNativeId);
-      expect(markerNotes[0]?.body.includes('second'), 'body must be the second payload').toBe(
-        true,
-      );
+      expect(markerNotes[0]?.body.includes('second'), 'body must be the second payload').toBe(true);
     },
     30_000,
   );
