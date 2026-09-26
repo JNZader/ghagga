@@ -15,8 +15,8 @@
  * command-level glue builds a GitLab adapter + a `gitlab`-kind ref and calls
  * THIS function UNCHANGED.
  *
- * Idempotency (find stale → delete all → post fresh) lives inside
- * `adapter.upsertSummaryComment`; this wrapper just relays the adapter's RAW
+ * Idempotency (update-in-place; prune duplicate marker notes best-effort) lives
+ * inside `adapter.upsertSummaryComment`; this wrapper just relays the adapter's RAW
  * forge-native result. Boxing into a canonical `CommentId` (if ever needed) is
  * the kind-specific HANDLER's concern, not this neutral seam's — the only
  * consumer today logs the raw id, so we do not box at all.
