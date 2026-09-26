@@ -1,5 +1,12 @@
 # ghagga-triage-engine
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.5.0
+
 ## 0.3.0
 
 ### Minor Changes

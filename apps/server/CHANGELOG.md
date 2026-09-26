@@ -1,5 +1,15 @@
 # @ghagga/server
 
+## 3.1.1
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.5.0
+  - ghagga-db@3.5.0
+  - ghagga-forge@3.5.0
+  - @ghagga/types@3.0.5
+
 ## 3.1.0
 
 ### Minor Changes

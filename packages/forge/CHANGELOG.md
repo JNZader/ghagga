@@ -1,5 +1,16 @@
 # ghagga-forge
 
+## 3.5.0
+
+### Minor Changes
+
+- TypeScript 7, pnpm 12, esbuild Action bundle (ncc removed), public docs aligned with the runtime, and live GitLab `--mr` write-path E2E.
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.5.0
+
 ## 3.4.0
 
 ### Patch Changes

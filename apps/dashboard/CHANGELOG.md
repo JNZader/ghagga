@@ -1,5 +1,11 @@
 # @ghagga/dashboard
 
+## 3.1.1
+
+### Patch Changes
+
+- @ghagga/types@3.0.5
+
 ## 3.1.0
 
 ### Minor Changes
