@@ -49,9 +49,9 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.8.0",
-    "chalk": "^6.0.0",
+    "chalk": "^6.0.1",
     "commander": "^15.0.0",
-    "dotenv": "^18.0.3",
+    "dotenv": "^18.0.4",
     "fts5-sql-bundle": "^1.0.2",
     "ghagga-core": "workspace:*",
     "ghagga-forge": "workspace:*",
