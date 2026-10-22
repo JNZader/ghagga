@@ -53,14 +53,14 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.75",
     "@ai-sdk/openai-compatible": "^3.0.55",
-    "@bufbuild/protobuf": "^2.15.0",
+    "@bufbuild/protobuf": "^2.16.0",
     "@cursorless/tree-sitter-wasms": "^0.10.0",
     "@scip-code/scip": "^0.10.0",
     "ai": "^7.0.114",
     "fts5-sql-bundle": "^1.0.2",
     "minimatch": "^10.2.6",
-    "web-tree-sitter": "^0.27.0",
-    "zod": "^4.6.2"
+    "web-tree-sitter": "^0.27.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
