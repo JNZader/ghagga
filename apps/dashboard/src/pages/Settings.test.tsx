@@ -646,8 +646,9 @@ describe('Settings — global/custom toggle', () => {
 
     renderSettings();
 
-    // "Inherited from global settings" appears for both Static Analysis and AI Review cards
-    expect(screen.getAllByText('Inherited from global settings')).toHaveLength(2);
+    // Static analysis, PR explanations, and AI review each inherit from global settings.
+    expect(screen.getAllByText('Inherited from global settings')).toHaveLength(3);
+    expect(screen.getByText('/ghagga explain:').closest('p')).toHaveTextContent('Disabled');
 
     // Provider chain displayed as text
     expect(screen.getByText(/openai \(gpt-4\)/)).toBeInTheDocument();
@@ -742,12 +743,51 @@ describe('Settings — save', () => {
       expect(payload.enableTrivy).toBe(true);
       expect(payload.enableCpd).toBe(false);
       expect(payload.enableMemory).toBe(true);
+      expect(payload.explanationsEnabled).toBe(false);
       expect(payload.customRules).toBe('no eval()');
       expect(payload.ignorePatterns).toEqual(['*.lock', 'dist/**']);
       expect(payload.providerChain).toEqual([
         { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
       ]);
     });
+  });
+
+  it('sends explanationsEnabled when the PR explanations toggle is turned on', async () => {
+    const mockMutateAsync = vi.fn().mockResolvedValue({ message: 'ok' });
+    mockUseUpdateSettings.mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+      isError: false,
+    });
+
+    setupWithSettings();
+    renderSettings();
+
+    const toggle = screen.getByRole('checkbox', { name: 'PR explanations' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByText('Save Settings'));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      expect(mockMutateAsync.mock.calls[0]?.[0].explanationsEnabled).toBe(true);
+    });
+  });
+
+  it('shows an inherited explanation opt-in without offering the repository toggle', () => {
+    setupSelectedRepo();
+    mockUseSettings.mockReturnValue({
+      data: {
+        ...SETTINGS_WITH_GLOBAL,
+        globalSettings: { ...GLOBAL_SETTINGS, explanationsEnabled: true },
+      },
+      isLoading: false,
+    });
+
+    renderSettings();
+
+    expect(screen.getByText('/ghagga explain:').closest('p')).toHaveTextContent('Enabled');
+    expect(screen.queryByRole('checkbox', { name: 'PR explanations' })).not.toBeInTheDocument();
   });
 
   it('shows "Saving..." while mutation is pending', () => {

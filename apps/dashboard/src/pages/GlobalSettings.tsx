@@ -50,6 +50,7 @@ export function GlobalSettings() {
   const [enableCpd, setEnableCpd] = useState(false);
   const [enableMemory, setEnableMemory] = useState(true);
   const [enableBlastRadius, setEnableBlastRadius] = useState(false);
+  const [explanationsEnabled, setExplanationsEnabled] = useState(false);
   const [aiReviewEnabled, setAiReviewEnabled] = useState(true);
   const [providerChain, setProviderChain] = useState<ProviderEntryState[]>([]);
   const [reviewMode, setReviewMode] = useState<ReviewMode>('simple');
@@ -67,6 +68,7 @@ export function GlobalSettings() {
       setEnableCpd(settings.enableCpd);
       setEnableMemory(settings.enableMemory);
       setEnableBlastRadius(settings.enableBlastRadius ?? false);
+      setExplanationsEnabled(settings.explanationsEnabled ?? false);
       setAiReviewEnabled(settings.aiReviewEnabled);
       setReviewMode(settings.reviewMode as ReviewMode);
       setCustomRules(settings.customRules);
@@ -120,6 +122,7 @@ export function GlobalSettings() {
       enableCpd,
       enableMemory,
       enableBlastRadius,
+      explanationsEnabled,
       customRules,
       ignorePatterns: ignorePatterns
         .split('\n')
@@ -340,6 +343,34 @@ export function GlobalSettings() {
                 </p>
               </div>
             )}
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between">
+              <CardHeader
+                title="PR explanations"
+                description="Let maintainers ask /ghagga explain on a pull request. Repositories using global settings inherit this opt-in."
+              />
+              <label className="flex cursor-pointer items-center gap-3">
+                <span className="text-sm text-text-secondary">
+                  {explanationsEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    aria-label="PR explanations"
+                    checked={explanationsEnabled}
+                    onChange={(e) => setExplanationsEnabled(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div className="h-6 w-11 rounded-full bg-surface-border peer-checked:bg-primary-600 transition-colors" />
+                  <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+                </div>
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-text-secondary">
+              Off by default. This does not add a review mode and does not post review findings.
+            </p>
           </Card>
 
           {/* ── AI Review ────────────────────────────────────── */}

@@ -143,32 +143,35 @@ function hasExactConfirmedInvocation(
   );
 }
 
-function currentAnswerPublication(row: Record<string, unknown>) {
-  const status = row.answerPublicationStatus;
-  const version = row.answerPublicationVersion;
+function currentChannelPublication(row: Record<string, unknown>, channel: 'answer' | 'progress') {
+  const status =
+    row[channel === 'progress' ? 'progressPublicationStatus' : 'answerPublicationStatus'];
+  const version =
+    row[channel === 'progress' ? 'progressPublicationVersion' : 'answerPublicationVersion'];
+  const commentId = row[channel === 'progress' ? 'progressCommentId' : 'answerCommentId'];
+  const publicationFence =
+    row[channel === 'progress' ? 'progressPublicationFence' : 'answerPublicationFence'];
   if (!isNonNegativeSafeInteger(version)) return null;
   if (status === EXPLANATION_PUBLICATION_STATUS.NOT_STARTED) {
     return { status, version } as const;
   }
   if (status === EXPLANATION_PUBLICATION_STATUS.PUBLISHED) {
-    return isPositiveSafeInteger(row.answerCommentId)
-      ? ({ status, version, commentId: row.answerCommentId } as const)
-      : null;
+    return isPositiveSafeInteger(commentId) ? ({ status, version, commentId } as const) : null;
   }
   if (
     (status === EXPLANATION_PUBLICATION_STATUS.CREATE_STARTED ||
       status === EXPLANATION_PUBLICATION_STATUS.PATCH_STARTED) &&
-    typeof row.answerPublicationFence === 'string' &&
-    row.answerPublicationFence.length > 0
+    typeof publicationFence === 'string' &&
+    publicationFence.length > 0
   ) {
-    return isPositiveSafeInteger(row.answerCommentId)
+    return isPositiveSafeInteger(commentId)
       ? ({
           status,
           version,
-          publicationFence: row.answerPublicationFence,
-          commentId: row.answerCommentId,
+          publicationFence,
+          commentId,
         } as const)
-      : ({ status, version, publicationFence: row.answerPublicationFence } as const);
+      : ({ status, version, publicationFence } as const);
   }
   return null;
 }
@@ -179,7 +182,7 @@ function currentAnswerPublication(row: Record<string, unknown>) {
  */
 export function createPersistedExplanationPublisher(
   overridesOrChannel: PersistedExplanationPublisherDependencies | 'answer' | 'progress' = {},
-  channel = 'answer' as const,
+  channel: 'answer' | 'progress' = 'answer',
 ): PersistedExplanationPublisher {
   const overrides = typeof overridesOrChannel === 'string' ? {} : overridesOrChannel;
   const publicationChannel = typeof overridesOrChannel === 'string' ? overridesOrChannel : channel;
@@ -198,12 +201,19 @@ export function createPersistedExplanationPublisher(
   return async function publishConfirmedExplanation(
     confirmed: ConfirmedPersistedExplanationOutcome,
   ): Promise<PersistedExplanationPublicationResult | undefined> {
+    if (
+      confirmed.outcome.kind === 'DISABLED' ||
+      confirmed.outcome.kind === 'UNAUTHORIZED' ||
+      confirmed.outcome.kind === 'STALE' ||
+      !sameIdentity(confirmed.identity, confirmed.request.identity)
+    ) {
+      return undefined;
+    }
     const body =
       publicationChannel === 'progress'
         ? `Explanation completed with outcome ${confirmed.outcome.kind}.`
         : rawAnswerBody(confirmed.outcome);
-    if (body === null || !sameIdentity(confirmed.identity, confirmed.request.identity))
-      return undefined;
+    if (body === null) return undefined;
 
     const db = createDatabase();
     let adapter: GitHubAdapter | undefined;
@@ -309,8 +319,9 @@ export function createPersistedExplanationPublisher(
           ? { kind: EXPLANATION_PUBLICATION_GUARD.STALE }
           : { kind: EXPLANATION_PUBLICATION_GUARD.UNAVAILABLE };
       }
-      const publication = currentAnswerPublication(
+      const publication = currentChannelPublication(
         observed.invocation as unknown as Record<string, unknown>,
+        publicationChannel,
       );
       const invocationId = deriveExplanationInvocationKey(confirmed.request.identity);
       if (publication === null || invocationId === null) {
@@ -329,7 +340,7 @@ export function createPersistedExplanationPublisher(
           iid: confirmed.request.identity.pullRequestNumber,
         },
         ownerId: String(bot.id),
-        channel: 'answer',
+        channel: publicationChannel,
         invocationId,
       };
       return {

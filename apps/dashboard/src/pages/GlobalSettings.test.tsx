@@ -7,7 +7,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -200,6 +200,30 @@ describe('GlobalSettings — installations error (PRODOPS-006)', () => {
     fireEvent.click(screen.getByText('Retry'));
 
     expect(mockRefetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GlobalSettings — PR explanations', () => {
+  it('saves an explicit opt-in and stays off when the setting is omitted', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ message: 'ok' });
+    mockUseUpdateInstallationSettings.mockReturnValue({
+      mutateAsync,
+      isPending: false,
+      isError: false,
+    });
+
+    renderGlobalSettings();
+
+    const toggle = screen.getByRole('checkbox', { name: 'PR explanations' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByText('Save Global Settings'));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ installationId: 100, explanationsEnabled: true }),
+      );
+    });
   });
 });
 

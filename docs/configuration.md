@@ -1,6 +1,6 @@
 # Configuration
 
-> **Using the SaaS (GitHub App)?** Configure everything in the [Dashboard](https://ghagga.javierzader.com/app/) → Settings. The environment variables and config file below are for **CLI** and **self-hosted** deployments only.
+> **Using the SaaS (GitHub App)?** Configure everything in the [Dashboard](https://ghagga.javierzader.com/app/) → Settings. The environment variables and config file below are for **CLI** and **self-hosted** deployments only. `/ghagga explain` has no extra environment variable: enable **PR explanations** in the dashboard. See [PR explanations](pr-explanations.md).
 
 ## Environment Variables
 

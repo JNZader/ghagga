@@ -417,6 +417,7 @@ Returns the settings for a specific repository, including its resolved global se
     "enableTrivy": true,
     "enableCpd": true,
     "enableMemory": true,
+    "explanationsEnabled": false,
     "enabledTools": ["semgrep", "trivy", "cpd", "gitleaks", "shellcheck"],
     "disabledTools": ["psalm"],
     "registeredTools": ["semgrep", "trivy", "cpd", "gitleaks", "shellcheck", "markdownlint", "lizard", "ruff", "bandit", "golangci-lint", "biome", "pmd", "psalm", "clippy", "hadolint"],
@@ -436,6 +437,7 @@ Returns the settings for a specific repository, including its resolved global se
       "enableTrivy": true,
       "enableCpd": true,
       "enableMemory": true,
+      "explanationsEnabled": false,
       "enabledTools": [],
       "disabledTools": [],
       "customRules": "",
@@ -473,6 +475,7 @@ Updates configuration for a repository. Supports partial updates — only includ
   "enableTrivy": true,
   "enableCpd": false,
   "enableMemory": true,
+  "explanationsEnabled": false,
   "enabledTools": ["semgrep", "trivy", "gitleaks"],
   "disabledTools": ["cpd"],
   "customRules": "rule1\nrule2",
@@ -493,6 +496,7 @@ Updates configuration for a repository. Supports partial updates — only includ
 | `enableTrivy` | `boolean` | No | **Deprecated.** Enable Trivy vulnerability scanning. Use `enabledTools`/`disabledTools` instead |
 | `enableCpd` | `boolean` | No | **Deprecated.** Enable copy-paste detection. Use `enabledTools`/`disabledTools` instead |
 | `enableMemory` | `boolean` | No | Enable project memory |
+| `explanationsEnabled` | `boolean` | No | Opt in to `/ghagga explain` on pull-request comments. Omitted or `false` leaves the command disabled. Does not change review behavior |
 | `enabledTools` | `string[]` | No | Tools to force-enable (e.g., `["semgrep", "gitleaks"]`). Overrides registry defaults |
 | `disabledTools` | `string[]` | No | Tools to force-disable (e.g., `["cpd", "psalm"]`). Overrides registry defaults |
 | `customRules` | `string` | No | Custom review rules (newline-separated) |
@@ -555,6 +559,7 @@ Returns the global (installation-level) settings that apply as defaults to all r
     "enableTrivy": true,
     "enableCpd": true,
     "enableMemory": true,
+    "explanationsEnabled": false,
     "enabledTools": [],
     "disabledTools": [],
     "registeredTools": ["semgrep", "trivy", "cpd", "gitleaks", "shellcheck", "markdownlint", "lizard", "ruff", "bandit", "golangci-lint", "biome", "pmd", "psalm", "clippy", "hadolint"],
@@ -586,6 +591,7 @@ Updates the global settings for an installation. These settings apply to all rep
   "enableTrivy": true,
   "enableCpd": true,
   "enableMemory": true,
+  "explanationsEnabled": true,
   "enabledTools": ["semgrep", "trivy", "cpd", "gitleaks"],
   "disabledTools": [],
   "customRules": "rule1\nrule2",

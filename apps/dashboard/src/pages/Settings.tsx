@@ -91,6 +91,9 @@ export function Settings() {
   // ── Blast Radius toggle ──────────────────────────────────────
   const [enableBlastRadius, setEnableBlastRadius] = useState(false);
 
+  // ── PR explanation opt-in ────────────────────────────────────
+  const [explanationsEnabled, setExplanationsEnabled] = useState(false);
+
   // ── Other settings ──────────────────────────────────────────
   const [customRules, setCustomRules] = useState('');
   const [ignorePatterns, setIgnorePatterns] = useState('');
@@ -121,6 +124,7 @@ export function Settings() {
     setProviderChain([]);
     setReviewMode('simple');
     setEnableBlastRadius(false);
+    setExplanationsEnabled(false);
     setCustomRules('');
     setIgnorePatterns('');
   }, [selectedRepo]);
@@ -134,6 +138,7 @@ export function Settings() {
       setEnableCpd(settings.enableCpd);
       setEnableMemory(settings.enableMemory);
       setEnableBlastRadius(settings.enableBlastRadius ?? false);
+      setExplanationsEnabled(settings.explanationsEnabled ?? false);
       setAiReviewEnabled(settings.aiReviewEnabled);
       setReviewMode(settings.reviewMode);
       setCustomRules(settings.customRules);
@@ -202,6 +207,7 @@ export function Settings() {
         setEnableCpd(settings.globalSettings.enableCpd);
         setEnableMemory(settings.globalSettings.enableMemory);
         setEnableBlastRadius(settings.globalSettings.enableBlastRadius ?? false);
+        setExplanationsEnabled(settings.globalSettings.explanationsEnabled ?? false);
         setCustomRules(settings.globalSettings.customRules);
         setIgnorePatterns(settings.globalSettings.ignorePatterns.join('\n'));
       }
@@ -246,6 +252,7 @@ export function Settings() {
         enableCpd,
         enableMemory,
         enableBlastRadius,
+        explanationsEnabled,
         disabledTools,
         customRules,
         ignorePatterns: ignorePatterns
@@ -482,6 +489,14 @@ export function Settings() {
               </Card>
 
               <Card>
+                <CardHeader title="PR explanations" description="Inherited from global settings" />
+                <p className="text-sm text-text-secondary">
+                  <strong className="text-text-primary">/ghagga explain:</strong>{' '}
+                  {globalSettings.explanationsEnabled ? 'Enabled' : 'Disabled'}
+                </p>
+              </Card>
+
+              <Card>
                 <CardHeader title="AI Review" description="Inherited from global settings" />
                 <div className="space-y-2 text-sm text-text-secondary">
                   <p>
@@ -616,6 +631,36 @@ export function Settings() {
                     </p>
                   </div>
                 )}
+              </Card>
+
+              <Card>
+                <div className="flex items-center justify-between">
+                  <CardHeader
+                    title="PR explanations"
+                    description="Let maintainers ask /ghagga explain on a pull request. Answers stay separate from reviews."
+                  />
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <span className="text-sm text-text-secondary">
+                      {explanationsEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        aria-label="PR explanations"
+                        checked={explanationsEnabled}
+                        onChange={(e) => setExplanationsEnabled(e.target.checked)}
+                        className="peer sr-only"
+                      />
+                      <div className="h-6 w-11 rounded-full bg-surface-border peer-checked:bg-primary-600 transition-colors" />
+                      <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+                    </div>
+                  </label>
+                </div>
+                <p className="mt-2 text-xs text-text-secondary">
+                  Off by default. An OWNER, MEMBER, or COLLABORATOR comments{' '}
+                  <code>/ghagga explain &lt;question&gt;</code> on the pull request. GHAGGA replies
+                  in the conversation and does not approve or request changes.
+                </p>
               </Card>
 
               {/* ── AI Review ────────────────────────────────────── */}

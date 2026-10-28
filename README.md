@@ -34,6 +34,7 @@ What makes it different:
 - **Static analysis runs first.** 17 deterministic tools (Semgrep, Trivy, Gitleaks, Ruff, clippy, …) catch known issues before a single LLM token is spent. Findings are injected into the review prompt so the model spends its attention on logic and architecture, not lint.
 - **It remembers.** Past decisions, bugfixes, and patterns persist across reviews (PostgreSQL, SQLite, or [Engram](https://github.com/Gentleman-Programming/engram)) and feed back into future ones — with full-text search, strength decay, and privacy stripping.
 - **Six orchestration strategies.** From a single fast pass to multi-agent fan-out and `hybrid-4r`, chosen per review by the cost/confidence tradeoff you want.
+- **Ask why, separately from review.** On the GitHub App, an opted-in repository accepts `/ghagga explain <question>` from a maintainer comment and posts a finding-free answer on that pull request. It does not approve, request changes, or add a seventh review mode. See [PR explanations](docs/pr-explanations.md).
 - **Forge-agnostic core.** The review engine speaks in provider-neutral ports. The CLI posts findings back to **GitHub pull requests** (`--pr`) and **GitLab merge requests** (`--mr`). Gitea exists as a forge kind on the port types. There is no Gitea adapter.
 - **No runner infrastructure.** Server mode injects an inline GitHub Actions workflow into each target repo and dispatches it — heavy analysis runs on the repo's own free CI minutes, secured with per-dispatch HMAC secrets.
 
