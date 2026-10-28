@@ -49,7 +49,7 @@
 ## Phase 3: Dashboard API Hooks
 
 - [ ] 3.1 Add `useDeleteReview`, `useBatchDeleteReviews`, and `useBatchDeleteObservations` hooks to `apps/dashboard/src/lib/api.ts`
-  - `useDeleteReview()`: calls `fetchData<{ deleted: boolean }>(\`/api/reviews/${reviewId}\`, { method: 'DELETE' })`, invalidates `['reviews']` and `['stats']`
+  - `useDeleteReview()`: calls `fetchData<{ deleted: boolean }>(\`/api/reviews/${reviewId}\`, { method: 'DELETE' })`, invalidates `['reviews']`and`['stats']`
   - `useBatchDeleteReviews()`: calls `fetchData<{ deletedCount: number }>('/api/reviews/batch', { method: 'DELETE', body: JSON.stringify({ ids }) })`, invalidates `['reviews']` and `['stats']`
   - `useBatchDeleteObservations()`: calls `fetchData<{ deletedCount: number }>('/api/memory/observations/batch', { method: 'DELETE', body: JSON.stringify({ ids }) })`, invalidates `['memory', 'observations']` and `['memory', 'sessions']`
   - Follow existing mutation patterns (e.g., `useDeleteObservation` at line 243-255)

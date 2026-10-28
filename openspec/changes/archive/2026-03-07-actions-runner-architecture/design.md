@@ -48,14 +48,14 @@
 
 ### Separation of Concerns
 
-| Responsibility | Where | Why |
-|---|---|---|
-| Webhook reception & verification | Render | Already handles webhooks |
-| Settings resolution, DB queries | Render | Has DATABASE_URL |
-| LLM API calls (Anthropic, OpenAI, etc.) | Render | Has API keys |
-| Semgrep, Trivy, CPD execution | GitHub Actions | Needs 7GB RAM, free on public repos |
-| Review comment posting | Render | Has installation token |
-| Runner repo lifecycle | Render | Has GitHub App credentials |
+| Responsibility                          | Where          | Why                                 |
+| --------------------------------------- | -------------- | ----------------------------------- |
+| Webhook reception & verification        | Render         | Already handles webhooks            |
+| Settings resolution, DB queries         | Render         | Has DATABASE_URL                    |
+| LLM API calls (Anthropic, OpenAI, etc.) | Render         | Has API keys                        |
+| Semgrep, Trivy, CPD execution           | GitHub Actions | Needs 7GB RAM, free on public repos |
+| Review comment posting                  | Render         | Has installation token              |
+| Runner repo lifecycle                   | Render         | Has GitHub App credentials          |
 
 ---
 
@@ -225,16 +225,16 @@ Sent from server to `POST https://api.github.com/repos/{owner}/ghagga-runner/dis
 
 **Field descriptions:**
 
-| Field | Type | Description |
-|---|---|---|
-| `callbackId` | string (UUID v4) | Unique correlation ID linking dispatch to callback |
-| `repoFullName` | string | Target repository to clone and scan (e.g., `alice/my-project`) |
-| `prNumber` | number | PR number (used for context in error messages only) |
-| `headSha` | string | HEAD commit SHA to checkout after cloning |
-| `baseBranch` | string | Base branch name (for shallow clone reference) |
-| `toolSettings` | object | Which tools to run (mirrors `ReviewSettings` subset) |
-| `callbackUrl` | string | Server URL to POST results to |
-| `callbackSignature` | string | Pre-computed HMAC-SHA256 for the runner to include in callback header |
+| Field               | Type             | Description                                                           |
+| ------------------- | ---------------- | --------------------------------------------------------------------- |
+| `callbackId`        | string (UUID v4) | Unique correlation ID linking dispatch to callback                    |
+| `repoFullName`      | string           | Target repository to clone and scan (e.g., `alice/my-project`)        |
+| `prNumber`          | number           | PR number (used for context in error messages only)                   |
+| `headSha`           | string           | HEAD commit SHA to checkout after cloning                             |
+| `baseBranch`        | string           | Base branch name (for shallow clone reference)                        |
+| `toolSettings`      | object           | Which tools to run (mirrors `ReviewSettings` subset)                  |
+| `callbackUrl`       | string           | Server URL to POST results to                                         |
+| `callbackSignature` | string           | Pre-computed HMAC-SHA256 for the runner to include in callback header |
 
 **What is NOT in the payload:**
 - No API keys or tokens (token is a repo secret)
@@ -299,27 +299,27 @@ Sent from GitHub Actions to `POST {callbackUrl}` with header `X-Ghagga-Signature
 
 **How tool outputs are transformed in the runner workflow:**
 
-| Tool | Native Output | Transformation | Target Type |
-|---|---|---|---|
-| Semgrep | JSON (`--json` flag): `{ results: [...], errors: [...] }` | Map `results[].check_id`, `.path`, `.start.line`, `.extra.message`, `.extra.severity` → `ReviewFinding` | `ToolResult` |
-| Trivy | JSON (`--format json`): `{ Results: [{ Target, Vulnerabilities: [...] }] }` | Map `VulnerabilityID`, `PkgName`, `InstalledVersion`, `Severity`, `Title` → `ReviewFinding` | `ToolResult` |
-| CPD | XML (`--format xml`): `<pmd-cpd><duplication>...</duplication></pmd-cpd>` | Parse XML regex, extract `<file path="" line="">`, `<duplication lines="" tokens="">` → `ReviewFinding` | `ToolResult` |
+| Tool    | Native Output                                                               | Transformation                                                                                          | Target Type  |
+| ------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------ |
+| Semgrep | JSON (`--json` flag): `{ results: [...], errors: [...] }`                   | Map `results[].check_id`, `.path`, `.start.line`, `.extra.message`, `.extra.severity` → `ReviewFinding` | `ToolResult` |
+| Trivy   | JSON (`--format json`): `{ Results: [{ Target, Vulnerabilities: [...] }] }` | Map `VulnerabilityID`, `PkgName`, `InstalledVersion`, `Severity`, `Title` → `ReviewFinding`             | `ToolResult` |
+| CPD     | XML (`--format xml`): `<pmd-cpd><duplication>...</duplication></pmd-cpd>`   | Parse XML regex, extract `<file path="" line="">`, `<duplication lines="" tokens="">` → `ReviewFinding` | `ToolResult` |
 
 **Severity mapping (reuses existing logic from `packages/core/src/tools/`):**
 
 | Semgrep Severity | → FindingSeverity | Trivy Severity | → FindingSeverity |
-|---|---|---|---|
-| ERROR | high | CRITICAL | critical |
-| WARNING | medium | HIGH | high |
-| INFO | info | MEDIUM | medium |
-| (other) | low | LOW | low |
-| | | (other) | info |
+| ---------------- | ----------------- | -------------- | ----------------- |
+| ERROR            | high              | CRITICAL       | critical          |
+| WARNING          | medium            | HIGH           | high              |
+| INFO             | info              | MEDIUM         | medium            |
+| (other)          | low               | LOW            | low               |
+|                  |                   | (other)        | info              |
 
 The `staticAnalysis` field conforms exactly to the `StaticAnalysisResult` type from `packages/core/src/types.ts`:
 
 ```typescript
 interface StaticAnalysisResult {
-  semgrep: ToolResult;  // { status, findings, error?, executionTimeMs }
+  semgrep: ToolResult; // { status, findings, error?, executionTimeMs }
   trivy: ToolResult;
   cpd: ToolResult;
 }
@@ -620,11 +620,11 @@ jobs:
 
 **Caching strategy summary:**
 
-| Tool | Cache Path | Cache Key | Size | Cold → Warm |
-|---|---|---|---|---|
-| Semgrep | `~/.cache/semgrep` | `semgrep-{os}-v1` | ~400MB | ~90s → ~5s |
-| Trivy DB | `~/.cache/trivy` | `trivy-db-{os}-{lockfile-hash}` | ~100MB | ~60s → ~3s |
-| PMD | `/opt/pmd` | `pmd-7.8.0-{os}` | ~300MB | ~30s → ~1s |
+| Tool     | Cache Path         | Cache Key                       | Size   | Cold → Warm |
+| -------- | ------------------ | ------------------------------- | ------ | ----------- |
+| Semgrep  | `~/.cache/semgrep` | `semgrep-{os}-v1`               | ~400MB | ~90s → ~5s  |
+| Trivy DB | `~/.cache/trivy`   | `trivy-db-{os}-{lockfile-hash}` | ~100MB | ~60s → ~3s  |
+| PMD      | `/opt/pmd`         | `pmd-7.8.0-{os}`                | ~300MB | ~30s → ~1s  |
 
 ---
 
@@ -642,9 +642,7 @@ import { getInstallationToken } from './client.js';
 
 // Canonical workflow file content (embedded as string constant)
 const CANONICAL_WORKFLOW = `...`; // The full YAML from section 3.3
-const CANONICAL_WORKFLOW_HASH = createHash('sha256')
-  .update(CANONICAL_WORKFLOW)
-  .digest('hex');
+const CANONICAL_WORKFLOW_HASH = createHash('sha256').update(CANONICAL_WORKFLOW).digest('hex');
 
 const RUNNER_REPO_NAME = 'ghagga-runner';
 const WORKFLOW_PATH = '.github/workflows/ghagga-analysis.yml';
@@ -655,7 +653,7 @@ const GITHUB_API = 'https://api.github.com';
 /**
  * Ensure the runner repo exists with the correct workflow file.
  * Creates if missing, re-commits workflow if tampered.
- * 
+ *
  * Returns { created: boolean, existed: boolean }.
  */
 export async function ensureRunnerRepo(
@@ -737,11 +735,7 @@ async function setRepoSecret(
  * Delete workflow run logs via DELETE /repos/{owner}/{repo}/actions/runs/{runId}/logs.
  * Called from server side as a backup if the runner's self-deletion fails.
  */
-async function deleteWorkflowLogs(
-  owner: string,
-  runId: number,
-  token: string,
-): Promise<void>;
+async function deleteWorkflowLogs(owner: string, runId: number, token: string): Promise<void>;
 ```
 
 **Key implementation detail — libsodium sealed box for secrets:**
@@ -767,19 +761,19 @@ async function setRepoSecret(owner: string, secretName: string, value: string, t
   const encryptedB64 = Buffer.from(encrypted).toString('base64');
 
   // 3. PUT the secret
-  await fetch(
-    `${GITHUB_API}/repos/${owner}/${RUNNER_REPO_NAME}/actions/secrets/${secretName}`,
-    {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ encrypted_value: encryptedB64, key_id }),
+  await fetch(`${GITHUB_API}/repos/${owner}/${RUNNER_REPO_NAME}/actions/secrets/${secretName}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
     },
-  );
+    body: JSON.stringify({ encrypted_value: encryptedB64, key_id }),
+  });
 }
 ```
 
 **Decision: Use `libsodium-wrappers` for sealed box encryption.**
-
 - **Choice**: Add `libsodium-wrappers` as a dependency
 - **Alternatives considered**: `tweetnacl` (lacks sealed box), manual crypto
 - **Rationale**: `libsodium-wrappers` is the de facto standard for GitHub Secrets API encryption, lightweight (~200KB), and widely used. `tweetnacl` doesn't provide `crypto_box_seal` natively.
@@ -843,9 +837,8 @@ export function createRunnerCallbackRouter() {
       return c.json({ error: 'Server misconfiguration' }, 500);
     }
 
-    const expectedSignature = 'sha256=' + createHmac('sha256', webhookSecret)
-      .update(body.callbackId)
-      .digest('hex');
+    const expectedSignature =
+      'sha256=' + createHmac('sha256', webhookSecret).update(body.callbackId).digest('hex');
 
     const sigMatch = safeCompare(signature, expectedSignature);
     if (!sigMatch) {
@@ -885,7 +878,6 @@ function safeCompare(a: string, b: string): boolean {
 ```
 
 **Architecture Decision: HMAC key source**
-
 - **Choice**: Use `GITHUB_WEBHOOK_SECRET` as the HMAC key for callback verification
 - **Alternatives considered**: Generate per-dispatch random secret and store in a TTL cache or database
 - **Rationale**: Using the existing webhook secret avoids needing a separate secret store or cache. The signature is `HMAC-SHA256(GITHUB_WEBHOOK_SECRET, callbackId)`. Since `callbackId` is a random UUID, each dispatch produces a unique signature. The webhook secret is already a high-entropy secret available in the server environment. This eliminates the need for Redis/Memcached or a database table to store per-dispatch secrets.
@@ -942,9 +934,24 @@ if (dispatchResult.dispatched) {
     // Timeout — construct empty result
     console.warn('[ghagga] Runner timed out after 10 minutes, proceeding with LLM-only');
     precomputedStaticAnalysis = {
-      semgrep: { status: 'skipped', findings: [], error: 'Runner timeout (10 min)', executionTimeMs: 0 },
-      trivy: { status: 'skipped', findings: [], error: 'Runner timeout (10 min)', executionTimeMs: 0 },
-      cpd: { status: 'skipped', findings: [], error: 'Runner timeout (10 min)', executionTimeMs: 0 },
+      semgrep: {
+        status: 'skipped',
+        findings: [],
+        error: 'Runner timeout (10 min)',
+        executionTimeMs: 0,
+      },
+      trivy: {
+        status: 'skipped',
+        findings: [],
+        error: 'Runner timeout (10 min)',
+        executionTimeMs: 0,
+      },
+      cpd: {
+        status: 'skipped',
+        findings: [],
+        error: 'Runner timeout (10 min)',
+        executionTimeMs: 0,
+      },
     };
   }
 }
@@ -961,8 +968,12 @@ const result = await step.run('run-review', async () => {
     provider: legacyProvider,
     model: legacyModel,
     apiKey: legacyApiKey,
-    settings: { /* ... unchanged ... */ },
-    context: { /* ... unchanged ... */ },
+    settings: {
+      /* ... unchanged ... */
+    },
+    context: {
+      /* ... unchanged ... */
+    },
     db,
     precomputedStaticAnalysis, // NEW: inject runner results
   };
@@ -1057,8 +1068,8 @@ await inngest.send({
   name: 'ghagga/review.requested',
   data: {
     // ... existing fields ...
-    headSha: payload.pull_request.head.sha,     // NEW
-    baseBranch: payload.pull_request.base.ref,   // NEW
+    headSha: payload.pull_request.head.sha, // NEW
+    baseBranch: payload.pull_request.base.ref, // NEW
   },
 });
 ```
@@ -1226,60 +1237,60 @@ Any subsequent output containing these strings will be replaced with `***` by Gi
 
 ### What Gets Cached
 
-| Item | Cache Action | Path | Key | Approx. Size |
-|---|---|---|---|---|
-| Semgrep binary + rules | `actions/cache@v4` | `~/.cache/semgrep` | `semgrep-{os}-v1` | ~400MB |
-| Trivy vulnerability DB | `actions/cache@v4` | `~/.cache/trivy` | `trivy-db-{os}-{lockfile-hash}` | ~100MB |
-| PMD binary distribution | `actions/cache@v4` | `/opt/pmd` | `pmd-7.8.0-{os}` | ~300MB |
+| Item                    | Cache Action       | Path               | Key                             | Approx. Size |
+| ----------------------- | ------------------ | ------------------ | ------------------------------- | ------------ |
+| Semgrep binary + rules  | `actions/cache@v4` | `~/.cache/semgrep` | `semgrep-{os}-v1`               | ~400MB       |
+| Trivy vulnerability DB  | `actions/cache@v4` | `~/.cache/trivy`   | `trivy-db-{os}-{lockfile-hash}` | ~100MB       |
+| PMD binary distribution | `actions/cache@v4` | `/opt/pmd`         | `pmd-7.8.0-{os}`                | ~300MB       |
 
 ### Cache Key and Invalidation Strategy
 
-| Tool | Key Pattern | Invalidation |
-|---|---|---|
-| Semgrep | `semgrep-Linux-v1` | Manual: bump `v1` → `v2` when upgrading Semgrep version |
+| Tool     | Key Pattern             | Invalidation                                                                                                                              |
+| -------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Semgrep  | `semgrep-Linux-v1`      | Manual: bump `v1` → `v2` when upgrading Semgrep version                                                                                   |
 | Trivy DB | `trivy-db-Linux-{hash}` | Auto: lockfile hash changes when dependencies update. Restore key `trivy-db-Linux-` ensures partial cache hit even when lockfile changes. |
-| PMD | `pmd-7.8.0-Linux` | Manual: change version number when upgrading PMD |
+| PMD      | `pmd-7.8.0-Linux`       | Manual: change version number when upgrading PMD                                                                                          |
 
 ### Expected Run Times
 
-| Scenario | Tool Install | Tool Execution | Total Actions Time |
-|---|---|---|---|
-| **Cold start** (no cache) | ~3 min (download all tools) | ~2 min (depends on repo size) | ~5-6 min |
-| **Warm cache** (all cached) | ~10 sec (restore from cache) | ~2 min | ~2-3 min |
-| **Partial cache** (Trivy DB miss) | ~1 min (Trivy re-downloads) | ~2 min | ~3-4 min |
+| Scenario                          | Tool Install                 | Tool Execution                | Total Actions Time |
+| --------------------------------- | ---------------------------- | ----------------------------- | ------------------ |
+| **Cold start** (no cache)         | ~3 min (download all tools)  | ~2 min (depends on repo size) | ~5-6 min           |
+| **Warm cache** (all cached)       | ~10 sec (restore from cache) | ~2 min                        | ~2-3 min           |
+| **Partial cache** (Trivy DB miss) | ~1 min (Trivy re-downloads)  | ~2 min                        | ~3-4 min           |
 
 **End-to-end times** (webhook → comment posted):
 
-| Scenario | Actions Overhead | LLM Review | Total |
-|---|---|---|---|
-| Warm cache | ~2-3 min | ~1-2 min | ~3-5 min |
-| Cold start | ~5-6 min | ~1-2 min | ~6-8 min |
+| Scenario   | Actions Overhead | LLM Review | Total    |
+| ---------- | ---------------- | ---------- | -------- |
+| Warm cache | ~2-3 min         | ~1-2 min   | ~3-5 min |
+| Cold start | ~5-6 min         | ~1-2 min   | ~6-8 min |
 
 ---
 
 ## 7. Error Handling Matrix
 
-| Failure Mode | Detection | Handling | User Impact |
-|---|---|---|---|
-| **Runner repo doesn't exist** | 404 from GitHub API | Re-create repo + workflow file, retry dispatch | Slight delay (~10s); review proceeds |
-| **Runner repo creation fails** | 403/422 from GitHub API | Log error; skip dispatch; proceed LLM-only | Review delivered without static analysis |
-| **Workflow file tampered** | SHA-256 hash mismatch | Re-commit canonical file; if fails → LLM-only | Security warning logged; review proceeds |
-| **Installation token expired** | Clone fails in runner | Runner POSTs callback with all tools `status: "error"` | LLM-only review delivered |
-| **Secret encryption fails** | `setRepoSecret` throws | Catch error; skip dispatch; proceed LLM-only | Review delivered without static analysis |
-| **`repository_dispatch` fails** | 4xx/5xx from GitHub API | Inngest retries up to 3 times; then LLM-only | Up to 3 retries (~30s each); then LLM-only |
-| **Semgrep crashes in runner** | Non-zero exit code, no valid JSON | Semgrep marked `status: "error"`; other tools continue | Partial static analysis + LLM review |
-| **Trivy crashes in runner** | Non-zero exit code | Trivy marked `status: "error"`; other tools continue | Partial static analysis + LLM review |
-| **CPD crashes in runner** | Non-zero exit, no valid XML | CPD marked `status: "error"`; other tools continue | Partial static analysis + LLM review |
-| **All tools crash in runner** | All three have `status: "error"` | Callback still sent; server proceeds LLM-only | LLM-only review delivered |
-| **Callback POST fails** | `curl` returns non-zero | Runner logs warning; no retry | Inngest times out after 10 min → LLM-only |
-| **Callback HMAC invalid** | Signature mismatch | Server returns 401; logs warning | Inngest times out → LLM-only |
-| **Callback body malformed** | JSON parse fails | Server returns 400 | Inngest times out → LLM-only |
-| **waitForEvent times out** | Inngest returns null after 10m | Construct all-skipped `StaticAnalysisResult` | LLM-only review with "runner timeout" note |
-| **Log deletion fails** | DELETE API returns error | Warning logged; 1-day retention auto-purges | Logs visible for up to 24 hours |
-| **Concurrent secret overwrite** | Second dispatch overwrites `GHAGGA_TOKEN` | Each workflow run captures secrets at start time | Both reviews complete correctly |
-| **GitHub API rate limit** | 403 with rate limit headers | Inngest retry with backoff | Delayed review (retry in ~1 min) |
-| **Repo clone timeout (>5 min)** | Git clone exceeds timeout | Runner aborts; POSTs error callback | LLM-only review |
-| **Large diff (1000+ files)** | Per-tool 5-min timeout | Tools that time out marked `status: "error"` | Partial or LLM-only results |
+| Failure Mode                    | Detection                                 | Handling                                               | User Impact                                |
+| ------------------------------- | ----------------------------------------- | ------------------------------------------------------ | ------------------------------------------ |
+| **Runner repo doesn't exist**   | 404 from GitHub API                       | Re-create repo + workflow file, retry dispatch         | Slight delay (~10s); review proceeds       |
+| **Runner repo creation fails**  | 403/422 from GitHub API                   | Log error; skip dispatch; proceed LLM-only             | Review delivered without static analysis   |
+| **Workflow file tampered**      | SHA-256 hash mismatch                     | Re-commit canonical file; if fails → LLM-only          | Security warning logged; review proceeds   |
+| **Installation token expired**  | Clone fails in runner                     | Runner POSTs callback with all tools `status: "error"` | LLM-only review delivered                  |
+| **Secret encryption fails**     | `setRepoSecret` throws                    | Catch error; skip dispatch; proceed LLM-only           | Review delivered without static analysis   |
+| **`repository_dispatch` fails** | 4xx/5xx from GitHub API                   | Inngest retries up to 3 times; then LLM-only           | Up to 3 retries (~30s each); then LLM-only |
+| **Semgrep crashes in runner**   | Non-zero exit code, no valid JSON         | Semgrep marked `status: "error"`; other tools continue | Partial static analysis + LLM review       |
+| **Trivy crashes in runner**     | Non-zero exit code                        | Trivy marked `status: "error"`; other tools continue   | Partial static analysis + LLM review       |
+| **CPD crashes in runner**       | Non-zero exit, no valid XML               | CPD marked `status: "error"`; other tools continue     | Partial static analysis + LLM review       |
+| **All tools crash in runner**   | All three have `status: "error"`          | Callback still sent; server proceeds LLM-only          | LLM-only review delivered                  |
+| **Callback POST fails**         | `curl` returns non-zero                   | Runner logs warning; no retry                          | Inngest times out after 10 min → LLM-only  |
+| **Callback HMAC invalid**       | Signature mismatch                        | Server returns 401; logs warning                       | Inngest times out → LLM-only               |
+| **Callback body malformed**     | JSON parse fails                          | Server returns 400                                     | Inngest times out → LLM-only               |
+| **waitForEvent times out**      | Inngest returns null after 10m            | Construct all-skipped `StaticAnalysisResult`           | LLM-only review with "runner timeout" note |
+| **Log deletion fails**          | DELETE API returns error                  | Warning logged; 1-day retention auto-purges            | Logs visible for up to 24 hours            |
+| **Concurrent secret overwrite** | Second dispatch overwrites `GHAGGA_TOKEN` | Each workflow run captures secrets at start time       | Both reviews complete correctly            |
+| **GitHub API rate limit**       | 403 with rate limit headers               | Inngest retry with backoff                             | Delayed review (retry in ~1 min)           |
+| **Repo clone timeout (>5 min)** | Git clone exceeds timeout                 | Runner aborts; POSTs error callback                    | LLM-only review                            |
+| **Large diff (1000+ files)**    | Per-tool 5-min timeout                    | Tools that time out marked `status: "error"`           | Partial or LLM-only results                |
 
 ---
 
@@ -1319,12 +1330,12 @@ gcloud billing budgets delete BUDGET_ID --billing-account=BILLING_ACCOUNT_ID
 
 ### 8.2 Files to Remove from Repository
 
-| File | Type | Why |
-|---|---|---|
-| `cloudbuild.yaml` | Config | Cloud Build configuration for Cloud Run |
-| `scripts/deploy-cloudrun.sh` | Script | Cloud Run deployment script |
-| `CLOUD-RUN-MIGRATION.md` | Docs | Migration documentation (no longer relevant) |
-| `Dockerfile` (root) | Config | Cloud Run Dockerfile (root-level, not `apps/server/Dockerfile`) |
+| File                         | Type   | Why                                                             |
+| ---------------------------- | ------ | --------------------------------------------------------------- |
+| `cloudbuild.yaml`            | Config | Cloud Build configuration for Cloud Run                         |
+| `scripts/deploy-cloudrun.sh` | Script | Cloud Run deployment script                                     |
+| `CLOUD-RUN-MIGRATION.md`     | Docs   | Migration documentation (no longer relevant)                    |
+| `Dockerfile` (root)          | Config | Cloud Run Dockerfile (root-level, not `apps/server/Dockerfile`) |
 
 ---
 
@@ -1362,36 +1373,36 @@ gcloud billing budgets delete BUDGET_ID --billing-account=BILLING_ACCOUNT_ID
 
 ### Backward Compatibility During Transition
 
-| Mode | Phase 1-2 | Phase 3+ |
-|---|---|---|
-| **SaaS** (flag off) | Tools run locally in Docker (existing) | Runner mode only |
-| **SaaS** (flag on) | Tools run in GitHub Actions runner | Runner mode only |
-| **CLI** | Tools run locally (unchanged) | Tools run locally (unchanged) |
-| **Action** | Tools run locally (unchanged) | Tools run locally (unchanged) |
-| **1-click deploy** | Tools run locally (unchanged) | Tools run locally (unchanged) |
+| Mode                | Phase 1-2                              | Phase 3+                      |
+| ------------------- | -------------------------------------- | ----------------------------- |
+| **SaaS** (flag off) | Tools run locally in Docker (existing) | Runner mode only              |
+| **SaaS** (flag on)  | Tools run in GitHub Actions runner     | Runner mode only              |
+| **CLI**             | Tools run locally (unchanged)          | Tools run locally (unchanged) |
+| **Action**          | Tools run locally (unchanged)          | Tools run locally (unchanged) |
+| **1-click deploy**  | Tools run locally (unchanged)          | Tools run locally (unchanged) |
 
 ---
 
 ## 10. File Change Summary
 
-| File | Action | Description |
-|---|---|---|
-| `apps/server/src/github/runner.ts` | **Create** | Runner repo lifecycle: create, commit workflow, verify integrity, set secrets, dispatch, delete logs |
-| `apps/server/src/routes/runner-callback.ts` | **Create** | `POST /api/runner-callback` — HMAC verification, Inngest event emission |
-| `templates/runner-workflow.yml` | **Create** | Canonical GitHub Actions workflow template (source of truth for the YAML in section 3.3) |
-| `packages/core/src/types.ts` | **Modify** | Add `precomputedStaticAnalysis?: StaticAnalysisResult` to `ReviewInput` |
-| `packages/core/src/pipeline.ts` | **Modify** | Use `precomputedStaticAnalysis` when available; skip local `runStaticAnalysis` |
-| `apps/server/src/inngest/review.ts` | **Modify** | Add `dispatch-runner` and `wait-for-runner` steps; pass precomputed results to pipeline |
-| `apps/server/src/inngest/client.ts` | **Modify** | Add `ghagga/runner.completed` event schema; add `headSha`, `baseBranch` to `ReviewRequestedData` |
-| `apps/server/src/routes/webhook.ts` | **Modify** | Create runner repo on `installation.created`; delete on `installation.deleted`; add `headSha`/`baseBranch` to event |
-| `apps/server/src/index.ts` (or server entry) | **Modify** | Mount runner callback route (before auth middleware) |
-| `apps/server/Dockerfile` | **Modify** | Remove Python, JVM, Semgrep, Trivy, PMD installation (Phase 3) |
-| `apps/server/package.json` | **Modify** | Add `libsodium-wrappers` dependency for secret encryption |
-| `render.yaml` | **Possibly modify** | May remain Docker or switch to Node runtime once tools are removed |
-| `cloudbuild.yaml` | **Delete** | Cloud Run config no longer needed |
-| `scripts/deploy-cloudrun.sh` | **Delete** | Cloud Run deploy script no longer needed |
-| `CLOUD-RUN-MIGRATION.md` | **Delete** | Cloud Run docs no longer needed |
-| `Dockerfile` (root) | **Delete** | Cloud Run Dockerfile no longer needed |
+| File                                         | Action              | Description                                                                                                         |
+| -------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `apps/server/src/github/runner.ts`           | **Create**          | Runner repo lifecycle: create, commit workflow, verify integrity, set secrets, dispatch, delete logs                |
+| `apps/server/src/routes/runner-callback.ts`  | **Create**          | `POST /api/runner-callback` — HMAC verification, Inngest event emission                                             |
+| `templates/runner-workflow.yml`              | **Create**          | Canonical GitHub Actions workflow template (source of truth for the YAML in section 3.3)                            |
+| `packages/core/src/types.ts`                 | **Modify**          | Add `precomputedStaticAnalysis?: StaticAnalysisResult` to `ReviewInput`                                             |
+| `packages/core/src/pipeline.ts`              | **Modify**          | Use `precomputedStaticAnalysis` when available; skip local `runStaticAnalysis`                                      |
+| `apps/server/src/inngest/review.ts`          | **Modify**          | Add `dispatch-runner` and `wait-for-runner` steps; pass precomputed results to pipeline                             |
+| `apps/server/src/inngest/client.ts`          | **Modify**          | Add `ghagga/runner.completed` event schema; add `headSha`, `baseBranch` to `ReviewRequestedData`                    |
+| `apps/server/src/routes/webhook.ts`          | **Modify**          | Create runner repo on `installation.created`; delete on `installation.deleted`; add `headSha`/`baseBranch` to event |
+| `apps/server/src/index.ts` (or server entry) | **Modify**          | Mount runner callback route (before auth middleware)                                                                |
+| `apps/server/Dockerfile`                     | **Modify**          | Remove Python, JVM, Semgrep, Trivy, PMD installation (Phase 3)                                                      |
+| `apps/server/package.json`                   | **Modify**          | Add `libsodium-wrappers` dependency for secret encryption                                                           |
+| `render.yaml`                                | **Possibly modify** | May remain Docker or switch to Node runtime once tools are removed                                                  |
+| `cloudbuild.yaml`                            | **Delete**          | Cloud Run config no longer needed                                                                                   |
+| `scripts/deploy-cloudrun.sh`                 | **Delete**          | Cloud Run deploy script no longer needed                                                                            |
+| `CLOUD-RUN-MIGRATION.md`                     | **Delete**          | Cloud Run docs no longer needed                                                                                     |
+| `Dockerfile` (root)                          | **Delete**          | Cloud Run Dockerfile no longer needed                                                                               |
 
 ---
 
@@ -1431,18 +1442,18 @@ gcloud billing budgets delete BUDGET_ID --billing-account=BILLING_ACCOUNT_ID
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|---|---|---|
-| Unit | `runner.ts` functions (dispatchAnalysis, verifyWorkflowIntegrity, ensureRunnerRepo) | Mock `fetch` calls; verify correct API URLs, headers, payloads |
-| Unit | `runner-callback.ts` HMAC verification | Pass valid/invalid signatures; verify 200/401 responses |
-| Unit | `pipeline.ts` precomputed static analysis branch | Provide `precomputedStaticAnalysis`; verify `runStaticAnalysis` is NOT called |
-| Unit | Inngest event schema | Verify `ghagga/runner.completed` event shape compiles |
-| Integration | Full dispatch → callback → resume flow | Use Inngest dev server; mock GitHub API; verify waitForEvent resumes |
-| Integration | Timeout fallback | Dispatch without callback; verify LLM-only review after 10m timeout |
-| Integration | Workflow YAML transform | Run the workflow's jq/python transform scripts against sample tool outputs; verify `StaticAnalysisResult` shape |
-| E2E | Install app → runner repo created | Install on a test account; verify repo + workflow file exist |
-| E2E | PR → runner → callback → comment | Open a PR on a test repo; verify static analysis findings appear in comment |
-| Manual | Security audit | Inspect public runner repo logs (before deletion) to verify no source code leaks |
+| Layer       | What to Test                                                                        | Approach                                                                                                        |
+| ----------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Unit        | `runner.ts` functions (dispatchAnalysis, verifyWorkflowIntegrity, ensureRunnerRepo) | Mock `fetch` calls; verify correct API URLs, headers, payloads                                                  |
+| Unit        | `runner-callback.ts` HMAC verification                                              | Pass valid/invalid signatures; verify 200/401 responses                                                         |
+| Unit        | `pipeline.ts` precomputed static analysis branch                                    | Provide `precomputedStaticAnalysis`; verify `runStaticAnalysis` is NOT called                                   |
+| Unit        | Inngest event schema                                                                | Verify `ghagga/runner.completed` event shape compiles                                                           |
+| Integration | Full dispatch → callback → resume flow                                              | Use Inngest dev server; mock GitHub API; verify waitForEvent resumes                                            |
+| Integration | Timeout fallback                                                                    | Dispatch without callback; verify LLM-only review after 10m timeout                                             |
+| Integration | Workflow YAML transform                                                             | Run the workflow's jq/python transform scripts against sample tool outputs; verify `StaticAnalysisResult` shape |
+| E2E         | Install app → runner repo created                                                   | Install on a test account; verify repo + workflow file exist                                                    |
+| E2E         | PR → runner → callback → comment                                                    | Open a PR on a test repo; verify static analysis findings appear in comment                                     |
+| Manual      | Security audit                                                                      | Inspect public runner repo logs (before deletion) to verify no source code leaks                                |
 
 ---
 

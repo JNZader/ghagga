@@ -118,7 +118,12 @@ export interface WorkflowReviewInput {
 
 // Inside specialist loop:
 const specialistModel = createModel(entry.provider, entry.model, entry.apiKey);
-const result = await generateTextWithTimeout({ model: specialistModel, system, prompt, temperature: 0.3 });
+const result = await generateTextWithTimeout({
+  model: specialistModel,
+  system,
+  prompt,
+  temperature: 0.3,
+});
 ```
 
 ### After (workflow.ts)
@@ -177,7 +182,7 @@ function resolveGenerateTextFns(input: ReviewInput): GenerateTextFn[] {
   }
   // AI SDK: one function per chain entry (for round-robin distribution)
   const chain = input.providerChain ?? [resolvePrimaryProvider(input)];
-  return chain.map(entry => createAISDKGenerateFn(entry.provider, entry.model, entry.apiKey));
+  return chain.map((entry) => createAISDKGenerateFn(entry.provider, entry.model, entry.apiKey));
 }
 ```
 
@@ -192,7 +197,6 @@ All three backends throw on failure. Agents use `allSettled` to handle partial f
 ## Concurrency & Rate Limiting
 
 Workflow already has `runWithConcurrency` with auto-calculated schedules based on model TPM. This works unchanged because:
-
 - AI SDK: rate schedule from model name (existing)
 - CLI Bridge: sequential by nature (execSync), concurrency=1 forced
 - Gateway: gateway handles its own rate limiting, concurrency=1 is safe default
@@ -203,13 +207,13 @@ The agents will detect that CLI bridge and gateway `generateFns` have length 1, 
 
 ## Files Changed
 
-| File | Change Type | Description |
-|------|-------------|-------------|
-| `providers/generate-fn.ts` | **NEW** | `GenerateTextFn` type + 3 factory functions |
-| `agents/workflow.ts` | **MODIFY** | Accept `GenerateTextFn[]`, remove `createModel` import |
-| `agents/consensus.ts` | **MODIFY** | Accept `GenerateTextFn[]`, remove `createModel` import |
-| `agents/simple.ts` | **MODIFY** | Accept `GenerateTextFn`, remove `createModel` import |
-| `pipeline.ts` | **MODIFY** | Unified dispatch, remove `runCLIBridgeReview`/`runGatewayReview`, add `resolveGenerateTextFns` |
+| File                       | Change Type | Description                                                                                    |
+| -------------------------- | ----------- | ---------------------------------------------------------------------------------------------- |
+| `providers/generate-fn.ts` | **NEW**     | `GenerateTextFn` type + 3 factory functions                                                    |
+| `agents/workflow.ts`       | **MODIFY**  | Accept `GenerateTextFn[]`, remove `createModel` import                                         |
+| `agents/consensus.ts`      | **MODIFY**  | Accept `GenerateTextFn[]`, remove `createModel` import                                         |
+| `agents/simple.ts`         | **MODIFY**  | Accept `GenerateTextFn`, remove `createModel` import                                           |
+| `pipeline.ts`              | **MODIFY**  | Unified dispatch, remove `runCLIBridgeReview`/`runGatewayReview`, add `resolveGenerateTextFns` |
 
 ## What Does NOT Change
 

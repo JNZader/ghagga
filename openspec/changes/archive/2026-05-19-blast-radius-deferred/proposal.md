@@ -2,7 +2,7 @@
 
 **Status**: draft  
 **Author**: javier  
-**Date**: 2026-03-17  
+**Date**: 2026-03-17
 
 ## Intent
 
@@ -12,22 +12,22 @@ Add dependency-graph-aware blast-radius analysis to GHAGGA so the review pipelin
 
 GHAGGA currently sends every file in a PR's diff to the LLM review pipeline. For large PRs or monorepos, this means:
 
-| Problem | Impact | Example |
-|---------|--------|---------|
-| Token waste on unrelated files | Higher cost, slower reviews | Renaming a utility used by 3 files sends 40-file PR to LLM |
-| Noise in findings | False positives about files unrelated to the change | Linter findings on untouched files pollute the review |
-| Context window saturation | Diff truncation loses important files | 200-file monorepo PR truncated at token budget, dropping the actual blast-radius files |
-| No test coverage signal | LLM doesn't know which tests exercise the changed code | Changed function has 5 test files; reviewer doesn't see any of them |
+| Problem                        | Impact                                                 | Example                                                                                |
+| ------------------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| Token waste on unrelated files | Higher cost, slower reviews                            | Renaming a utility used by 3 files sends 40-file PR to LLM                             |
+| Noise in findings              | False positives about files unrelated to the change    | Linter findings on untouched files pollute the review                                  |
+| Context window saturation      | Diff truncation loses important files                  | 200-file monorepo PR truncated at token budget, dropping the actual blast-radius files |
+| No test coverage signal        | LLM doesn't know which tests exercise the changed code | Changed function has 5 test files; reviewer doesn't see any of them                    |
 
 ### Impact Numbers (estimated from typical repo analysis)
 
-| Metric | Without blast-radius | With blast-radius |
-|--------|---------------------|-------------------|
-| Files sent to LLM (avg) | 34 | 5 |
-| Files sent to LLM (monorepo) | 245 | 5 |
-| Tokens per review (avg) | ~18K | ~2.6K |
-| Review relevance | ~40% of findings actionable | ~85% actionable |
-| **Reduction factor** | — | **6.8x avg, 49x monorepo** |
+| Metric                       | Without blast-radius        | With blast-radius          |
+| ---------------------------- | --------------------------- | -------------------------- |
+| Files sent to LLM (avg)      | 34                          | 5                          |
+| Files sent to LLM (monorepo) | 245                         | 5                          |
+| Tokens per review (avg)      | ~18K                        | ~2.6K                      |
+| Review relevance             | ~40% of findings actionable | ~85% actionable            |
+| **Reduction factor**         | —                           | **6.8x avg, 49x monorepo** |
 
 ## Scope
 
@@ -71,16 +71,15 @@ ghagga/graph (orphan branch)
 
 ### 2. Three Modes of Operation
 
-| Mode | Reads graph from | Builds graph | Pushes graph |
-|------|-----------------|-------------|-------------|
-| **SaaS** | GitHub API (`?ref=ghagga/graph`) | No — reads only | No |
-| **Runner (GH Action)** | Filesystem (checkout orphan branch) | Yes (Tree-sitter) | Yes (to orphan branch) |
-| **CLI** | Local SQLite (`~/.ghagga/graphs/{repo}.db`) | Yes (Tree-sitter, local) | No |
+| Mode                   | Reads graph from                            | Builds graph             | Pushes graph           |
+| ---------------------- | ------------------------------------------- | ------------------------ | ---------------------- |
+| **SaaS**               | GitHub API (`?ref=ghagga/graph`)            | No — reads only          | No                     |
+| **Runner (GH Action)** | Filesystem (checkout orphan branch)         | Yes (Tree-sitter)        | Yes (to orphan branch) |
+| **CLI**                | Local SQLite (`~/.ghagga/graphs/{repo}.db`) | Yes (Tree-sitter, local) | No                     |
 
 ### 3. Graph Contents
 
 Each node in the graph represents a source file. Edges represent dependencies:
-
 - **imports/exports** — `import { foo } from './bar'` creates edge `bar.ts → file.ts`
 - **function calls** — `bar.compute()` in `file.ts` creates edge `bar.ts → file.ts`
 - **class hierarchy** — `class Dog extends Animal` creates edge `animal.ts → dog.ts`
@@ -94,7 +93,6 @@ Each node in the graph represents a source file. Edges represent dependencies:
 ### 5. Blast-Radius Computation
 
 Given a set of changed file paths from the PR diff:
-
 1. Load graph (from branch, API, or SQLite)
 2. For each changed file, traverse reverse edges (who depends on me?) up to depth 3
 3. Collect all files that transitively depend on any changed file
@@ -115,42 +113,42 @@ If the graph is unavailable (no orphan branch, API error, CLI without local grap
 
 ## Affected Modules
 
-| Package | Files | Change Type |
-|---------|-------|-------------|
-| `packages/core` | `src/graph/schema.ts` (NEW) | Graph type definitions, JSON schema |
-| `packages/core` | `src/graph/indexer.ts` (NEW) | Tree-sitter indexing (file → edges) |
-| `packages/core` | `src/graph/blast-radius.ts` (NEW) | Reverse traversal, test association |
-| `packages/core` | `src/graph/loader.ts` (NEW) | Load graph from JSON, GitHub API, or SQLite |
-| `packages/core` | `src/graph/index.ts` (NEW) | Public API barrel export |
-| `packages/core` | `src/pipeline.ts` | Insert blast-radius step between parse and stacks |
-| `packages/core` | `src/types.ts` | Add `GraphConfig` to `ReviewInput` and `ReviewSettings` |
-| `apps/server` | `src/github/client.ts` | Add `fetchGraphFromBranch()` helper |
-| `apps/server` | `src/queues/review.ts` | Fetch graph before pipeline, pass to ReviewInput |
-| ghagga-runner | `ghagga-graph-index.yml` (NEW) | GH Action workflow for graph indexing |
-| ghagga-runner | `scripts/index-graph.ts` (NEW) | Tree-sitter indexing script |
-| ghagga-runner | `scripts/push-graph.sh` (NEW) | Push graph to orphan branch |
+| Package         | Files                             | Change Type                                             |
+| --------------- | --------------------------------- | ------------------------------------------------------- |
+| `packages/core` | `src/graph/schema.ts` (NEW)       | Graph type definitions, JSON schema                     |
+| `packages/core` | `src/graph/indexer.ts` (NEW)      | Tree-sitter indexing (file → edges)                     |
+| `packages/core` | `src/graph/blast-radius.ts` (NEW) | Reverse traversal, test association                     |
+| `packages/core` | `src/graph/loader.ts` (NEW)       | Load graph from JSON, GitHub API, or SQLite             |
+| `packages/core` | `src/graph/index.ts` (NEW)        | Public API barrel export                                |
+| `packages/core` | `src/pipeline.ts`                 | Insert blast-radius step between parse and stacks       |
+| `packages/core` | `src/types.ts`                    | Add `GraphConfig` to `ReviewInput` and `ReviewSettings` |
+| `apps/server`   | `src/github/client.ts`            | Add `fetchGraphFromBranch()` helper                     |
+| `apps/server`   | `src/queues/review.ts`            | Fetch graph before pipeline, pass to ReviewInput        |
+| ghagga-runner   | `ghagga-graph-index.yml` (NEW)    | GH Action workflow for graph indexing                   |
+| ghagga-runner   | `scripts/index-graph.ts` (NEW)    | Tree-sitter indexing script                             |
+| ghagga-runner   | `scripts/push-graph.sh` (NEW)     | Push graph to orphan branch                             |
 
 ## Distribution Mode Impact
 
-| Mode | Impact |
-|------|--------|
-| **SaaS** | Full support — server fetches graph from GitHub API, passes to pipeline |
-| **CLI** | Full support — CLI builds local SQLite graph, reads from filesystem |
-| **GitHub Action** | Full support — runner builds graph, pushes to branch; SaaS reads it |
-| **1-click deploy** | Full support — no infra change needed (graph lives in the repo) |
+| Mode               | Impact                                                                  |
+| ------------------ | ----------------------------------------------------------------------- |
+| **SaaS**           | Full support — server fetches graph from GitHub API, passes to pipeline |
+| **CLI**            | Full support — CLI builds local SQLite graph, reads from filesystem     |
+| **GitHub Action**  | Full support — runner builds graph, pushes to branch; SaaS reads it     |
+| **1-click deploy** | Full support — no infra change needed (graph lives in the repo)         |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Tree-sitter parsing errors for edge cases | Medium | Low | Fallback to current behavior; log parsing errors for debugging |
-| Large graph.json for monorepos (>2MB) | Medium | Medium | Compress with gzip; GitHub API supports `Accept: application/vnd.github.raw`; cap at 5MB |
-| Graph becomes stale if runner doesn't run | Low | Low | Metadata includes `indexedAt` timestamp; pipeline warns if graph is >7 days old |
-| Orphan branch clutters repo | Low | Low | Single branch with 2 files; invisible in default GitHub UI |
-| Over-pruning: blast radius misses relevant files | Medium | Medium | Conservative traversal depth (3); include direct test files; user can disable via `enableBlastRadius: false` |
-| Under-pruning: blast radius too broad for core utilities | Low | Low | Cap at 50 files; if blast radius exceeds 50, fall back to full diff |
-| Tree-sitter WASM binaries add ~15MB to runner | Low | Low | Only needed in runner/CLI; SaaS never runs Tree-sitter |
-| GitHub API rate limit for graph fetch | Low | Low | Single API call per review; graph is small (<200KB); ETag caching |
+| Risk                                                     | Likelihood | Impact | Mitigation                                                                                                   |
+| -------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------ |
+| Tree-sitter parsing errors for edge cases                | Medium     | Low    | Fallback to current behavior; log parsing errors for debugging                                               |
+| Large graph.json for monorepos (>2MB)                    | Medium     | Medium | Compress with gzip; GitHub API supports `Accept: application/vnd.github.raw`; cap at 5MB                     |
+| Graph becomes stale if runner doesn't run                | Low        | Low    | Metadata includes `indexedAt` timestamp; pipeline warns if graph is >7 days old                              |
+| Orphan branch clutters repo                              | Low        | Low    | Single branch with 2 files; invisible in default GitHub UI                                                   |
+| Over-pruning: blast radius misses relevant files         | Medium     | Medium | Conservative traversal depth (3); include direct test files; user can disable via `enableBlastRadius: false` |
+| Under-pruning: blast radius too broad for core utilities | Low        | Low    | Cap at 50 files; if blast radius exceeds 50, fall back to full diff                                          |
+| Tree-sitter WASM binaries add ~15MB to runner            | Low        | Low    | Only needed in runner/CLI; SaaS never runs Tree-sitter                                                       |
+| GitHub API rate limit for graph fetch                    | Low        | Low    | Single API call per review; graph is small (<200KB); ETag caching                                            |
 
 ## Rollback Plan
 

@@ -16,13 +16,13 @@ Add AI-powered code reviews to any repository in under 5 minutes. GHAGGA runs di
 
 ## Cost
 
-| Component | Cost |
-|-----------|------|
-| **GHAGGA** | Free and open source (MIT license) |
-| **GitHub Actions minutes** | **Free unlimited** for public repos. Private repos: 2,000 free minutes/month (then [paid by GitHub](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)) |
-| **LLM** | Not included. Set `provider` to `gateway`, `cli-bridge`, or `ollama`. The default is `gateway`. `api-key` is the gateway credential |
-| **Ollama** | Runs on a self-hosted runner with Ollama installed. No API key |
-| **Static analysis** (17-tool registry; SonarQube only with MCP) | Runs on the GitHub Actions runner |
+| Component                                                       | Cost                                                                                                                                                                                                          |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GHAGGA**                                                      | Free and open source (MIT license)                                                                                                                                                                            |
+| **GitHub Actions minutes**                                      | **Free unlimited** for public repos. Private repos: 2,000 free minutes/month (then [paid by GitHub](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)) |
+| **LLM**                                                         | Not included. Set `provider` to `gateway`, `cli-bridge`, or `ollama`. The default is `gateway`. `api-key` is the gateway credential                                                                           |
+| **Ollama**                                                      | Runs on a self-hosted runner with Ollama installed. No API key                                                                                                                                                |
+| **Static analysis** (17-tool registry; SonarQube only with MCP) | Runs on the GitHub Actions runner                                                                                                                                                                             |
 
 > The Action does not call GitHub Models with `GITHUB_TOKEN`. Legacy `provider: github` is remapped to `gateway`.
 
@@ -53,12 +53,12 @@ jobs:
 
 ### What each section does
 
-| Section | Purpose |
-|---------|---------|
-| `on: pull_request` | Triggers the review when a PR is opened, updated, or reopened |
-| `permissions: pull-requests: write` | Allows the Action to post comments on the PR |
-| `actions/checkout@v4` | Checks out the repository code for static analysis |
-| `JNZader/ghagga@v3.4.0` | Runs the GHAGGA review. Default provider is `gateway`, default mode is `simple` |
+| Section                             | Purpose                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------- |
+| `on: pull_request`                  | Triggers the review when a PR is opened, updated, or reopened                   |
+| `permissions: pull-requests: write` | Allows the Action to post comments on the PR                                    |
+| `actions/checkout@v4`               | Checks out the repository code for static analysis                              |
+| `JNZader/ghagga@v3.4.0`             | Runs the GHAGGA review. Default provider is `gateway`, default mode is `simple` |
 
 > ✅ **Verification**: You should now have a file at `.github/workflows/ghagga.yml` in your repository.
 
@@ -91,7 +91,6 @@ Create a new Pull Request (or push a commit to an existing one). The Action trig
 Wait **~3-5 minutes** for the first run (static analysis tools are installed and cached). Subsequent runs take **~1-2 minutes** (tools are loaded from cache).
 
 GHAGGA posts a **review comment** on your PR with:
-
 - **Status**: ✅ `PASSED`, ❌ `FAILED`, ⚠️ `NEEDS_HUMAN_REVIEW`, or ⏭️ `SKIPPED`
 - **Summary**: A brief overview of the changes
 - **Findings**: Individual issues grouped by source, with severity, file location, and description
@@ -135,28 +134,28 @@ sequenceDiagram
 
 All configuration is done via Action inputs in the workflow YAML. The Action does **not** read `.ghagga.json` config files.
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `provider` | No | `gateway` | `gateway`, `cli-bridge`, or `ollama`. Legacy names are remapped to `gateway` |
-| `model` | No | provider default | Model id. `auto` lets the gateway or CLI pick |
-| `mode` | No | `simple` | `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, or `hybrid-4r` |
-| `api-key` | No | — | Credential for `gateway` or `cli-bridge`. Not used by `ollama` |
-| `github-token` | No | `${{ github.token }}` | GitHub token for fetching PR diffs and posting comments. Automatic. |
-| `enabled-tools` | No | — | Comma-separated list of tools to force-enable (e.g., `ruff,bandit`). Properly forwarded through webhooks in SaaS mode. |
-| `disabled-tools` | No | — | Comma-separated list of tools to force-disable (e.g., `markdownlint`). Properly forwarded through webhooks in SaaS mode. |
-| `enable-semgrep` | No | `true` | ⚠️ Deprecated — use `disabled-tools`. Enable Semgrep |
-| `enable-trivy` | No | `true` | ⚠️ Deprecated — use `disabled-tools`. Enable Trivy |
-| `enable-cpd` | No | `true` | ⚠️ Deprecated — use `disabled-tools`. Enable CPD |
-| `enable-memory` | No | `true` | Enable SQLite review memory (cached across runs) |
+| Input            | Required | Default               | Description                                                                                                              |
+| ---------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `provider`       | No       | `gateway`             | `gateway`, `cli-bridge`, or `ollama`. Legacy names are remapped to `gateway`                                             |
+| `model`          | No       | provider default      | Model id. `auto` lets the gateway or CLI pick                                                                            |
+| `mode`           | No       | `simple`              | `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, or `hybrid-4r`                                               |
+| `api-key`        | No       | —                     | Credential for `gateway` or `cli-bridge`. Not used by `ollama`                                                           |
+| `github-token`   | No       | `${{ github.token }}` | GitHub token for fetching PR diffs and posting comments. Automatic.                                                      |
+| `enabled-tools`  | No       | —                     | Comma-separated list of tools to force-enable (e.g., `ruff,bandit`). Properly forwarded through webhooks in SaaS mode.   |
+| `disabled-tools` | No       | —                     | Comma-separated list of tools to force-disable (e.g., `markdownlint`). Properly forwarded through webhooks in SaaS mode. |
+| `enable-semgrep` | No       | `true`                | ⚠️ Deprecated — use `disabled-tools`. Enable Semgrep                                                                     |
+| `enable-trivy`   | No       | `true`                | ⚠️ Deprecated — use `disabled-tools`. Enable Trivy                                                                       |
+| `enable-cpd`     | No       | `true`                | ⚠️ Deprecated — use `disabled-tools`. Enable CPD                                                                         |
+| `enable-memory`  | No       | `true`                | Enable SQLite review memory (cached across runs)                                                                         |
 
 ---
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| `status` | Review result: `PASSED`, `FAILED`, `NEEDS_HUMAN_REVIEW`, or `SKIPPED` |
-| `findings-count` | Number of findings detected |
+| Output           | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| `status`         | Review result: `PASSED`, `FAILED`, `NEEDS_HUMAN_REVIEW`, or `SKIPPED` |
+| `findings-count` | Number of findings detected                                           |
 
 ---
 
@@ -184,7 +183,7 @@ Add `continue-on-error: true` to make reviews informational — findings are pos
 ```yaml
 - uses: JNZader/ghagga@v3.4.0
   id: review
-  continue-on-error: true  # Don't fail CI on review findings
+  continue-on-error: true # Don't fail CI on review findings
 ```
 
 ### Use review status in subsequent steps
@@ -256,7 +255,6 @@ jobs:
 ## Static Analysis Tools
 
 GHAGGA runs the 17-tool registry before the LLM review. SonarQube stays inert without MCP. See [Static Analysis](static-analysis.md).
-
 - **7 always-on tools** run on every review: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard
 - **9 auto-detect tools** activate when matching files are in the diff: Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, zizmor
 
@@ -265,8 +263,8 @@ Control tools with the `enabled-tools` and `disabled-tools` inputs:
 ```yaml
 - uses: JNZader/ghagga@v3.4.0
   with:
-    enabled-tools: 'ruff,bandit'
-    disabled-tools: 'markdownlint'
+    enabled-tools: "ruff,bandit"
+    disabled-tools: "markdownlint"
 ```
 
 > The legacy boolean inputs `enable-semgrep`, `enable-trivy`, `enable-cpd` still work but are deprecated. Use `disabled-tools` instead.
@@ -279,9 +277,9 @@ Control tools with the `enabled-tools` and `disabled-tools` inputs:
 on:
   pull_request:
     paths:
-      - 'src/**'
-      - '!src/**/*.test.ts'
-      - '!docs/**'
+      - "src/**"
+      - "!src/**/*.test.ts"
+      - "!docs/**"
 ```
 
 ---

@@ -216,11 +216,11 @@ Both MUST fall back to the current hardcoded value if the environment variable i
 
 ## Coverage Summary
 
-| Requirement | Happy Paths | Edge Cases | Error States |
-|-------------|-------------|------------|--------------|
-| R1: Biome Configuration | Config valid, rules apply to .ts/.tsx | Ignored dirs not checked | Formatter flags violations |
-| R2: Monorepo Scripts | lint exits 0, lint:fix works | — | lint exits non-zero on errors |
-| R3: CI Integration | lint in CI, passes clean code | — | lint failure blocks merge |
-| R4: Clean Codebase | Full lint passes | biome-ignore with justification | — |
-| R5a: Logger in OAuth | Errors logged via pino | — | No console.error remains |
-| R5b: Client ID from env | Reads from env var | Falls back to hardcoded value | — |
+| Requirement             | Happy Paths                           | Edge Cases                      | Error States                  |
+| ----------------------- | ------------------------------------- | ------------------------------- | ----------------------------- |
+| R1: Biome Configuration | Config valid, rules apply to .ts/.tsx | Ignored dirs not checked        | Formatter flags violations    |
+| R2: Monorepo Scripts    | lint exits 0, lint:fix works          | —                               | lint exits non-zero on errors |
+| R3: CI Integration      | lint in CI, passes clean code         | —                               | lint failure blocks merge     |
+| R4: Clean Codebase      | Full lint passes                      | biome-ignore with justification | —                             |
+| R5a: Logger in OAuth    | Errors logged via pino                | —                               | No console.error remains      |
+| R5b: Client ID from env | Reads from env var                    | Falls back to hardcoded value   | —                             |

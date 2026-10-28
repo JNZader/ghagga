@@ -6,6 +6,7 @@
 ## Phase 1: Core Query
 
 ### 1.1 Add `getReviewsByDay` query function
+
 - **File**: `packages/db/src/queries.ts`
 - **Action**: Add new exported async function `getReviewsByDay(db, repositoryId)`
 - **Details**:
@@ -19,6 +20,7 @@
 ## Phase 2: API Integration
 
 ### 2.1 Wire `getReviewsByDay` into `/api/stats` endpoint
+
 - **File**: `apps/server/src/routes/api.ts`
 - **Action**:
   - Import `getReviewsByDay` from `ghagga-db`
@@ -29,6 +31,7 @@
 ## Phase 3: Tests
 
 ### 3.1 Add `reviewsByDay` tests to API test suite
+
 - **File**: `apps/server/src/routes/api.test.ts`
 - **Action**:
   - Add mock for `getReviewsByDay`
@@ -43,9 +46,11 @@
 ## Phase 4: Verification
 
 ### 4.1 Run typecheck
+
 - **Command**: `pnpm exec turbo typecheck`
 - [x] Done
 
 ### 4.2 Run tests
+
 - **Command**: `pnpm exec turbo test`
 - [x] Done

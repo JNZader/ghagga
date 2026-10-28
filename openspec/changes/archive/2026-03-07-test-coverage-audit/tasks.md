@@ -3,7 +3,6 @@
 ## Phase 1: Quick Wins — Pure Functions & Constants
 
 Zero dependencies, zero mocking. Each task creates one test file testing deterministic exports.
-
 - [x] T1.1 Create `apps/cli/src/ui/format.test.ts` — test all 6 pure functions
   - `formatTable()`: headers + separator + rows, single-row, empty rows, column padding
   - `formatSize()`: bytes range (<1024), KB range, MB range, boundary values (0, 1024, 1048576)
@@ -44,7 +43,6 @@ Zero dependencies, zero mocking. Each task creates one test file testing determi
 ## Phase 2: Critical Path Coverage
 
 Files that need mocking but are on critical code paths. Highest-risk gaps.
-
 - [x] T2.1 Create `packages/core/src/providers/index.test.ts` — test provider factory for all 6 branches + error case
   - Mock: `vi.mock('@ai-sdk/anthropic')`, `vi.mock('@ai-sdk/openai')`, `vi.mock('@ai-sdk/google')` — each returns a factory function
   - `createProvider('anthropic', key)`: calls `createAnthropic({ apiKey })`
@@ -118,7 +116,6 @@ Files that need mocking but are on critical code paths. Highest-risk gaps.
 ## Phase 3: Dashboard Hooks & Components
 
 Extend existing dashboard test patterns. All use `vi.stubGlobal('fetch')` + `createWrapper()`.
-
 - [x] T3.1 Extend `apps/dashboard/src/lib/api.test.ts` — test remaining 11 hooks
   - Existing tests cover: useRunnerStatus (5), useCreateRunner (4), useConfigureRunnerSecret (3) = 12 tests
   - Add tests for these hooks using the same mockFetch + createWrapper pattern:
@@ -167,7 +164,6 @@ Extend existing dashboard test patterns. All use `vi.stubGlobal('fetch')` + `cre
 ## Phase 4: CLI Commands & Remaining
 
 CLI commands with established mock patterns, plus low-priority items.
-
 - [x] T4.1 Create `apps/cli/src/commands/login.test.ts` — test login command orchestration
   - Mock: `vi.mock('../lib/config.js')`, `vi.mock('../lib/oauth.js')`, `vi.mock('../ui/tui.js')`
   - Already logged in: prints "Already logged in as {login}", returns without device flow
@@ -209,13 +205,13 @@ CLI commands with established mock patterns, plus low-priority items.
 
 ## Summary
 
-| Phase | Tasks | Est. Tests | Focus |
-|-------|-------|-----------|-------|
-| Phase 1 | 6 | 28-38 | Pure functions & constants (zero mocking) |
-| Phase 2 | 6 | 44-57 | Critical path coverage (mocking required) |
-| Phase 3 | 5 | 42-56 | Dashboard hooks & components |
-| Phase 4 | 6 | 18-26 | CLI commands & remaining |
-| **Total** | **23** | **132-177** | |
+| Phase     | Tasks  | Est. Tests  | Focus                                     |
+| --------- | ------ | ----------- | ----------------------------------------- |
+| Phase 1   | 6      | 28-38       | Pure functions & constants (zero mocking) |
+| Phase 2   | 6      | 44-57       | Critical path coverage (mocking required) |
+| Phase 3   | 5      | 42-56       | Dashboard hooks & components              |
+| Phase 4   | 6      | 18-26       | CLI commands & remaining                  |
+| **Total** | **23** | **132-177** |                                           |
 
 ## Implementation Order
 

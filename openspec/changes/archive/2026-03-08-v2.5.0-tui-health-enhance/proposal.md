@@ -5,7 +5,6 @@
 GHAGGA's CLI is functional but utilitarian. Review output is a flat wall of markdown text with no visual hierarchy, no severity coloring, and no structured summary. Static analysis findings are mixed inline with no tool-level separation. Users in CI pipelines cannot consume results programmatically (only `--format json` exists; no SARIF for GitHub Security tab, no machine-readable markdown). There is no way to create GitHub issues from review results, no "quick health check" workflow for local iteration, and no AI-powered post-processing to group, prioritize, and reduce noise in findings.
 
 v2.5.0 addresses all five gaps in a single release:
-
 1. **TUI Polish** — Colored severity output, box-drawing summary, step progress indicators, section dividers between tools. All behind the existing TUI facade pattern (`ui/tui.ts`).
 2. **`ghagga health`** — A lightweight command that runs a subset of static analysis tools locally and produces a health score with top issues, trends, and actionable recommendations. Capped at 1,500 lines.
 3. **AI Enhance** — Post-static-analysis pass using gpt-4o-mini to group related findings, prioritize by impact, generate fix suggestions, and filter false positives.
@@ -19,6 +18,7 @@ The goal is to make `ghagga` feel like a polished, professional tool both in int
 ### In Scope
 
 #### TUI Polish (CLI presentation layer)
+
 - **Colored severity output** using `chalk` — critical=red, high=orange, medium=yellow, low=green, info=purple. Colors respect `NO_COLOR`, non-TTY, and `--plain` detection.
 - **Box-drawing summary** at end of review — bordered box showing status, finding counts by severity, execution time, tools run.
 - **Step progress indicators** `[1/7] Running Semgrep...` `[2/7] Running Trivy...` — replacing the current generic spinner message during review.
@@ -27,6 +27,7 @@ The goal is to make `ghagga` feel like a polished, professional tool both in int
 - **`ui/chalk.ts` adapter** — thin wrapper that re-exports chalk functions and handles NO_COLOR/non-TTY fallback, so tui.ts delegates color logic there.
 
 #### `ghagga health` Command
+
 - New command: `ghagga health [path]` — quick project health check.
 - Runs a **subset** of static analysis tools locally (always-on tools from the registry: Semgrep, Trivy, Gitleaks, ShellCheck, Lizard at minimum).
 - Produces a **health score** (0-100) computed from weighted severity counts.
@@ -38,6 +39,7 @@ The goal is to make `ghagga` feel like a polished, professional tool both in int
 - Respects `--plain` and CI detection.
 
 #### AI Enhance (Post-Analysis Intelligence)
+
 - New module in `packages/core/src/enhance/` — runs **after** static analysis, **before** final result assembly.
 - Uses **gpt-4o-mini** (the CLI/Action model — free via GitHub Models) to:
   - **Group** related findings across tools (e.g., a Semgrep finding and a Trivy finding about the same dependency).
@@ -50,6 +52,7 @@ The goal is to make `ghagga` feel like a polished, professional tool both in int
 - Graceful degradation: if the AI enhance call fails, the result is returned unenhanced with a warning. No review failure.
 
 #### `--issue` Flag (GitHub Issue Creation)
+
 - `ghagga review --issue 42` — creates or updates GitHub issue #42 with formatted review results.
 - `ghagga review --issue new` — creates a new issue, prints the issue URL.
 - Uses the **GitHub REST API** via `fetch` (no new dependency — the token is already available from `ghagga login`).
@@ -60,6 +63,7 @@ The goal is to make `ghagga` feel like a polished, professional tool both in int
 - Errors clearly when no token is available or the repo doesn't have issues enabled.
 
 #### `--output` Flag (Structured Output Formats)
+
 - Replaces the existing `--format` flag (which only supports `markdown|json`).
 - `--format` becomes a deprecated alias for `--output` (backward compat).
 - New values: `json`, `sarif`, `markdown` (default for TTY).
@@ -87,7 +91,6 @@ The goal is to make `ghagga` feel like a polished, professional tool both in int
 ### Architecture Overview
 
 All five features touch the CLI (`apps/cli/`) and the core package (`packages/core/`). The architectural strategy is:
-
 1. **TUI facade remains the single output abstraction** — new methods added to `ui/tui.ts`, commands never import `chalk` or `@clack/prompts` directly.
 2. **Core stays distribution-agnostic** — the AI Enhance module and SARIF builder live in `packages/core/` so they're usable from CLI, Action, and SaaS.
 3. **New command (`health`) follows existing command patterns** — handler in `commands/health.ts`, registered in `index.ts`, uses `tui.*` for output.
@@ -196,49 +199,49 @@ tui.init({ plain: isPlain });
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `apps/cli/src/ui/tui.ts` | Modified | Add `box()`, `divider()`, `severity()`, `progress()` methods |
-| `apps/cli/src/ui/chalk.ts` (new) | New | Chalk wrapper with NO_COLOR/TTY-aware color functions |
-| `apps/cli/src/ui/theme.ts` | Modified | Add `SEVERITY_COLORS` map, box-drawing constants |
-| `apps/cli/src/ui/format.ts` | Modified | Add `formatBoxSummary()`, `formatSeverityLine()`, `formatDivider()` |
-| `apps/cli/src/ui/sarif.ts` (new) | New | SARIF v2.1.0 document builder |
-| `apps/cli/src/commands/review.ts` | Modified | Wire `--output`, `--issue`, `--enhance`, step progress, box summary |
-| `apps/cli/src/commands/health.ts` (new) | New | Health command handler |
-| `apps/cli/src/index.ts` | Modified | Register `health` command, add `--output`/`--issue`/`--enhance` flags, deprecate `--format` |
-| `apps/cli/src/lib/github-api.ts` (new) | New | GitHub REST API client for issue creation |
-| `packages/core/src/enhance/` (new) | New | AI enhance module (enhance.ts, prompt.ts, types.ts) |
-| `packages/core/src/health/` (new) | New | Health scoring (score.ts, trends.ts, recommendations.ts) |
-| `packages/core/src/types.ts` | Modified | Add `EnhanceMetadata` to `ReviewResult`, `HealthResult` type |
-| `packages/core/src/pipeline.ts` | Modified | Call enhance module after static analysis (when enabled) |
-| `packages/core/src/index.ts` | Modified | Export new types and modules |
-| `apps/cli/package.json` | Modified | Add `chalk` dependency |
-| Existing tests | None | All existing tests must pass without modification |
-| ncc bundle | Modified | Bundle includes chalk (~7KB increase) |
+| Area                                    | Impact   | Description                                                                                 |
+| --------------------------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `apps/cli/src/ui/tui.ts`                | Modified | Add `box()`, `divider()`, `severity()`, `progress()` methods                                |
+| `apps/cli/src/ui/chalk.ts` (new)        | New      | Chalk wrapper with NO_COLOR/TTY-aware color functions                                       |
+| `apps/cli/src/ui/theme.ts`              | Modified | Add `SEVERITY_COLORS` map, box-drawing constants                                            |
+| `apps/cli/src/ui/format.ts`             | Modified | Add `formatBoxSummary()`, `formatSeverityLine()`, `formatDivider()`                         |
+| `apps/cli/src/ui/sarif.ts` (new)        | New      | SARIF v2.1.0 document builder                                                               |
+| `apps/cli/src/commands/review.ts`       | Modified | Wire `--output`, `--issue`, `--enhance`, step progress, box summary                         |
+| `apps/cli/src/commands/health.ts` (new) | New      | Health command handler                                                                      |
+| `apps/cli/src/index.ts`                 | Modified | Register `health` command, add `--output`/`--issue`/`--enhance` flags, deprecate `--format` |
+| `apps/cli/src/lib/github-api.ts` (new)  | New      | GitHub REST API client for issue creation                                                   |
+| `packages/core/src/enhance/` (new)      | New      | AI enhance module (enhance.ts, prompt.ts, types.ts)                                         |
+| `packages/core/src/health/` (new)       | New      | Health scoring (score.ts, trends.ts, recommendations.ts)                                    |
+| `packages/core/src/types.ts`            | Modified | Add `EnhanceMetadata` to `ReviewResult`, `HealthResult` type                                |
+| `packages/core/src/pipeline.ts`         | Modified | Call enhance module after static analysis (when enabled)                                    |
+| `packages/core/src/index.ts`            | Modified | Export new types and modules                                                                |
+| `apps/cli/package.json`                 | Modified | Add `chalk` dependency                                                                      |
+| Existing tests                          | None     | All existing tests must pass without modification                                           |
+| ncc bundle                              | Modified | Bundle includes chalk (~7KB increase)                                                       |
 
 ### Distribution Mode Impact
 
-| Mode | Impact |
-|------|--------|
-| **CLI** | Primary target. All 5 features land here. |
-| **GitHub Action** | AI Enhance and SARIF builder are usable from Action (via `packages/core`). TUI polish and health command are CLI-only. `--output sarif` could be used in Action for uploading to GitHub Security tab (future work). |
-| **SaaS (server)** | No changes. Server uses its own PR comment formatting. AI Enhance could be integrated into the SaaS pipeline in a future release. |
-| **1-click deploy** | No changes. Runner template unchanged. |
+| Mode               | Impact                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CLI**            | Primary target. All 5 features land here.                                                                                                                                                                           |
+| **GitHub Action**  | AI Enhance and SARIF builder are usable from Action (via `packages/core`). TUI polish and health command are CLI-only. `--output sarif` could be used in Action for uploading to GitHub Security tab (future work). |
+| **SaaS (server)**  | No changes. Server uses its own PR comment formatting. AI Enhance could be integrated into the SaaS pipeline in a future release.                                                                                   |
+| **1-click deploy** | No changes. Runner template unchanged.                                                                                                                                                                              |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| **chalk bundling with ncc** | Low | chalk v5 is pure ESM with zero native deps. Pre-validate with `ncc build` before merging. If it fails, vendor chalk's core color functions (~50 lines) directly. |
-| **AI Enhance hallucinated groupings** | Medium | AI Enhance is opt-in (`--enhance`). Output is advisory — it adds metadata to findings but never removes findings from the result. Filtered findings are marked, not deleted, and visible with `--verbose`. |
-| **AI Enhance token cost explosion** | Low | Input capped at 4K tokens. Uses gpt-4o-mini (cheapest available, free via GitHub Models). Single call per review. If findings exceed cap, lowest-severity findings are dropped from the AI input (still shown in results). |
-| **SARIF schema non-compliance** | Medium | Validate generated SARIF against the official JSON schema (https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json) in tests. GitHub's Code Scanning is strict about schema compliance. |
-| **Health score gaming / meaninglessness** | Low | Score is a simple weighted formula — transparent and documented. Not intended as a definitive quality metric; it's a directional indicator. The scoring weights are configurable in `.ghagga.json` (future enhancement). |
-| **`--issue` rate limiting** | Low | GitHub API rate limit is 5,000 req/hr for authenticated users. A single issue creation is 1-2 requests. Warn the user if the API returns 403/429. |
-| **`--issue` without authentication** | Low | Check for stored token before attempting API call. Clear error message with `ghagga login` suggestion. |
-| **`--output` breaking existing `--format` users** | Medium | `--format` remains as a deprecated alias. Both flags map to the same internal option. Deprecation warning printed when `--format` is used. JSON output format is byte-identical to current behavior. |
-| **Box-drawing characters on Windows terminals** | Low | Unicode box-drawing (U+2500 block) is supported by all modern Windows terminals (Terminal, PowerShell 7, CMD with chcp 65001). Fallback to ASCII `+--+` in plain mode. |
-| **Health command exceeding 1,500 line cap** | Low | Architecture is pre-planned: command ~300, scoring ~400, trends ~200, recommendations ~300 = ~1,200 lines. If trending toward cap, move recommendation logic to `packages/core`. |
+| Risk                                              | Likelihood | Mitigation                                                                                                                                                                                                                           |
+| ------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **chalk bundling with ncc**                       | Low        | chalk v5 is pure ESM with zero native deps. Pre-validate with `ncc build` before merging. If it fails, vendor chalk's core color functions (~50 lines) directly.                                                                     |
+| **AI Enhance hallucinated groupings**             | Medium     | AI Enhance is opt-in (`--enhance`). Output is advisory — it adds metadata to findings but never removes findings from the result. Filtered findings are marked, not deleted, and visible with `--verbose`.                           |
+| **AI Enhance token cost explosion**               | Low        | Input capped at 4K tokens. Uses gpt-4o-mini (cheapest available, free via GitHub Models). Single call per review. If findings exceed cap, lowest-severity findings are dropped from the AI input (still shown in results).           |
+| **SARIF schema non-compliance**                   | Medium     | Validate generated SARIF against the official JSON schema (https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json) in tests. GitHub's Code Scanning is strict about schema compliance. |
+| **Health score gaming / meaninglessness**         | Low        | Score is a simple weighted formula — transparent and documented. Not intended as a definitive quality metric; it's a directional indicator. The scoring weights are configurable in `.ghagga.json` (future enhancement).             |
+| **`--issue` rate limiting**                       | Low        | GitHub API rate limit is 5,000 req/hr for authenticated users. A single issue creation is 1-2 requests. Warn the user if the API returns 403/429.                                                                                    |
+| **`--issue` without authentication**              | Low        | Check for stored token before attempting API call. Clear error message with `ghagga login` suggestion.                                                                                                                               |
+| **`--output` breaking existing `--format` users** | Medium     | `--format` remains as a deprecated alias. Both flags map to the same internal option. Deprecation warning printed when `--format` is used. JSON output format is byte-identical to current behavior.                                 |
+| **Box-drawing characters on Windows terminals**   | Low        | Unicode box-drawing (U+2500 block) is supported by all modern Windows terminals (Terminal, PowerShell 7, CMD with chcp 65001). Fallback to ASCII `+--+` in plain mode.                                                               |
+| **Health command exceeding 1,500 line cap**       | Low        | Architecture is pre-planned: command ~300, scoring ~400, trends ~200, recommendations ~300 = ~1,200 lines. If trending toward cap, move recommendation logic to `packages/core`.                                                     |
 
 ## Rollback Plan
 
@@ -252,14 +255,17 @@ tui.init({ plain: isPlain });
 ## Dependencies
 
 ### New Dependencies
+
 - **`chalk`** (npm, MIT, ~7KB) — terminal color support. Auto-detects NO_COLOR, FORCE_COLOR, non-TTY. ESM-only, pure JS, zero native deps.
 
 ### Existing Dependencies (no changes)
+
 - **`@clack/prompts`** — spinners, intro/outro (already installed)
 - **`commander`** — CLI argument parsing (already installed)
 - **`ghagga-core`** — review pipeline, tool registry, types (workspace dependency)
 
 ### No New Dependencies For
+
 - **GitHub API** — uses `fetch` (Node 20+ built-in)
 - **SARIF builder** — pure TypeScript, no external library
 - **AI Enhance** — uses existing `packages/core/src/providers/` LLM infrastructure (Vercel AI SDK already installed in core)
@@ -269,6 +275,7 @@ tui.init({ plain: isPlain });
 The recommended implementation order, based on dependency analysis:
 
 ### Phase 1: TUI Foundation
+
 1. Add `chalk` dependency, create `ui/chalk.ts` adapter
 2. Extend `tui.ts` with `box()`, `divider()`, `severity()`, `progress()`
 3. Extend `theme.ts` with `SEVERITY_COLORS`
@@ -276,30 +283,35 @@ The recommended implementation order, based on dependency analysis:
 5. Wire colored severity into finding rendering
 
 ### Phase 2: `--output` Flag
+
 1. Add `--output json|sarif|markdown` to `index.ts`, deprecate `--format`
 2. Implement SARIF builder (`ui/sarif.ts`)
 3. Update `review.ts` to route output through format selector
 4. Force plain mode when `--output` is specified
 
 ### Phase 3: TUI Polish (Review Output)
+
 1. Wire step progress `[3/7]` into review pipeline via `onProgress`
 2. Add section dividers between tool finding groups
 3. Add box-drawing summary at end of review
 4. Test: TTY output, plain output, piped output, CI output
 
 ### Phase 4: AI Enhance
+
 1. Create `packages/core/src/enhance/` module (types, prompt, enhance function)
 2. Integrate into pipeline (conditional, after static analysis)
 3. Add `--enhance` / `--no-enhance` flags
 4. Update result rendering to show grouped/prioritized/filtered findings
 
 ### Phase 5: `ghagga health`
+
 1. Create `packages/core/src/health/` (scoring, trends, recommendations)
 2. Create `commands/health.ts`
 3. Register in `index.ts`
 4. Implement health history storage and trend display
 
 ### Phase 6: `--issue` Flag
+
 1. Create `lib/github-api.ts` (minimal REST client)
 2. Add `--issue` flag to review command
 3. Wire issue creation/update after review completion
@@ -308,6 +320,7 @@ The recommended implementation order, based on dependency analysis:
 ## Success Criteria
 
 ### TUI Polish
+
 - [ ] Findings display colored severity text in TTY mode (red/orange/yellow/green/purple)
 - [ ] Review ends with a box-drawing summary showing status, counts, time, tools
 - [ ] Review shows step progress `[1/7] Running Semgrep...` during pipeline
@@ -319,6 +332,7 @@ The recommended implementation order, based on dependency analysis:
 - [ ] Commands never import `chalk` or `@clack/prompts` directly (only via `ui/tui.ts` and `ui/chalk.ts`)
 
 ### `--output` Flag
+
 - [ ] `ghagga review --output json` produces identical output to current `--format json`
 - [ ] `ghagga review --output sarif` produces valid SARIF v2.1.0 JSON
 - [ ] `ghagga review --output markdown` produces clean markdown (no ANSI)
@@ -328,6 +342,7 @@ The recommended implementation order, based on dependency analysis:
 - [ ] SARIF output is uploadable to GitHub Code Scanning via `gh sarif upload`
 
 ### AI Enhance
+
 - [ ] `ghagga review --enhance` triggers the AI enhance pass after static analysis
 - [ ] Enhanced results show grouped findings with group labels
 - [ ] Enhanced results show AI-prioritized ordering
@@ -338,6 +353,7 @@ The recommended implementation order, based on dependency analysis:
 - [ ] `--no-enhance` explicitly disables even if a future default changes
 
 ### `ghagga health`
+
 - [ ] `ghagga health` runs static analysis and shows a health score (0-100)
 - [ ] Health score is color-coded: green (80+), yellow (50-79), red (0-49)
 - [ ] Top 5 issues are shown sorted by severity
@@ -349,6 +365,7 @@ The recommended implementation order, based on dependency analysis:
 - [ ] Health command does not require authentication (runs locally)
 
 ### `--issue` Flag
+
 - [ ] `ghagga review --issue new` creates a new GitHub issue and prints the URL
 - [ ] `ghagga review --issue 42` posts a comment on issue #42 and prints the comment URL
 - [ ] Issue body contains the review summary in formatted markdown
@@ -358,6 +375,7 @@ The recommended implementation order, based on dependency analysis:
 - [ ] Works with both `owner/repo` from git remote and explicit repo paths
 
 ### Cross-Cutting
+
 - [ ] All existing tests pass without modification
 - [ ] `ncc build` succeeds and produces a single-file bundle
 - [ ] Bundle size increase is < 30KB over v2.4.2 baseline

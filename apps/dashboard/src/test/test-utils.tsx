@@ -23,6 +23,9 @@ export function createTestQueryClient() {
  */
 export function createWrapper(queryClient?: QueryClient) {
   const client = queryClient ?? createTestQueryClient();
+  // The wrapper must close over this call's QueryClient. It is created once per
+  // renderHook invocation, so its identity stays stable for that test.
+  // biome-ignore lint/correctness/noComponentHookFactories: per-call QueryClient
   return function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   };

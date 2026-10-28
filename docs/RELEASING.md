@@ -2,7 +2,6 @@
 
 This monorepo uses [Changesets](https://github.com/changesets/changesets) for
 **lockstep** versioning. The three published packages always share one version:
-
 - `ghagga-core` (`packages/core`)
 - `ghagga` (`apps/cli`)
 - `ghagga-db` (`packages/db`)

@@ -7,7 +7,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRepositories } from './api';
@@ -104,14 +104,28 @@ afterEach(() => {
 
 // ─── Wrapper ────────────────────────────────────────────────────
 
-function createAuthWrapper() {
-  return function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <MemoryRouter>
-        <AuthProvider>{children}</AuthProvider>
-      </MemoryRouter>
-    );
-  };
+function AuthTestWrapper({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter>
+      <AuthProvider>{children}</AuthProvider>
+    </MemoryRouter>
+  );
+}
+
+function SessionExpiryWrapper({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      }),
+  );
+  return (
+    <MemoryRouter>
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </AuthProvider>
+    </MemoryRouter>
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -127,7 +141,7 @@ describe('useAuth', () => {
 
   it('starts with isAuthenticated: false when no stored credentials', () => {
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     expect(result.current.isAuthenticated).toBe(false);
@@ -144,7 +158,7 @@ describe('useAuth', () => {
     });
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     expect(result.current.isAuthenticated).toBe(true);
@@ -166,7 +180,7 @@ describe('loginFromCallback', () => {
     });
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     let success: boolean | undefined;
@@ -189,7 +203,7 @@ describe('loginFromCallback', () => {
     mockFetchGitHubUser.mockRejectedValueOnce(new Error('Invalid or expired token'));
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     let success: boolean | undefined;
@@ -218,7 +232,7 @@ describe('reAuthenticate', () => {
     });
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     act(() => {
@@ -231,7 +245,7 @@ describe('reAuthenticate', () => {
 
   it('redirects to server /auth/login', () => {
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     act(() => {
@@ -256,7 +270,7 @@ describe('session expiry', () => {
     });
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     expect(result.current.isAuthenticated).toBe(true);
@@ -286,7 +300,7 @@ describe('session expiry', () => {
     notifySessionExpired();
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     // The mount effect drains the latched signal → auth state ends cleared.
@@ -317,22 +331,8 @@ describe('session expiry', () => {
       vi.fn().mockResolvedValue(new Response('Unauthorized', { status: 401 })),
     );
 
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <MemoryRouter>
-          <AuthProvider>
-            <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-          </AuthProvider>
-        </MemoryRouter>
-      );
-    }
-
     const { result } = renderHook(() => ({ auth: useAuth(), repos: useRepositories() }), {
-      wrapper: Wrapper,
+      wrapper: SessionExpiryWrapper,
     });
 
     // Starts "authenticated" with stale credentials
@@ -362,7 +362,7 @@ describe('logout', () => {
     sessionStore.ghagga_redirect_after_login = '/settings';
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     act(() => {
@@ -379,7 +379,7 @@ describe('logout', () => {
     store.ghagga_user = JSON.stringify({ githubLogin: 'user', githubUserId: 1, avatarUrl: '' });
 
     const { result } = renderHook(() => useAuth(), {
-      wrapper: createAuthWrapper(),
+      wrapper: AuthTestWrapper,
     });
 
     // Should start authenticated

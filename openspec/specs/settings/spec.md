@@ -101,6 +101,7 @@ The system MUST support updating the provider chain for a repository via `update
 The system MUST provide an `installation_settings` table with a 1:1 relationship to `installations`.
 
 #### Fields
+
 - `id` (serial PK)
 - `installation_id` (FK → installations.id, UNIQUE, NOT NULL)
 - `provider_chain` (JSONB, default `[]`) — same shape as `DbProviderChainEntry[]`
@@ -232,6 +233,7 @@ The server MUST expose `PUT /api/settings` that updates all settings for a repos
 
 - GIVEN an authenticated user with access to repo `JNZader/my-app`
 - WHEN `PUT /api/settings` is called with body:
+
   ```json
   {
     "repoFullName": "JNZader/my-app",
@@ -992,6 +994,7 @@ The `GET /api/settings` and `PUT /api/settings` endpoints MUST support the new t
 - GIVEN the tool registry has 15 registered tools
 - WHEN `GET /api/settings?repo=owner/repo` is called
 - THEN the response MUST include `registeredTools` with entries like:
+
   ```json
   [
     { "name": "semgrep", "displayName": "Semgrep", "category": "security", "tier": "always-on" },

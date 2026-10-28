@@ -30,24 +30,24 @@ This exploration covers Phase 0 baseline reconciliation and the first independen
 
 ## Approaches
 
-| Approach | Pros | Cons | Effort |
-|---|---|---|---|
-| **A. Extend review modes (`describe` as review alias)** | Smallest apparent change; reuses current queue and formatter | Cannot carry a question today; mixes answer semantics with findings/verdict/coverage/memory; inherits mutable fetches, retries, duplicate persistence, and marker collision | Medium initially, high remediation risk |
-| **B. Typed intent envelope with a separate explanation path over shared read-only primitives** | Preserves the existing review control path; makes finding-free behavior explicit; supports immutable identity, replay, and truthful progress; reversible by intent/wiring flag | Requires new contracts and carefully extracted shared preparation/context seams; cross-package coordination | Medium-high, divisible into narrow slices |
-| **C. New monolithic conversational PR subsystem** | Maximum UX freedom and transcript support | Duplicates engine/policy behavior, expands scope across surfaces, increases security and rollback risk, and conflicts with the approved first read-only slice | High |
+| Approach                                                                                       | Pros                                                                                                                                                                           | Cons                                                                                                                                                                        | Effort                                    |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **A. Extend review modes (`describe` as review alias)**                                        | Smallest apparent change; reuses current queue and formatter                                                                                                                   | Cannot carry a question today; mixes answer semantics with findings/verdict/coverage/memory; inherits mutable fetches, retries, duplicate persistence, and marker collision | Medium initially, high remediation risk   |
+| **B. Typed intent envelope with a separate explanation path over shared read-only primitives** | Preserves the existing review control path; makes finding-free behavior explicit; supports immutable identity, replay, and truthful progress; reversible by intent/wiring flag | Requires new contracts and carefully extracted shared preparation/context seams; cross-package coordination                                                                 | Medium-high, divisible into narrow slices |
+| **C. New monolithic conversational PR subsystem**                                              | Maximum UX freedom and transcript support                                                                                                                                      | Duplicates engine/policy behavior, expands scope across surfaces, increases security and rollback risk, and conflicts with the approved first read-only slice               | High                                      |
 
 ### Recommended Reversible Slice Sequence
 
-| Slice | Purpose | Estimated authored change |
-|---|---|---:|
-| 1. Pure intent and explanation-result contracts | Define read-only behavior without server or forge side effects | 150-250 lines |
-| 2. Parsing and invocation identity | Capture an explicit question and derive a stable target/invoker identity | 250-380 lines |
-| 3. Immutable snapshot read contract | Ensure diff/context are bound to the requested PR revision | 250-400 lines |
-| 4. Durable replay claim/result | Deduplicate retries and replay the same terminal outcome | 250-400 lines |
-| 5. Finding-free explanation service | Reuse safe preparation/context primitives without review finalization | 250-400 lines |
-| 6. Pure progress reducer | Map internal stages to monotonic, truthful public states | 180-300 lines |
-| 7. Isolated progress/explanation publication | Use distinct markers/channels so review summaries cannot collide | 250-400 lines |
-| 8. Opt-in server wiring | Connect the first approved surface while retaining the old review path as control | 250-400 lines |
+| Slice                                           | Purpose                                                                           | Estimated authored change |
+| ----------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------: |
+| 1. Pure intent and explanation-result contracts | Define read-only behavior without server or forge side effects                    |             150-250 lines |
+| 2. Parsing and invocation identity              | Capture an explicit question and derive a stable target/invoker identity          |             250-380 lines |
+| 3. Immutable snapshot read contract             | Ensure diff/context are bound to the requested PR revision                        |             250-400 lines |
+| 4. Durable replay claim/result                  | Deduplicate retries and replay the same terminal outcome                          |             250-400 lines |
+| 5. Finding-free explanation service             | Reuse safe preparation/context primitives without review finalization             |             250-400 lines |
+| 6. Pure progress reducer                        | Map internal stages to monotonic, truthful public states                          |             180-300 lines |
+| 7. Isolated progress/explanation publication    | Use distinct markers/channels so review summaries cannot collide                  |             250-400 lines |
+| 8. Opt-in server wiring                         | Connect the first approved surface while retaining the old review path as control |             250-400 lines |
 
 These are exploration estimates, not a promise that a delivery unit stays below the 400-line review budget. Task planning must measure coupling and choose PR boundaries.
 
@@ -70,7 +70,6 @@ Model public progress as a pure monotonic reducer first, then project it through
 ## Pending Product Decisions
 
 The following decisions are **unconfirmed** and must be resolved by the orchestrator/user before proposal. This exploration does not select defaults:
-
 1. Explicit `/ghagga explain <question>` versus transcript-derived conversational intent.
 2. Eligible associations and whether contributors may invoke only on their own PRs.
 3. Reject stale targets versus answer from an explicitly identified historical snapshot.

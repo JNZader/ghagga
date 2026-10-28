@@ -5,13 +5,11 @@
 Delegated CI extends GHAGGA's existing SaaS runner pattern instead of introducing a second execution stack. The server continues to own policy evaluation, token minting, runner discovery, workflow dispatch, callback verification, and durable state. The public `ghagga-runner` repository remains the execution surface, but Delegated CI gets its own workflow template and its own orchestration path.
 
 The key architectural move is to separate three concerns that are currently bundled inside the static-analysis flow:
-
 1. runner infrastructure concerns (`discoverRunnerRepo`, `setRunnerSecret`, callback HMAC, workflow dispatch)
 2. execution-kind concerns (static analysis vs delegated CI)
 3. repository policy concerns (what is allowed for a specific repo)
 
 For MVP, GHAGGA stays conservative:
-
 - SaaS-only orchestration
 - repo-level opt-in only
 - no global inheritance for delegated CI enablement
@@ -181,30 +179,30 @@ sequenceDiagram
 
 ## Reused Existing Components
 
-| Component | Reuse | Notes |
-|------|--------|-------------|
-| `apps/server/src/github/runner.ts` | Extend | Keep runner discovery, repo secret provisioning, and workflow dispatch mechanics; extract generic workflow-dispatch helpers. |
-| `apps/server/src/routes/runner-callback.ts` | Extend | Keep stateless HMAC verification; broaden payload schema to support delegated CI state/result envelopes. |
-| `apps/server/src/inngest/review.ts` pattern | Reuse as reference | Delegated CI should use the same dispatch/wait/resume durable execution pattern, but in a separate Inngest function. |
-| `apps/server/src/inngest/client.ts` | Extend | Add delegated CI event schemas. |
-| `templates/ghagga-analysis.yml` | Reuse security patterns only | Reuse log suppression, masking, callback signing, cleanup, and log deletion patterns; do not reuse as the execution template itself. |
-| `apps/server/src/routes/api/settings.ts` and dashboard settings flows | Extend | Follow current repo-settings API/UI conventions for editing repo-scoped policy. |
-| `packages/db/src/schema.ts` / `packages/db/src/queries.ts` | Extend | Follow the current repository/settings JSONB and run-history patterns. |
+| Component                                                             | Reuse                        | Notes                                                                                                                                |
+| --------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/server/src/github/runner.ts`                                    | Extend                       | Keep runner discovery, repo secret provisioning, and workflow dispatch mechanics; extract generic workflow-dispatch helpers.         |
+| `apps/server/src/routes/runner-callback.ts`                           | Extend                       | Keep stateless HMAC verification; broaden payload schema to support delegated CI state/result envelopes.                             |
+| `apps/server/src/inngest/review.ts` pattern                           | Reuse as reference           | Delegated CI should use the same dispatch/wait/resume durable execution pattern, but in a separate Inngest function.                 |
+| `apps/server/src/inngest/client.ts`                                   | Extend                       | Add delegated CI event schemas.                                                                                                      |
+| `templates/ghagga-analysis.yml`                                       | Reuse security patterns only | Reuse log suppression, masking, callback signing, cleanup, and log deletion patterns; do not reuse as the execution template itself. |
+| `apps/server/src/routes/api/settings.ts` and dashboard settings flows | Extend                       | Follow current repo-settings API/UI conventions for editing repo-scoped policy.                                                      |
+| `packages/db/src/schema.ts` / `packages/db/src/queries.ts`            | Extend                       | Follow the current repository/settings JSONB and run-history patterns.                                                               |
 
 ---
 
 ## New Components Required
 
-| Component | Type | Purpose |
-|------|--------|-------------|
-| `repositories.delegatedCiPolicy` or equivalent repo-only JSONB field | New persistence | Stores repo-scoped opt-in policy and job classification. |
-| `delegated_ci_runs` table | New persistence | Stores orchestration states, reasons, timings, callback IDs, and summarized outputs. |
-| `apps/server/src/inngest/delegated-ci.ts` | New server module | Owns Delegated CI orchestration separate from AI review flow. |
-| `templates/ghagga-delegated-ci.yml` | New runner template | Executes GHAGGA-curated delegated CI job profiles. |
-| `apps/server/src/delegated-ci/policy.ts` | New server module | Normalizes policy, applies conservative defaults, validates classification and MVP eligibility. |
-| `apps/server/src/delegated-ci/profiles.ts` | New server module | Registry of supported delegated CI execution profiles and their constraints. |
-| `apps/server/src/routes/api/delegated-ci.ts` or settings extensions | New/extended API | Exposes policy and run status to the dashboard. |
-| Dashboard repo settings section | New UI | Allows repo owners to opt in and classify approved jobs. |
+| Component                                                            | Type                | Purpose                                                                                         |
+| -------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| `repositories.delegatedCiPolicy` or equivalent repo-only JSONB field | New persistence     | Stores repo-scoped opt-in policy and job classification.                                        |
+| `delegated_ci_runs` table                                            | New persistence     | Stores orchestration states, reasons, timings, callback IDs, and summarized outputs.            |
+| `apps/server/src/inngest/delegated-ci.ts`                            | New server module   | Owns Delegated CI orchestration separate from AI review flow.                                   |
+| `templates/ghagga-delegated-ci.yml`                                  | New runner template | Executes GHAGGA-curated delegated CI job profiles.                                              |
+| `apps/server/src/delegated-ci/policy.ts`                             | New server module   | Normalizes policy, applies conservative defaults, validates classification and MVP eligibility. |
+| `apps/server/src/delegated-ci/profiles.ts`                           | New server module   | Registry of supported delegated CI execution profiles and their constraints.                    |
+| `apps/server/src/routes/api/delegated-ci.ts` or settings extensions  | New/extended API    | Exposes policy and run status to the dashboard.                                                 |
+| Dashboard repo settings section                                      | New UI              | Allows repo owners to opt in and classify approved jobs.                                        |
 
 ---
 
@@ -240,7 +238,6 @@ interface DelegatedCiPolicy {
 ### `enabled` precedence rules
 
 Both `DelegatedCiPolicy.enabled` (policy-level) and `DelegatedCiJobPolicy.enabled` (job-level) exist. The precedence is:
-
 - **Policy-level `enabled: false`** overrides everything — no jobs are evaluated, regardless of their individual `enabled` flags.
 - **Job-level `enabled: false`** skips that specific job even if the policy is enabled.
 - A job with `enabled: true` but policy `enabled: false` is treated as non-delegable (policy wins).
@@ -279,7 +276,6 @@ Only jobs explicitly present in the repo policy and marked `safe/delegable` may 
 ### Delegable job checklist
 
 A job may be approved only if all are true:
-
 1. delegated CI is enabled for the repository
 2. the job exists in repo policy
 3. the job is classified `safe/delegable`
@@ -321,7 +317,6 @@ MVP supports pull-request-related orchestration first. Manual trigger support ma
 ### Concurrency model for multiple delegated jobs
 
 When a repository has multiple approved delegated jobs (e.g., `lint`, `unit-tests`, `type-check`), MVP dispatches them concurrently:
-
 - Each approved job gets its own Inngest function invocation and its own `delegated_ci_runs` row.
 - Each job is independent — failure of one does not cancel others.
 - A concurrency limit per repository can be added post-MVP if dispatch volume becomes a concern.
@@ -360,7 +355,6 @@ The static-analysis payload path remains intact. The callback router becomes exe
 **Callback event routing by execution kind:**
 
 The callback route determines `executionKind` from the incoming payload and emits the appropriate Inngest event so the correct durable function resumes:
-
 - For `executionKind: 'static-analysis'`: emits the existing `ghagga/runner.callback` event (unchanged from current behavior)
 - For `executionKind: 'delegated-ci'`: emits a new `ghagga/delegated-ci.callback` event
 
@@ -373,7 +367,6 @@ The delegated CI Inngest function uses `step.waitForEvent("ghagga/delegated-ci.c
 ### Durable state tracking
 
 Use a dedicated run ledger so GHAGGA can answer:
-
 - which repo and job were evaluated
 - whether the job was rejected vs actually dispatched
 - current and final state
@@ -468,7 +461,6 @@ For MVP, GHAGGA does not attempt full GitHub Checks integration. Native CI remai
 ### Pre-dispatch rejection
 
 Reject without dispatch when:
-
 - delegated CI is disabled for the repo
 - job is missing from policy
 - classification is `sensitive/no-delegable`
@@ -477,7 +469,6 @@ Reject without dispatch when:
 - runner template integrity fails and cannot be repaired
 
 Store machine-readable reason codes such as:
-
 - `delegated_ci_disabled`
 - `job_not_configured`
 - `job_sensitive`
@@ -489,7 +480,6 @@ Store machine-readable reason codes such as:
 ### Post-approval fallback
 
 If dispatch cannot proceed or the runner fails after approval:
-
 - mark the run `failed` or `timed_out`
 - retain the original approval/rejection audit data
 - do not silently retry with a broader or less safe execution mode
@@ -535,24 +525,24 @@ GHAGGA never converts a rejected job into an unsafe delegated run. The repositor
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/db/src/schema.ts` | Modify | Add repo-only delegated CI policy storage and a `delegated_ci_runs` table. |
-| `packages/db/src/queries.ts` | Modify | Add CRUD/query helpers for delegated CI policy and run states. |
-| `packages/types/src/delegated-ci.ts` | Create | Add shared delegated CI policy/state/result types (`DelegatedCiJobPolicy`, `DelegatedCiClassification`, `DelegatedCiRunState`, etc.). Re-export from `packages/types/src/index.ts`. |
-| `packages/types/src/api.ts` | Modify | Expose delegated CI policy/run API contracts to the dashboard. |
-| `apps/server/src/github/runner.ts` | Modify | Extract generic runner dispatch helpers and add delegated CI workflow dispatch support. |
-| `apps/server/src/routes/runner-callback.ts` | Modify | Accept execution-kind aware callback payloads and update delegated CI runs. |
-| `apps/server/src/inngest/client.ts` | Modify | Add delegated CI event schemas. |
-| `apps/server/src/inngest/delegated-ci.ts` | Create | New durable orchestration flow for delegated CI. |
-| `apps/server/src/routes/api/settings.ts` | Modify | Read/write repo-only delegated CI policy in repo settings APIs. |
-| `apps/server/src/routes/api/delegated-ci.ts` | Create or extend | Query delegated CI run history/status for the dashboard. |
-| `apps/dashboard/src/pages/Settings.tsx` | Modify | Add delegated CI policy controls to the repo settings UI. |
-| `apps/dashboard/src/lib/api.ts` | Modify | Add hooks for delegated CI policy and run history. |
-| `apps/dashboard/src/lib/types.ts` | Modify | Re-export new delegated CI API types. |
-| `templates/ghagga-delegated-ci.yml` | Create | Dedicated workflow template for delegated CI jobs. |
-| `docs/runner-architecture.md` | Modify | Document the new execution kind and template split. |
-| `docs/security.md` | Modify | Document delegated CI safety boundaries and non-goals. |
+| File                                         | Action           | Description                                                                                                                                                                         |
+| -------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/db/src/schema.ts`                  | Modify           | Add repo-only delegated CI policy storage and a `delegated_ci_runs` table.                                                                                                          |
+| `packages/db/src/queries.ts`                 | Modify           | Add CRUD/query helpers for delegated CI policy and run states.                                                                                                                      |
+| `packages/types/src/delegated-ci.ts`         | Create           | Add shared delegated CI policy/state/result types (`DelegatedCiJobPolicy`, `DelegatedCiClassification`, `DelegatedCiRunState`, etc.). Re-export from `packages/types/src/index.ts`. |
+| `packages/types/src/api.ts`                  | Modify           | Expose delegated CI policy/run API contracts to the dashboard.                                                                                                                      |
+| `apps/server/src/github/runner.ts`           | Modify           | Extract generic runner dispatch helpers and add delegated CI workflow dispatch support.                                                                                             |
+| `apps/server/src/routes/runner-callback.ts`  | Modify           | Accept execution-kind aware callback payloads and update delegated CI runs.                                                                                                         |
+| `apps/server/src/inngest/client.ts`          | Modify           | Add delegated CI event schemas.                                                                                                                                                     |
+| `apps/server/src/inngest/delegated-ci.ts`    | Create           | New durable orchestration flow for delegated CI.                                                                                                                                    |
+| `apps/server/src/routes/api/settings.ts`     | Modify           | Read/write repo-only delegated CI policy in repo settings APIs.                                                                                                                     |
+| `apps/server/src/routes/api/delegated-ci.ts` | Create or extend | Query delegated CI run history/status for the dashboard.                                                                                                                            |
+| `apps/dashboard/src/pages/Settings.tsx`      | Modify           | Add delegated CI policy controls to the repo settings UI.                                                                                                                           |
+| `apps/dashboard/src/lib/api.ts`              | Modify           | Add hooks for delegated CI policy and run history.                                                                                                                                  |
+| `apps/dashboard/src/lib/types.ts`            | Modify           | Re-export new delegated CI API types.                                                                                                                                               |
+| `templates/ghagga-delegated-ci.yml`          | Create           | Dedicated workflow template for delegated CI jobs.                                                                                                                                  |
+| `docs/runner-architecture.md`                | Modify           | Document the new execution kind and template split.                                                                                                                                 |
+| `docs/security.md`                           | Modify           | Document delegated CI safety boundaries and non-goals.                                                                                                                              |
 
 ---
 
@@ -575,7 +565,6 @@ interface RunnerWorkflowDescriptor {
 The descriptor carries only structural and routing information — it does not encode any execution-kind-specific semantics. The `inputs` field is a generic `Record<string, string>` that each execution kind populates via its own factory function.
 
 **Factory functions:**
-
 - `buildAnalysisDescriptor(...)` — creates a descriptor for static analysis, mapping file patterns, model, review ID, etc. into `inputs`
 - `buildDelegatedCiDescriptor(...)` — creates a descriptor for delegated CI, mapping job key, profile, and CI-specific config into `inputs`
 - A general `buildDescriptor(kind, params)` pattern ensures each execution kind owns its own input serialization
@@ -603,15 +592,15 @@ To stay within the constraint, delegated CI packs non-security inputs into a sin
 
 Security-critical inputs that the runner needs before parsing JSON remain as separate `workflow_dispatch` inputs:
 
-| Input | Separate | Reason |
-|-------|----------|--------|
-| `callbackUrl` | Yes | Runner must know where to POST before executing any job logic |
-| `callbackSecret` | Yes | Required for HMAC signing before any JSON parsing |
-| `token` | Yes | Required for checkout before any JSON parsing |
-| `repoFullName` | Yes | Required for checkout |
-| `headSha` | Yes | Required for checkout |
-| `baseBranch` | Yes | Required for diff/merge-base context |
-| `config` | Yes (JSON) | Packs all remaining inputs |
+| Input            | Separate   | Reason                                                        |
+| ---------------- | ---------- | ------------------------------------------------------------- |
+| `callbackUrl`    | Yes        | Runner must know where to POST before executing any job logic |
+| `callbackSecret` | Yes        | Required for HMAC signing before any JSON parsing             |
+| `token`          | Yes        | Required for checkout before any JSON parsing                 |
+| `repoFullName`   | Yes        | Required for checkout                                         |
+| `headSha`        | Yes        | Required for checkout                                         |
+| `baseBranch`     | Yes        | Required for diff/merge-base context                          |
+| `config`         | Yes (JSON) | Packs all remaining inputs                                    |
 
 This yields 7 total `workflow_dispatch` inputs, well within the ~10 limit. The `ghagga-delegated-ci.yml` template parses the `config` input using `fromJSON()` in its steps.
 
@@ -657,15 +646,15 @@ interface RepositoryDelegatedCiSettings {
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | Policy evaluator defaults, classification, rejection reasons | Pure-function tests in server policy module |
-| Unit | Runner dispatch descriptor building for delegated CI | Mock `fetch` and secret provisioning in `runner.ts` tests |
-| Unit | Callback payload verification and state transitions | Extend `runner-callback.test.ts` |
-| Integration | Repo settings API reads/writes delegated CI policy correctly | Hono route tests matching current settings-route style |
-| Integration | Inngest delegated CI flow updates states from approved to completed/failed/timed_out | Inngest function tests with mocked callbacks |
-| Integration | DB queries for delegated CI runs and filters | Query tests in `packages/db` |
-| E2E | Beta repo opt-in, approved job dispatch, rejection path, timeout path | End-to-end SaaS flow with runner template fixture and mocked GitHub API |
+| Layer       | What to Test                                                                         | Approach                                                                |
+| ----------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Unit        | Policy evaluator defaults, classification, rejection reasons                         | Pure-function tests in server policy module                             |
+| Unit        | Runner dispatch descriptor building for delegated CI                                 | Mock `fetch` and secret provisioning in `runner.ts` tests               |
+| Unit        | Callback payload verification and state transitions                                  | Extend `runner-callback.test.ts`                                        |
+| Integration | Repo settings API reads/writes delegated CI policy correctly                         | Hono route tests matching current settings-route style                  |
+| Integration | Inngest delegated CI flow updates states from approved to completed/failed/timed_out | Inngest function tests with mocked callbacks                            |
+| Integration | DB queries for delegated CI runs and filters                                         | Query tests in `packages/db`                                            |
+| E2E         | Beta repo opt-in, approved job dispatch, rejection path, timeout path                | End-to-end SaaS flow with runner template fixture and mocked GitHub API |
 
 ---
 
@@ -674,7 +663,6 @@ interface RepositoryDelegatedCiSettings {
 No data migration is required for existing reviews or runner behavior. This change adds new repo policy data and new run-history data only.
 
 Rollout is feature-flagged and additive:
-
 - existing runner setup stays valid
 - existing static-analysis flow stays valid
 - repos without delegated CI policy continue unchanged

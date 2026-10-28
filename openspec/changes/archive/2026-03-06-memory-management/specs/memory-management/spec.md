@@ -58,16 +58,16 @@ export interface MemoryObservationDetail {
   project: string;
   topicKey: string | null;
   revisionCount: number;
-  createdAt: string;   // ISO 8601
-  updatedAt: string;   // ISO 8601
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 export interface MemoryStats {
   totalObservations: number;
   byType: Record<string, number>;
   byProject: Record<string, number>;
-  oldestObservation: string | null;  // ISO 8601, null if no observations
-  newestObservation: string | null;  // ISO 8601, null if no observations
+  oldestObservation: string | null; // ISO 8601, null if no observations
+  newestObservation: string | null; // ISO 8601, null if no observations
 }
 ```
 
@@ -141,7 +141,6 @@ DELETE FROM memory_observations WHERE id = ?
 #### R4.4: getStats
 
 Three queries:
-
 1. `SELECT COUNT(*) AS total, MIN(created_at) AS oldest, MAX(created_at) AS newest FROM memory_observations`
 2. `SELECT type, COUNT(*) AS count FROM memory_observations GROUP BY type`
 3. `SELECT project, COUNT(*) AS count FROM memory_observations GROUP BY project ORDER BY count DESC`
@@ -195,11 +194,11 @@ The file MUST contain all six subcommand definitions and their handler functions
 
 #### R7.1: Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--repo <owner/repo>` | string | (none) | Filter by project field |
-| `--type <type>` | string | (none) | Filter by observation type |
-| `--limit <n>` | number | 20 | Maximum rows to display |
+| Option                | Type   | Defaults | Description                |
+| --------------------- | ------ | -------- | -------------------------- |
+| `--repo <owner/repo>` | string | (none)   | Filter by project field    |
+| `--type <type>`       | string | (none)   | Filter by observation type |
+| `--limit <n>`         | number | 20       | Maximum rows to display    |
 
 #### R7.2: Output Format
 
@@ -389,10 +388,10 @@ No memory database found. Run "ghagga review" first to build memory.
 
 #### R12.1: Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--repo <owner/repo>` | string | (none) | Scope deletion to a single project |
-| `--force` | boolean | false | Skip confirmation prompt |
+| Option                | Type    | Defaults | Description                        |
+| --------------------- | ------- | -------- | ---------------------------------- |
+| `--repo <owner/repo>` | string  | (none)   | Scope deletion to a single project |
+| `--force`             | boolean | false    | Skip confirmation prompt           |
 
 #### R12.2: Confirmation Flow
 
@@ -420,7 +419,6 @@ Same as R10.4: skip confirmation, proceed directly.
 ### R13: Database Lifecycle in Commands
 
 Every command handler MUST follow this lifecycle:
-
 1. **Check existence**: `existsSync(dbPath)`. If the file does not exist:
    - For read-only commands (`list`, `search`, `show`, `stats`): print `No memory database found. Run "ghagga review" first to build memory.` and exit with code 0.
    - For write commands (`delete`, `clear`): same message, exit with code 0.
@@ -471,7 +469,6 @@ This change MUST NOT add any new npm dependencies to `packages/core` or `apps/cl
 ### CC1: Graceful Degradation — No Database File
 
 All six commands MUST handle the case where `~/.config/ghagga/memory.db` does not exist. The behavior is:
-
 - Check `existsSync(dbPath)` BEFORE attempting to open the storage.
 - Print: `No memory database found. Run "ghagga review" first to build memory.`
 - Exit with code 0 (not an error — the user simply hasn't reviewed yet).
@@ -483,7 +480,6 @@ This MUST NOT create an empty database file as a side effect.
 ### CC2: Non-TTY Detection
 
 Commands that require interactive confirmation (`delete`, `clear`) MUST detect non-TTY environments:
-
 - Check: `process.stdin.isTTY === undefined` or `process.stdin.isTTY === false`
 - When non-TTY and `--force` is NOT set: print `Error: Use --force for non-interactive deletion.` and exit with code 1.
 - When non-TTY and `--force` IS set: proceed without confirmation.
@@ -495,7 +491,6 @@ Commands that require interactive confirmation (`delete`, `clear`) MUST detect n
 ### CC3: Output Formatting — Plain Text Only
 
 All command output MUST be plain text. Specifically:
-
 - No ANSI color codes (no chalk, kleur, etc.)
 - No TUI components (no ink, blessed, etc.)
 - No box-drawing characters beyond simple horizontal rules (`────────`)
@@ -506,23 +501,22 @@ All command output MUST be plain text. Specifically:
 
 ### CC4: Error Exit Codes
 
-| Scenario | Exit Code |
-|----------|-----------|
-| Success (data found and displayed) | 0 |
-| Success (no data / empty results) | 0 |
-| No database file exists | 0 |
-| Observation not found (show/delete) | 1 |
-| Invalid input (bad ID format) | 1 |
-| Non-TTY without --force | 1 |
-| Database open/read error | 1 |
-| Cancelled by user | 0 |
+| Scenario                            | Exit Code |
+| ----------------------------------- | --------- |
+| Success (data found and displayed)  | 0         |
+| Success (no data / empty results)   | 0         |
+| No database file exists             | 0         |
+| Observation not found (show/delete) | 1         |
+| Invalid input (bad ID format)       | 1         |
+| Non-TTY without --force             | 1         |
+| Database open/read error            | 1         |
+| Cancelled by user                   | 0         |
 
 **Rationale**: Standard Unix conventions — 0 for success or graceful conditions, 1 for errors. "No data" is not an error (the user asked a valid question, the answer is "nothing").
 
 ### CC5: ID Display Format
 
 Throughout all commands, observation IDs are displayed as the first 8 characters of the zero-padded integer ID:
-
 - ID `42` displays as `00000042`
 - ID `1234567` displays as `01234567`
 - ID `12345678` displays as `12345678`

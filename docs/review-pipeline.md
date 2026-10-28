@@ -76,7 +76,6 @@ graph TB
 ### Step 5.5: AI Enhance (Optional)
 
 When `--enhance` is enabled, an AI post-analysis step runs on the static analysis findings before agent execution:
-
 1. **Groups findings by pattern** — clusters related findings across files
 2. **Assigns AI priorities** — re-ranks findings based on actual impact, not just tool severity
 3. **Suggests fixes** — generates actionable fix suggestions for each finding group
@@ -87,7 +86,6 @@ This step reduces noise from raw static analysis output and provides more action
 ### Step 6: Agent Execution
 
 The combined context (diff + static findings + memory) is sent to the selected review mode:
-
 - **Simple**: 1 LLM call — fast and cheap
 - **Workflow**: 5 specialist agents in parallel + 1 synthesis — thorough
 - **Consensus**: 3 stanced reviews (same model) + algorithmic weighted vote — high confidence
@@ -117,9 +115,9 @@ See [Memory System](memory-system.md) for full details on backends, search, dedu
 
 Reviews can be triggered in two ways in SaaS mode:
 
-| Trigger | Event | When |
-|---------|-------|------|
-| **Automatic** | `pull_request` webhook | PR opened, updated (push), or reopened |
+| Trigger       | Event                   | When                                     |
+| ------------- | ----------------------- | ---------------------------------------- |
+| **Automatic** | `pull_request` webhook  | PR opened, updated (push), or reopened   |
 | **On-demand** | `issue_comment` webhook | Someone comments `ghagga review` on a PR |
 
 The on-demand trigger uses the same pipeline and settings as automatic reviews. It adds reaction feedback: 👀 when the trigger is received, 🚀 when the review is posted.
@@ -148,10 +146,10 @@ BullMQ provides automatic retries with configurable backoff. If an LLM call fail
 
 ## Graceful Degradation
 
-| Component | If Missing/Failed | Pipeline Behavior |
-|-----------|-------------------|-------------------|
-| Static analysis tools | Not installed | Skipped individually, review continues with available tools |
-| Memory (PostgreSQL or SQLite) | No database connection | Skipped, no memory context |
-| LLM Provider | API error | Fallback chain attempts next provider |
-| Inline workflow injection | Blocked (branch protection, missing perms) | LLM-only review (no static analysis) |
-| Redis/BullMQ | Not connected | Sync execution (no queue-based processing) |
+| Component                     | If Missing/Failed                          | Pipeline Behavior                                           |
+| ----------------------------- | ------------------------------------------ | ----------------------------------------------------------- |
+| Static analysis tools         | Not installed                              | Skipped individually, review continues with available tools |
+| Memory (PostgreSQL or SQLite) | No database connection                     | Skipped, no memory context                                  |
+| LLM Provider                  | API error                                  | Fallback chain attempts next provider                       |
+| Inline workflow injection     | Blocked (branch protection, missing perms) | LLM-only review (no static analysis)                        |
+| Redis/BullMQ                  | Not connected                              | Sync execution (no queue-based processing)                  |

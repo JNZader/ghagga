@@ -89,10 +89,7 @@ function verifyCallbackSignature(
   if (!signatureHeader.startsWith(expectedPrefix)) return false;
   const signatureHex = signatureHeader.slice(expectedPrefix.length);
   const computed = createHmac('sha256', secret).update(payload).digest('hex');
-  return timingSafeEqual(
-    Buffer.from(signatureHex, 'hex'),
-    Buffer.from(computed, 'hex'),
-  );
+  return timingSafeEqual(Buffer.from(signatureHex, 'hex'), Buffer.from(computed, 'hex'));
 }
 ```
 
@@ -105,7 +102,6 @@ The `STATE_SECRET` environment variable already exists and is deployed on Render
 The current in-memory store provides one-time-use semantics by deleting the secret after verification. With the stateless approach, the secret can be recomputed indefinitely within the TTL window.
 
 This is acceptable because Inngest's `waitForEvent` with `callbackId` correlation already provides exactly-once consumption:
-
 1. The Inngest function calls `waitForEvent("ghagga/runner.completed", { match: "data.callbackId" })`.
 2. The first matching event resumes the function and the wait step is consumed.
 3. Any replayed callback emits a duplicate Inngest event, but there is no waiting step to match -- the event is silently dropped.
@@ -114,27 +110,26 @@ A replayed callback would still pass HMAC verification and return `200 OK`, but 
 
 ## Affected Areas
 
-| File | Change | Lines Affected |
-|------|--------|----------------|
-| `apps/server/src/github/runner.ts` | Remove `secretStore` Map, `StoredSecret`, `storeCallbackSecret()`, `verifyAndConsumeSecret()`, cleanup interval. Add `deriveCallbackSecret()`, `verifyCallbackSignature()`. Modify `dispatchWorkflow()`. | Lines 103-197 (delete), 321-325 (modify) |
-| `apps/server/src/routes/runner-callback.ts` | Change import: `verifyAndConsumeSecret` -> `verifyCallbackSignature` | Line 22, 67 |
-| `apps/server/src/github/runner.test.ts` | Rewrite secret store tests to test stateless functions | ~60 lines across multiple test cases |
-| `apps/server/src/routes/runner-callback.test.ts` | Update mock name | Line 17 |
+| File                                             | Change                                                                                                                                                                                                   | Lines Affected                           |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `apps/server/src/github/runner.ts`               | Remove `secretStore` Map, `StoredSecret`, `storeCallbackSecret()`, `verifyAndConsumeSecret()`, cleanup interval. Add `deriveCallbackSecret()`, `verifyCallbackSignature()`. Modify `dispatchWorkflow()`. | Lines 103-197 (delete), 321-325 (modify) |
+| `apps/server/src/routes/runner-callback.ts`      | Change import: `verifyAndConsumeSecret` -> `verifyCallbackSignature`                                                                                                                                     | Line 22, 67                              |
+| `apps/server/src/github/runner.test.ts`          | Rewrite secret store tests to test stateless functions                                                                                                                                                   | ~60 lines across multiple test cases     |
+| `apps/server/src/routes/runner-callback.test.ts` | Update mock name                                                                                                                                                                                         | Line 17                                  |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| **Replay attacks within TTL window** | Low | Low | Inngest `waitForEvent` correlation ensures exactly-once processing. Replayed events find no waiting step and are dropped. Same model as GitHub webhooks. |
-| **`STATE_SECRET` rotation** | Low | Medium | Rotating `STATE_SECRET` invalidates all in-flight callbacks (same risk as current approach with redeploys). Document that rotation should happen during low-traffic windows. Could add support for accepting both old and new secrets during rotation, but this is out of scope. |
-| **`STATE_SECRET` compromise** | Very Low | High | If `STATE_SECRET` leaks, an attacker can forge callback signatures. Identical risk profile to the OAuth state flow. Mitigation: standard secret management hygiene, Render env var encryption. |
-| **Clock skew on `callbackId` timestamp** | Very Low | Low | Both timestamp creation and validation happen on the same server. Even across redeploys, system clock drift on Render is negligible. |
-| **Old-format `callbackId` in flight during deploy** | Medium | Low | During the deploy that ships this change, any callback with an old-format `callbackId` (no embedded timestamp) will fail `verifyCallbackSignature`. This is acceptable: the same scenario (redeploy losing state) already causes failure today, and the window is identical (~5 minutes). |
+| Risk                                                | Likelihood | Impact | Mitigation                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------- | ---------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Replay attacks within TTL window**                | Low        | Low    | Inngest `waitForEvent` correlation ensures exactly-once processing. Replayed events find no waiting step and are dropped. Same model as GitHub webhooks.                                                                                                                                  |
+| **`STATE_SECRET` rotation**                         | Low        | Medium | Rotating `STATE_SECRET` invalidates all in-flight callbacks (same risk as current approach with redeploys). Document that rotation should happen during low-traffic windows. Could add support for accepting both old and new secrets during rotation, but this is out of scope.          |
+| **`STATE_SECRET` compromise**                       | Very Low   | High   | If `STATE_SECRET` leaks, an attacker can forge callback signatures. Identical risk profile to the OAuth state flow. Mitigation: standard secret management hygiene, Render env var encryption.                                                                                            |
+| **Clock skew on `callbackId` timestamp**            | Very Low   | Low    | Both timestamp creation and validation happen on the same server. Even across redeploys, system clock drift on Render is negligible.                                                                                                                                                      |
+| **Old-format `callbackId` in flight during deploy** | Medium     | Low    | During the deploy that ships this change, any callback with an old-format `callbackId` (no embedded timestamp) will fail `verifyCallbackSignature`. This is acceptable: the same scenario (redeploy losing state) already causes failure today, and the window is identical (~5 minutes). |
 
 ## Rollback Plan
 
 This change is trivially reversible:
-
 1. **Revert the commit**: Restores the in-memory `secretStore` Map and all associated functions.
 2. **Deploy**: No data migration, no schema changes, no env var changes.
 3. **In-flight callbacks**: Any callbacks dispatched with the stateless scheme during the brief window will fail verification (the server no longer derives secrets the same way). This is the exact same failure mode the change is designed to fix -- and the Inngest timeout fallback handles it gracefully.
@@ -161,9 +156,9 @@ This change is trivially reversible:
 
 ## Distribution Mode Impact
 
-| Mode | Impact | Notes |
-|------|--------|-------|
-| **SaaS** (webhook) | Fixed | Callbacks now survive server restarts and redeploys |
-| **Action** (self-hosted) | No change | Does not use callback flow |
-| **CLI** | No change | Does not use callback flow |
-| **1-click deploy** | No change | Does not use callback flow |
+| Mode                     | Impact    | Notes                                               |
+| ------------------------ | --------- | --------------------------------------------------- |
+| **SaaS** (webhook)       | Fixed     | Callbacks now survive server restarts and redeploys |
+| **Action** (self-hosted) | No change | Does not use callback flow                          |
+| **CLI**                  | No change | Does not use callback flow                          |
+| **1-click deploy**       | No change | Does not use callback flow                          |

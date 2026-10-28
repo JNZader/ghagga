@@ -3,7 +3,6 @@
 ## Technical Approach
 
 The memory system is currently hard-coupled to PostgreSQL via direct `ghagga-db` imports in `packages/core/src/memory/search.ts` and `packages/core/src/memory/persist.ts`. This design introduces a **strategy pattern**: a `MemoryStorage` interface in core that both consumers (`search.ts`, `persist.ts`) depend on, with two concrete adapters injected at the call site:
-
 - **`SqliteMemoryStorage`** (in `packages/core`) — uses sql.js (pure WASM SQLite) with FTS5 for full-text search. Used by CLI and Action.
 - **`PostgresMemoryStorage`** (in `apps/server`) — thin adapter wrapping existing `ghagga-db` query functions. Used by SaaS.
 
@@ -92,9 +91,9 @@ This maps directly to the proposal's approach and satisfies all requirements in 
 - Await the persist call — would block the pipeline response for a non-critical operation.
 - Move persist entirely out of core (to each distribution mode) — would duplicate the persist-if-memory-enabled logic.
 
-**Rationale**: The current pattern (`pipeline.ts:256-269`) deliberately does not await memory persistence to avoid blocking the review response. This is correct for the SaaS path (PostgreSQL is fast, but the client shouldn't wait). For SQLite, the fire-and-forget is slightly nuanced: `close()` must be called *after* the persist completes to flush to disk. The CLI and Action callers handle this by awaiting the pipeline, then calling `storage.close()`. The non-awaited persist in the pipeline is fine because the pipeline's internal persist writes to the in-memory sql.js database (fast, synchronous-equivalent), and the actual disk flush happens in `close()` at the call site.
+**Rationale**: The current pattern (`pipeline.ts:256-269`) deliberately does not await memory persistence to avoid blocking the review response. This is correct for the SaaS path (PostgreSQL is fast, but the client shouldn't wait). For SQLite, the fire-and-forget is slightly nuanced: `close()` must be called _after_ the persist completes to flush to disk. The CLI and Action callers handle this by awaiting the pipeline, then calling `storage.close()`. The non-awaited persist in the pipeline is fine because the pipeline's internal persist writes to the in-memory sql.js database (fast, synchronous-equivalent), and the actual disk flush happens in `close()` at the call site.
 
-**Important**: The CLI and Action MUST ensure they call `memoryStorage.close()` *after* awaiting `reviewPipeline()`. Since the persist is fire-and-forget inside the pipeline, we need a small change: the pipeline should track the persist promise and expose it, or the persist should be awaited. The simplest approach: **change the pipeline to `await` the persist call when `memoryStorage` is provided**. This is a minimal behavioral change — for PostgreSQL it adds negligible latency (the persist is fast), and for SQLite it ensures the in-memory DB is populated before `close()` exports it.
+**Important**: The CLI and Action MUST ensure they call `memoryStorage.close()` _after_ awaiting `reviewPipeline()`. Since the persist is fire-and-forget inside the pipeline, we need a small change: the pipeline should track the persist promise and expose it, or the persist should be awaited. The simplest approach: **change the pipeline to `await` the persist call when `memoryStorage` is provided**. This is a minimal behavioral change — for PostgreSQL it adds negligible latency (the persist is fast), and for SQLite it ensures the in-memory DB is populated before `close()` exports it.
 
 ---
 
@@ -196,26 +195,26 @@ GHAGGA Action starts
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/core/src/types.ts` | Modify | Add `MemoryStorage` interface, `MemoryObservationRow` interface. Replace `db?: unknown` with `memoryStorage?: MemoryStorage` on `ReviewInput`. |
-| `packages/core/src/memory/sqlite.ts` | Create | `SqliteMemoryStorage` class: async factory, schema init, FTS5 setup, content-hash dedup, topicKey upsert, BM25 search, file persistence, `close()`. |
-| `packages/core/src/memory/search.ts` | Modify | Remove `import { searchObservations } from 'ghagga-db'`. Change `db: unknown` param to `storage: MemoryStorage`. Call `storage.searchObservations()`. |
-| `packages/core/src/memory/persist.ts` | Modify | Remove `import { saveObservation, createMemorySession, endMemorySession } from 'ghagga-db'`. Change `db: unknown` to `storage: MemoryStorage`. Call `storage.createSession()`, `storage.saveObservation()`, `storage.endSession()`. |
-| `packages/core/src/pipeline.ts` | Modify | Replace `input.db` with `input.memoryStorage` in `searchMemorySafe` (line 369), persist step (line 256), and null guards. Await the persist call to ensure in-memory DB is populated before `close()`. |
-| `packages/core/package.json` | Modify | Remove `"ghagga-db": "workspace:^"` from dependencies. Add `"sql.js": "^1.11.0"`. |
-| `packages/core/src/memory/search.test.ts` | Modify | Replace `vi.mock('ghagga-db', ...)` with a mock `MemoryStorage` object. Update all test expectations from `mockSearchObservations(db, ...)` to `storage.searchObservations(...)`. |
-| `packages/core/src/memory/persist.test.ts` | Modify | Replace `vi.mock('ghagga-db', ...)` with a mock `MemoryStorage` object. Update test expectations to use interface method calls. |
-| `packages/core/src/memory/sqlite.test.ts` | Create | Unit tests for `SqliteMemoryStorage`: schema init, CRUD, dedup, topicKey upsert, FTS5 search, BM25 ordering, session lifecycle, file persistence, close behavior. Uses real sql.js (in-memory, no file I/O). |
-| `apps/server/src/memory/postgres.ts` | Create | `PostgresMemoryStorage` class: wraps `ghagga-db.searchObservations`, `saveObservation`, `createMemorySession`, `endMemorySession`. Constructor takes Drizzle `Database`. Maps full Drizzle row to `MemoryObservationRow`. `close()` is a no-op. |
-| `apps/server/src/memory/postgres.test.ts` | Create | Unit tests for `PostgresMemoryStorage`: delegation to ghagga-db functions, row mapping, close no-op. |
-| `apps/server/src/inngest/review.ts` | Modify | Replace `db` variable usage (line 241–276) with `new PostgresMemoryStorage(db)`. Pass `memoryStorage` instead of `db` to `reviewPipeline`. |
-| `apps/cli/src/commands/review.ts` | Modify | Import `SqliteMemoryStorage`. Add `memory: boolean` to `ReviewOptions` (default `true`). Create storage at `getConfigDir()/memory.db`. Derive project ID from `git remote get-url origin`. Set `enableMemory: true`, `memoryStorage: storage`. Call `storage.close()` after pipeline. Add `--no-memory` Commander.js option. |
-| `apps/cli/src/lib/git.ts` | Create | Utility `resolveProjectId(repoPath): string` — runs `git remote get-url origin`, normalizes to `owner/repo`. Falls back to `"local/unknown"`. |
-| `apps/action/src/index.ts` | Modify | Import `SqliteMemoryStorage`, `@actions/cache`. Add `enable-memory` input parsing. Restore cache before pipeline, create storage, set `enableMemory: true`, `memoryStorage: storage`. After pipeline, call `storage.close()`, save cache. |
-| `apps/action/action.yml` | Modify | Add `enable-memory` input (description, default: `'true'`). |
-| `action.yml` (root) | Modify | Add `enable-memory` input (mirrors `apps/action/action.yml`). |
-| `apps/action/package.json` | Modify | Add `"sql.js": "^1.11.0"` to dependencies (already has `@actions/cache`). |
+| File                                       | Action | Description                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/types.ts`               | Modify | Add `MemoryStorage` interface, `MemoryObservationRow` interface. Replace `db?: unknown` with `memoryStorage?: MemoryStorage` on `ReviewInput`.                                                                                                                                                                               |
+| `packages/core/src/memory/sqlite.ts`       | Create | `SqliteMemoryStorage` class: async factory, schema init, FTS5 setup, content-hash dedup, topicKey upsert, BM25 search, file persistence, `close()`.                                                                                                                                                                          |
+| `packages/core/src/memory/search.ts`       | Modify | Remove `import { searchObservations } from 'ghagga-db'`. Change `db: unknown` param to `storage: MemoryStorage`. Call `storage.searchObservations()`.                                                                                                                                                                        |
+| `packages/core/src/memory/persist.ts`      | Modify | Remove `import { saveObservation, createMemorySession, endMemorySession } from 'ghagga-db'`. Change `db: unknown` to `storage: MemoryStorage`. Call `storage.createSession()`, `storage.saveObservation()`, `storage.endSession()`.                                                                                          |
+| `packages/core/src/pipeline.ts`            | Modify | Replace `input.db` with `input.memoryStorage` in `searchMemorySafe` (line 369), persist step (line 256), and null guards. Await the persist call to ensure in-memory DB is populated before `close()`.                                                                                                                       |
+| `packages/core/package.json`               | Modify | Remove `"ghagga-db": "workspace:^"` from dependencies. Add `"sql.js": "^1.11.0"`.                                                                                                                                                                                                                                            |
+| `packages/core/src/memory/search.test.ts`  | Modify | Replace `vi.mock('ghagga-db', ...)` with a mock `MemoryStorage` object. Update all test expectations from `mockSearchObservations(db, ...)` to `storage.searchObservations(...)`.                                                                                                                                            |
+| `packages/core/src/memory/persist.test.ts` | Modify | Replace `vi.mock('ghagga-db', ...)` with a mock `MemoryStorage` object. Update test expectations to use interface method calls.                                                                                                                                                                                              |
+| `packages/core/src/memory/sqlite.test.ts`  | Create | Unit tests for `SqliteMemoryStorage`: schema init, CRUD, dedup, topicKey upsert, FTS5 search, BM25 ordering, session lifecycle, file persistence, close behavior. Uses real sql.js (in-memory, no file I/O).                                                                                                                 |
+| `apps/server/src/memory/postgres.ts`       | Create | `PostgresMemoryStorage` class: wraps `ghagga-db.searchObservations`, `saveObservation`, `createMemorySession`, `endMemorySession`. Constructor takes Drizzle `Database`. Maps full Drizzle row to `MemoryObservationRow`.`close()` is a no-op.                                                                               |
+| `apps/server/src/memory/postgres.test.ts`  | Create | Unit tests for `PostgresMemoryStorage`: delegation to ghagga-db functions, row mapping, close no-op.                                                                                                                                                                                                                         |
+| `apps/server/src/inngest/review.ts`        | Modify | Replace `db` variable usage (line 241–276) with `new PostgresMemoryStorage(db)`. Pass `memoryStorage` instead of `db` to `reviewPipeline`.                                                                                                                                                                                   |
+| `apps/cli/src/commands/review.ts`          | Modify | Import `SqliteMemoryStorage`. Add `memory: boolean` to `ReviewOptions` (default `true`). Create storage at `getConfigDir()/memory.db`. Derive project ID from `git remote get-url origin`. Set `enableMemory: true`, `memoryStorage: storage`. Call `storage.close()` after pipeline. Add `--no-memory` Commander.js option. |
+| `apps/cli/src/lib/git.ts`                  | Create | Utility `resolveProjectId(repoPath): string` — runs `git remote get-url origin`, normalizes to `owner/repo`. Falls back to `"local/unknown"`.                                                                                                                                                                                |
+| `apps/action/src/index.ts`                 | Modify | Import `SqliteMemoryStorage`, `@actions/cache`. Add `enable-memory` input parsing. Restore cache before pipeline, create storage, set `enableMemory: true`, `memoryStorage: storage`. After pipeline, call `storage.close()`, save cache.                                                                                    |
+| `apps/action/action.yml`                   | Modify | Add `enable-memory` input (description, default: `'true'`).                                                                                                                                                                                                                                                                  |
+| `action.yml` (root)                        | Modify | Add `enable-memory` input (mirrors `apps/action/action.yml`).                                                                                                                                                                                                                                                                |
+| `apps/action/package.json`                 | Modify | Add `"sql.js": "^1.11.0"` to dependencies (already has `@actions/cache`).                                                                                                                                                                                                                                                    |
 
 ---
 
@@ -245,10 +244,7 @@ export interface MemoryStorage {
     filePaths?: string[];
   }): Promise<MemoryObservationRow>;
 
-  createSession(data: {
-    project: string;
-    prNumber?: number;
-  }): Promise<{ id: number }>;
+  createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }>;
 
   endSession(sessionId: number, summary: string): Promise<void>;
 
@@ -443,12 +439,15 @@ export class SqliteMemoryStorage implements MemoryStorage {
       .digest('hex');
 
     // Dedup: check for same content hash within 15-minute window
-    const dedupRows = this.db.exec(`
+    const dedupRows = this.db.exec(
+      `
       SELECT id, type, title, content, file_paths FROM memory_observations
       WHERE content_hash = ? AND project = ?
         AND created_at > datetime('now', '-${DEDUP_WINDOW_MINUTES} minutes')
       LIMIT 1
-    `, [contentHash, data.project]);
+    `,
+      [contentHash, data.project],
+    );
 
     if (dedupRows.length > 0 && dedupRows[0]!.values.length > 0) {
       const row = dedupRows[0]!.values[0]!;
@@ -463,24 +462,30 @@ export class SqliteMemoryStorage implements MemoryStorage {
 
     // TopicKey upsert
     if (data.topicKey) {
-      const existingByTopic = this.db.exec(`
+      const existingByTopic = this.db.exec(
+        `
         SELECT id FROM memory_observations
         WHERE topic_key = ? AND project = ?
         LIMIT 1
-      `, [data.topicKey, data.project]);
+      `,
+        [data.topicKey, data.project],
+      );
 
       if (existingByTopic.length > 0 && existingByTopic[0]!.values.length > 0) {
         const existingId = existingByTopic[0]!.values[0]![0] as number;
         const filePathsJson = JSON.stringify(data.filePaths ?? []);
 
-        const updated = this.db.exec(`
+        const updated = this.db.exec(
+          `
           UPDATE memory_observations
           SET content = ?, title = ?, content_hash = ?, file_paths = ?,
               revision_count = revision_count + 1,
               updated_at = datetime('now')
           WHERE id = ?
           RETURNING id, type, title, content, file_paths
-        `, [data.content, data.title, contentHash, filePathsJson, existingId]);
+        `,
+          [data.content, data.title, contentHash, filePathsJson, existingId],
+        );
 
         const row = updated[0]!.values[0]!;
         return {
@@ -495,21 +500,24 @@ export class SqliteMemoryStorage implements MemoryStorage {
 
     // New observation
     const filePathsJson = JSON.stringify(data.filePaths ?? []);
-    const inserted = this.db.exec(`
+    const inserted = this.db.exec(
+      `
       INSERT INTO memory_observations
         (session_id, project, type, title, content, topic_key, file_paths, content_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id, type, title, content, file_paths
-    `, [
-      data.sessionId ?? null,
-      data.project,
-      data.type,
-      data.title,
-      data.content,
-      data.topicKey ?? null,
-      filePathsJson,
-      contentHash,
-    ]);
+    `,
+      [
+        data.sessionId ?? null,
+        data.project,
+        data.type,
+        data.title,
+        data.content,
+        data.topicKey ?? null,
+        filePathsJson,
+        contentHash,
+      ],
+    );
 
     const row = inserted[0]!.values[0]!;
     return {
@@ -521,25 +529,28 @@ export class SqliteMemoryStorage implements MemoryStorage {
     };
   }
 
-  async createSession(data: {
-    project: string;
-    prNumber?: number;
-  }): Promise<{ id: number }> {
-    const result = this.db.exec(`
+  async createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }> {
+    const result = this.db.exec(
+      `
       INSERT INTO memory_sessions (project, pr_number)
       VALUES (?, ?)
       RETURNING id
-    `, [data.project, data.prNumber ?? null]);
+    `,
+      [data.project, data.prNumber ?? null],
+    );
 
     return { id: result[0]!.values[0]![0] as number };
   }
 
   async endSession(sessionId: number, summary: string): Promise<void> {
-    this.db.run(`
+    this.db.run(
+      `
       UPDATE memory_sessions
       SET ended_at = datetime('now'), summary = ?
       WHERE id = ?
-    `, [summary, sessionId]);
+    `,
+      [summary, sessionId],
+    );
   }
 
   async close(): Promise<void> {
@@ -608,10 +619,7 @@ export class PostgresMemoryStorage implements MemoryStorage {
     };
   }
 
-  async createSession(data: {
-    project: string;
-    prNumber?: number;
-  }): Promise<{ id: number }> {
+  async createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }> {
     const session = await createMemorySession(this.db, data);
     return { id: session.id };
   }
@@ -688,7 +696,7 @@ export async function searchMemoryForContext(
   db: unknown,
   project: string,
   fileList: string[],
-): Promise<string | null>
+): Promise<string | null>;
 
 // After:
 import type { MemoryStorage } from '../types.js';
@@ -697,7 +705,7 @@ export async function searchMemoryForContext(
   storage: MemoryStorage,
   project: string,
   fileList: string[],
-): Promise<string | null>
+): Promise<string | null>;
 ```
 
 ### Refactored persist.ts Signature
@@ -709,7 +717,7 @@ export async function persistReviewObservations(
   project: string,
   prNumber: number,
   result: ReviewResult,
-): Promise<void>
+): Promise<void>;
 
 // After:
 import type { MemoryStorage } from '../types.js';
@@ -719,27 +727,22 @@ export async function persistReviewObservations(
   project: string,
   prNumber: number,
   result: ReviewResult,
-): Promise<void>
+): Promise<void>;
 ```
 
 ### Refactored pipeline.ts Key Sections
 
 ```typescript
 // searchMemorySafe — line ~365
-async function searchMemorySafe(
-  input: ReviewInput,
-  fileList: string[],
-): Promise<string | null> {
+async function searchMemorySafe(input: ReviewInput, fileList: string[]): Promise<string | null> {
   if (!input.settings.enableMemory || !input.memoryStorage || !input.context) {
     return null;
   }
   try {
-    return await searchMemoryForContext(
-      input.memoryStorage,
-      input.context.repoFullName,
-      fileList,
-    );
-  } catch (error) { /* ... existing handling ... */ }
+    return await searchMemoryForContext(input.memoryStorage, input.context.repoFullName, fileList);
+  } catch (error) {
+    /* ... existing handling ... */
+  }
 }
 
 // Step 8 persist — line ~255
@@ -762,18 +765,18 @@ if (input.settings.enableMemory && input.memoryStorage && input.context) {
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| **Unit** | `SqliteMemoryStorage` — schema init, `saveObservation` (insert, dedup, topicKey upsert), `searchObservations` (FTS5 match, BM25 ordering, project scoping, type filter, limit), `createSession`/`endSession`, `close` (exports to buffer), file_paths JSON serialization | `packages/core/src/memory/sqlite.test.ts` — use real sql.js with in-memory DB (no file I/O). Fast, deterministic. Mock `fs` for close/create file operations. Target: >80% mutation score (Stryker). |
-| **Unit** | `PostgresMemoryStorage` — delegation to ghagga-db functions, row mapping to `MemoryObservationRow`, `close()` is no-op | `apps/server/src/memory/postgres.test.ts` — mock all `ghagga-db` imports. Verify each method delegates correctly and maps the response shape. |
-| **Unit** | `search.ts` refactor — `storage.searchObservations()` called instead of direct import, null-guard on `!storage`, error handling | Update `packages/core/src/memory/search.test.ts` — replace `vi.mock('ghagga-db')` with a mock `MemoryStorage` object passed as `storage` argument. |
-| **Unit** | `persist.ts` refactor — `storage.createSession()`, `storage.saveObservation()`, `storage.endSession()` called instead of direct imports | Update `packages/core/src/memory/persist.test.ts` — replace `vi.mock('ghagga-db')` with a mock `MemoryStorage` object. |
-| **Unit** | `pipeline.ts` — `input.memoryStorage` used in `searchMemorySafe` and persist step; graceful degradation when `undefined` | Existing pipeline tests updated: replace `db: mockDb` with `memoryStorage: mockStorage`. Add explicit test for `memoryStorage: undefined` path. |
-| **Unit** | `resolveProjectId` / `normalizeRemoteUrl` — URL normalization for HTTPS, SSH, ssh://, missing remote fallback | `apps/cli/src/lib/git.test.ts` — unit tests with `vi.mock('node:child_process')`. Test all URL formats from spec S23. |
-| **Integration** | CLI review with SQLite memory — end-to-end flow from creation through search and persist, file persistence between "runs" | `apps/cli/src/commands/review.test.ts` — integration test that creates `SqliteMemoryStorage`, runs a mock pipeline, verifies observations persist, creates second storage instance from same file, verifies search returns previous observations. Uses temp directory. |
-| **Integration** | Action cache lifecycle — cache restore → review → close → cache save | `apps/action/src/index.test.ts` — mock `@actions/cache` and verify `restoreCache`/`saveCache` calls with correct key and paths. Verify `SqliteMemoryStorage.create` is called after restore. |
-| **Integration** | ncc bundle includes sql.js WASM | CI step: `ncc build`, verify `dist/` contains the WASM asset. Run `node dist/index.js` with minimal inputs to verify WASM loads. |
-| **Mutation** | SqliteMemoryStorage — all new code | Stryker with `vitest-runner`. Target: >80% mutation score. Critical mutants: dedup window check, topicKey upsert logic, FTS5 query construction, RETURNING clause parsing. |
+| Layer           | What to Test                                                                                                                                                                                                                                                             | Approach                                                                                                                                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit**        | `SqliteMemoryStorage` — schema init, `saveObservation` (insert, dedup, topicKey upsert), `searchObservations` (FTS5 match, BM25 ordering, project scoping, type filter, limit), `createSession`/`endSession`, `close` (exports to buffer), file_paths JSON serialization | `packages/core/src/memory/sqlite.test.ts` — use real sql.js with in-memory DB (no file I/O). Fast, deterministic. Mock `fs` for close/create file operations. Target: >80% mutation score (Stryker).                                                                   |
+| **Unit**        | `PostgresMemoryStorage` — delegation to ghagga-db functions, row mapping to `MemoryObservationRow`, `close()` is no-op                                                                                                                                                   | `apps/server/src/memory/postgres.test.ts` — mock all `ghagga-db` imports. Verify each method delegates correctly and maps the response shape.                                                                                                                          |
+| **Unit**        | `search.ts` refactor — `storage.searchObservations()` called instead of direct import, null-guard on `!storage`, error handling                                                                                                                                          | Update `packages/core/src/memory/search.test.ts` — replace `vi.mock('ghagga-db')` with a mock `MemoryStorage` object passed as `storage` argument.                                                                                                                     |
+| **Unit**        | `persist.ts` refactor — `storage.createSession()`, `storage.saveObservation()`, `storage.endSession()` called instead of direct imports                                                                                                                                  | Update `packages/core/src/memory/persist.test.ts` — replace `vi.mock('ghagga-db')` with a mock `MemoryStorage` object.                                                                                                                                                 |
+| **Unit**        | `pipeline.ts` — `input.memoryStorage` used in `searchMemorySafe` and persist step; graceful degradation when `undefined`                                                                                                                                                 | Existing pipeline tests updated: replace `db: mockDb` with `memoryStorage: mockStorage`. Add explicit test for `memoryStorage: undefined` path.                                                                                                                        |
+| **Unit**        | `resolveProjectId` / `normalizeRemoteUrl` — URL normalization for HTTPS, SSH, ssh://, missing remote fallback                                                                                                                                                            | `apps/cli/src/lib/git.test.ts` — unit tests with `vi.mock('node:child_process')`. Test all URL formats from spec S23.                                                                                                                                                  |
+| **Integration** | CLI review with SQLite memory — end-to-end flow from creation through search and persist, file persistence between "runs"                                                                                                                                                | `apps/cli/src/commands/review.test.ts` — integration test that creates `SqliteMemoryStorage`, runs a mock pipeline, verifies observations persist, creates second storage instance from same file, verifies search returns previous observations. Uses temp directory. |
+| **Integration** | Action cache lifecycle — cache restore → review → close → cache save                                                                                                                                                                                                     | `apps/action/src/index.test.ts` — mock `@actions/cache` and verify `restoreCache`/`saveCache` calls with correct key and paths. Verify `SqliteMemoryStorage.create` is called after restore.                                                                           |
+| **Integration** | ncc bundle includes sql.js WASM                                                                                                                                                                                                                                          | CI step: `ncc build`, verify `dist/` contains the WASM asset. Run `node dist/index.js` with minimal inputs to verify WASM loads.                                                                                                                                       |
+| **Mutation**    | SqliteMemoryStorage — all new code                                                                                                                                                                                                                                       | Stryker with `vitest-runner`. Target: >80% mutation score. Critical mutants: dedup window check, topicKey upsert logic, FTS5 query construction, RETURNING clause parsing.                                                                                             |
 
 ---
 
@@ -802,15 +805,17 @@ if (input.settings.enableMemory && input.memoryStorage && input.context) {
 ### WASM Bundling for Action
 
 The sql.js WASM binary (~1MB) must be bundled with `@vercel/ncc`. Two approaches, tried in order:
-
 1. **Default resolution**: `ncc` may inline the WASM as a base64 asset in the bundle. Test with `ncc build` and verify the WASM loads at runtime.
 2. **Fallback — `locateFile`**: If ncc cannot inline WASM, configure sql.js's `locateFile` option to load from a known sibling path. Copy the WASM file to `dist/` as a post-build step:
+
    ```typescript
    const SQL = await initSqlJs({
      locateFile: (file: string) => path.join(__dirname, file),
    });
    ```
+
    And add to `apps/action/package.json`:
+
    ```json
    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt -t && cp node_modules/sql.js/dist/sql-wasm.wasm dist/"
    ```
@@ -819,7 +824,7 @@ The sql.js WASM binary (~1MB) must be bundled with `@vercel/ncc`. Two approaches
 
 ## Open Questions
 
-- [x] **FTS5 query syntax**: Should keywords be joined with `OR` (match any) or `AND` (match all)? → **Resolved**: Use `OR` — matches the PostgreSQL behavior where `'auth' & 'pool'` returns rows matching *any* term (tsquery `&` means AND, but the search function wraps individual words). After reviewing `queries.ts:462`, PostgreSQL uses `&` (AND). However, for memory search where we want broad recall with few terms, `OR` provides better coverage. The BM25 ranking naturally boosts multi-keyword matches to the top. Decision: **use `OR` for recall, rely on BM25 ranking**.
+- [x] **FTS5 query syntax**: Should keywords be joined with `OR` (match any) or `AND` (match all)? → **Resolved**: Use `OR` — matches the PostgreSQL behavior where `'auth' & 'pool'` returns rows matching _any_ term (tsquery `&` means AND, but the search function wraps individual words). After reviewing `queries.ts:462`, PostgreSQL uses `&` (AND). However, for memory search where we want broad recall with few terms, `OR` provides better coverage. The BM25 ranking naturally boosts multi-keyword matches to the top. Decision: **use `OR` for recall, rely on BM25 ranking**.
 
 - [ ] **ncc + sql.js WASM**: Needs empirical validation during implementation. The `locateFile` fallback path is designed and ready if direct bundling fails. This should be tested in the first task.
 

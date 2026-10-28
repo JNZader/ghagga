@@ -316,14 +316,14 @@ The mutation report MUST be uploaded as a CI artifact.
 
 ## Coverage Summary
 
-| Requirement | Happy Paths | Edge Cases | Error States |
-|-------------|-------------|------------|--------------|
-| Biome Configuration | Config valid, rules apply to .ts/.tsx | Ignored dirs not checked | Formatter flags violations |
-| Monorepo Scripts | lint exits 0, lint:fix works | — | lint exits non-zero on errors |
-| CI Lint Integration | lint in CI, passes clean code | — | lint failure blocks merge |
-| Clean Codebase | Full lint passes | biome-ignore with justification | — |
-| Logger in OAuth | Errors logged via pino | — | No console.error remains |
-| Client ID from env | Reads from env var | Falls back to hardcoded value | — |
-| CI Security Scanning | Audit runs on every push/PR | Network error handled | Warnings don't block CI |
-| CI Coverage Reporting | Coverage generated and uploaded | No coverage data handled | — |
-| CI Mutation Testing | Stryker runs on push to main | PR skips mutation | Timeout at 30 min, continue-on-error |
+| Requirement           | Happy Paths                           | Edge Cases                      | Error States                         |
+| --------------------- | ------------------------------------- | ------------------------------- | ------------------------------------ |
+| Biome Configuration   | Config valid, rules apply to .ts/.tsx | Ignored dirs not checked        | Formatter flags violations           |
+| Monorepo Scripts      | lint exits 0, lint:fix works          | —                               | lint exits non-zero on errors        |
+| CI Lint Integration   | lint in CI, passes clean code         | —                               | lint failure blocks merge            |
+| Clean Codebase        | Full lint passes                      | biome-ignore with justification | —                                    |
+| Logger in OAuth       | Errors logged via pino                | —                               | No console.error remains             |
+| Client ID from env    | Reads from env var                    | Falls back to hardcoded value   | —                                    |
+| CI Security Scanning  | Audit runs on every push/PR           | Network error handled           | Warnings don't block CI              |
+| CI Coverage Reporting | Coverage generated and uploaded       | No coverage data handled        | —                                    |
+| CI Mutation Testing   | Stryker runs on push to main          | PR skips mutation               | Timeout at 30 min, continue-on-error |

@@ -67,7 +67,7 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
     4. Eliminar mappings stale con `deleteStaleUserMappings(db, staleIds)`
     5. Si no quedan instalaciones activas tras limpieza → ejecutar `discoverAndMapInstallations()`
     6. Si quedan instalaciones activas → continuar normalmente
-    Importar las nuevas funciones de `ghagga-db`.
+       Importar las nuevas funciones de `ghagga-db`.
   - **Verify**: Test con mock DB:
     - Mappings válidos → flujo normal sin cleanup (S-R9.1)
     - Mapping a instalación inactiva → se limpia, se re-descubre (S-R9.2)
@@ -84,7 +84,7 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
     1. Después de `deactivateInstallation(db, installation.id)`, buscar la instalación interna por `github_installation_id` usando `getInstallationByGitHubId(db, installation.id)` (nota: `installation.id` en el webhook es el `github_installation_id`)
     2. Si se encuentra, llamar `deleteMappingsByInstallationId(db, inst.id)` con el `id` interno
     3. Loguear la cantidad de mappings eliminados
-    Importar `getInstallationByGitHubId` y `deleteMappingsByInstallationId` de `ghagga-db`.
+       Importar `getInstallationByGitHubId` y `deleteMappingsByInstallationId` de `ghagga-db`.
   - **Verify**: Test: webhook `installation.deleted` con `installation.id=12345` → llama a `deactivateInstallation` Y `deleteMappingsByInstallationId`. Sin mappings asociados → no error (S-R10.2).
   - **Depends on**: T1.3
   - **Scenarios**: S-R10.1, S-R10.2, S-R10.3
@@ -96,11 +96,9 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
       - Mappings válidos → flujo normal, no cleanup (S-R9.1)
       - Mapping a instalación inactiva → cleanup + re-discovery (S-R9.2)
       - Todos stale → cleanup + re-discovery exitoso (S-R9.5, S-R12.1)
-      - Mixto → cleanup parcial, sin re-discovery (S-R9.4, S-R12.2)
-    - **Webhook**:
+      - Mixto → cleanup parcial, sin re-discovery (S-R9.4, S-R12.2) - **Webhook**:
       - `installation.deleted` → deactivate + delete mappings (S-R10.1)
-      - `installation.deleted` sin mappings → no error (S-R10.2)
-    - **Backward compatibility**:
+      - `installation.deleted` sin mappings → no error (S-R10.2) - **Backward compatibility**:
       - Token existente (Device Flow) funciona sin cambios (S-CC4.1, S-CC4.2)
   - **Verify**: `pnpm --filter ghagga-server test` pasa. Cobertura de todos los escenarios listados.
   - **Depends on**: T2.1, T2.2
@@ -154,12 +152,14 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
 - [x] **T3.3**: Agregar `GITHUB_CLIENT_SECRET` y `STATE_SECRET` a `render.yaml` [R8]
   - **Files**: `render.yaml`
   - **What**: Agregar dos nuevas entradas en `envVars`:
+
     ```yaml
     - key: GITHUB_CLIENT_SECRET
       sync: false
     - key: STATE_SECRET
       sync: false
     ```
+
     **Paso manual (fuera del código)**: Configurar los valores reales en Render Dashboard. `STATE_SECRET` generar con `openssl rand -hex 32`.
   - **Verify**: `render.yaml` tiene las dos nuevas env vars. Los valores NO están en el archivo (solo `sync: false`).
   - **Depends on**: Ninguna
@@ -172,12 +172,10 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
       - State válido dentro de 5 min → OK (S-R2.1)
       - State expirado (mock Date.now) → error (S-R2.2)
       - State con HMAC manipulado → error (S-R2.3)
-      - State con formato inválido → error
-    - **`GET /auth/login`**:
+      - State con formato inválido → error - **`GET /auth/login`**:
       - Responde 302 con Location a GitHub authorize URL (S-R1.1)
       - Incluye client_id, scope, redirect_uri, state
-      - Sin STATE_SECRET → 500 (S-R2.5)
-    - **`GET /auth/callback`**:
+      - Sin STATE_SECRET → 500 (S-R2.5) - **`GET /auth/callback`**:
       - Code válido + state válido → 302 a Dashboard con token en fragment (S-R1.2)
       - Code inválido → redirect con error=exchange_failed (S-R1.3)
       - Sin code → redirect con error=missing_code (S-R1.4)
@@ -185,8 +183,7 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
       - State expirado → redirect con error=state_expired (S-R2.2)
       - State manipulado → redirect con error=invalid_state (S-R2.3)
       - Sin CLIENT_SECRET → redirect con error=server_error (S-R8.2)
-      - GitHub auth denegada → redirect con error=access_denied (S-CC2.1)
-    - **Device Flow inalterado**:
+      - GitHub auth denegada → redirect con error=access_denied (S-CC2.1) - **Device Flow inalterado**:
       - `POST /auth/device/code` sigue funcionando (S-R6.1)
       - `POST /auth/device/token` sigue funcionando (S-R6.2)
   - **Verify**: `pnpm --filter ghagga-server test` pasa. Cobertura >80% en código nuevo.
@@ -214,9 +211,9 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
        - `missing_code` → "Error en la respuesta de GitHub"
        - `github_unavailable` → "GitHub no está disponible"
        - `server_error` → "Error del servidor"
-       Mostrar botón "Retry" (→ `/login`) y enlace "Usar Personal Access Token"
+         Mostrar botón "Retry" (→ `/login`) y enlace "Usar Personal Access Token"
     5. Si no hay ni `token` ni `error` → redirect a `/login`
-    Usar los estilos existentes de shadcn/tailwind del proyecto.
+       Usar los estilos existentes de shadcn/tailwind del proyecto.
   - **Verify**: Test Vitest + Testing Library:
     - Token válido → guarda en localStorage, redirige a `/` (S-R4.1)
     - Token inválido → muestra error, no guarda (S-R4.2)
@@ -232,9 +229,11 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
   - **What**:
     1. Agregar lazy import: `const AuthCallback = lazy(() => import('@/pages/AuthCallback').then((m) => ({ default: m.AuthCallback })));`
     2. Agregar ruta PÚBLICA (sin `ProtectedRoute`) ANTES del catch-all `*`:
+
        ```tsx
        <Route path="/auth/callback" element={<AuthCallback />} />
        ```
+
     La ruta es pública porque el token aún no está guardado cuando se monta.
   - **Verify**: Navegar a `#/auth/callback` carga el componente sin pedir autenticación. Las rutas protegidas siguen requiriendo auth.
   - **Depends on**: T4.1
@@ -244,7 +243,7 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
   - **Files**: `apps/dashboard/src/pages/Login.tsx`
   - **What**:
     1. Cuando `serverOnline === true`:
-       - El botón "Sign in with GitHub" hace `window.location.href = \`${API_URL}/auth/login\`` en vez de `startLogin()`
+       - El botón "Sign in with GitHub" hace `window.location.href = \`${API_URL}/auth/login\``en vez de`startLogin()`
        - NO mostrar UI de Device Flow (código, polling, instrucciones)
        - Antes del redirect, guardar destino original en `sessionStorage.setItem('ghagga_redirect_after_login', from)`
     2. Importar `API_URL` desde `@/lib/oauth` (necesita ser exportado — ver T4.5)
@@ -272,6 +271,7 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
     3. Eliminar del state: `loginPhase`, `deviceCode`, `abortController`
     4. Eliminar `LoginPhase` type export
     5. Simplificar `AuthContextType`:
+
        ```typescript
        interface AuthContextType {
          user: User | null;
@@ -298,7 +298,7 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
     3. Eliminar types `DeviceCodeResponse`, `AccessTokenResponse`, `DeviceFlowError` (ya no se usan)
     4. Eliminar helper `sleep`
     5. Mantener: `GITHUB_CLIENT_ID`, `API_URL`, `isServerAvailable`, `fetchGitHubUser`, `GitHubUser`
-    **Nota**: Los endpoints Device Flow (`POST /auth/device/code`, `POST /auth/device/token`) se mantienen en el SERVIDOR para el CLI (R6). Solo se elimina el código CLIENTE del Dashboard.
+       **Nota**: Los endpoints Device Flow (`POST /auth/device/code`, `POST /auth/device/token`) se mantienen en el SERVIDOR para el CLI (R6). Solo se elimina el código CLIENTE del Dashboard.
   - **Verify**: Compilación del dashboard sin errores (`pnpm --filter ghagga-dashboard build`). `import { API_URL } from '@/lib/oauth'` funciona. Las funciones eliminadas no se importan en ningún otro archivo del dashboard.
   - **Depends on**: T4.4 (auth.tsx ya no importa las funciones eliminadas)
   - **Scenarios**: S-R6.1, S-R6.2
@@ -312,12 +312,11 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
       - Param `error=state_expired` → mensaje descriptivo (S-R4.3)
       - Sin params → redirect a /login (S-R4.4)
       - Preserva destino original de sessionStorage (S-R4.5)
-      - `history.replaceState` llamado antes de validación (S-R5.1)
-    - **Login.tsx**:
+      - `history.replaceState` llamado antes de validación (S-R5.1) - **Login.tsx**:
       - Server online → botón redirect (no Device Flow) (S-R3.1, S-R3.3)
       - Server offline → PAT form (S-R7.1)
       - Server checking → spinner (S-R3.2)
-    Mock `fetchGitHubUser`, `window.history.replaceState`, `window.location`.
+        Mock `fetchGitHubUser`, `window.history.replaceState`, `window.location`.
   - **Verify**: `pnpm --filter ghagga-dashboard test` pasa. Cobertura >80% en código nuevo.
   - **Depends on**: T4.1, T4.3
   - **Scenarios**: S-R3.1 a S-R3.3, S-R4.1 a S-R4.5, S-R5.1, S-R5.2, S-R7.1, S-R7.2, S-CC2.1 a S-CC2.3
@@ -364,21 +363,21 @@ Refs: proposal.md, specs/dashboard-auth/spec.md, design.md
 
 ## Resumen de Coverage por Requisito
 
-| Requisito | Tareas |
-|-----------|--------|
-| R1 (Web Flow Endpoints) | T3.1, T3.2, T3.4 |
-| R2 (State HMAC) | T3.1, T3.2, T3.4 |
-| R3 (Dashboard Login) | T4.3, T4.4, T4.6 |
-| R4 (Callback Route) | T4.1, T4.2, T4.6 |
-| R5 (Clean URL) | T4.1, T4.6 |
+| Requisito                     | Tareas           |
+| ----------------------------- | ---------------- |
+| R1 (Web Flow Endpoints)       | T3.1, T3.2, T3.4 |
+| R2 (State HMAC)               | T3.1, T3.2, T3.4 |
+| R3 (Dashboard Login)          | T4.3, T4.4, T4.6 |
+| R4 (Callback Route)           | T4.1, T4.2, T4.6 |
+| R5 (Clean URL)                | T4.1, T4.6       |
 | R6 (Device Flow Preservation) | T4.5, T3.4, T5.2 |
-| R7 (PAT Fallback) | T4.3, T4.6 |
-| R8 (CLIENT_SECRET Config) | T3.2, T3.3, T3.4 |
-| R9 (Stale Mapping Cleanup) | T1.3, T2.1, T2.3 |
-| R10 (Webhook Cleanup) | T1.3, T2.2, T2.3 |
-| R11 (DB Constraint) | T1.1, T1.2, T1.5 |
+| R7 (PAT Fallback)             | T4.3, T4.6       |
+| R8 (CLIENT_SECRET Config)     | T3.2, T3.3, T3.4 |
+| R9 (Stale Mapping Cleanup)    | T1.3, T2.1, T2.3 |
+| R10 (Webhook Cleanup)         | T1.3, T2.2, T2.3 |
+| R11 (DB Constraint)           | T1.1, T1.2, T1.5 |
 | R12 (Re-Discovery Resiliente) | T1.3, T2.1, T2.3 |
-| CC1 (Token en Fragment) | T3.2, T4.1 |
-| CC2 (Error Handling) | T3.2, T4.1, T5.1 |
-| CC3 (UX Un Click) | T4.3 |
-| CC4 (Backward Compat) | T2.3, T5.2 |
+| CC1 (Token en Fragment)       | T3.2, T4.1       |
+| CC2 (Error Handling)          | T3.2, T4.1, T5.1 |
+| CC3 (UX Un Click)             | T4.3             |
+| CC4 (Backward Compat)         | T2.3, T5.2       |

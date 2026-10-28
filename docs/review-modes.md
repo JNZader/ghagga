@@ -43,13 +43,13 @@ Each specialist has a focused system prompt that constrains its analysis to a sp
 
 ### Specialist Focus Areas
 
-| Specialist | What It Looks For |
-|------------|-------------------|
-| **Scope Analysis** | Change blast radius, coupling between modified files, missing related changes |
-| **Coding Standards** | Naming conventions, DRY violations, code organization, readability |
-| **Error Handling** | Null/undefined safety, missing try-catch, error propagation, edge cases |
-| **Security Audit** | Injection vectors, XSS, auth bypasses, data exposure, secrets |
-| **Performance** | O(n²) loops, N+1 queries, memory leaks, unnecessary re-renders, resource exhaustion |
+| Specialist           | What It Looks For                                                                   |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| **Scope Analysis**   | Change blast radius, coupling between modified files, missing related changes       |
+| **Coding Standards** | Naming conventions, DRY violations, code organization, readability                  |
+| **Error Handling**   | Null/undefined safety, missing try-catch, error propagation, edge cases             |
+| **Security Audit**   | Injection vectors, XSS, auth bypasses, data exposure, secrets                       |
+| **Performance**      | O(n²) loops, N+1 queries, memory leaks, unnecessary re-renders, resource exhaustion |
 
 ## Consensus Mode
 
@@ -79,7 +79,6 @@ flowchart LR
 ### How Voting Works
 
 Each stance returns a decision (`PASSED`, `FAILED`, or `NEEDS_HUMAN_REVIEW`) with a confidence score (0.0 to 1.0). The final status is determined by the `calculateConsensus()` algorithm using weighted voting:
-
 1. Each vote's **weight** equals its confidence score
 2. **Abstain** votes (if any) contribute zero weight
 3. The algorithm requires **two thresholds** to declare a winner:
@@ -110,12 +109,12 @@ The diagnostic agent writes 1–5 ranked hypotheses. Each hypothesis has conditi
 
 ### When to Use Each Mode
 
-| Scenario | Recommended Mode |
-|----------|-----------------|
-| Small PR (< 200 lines) | Simple |
-| Large refactor | Workflow |
-| New feature with tests | Simple or Workflow |
-| Security-sensitive code | Consensus |
-| CI budget is tight | Simple |
-| Thorough team review replacement | Workflow |
-| Final review before release | Consensus |
+| Scenario                         | Recommended Mode   |
+| -------------------------------- | ------------------ |
+| Small PR (< 200 lines)           | Simple             |
+| Large refactor                   | Workflow           |
+| New feature with tests           | Simple or Workflow |
+| Security-sensitive code          | Consensus          |
+| CI budget is tight               | Simple             |
+| Thorough team review replacement | Workflow           |
+| Final review before release      | Consensus          |

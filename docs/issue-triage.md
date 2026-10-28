@@ -19,11 +19,11 @@ A **maintainer** comments the exact command on a plain GitHub issue:
 /ghagga triage
 ```
 
-| Constraint | Detail |
-|-----------|--------|
-| **Target** | A plain issue only. On a pull request, `triage` is a no-op (use the `review` commands for PR diffs). |
-| **Who can trigger** | Write-association maintainers only: `OWNER`, `MEMBER`, or `COLLABORATOR`. This is **stricter** than `/ghagga review` (which also accepts `CONTRIBUTOR` / `FIRST_TIME_CONTRIBUTOR`), because issues are openable by anyone and triage feeds untrusted text to an LLM. A `CONTRIBUTOR` can request a review but **cannot** trigger a triage. |
-| **Command-gate only** | v1 is triggered by the comment command alone. There is **no** label-gate and **no** GitHub Projects v2 integration — both are deferred to a later release. |
+| Constraint            | Detail                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Target**            | A plain issue only. On a pull request, `triage` is a no-op (use the `review` commands for PR diffs).                                                                                                                                                                                                                                       |
+| **Who can trigger**   | Write-association maintainers only: `OWNER`, `MEMBER`, or `COLLABORATOR`. This is **stricter** than `/ghagga review` (which also accepts `CONTRIBUTOR` / `FIRST_TIME_CONTRIBUTOR`), because issues are openable by anyone and triage feeds untrusted text to an LLM. A `CONTRIBUTOR` can request a review but **cannot** trigger a triage. |
+| **Command-gate only** | v1 is triggered by the comment command alone. There is **no** label-gate and **no** GitHub Projects v2 integration — both are deferred to a later release.                                                                                                                                                                                 |
 
 The author-association gate is enforced **server-side, before any issue fetch or
 LLM call**, so unauthorized or non-command comments cost zero tokens.
@@ -65,7 +65,6 @@ core safety property of the feature.
 ## Required permission
 
 Issue triage needs the **`Issues: Read and write`** GitHub App permission:
-
 - **Read** — fetch the issue body and its comments.
 - **Write** — post the approved draft comment back on the issue.
 
@@ -79,14 +78,12 @@ Issue triage needs the **`Issues: Read and write`** GitHub App permission:
 ## Scope (v1, 3.1.0)
 
 In scope:
-
 - `/ghagga triage` command-gated triggering on plain issues.
 - Untrusted-input fencing on all issue/comment text.
 - Keyword dedup against review memory.
 - Draft persistence + Dashboard approval page + post-on-approve.
 
 Deferred (later release):
-
 - Label-gate triggering.
 - GitHub Projects v2 integration.
 - Embedding / vector dedup (keyword dedup only in v1).

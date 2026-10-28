@@ -6,11 +6,11 @@ GHAGGA learns from past reviews using full-text search. Design patterns inspired
 
 All three backends implement the same `MemoryStorage` interface, ensuring consistent behavior regardless of distribution mode:
 
-| Backend | Used By | Search Engine |
-|---------|---------|---------------|
-| **PostgreSQL** | Server (SaaS/self-hosted) | `tsvector` + GIN index, ranked by `ts_rank` |
-| **SQLite** (sql.js WASM) | CLI, GitHub Action | FTS5 virtual table, BM25 ranking |
-| **Engram** | CLI (optional, `--memory-backend engram`) | Delegated to Engram server |
+| Backend                  | Used By                                   | Search Engine                               |
+| ------------------------ | ----------------------------------------- | ------------------------------------------- |
+| **PostgreSQL**           | Server (SaaS/self-hosted)                 | `tsvector` + GIN index, ranked by `ts_rank` |
+| **SQLite** (sql.js WASM) | CLI, GitHub Action                        | FTS5 virtual table, BM25 ranking            |
+| **Engram**               | CLI (optional, `--memory-backend engram`) | Delegated to Engram server                  |
 
 ## Pipeline Integration Lifecycle
 
@@ -48,7 +48,6 @@ flowchart TB
 ### Search Phase (Step 5)
 
 Memory search runs **in parallel** with static analysis (Step 5):
-
 1. **`buildSearchQuery()`** extracts meaningful terms from file paths in the diff:
    - Strips noise directories: `src/`, `lib/`, `dist/`, `test/`, and similar
    - Removes file extensions
@@ -61,7 +60,6 @@ All six review modes receive the same `memoryContext` in their system prompts.
 ### Persist Phase (Step 8)
 
 After the review completes, observations are extracted and stored (fire-and-forget -- this step never blocks the response):
-
 1. **Significance filter**: Only findings with **critical**, **high**, or **medium** severity are saved. Low and informational findings are discarded.
 2. **`stripPrivateData()`**: Applies 24 regex patterns to redact secrets before storage (see [Privacy Stripping](#privacy-stripping)).
 3. **Create session**: A new memory session is created, scoped to the repository and PR number.
@@ -74,29 +72,29 @@ After the review completes, observations are extracted and stored (fire-and-forg
 
 7 observation types, derived from finding categories:
 
-| Type | Description | Example |
-|------|-------------|---------|
-| `decision` | Architecture and design choices | "Team decided to use Zustand over Redux for state management" |
-| `pattern` | Code patterns and conventions | "All API routes use zod validation middleware" |
-| `bugfix` | Common errors and their fixes | "React useEffect cleanup missing causes memory leak in Dashboard" |
-| `learning` | General project knowledge | "The billing module uses Stripe webhooks for payment confirmation" |
-| `architecture` | System design decisions | "Microservices communicate via event bus, not direct HTTP" |
-| `config` | Configuration patterns | "Environment-specific configs are in /config/{env}.ts" |
-| `discovery` | Codebase discoveries | "Legacy auth module in /lib/auth is deprecated, use /modules/auth" |
+| Type           | Description                     | Example                                                            |
+| -------------- | ------------------------------- | ------------------------------------------------------------------ |
+| `decision`     | Architecture and design choices | "Team decided to use Zustand over Redux for state management"      |
+| `pattern`      | Code patterns and conventions   | "All API routes use zod validation middleware"                     |
+| `bugfix`       | Common errors and their fixes   | "React useEffect cleanup missing causes memory leak in Dashboard"  |
+| `learning`     | General project knowledge       | "The billing module uses Stripe webhooks for payment confirmation" |
+| `architecture` | System design decisions         | "Microservices communicate via event bus, not direct HTTP"         |
+| `config`       | Configuration patterns          | "Environment-specific configs are in /config/{env}.ts"             |
+| `discovery`    | Codebase discoveries            | "Legacy auth module in /lib/auth is deprecated, use /modules/auth" |
 
 ### Category to Type Mapping
 
 Finding categories from the review are mapped to observation types:
 
-| Finding Category | Observation Type |
-|-----------------|-----------------|
-| `security` | `discovery` |
-| `bug` | `bugfix` |
-| `performance` | `pattern` |
-| `style` | `pattern` |
-| `maintainability` | `pattern` |
-| `error-handling` | `learning` |
-| _(default)_ | `learning` |
+| Finding Category  | Observation Type |
+| ----------------- | ---------------- |
+| `security`        | `discovery`      |
+| `bug`             | `bugfix`         |
+| `performance`     | `pattern`        |
+| `style`           | `pattern`        |
+| `maintainability` | `pattern`        |
+| `error-handling`  | `learning`       |
+| _(default)_       | `learning`       |
 
 ## Session Model
 
@@ -139,12 +137,12 @@ ghagga memory backfill [--batch <n>] [--limit <n>] [--re-embed] [--delay <ms>]
 pnpm --filter @ghagga/server memory:backfill -- [--batch <n>] [--limit <n>] [--re-embed] [--delay <ms>]
 ```
 
-| Flag | Default | Description |
-|------|---------|--------------|
-| `--batch` | `100` | Rows per `embedBatch()` call |
-| `--limit` | unlimited | Maximum total rows to process in this run |
-| `--re-embed` | `false` | Also re-embed rows whose stored `embedding_model`/`embedding_dim` mismatches the active provider (not just `NULL` rows) -- use this after a provider or model swap |
-| `--delay` | `0` (ms) | Delay between batches, for rate/cost control against paid embedding APIs |
+| Flag         | Default   | Description                                                                                                                                                        |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--batch`    | `100`     | Rows per `embedBatch()` call                                                                                                                                       |
+| `--limit`    | unlimited | Maximum total rows to process in this run                                                                                                                          |
+| `--re-embed` | `false`   | Also re-embed rows whose stored `embedding_model`/`embedding_dim` mismatches the active provider (not just `NULL` rows) -- use this after a provider or model swap |
+| `--delay`    | `0` (ms)  | Delay between batches, for rate/cost control against paid embedding APIs                                                                                           |
 
 Both entry points call the same shared backfill routine, so CLI and server behave identically. The backfill is **not available in the GitHub Action** -- the Action's per-run SQLite database is ephemeral (persisted only via `@actions/cache` between runs of the same repo/workflow), so there's no long-lived history to backfill.
 
@@ -174,32 +172,31 @@ Full-text search uses SQLite's **FTS5** extension with **BM25** ranking. The FTS
 
 Before any observation is stored, `stripPrivateData()` applies **24 regex patterns** to remove sensitive data:
 
-| Pattern | Example | Redacted As |
-|---------|---------|-------------|
-| Anthropic API keys | `sk-ant-api03-...` | `[REDACTED_ANTHROPIC_KEY]` |
-| OpenAI API keys | `sk-proj-...` | `[REDACTED_OPENAI_KEY]` |
-| AWS Access Key IDs | `AKIA...` | `[REDACTED_AWS_KEY]` |
-| AWS Secret Access Keys | `AWS_SECRET_ACCESS_KEY=...` | `[REDACTED_AWS_SECRET]` |
-| GitHub tokens | `ghp_...`, `gho_...`, `ghs_...`, `ghr_...`, `github_pat_...` | `[REDACTED_GITHUB_*]` |
-| GitLab PATs | `glpat-...` | `[REDACTED_GITLAB_PAT]` |
-| npm tokens | `npm_...` | `[REDACTED_NPM_TOKEN]` |
-| Stripe keys | `sk_live_...`, `whsec_...` | `[REDACTED_STRIPE_*]` |
-| Hugging Face tokens | `hf_...` | `[REDACTED_HF_TOKEN]` |
-| SendGrid API keys | `SG....` | `[REDACTED_SENDGRID_KEY]` |
-| Google API keys | `AIza...` | `[REDACTED_GOOGLE_KEY]` |
-| Slack tokens | `xoxb-...`, `xoxp-...` | `[REDACTED_SLACK_TOKEN]` |
-| Bearer tokens | `Bearer eyJ...` | `Bearer [REDACTED_TOKEN]` |
-| JWT tokens | `eyJ...eyJ...xxx` | `[REDACTED_JWT]` |
-| PEM private keys | `-----BEGIN PRIVATE KEY-----` | `[REDACTED_PRIVATE_KEY]` |
-| Password/secret assignments | `password = "..."` | `[REDACTED]` |
-| Unquoted `.env`-style secrets | `SECRET=...` | `[REDACTED]` |
-| Base64 credentials | `SECRET=aGVsbG8...` | `[REDACTED_BASE64]` |
-| URL userinfo passwords | `https://user:pass@host` | `[REDACTED_URL_PASSWORD]` |
+| Pattern                       | Example                                                      | Redacted As                |
+| ----------------------------- | ------------------------------------------------------------ | -------------------------- |
+| Anthropic API keys            | `sk-ant-api03-...`                                           | `[REDACTED_ANTHROPIC_KEY]` |
+| OpenAI API keys               | `sk-proj-...`                                                | `[REDACTED_OPENAI_KEY]`    |
+| AWS Access Key IDs            | `AKIA...`                                                    | `[REDACTED_AWS_KEY]`       |
+| AWS Secret Access Keys        | `AWS_SECRET_ACCESS_KEY=...`                                  | `[REDACTED_AWS_SECRET]`    |
+| GitHub tokens                 | `ghp_...`, `gho_...`, `ghs_...`, `ghr_...`, `github_pat_...` | `[REDACTED_GITHUB_*]`      |
+| GitLab PATs                   | `glpat-...`                                                  | `[REDACTED_GITLAB_PAT]`    |
+| npm tokens                    | `npm_...`                                                    | `[REDACTED_NPM_TOKEN]`     |
+| Stripe keys                   | `sk_live_...`, `whsec_...`                                   | `[REDACTED_STRIPE_*]`      |
+| Hugging Face tokens           | `hf_...`                                                     | `[REDACTED_HF_TOKEN]`      |
+| SendGrid API keys             | `SG....`                                                     | `[REDACTED_SENDGRID_KEY]`  |
+| Google API keys               | `AIza...`                                                    | `[REDACTED_GOOGLE_KEY]`    |
+| Slack tokens                  | `xoxb-...`, `xoxp-...`                                       | `[REDACTED_SLACK_TOKEN]`   |
+| Bearer tokens                 | `Bearer eyJ...`                                              | `Bearer [REDACTED_TOKEN]`  |
+| JWT tokens                    | `eyJ...eyJ...xxx`                                            | `[REDACTED_JWT]`           |
+| PEM private keys              | `-----BEGIN PRIVATE KEY-----`                                | `[REDACTED_PRIVATE_KEY]`   |
+| Password/secret assignments   | `password = "..."`                                           | `[REDACTED]`               |
+| Unquoted `.env`-style secrets | `SECRET=...`                                                 | `[REDACTED]`               |
+| Base64 credentials            | `SECRET=aGVsbG8...`                                          | `[REDACTED_BASE64]`        |
+| URL userinfo passwords        | `https://user:pass@host`                                     | `[REDACTED_URL_PASSWORD]`  |
 
 ## Content Deduplication
 
 Two mechanisms prevent duplicate observations:
-
 1. **Content hash dedup**: Each observation's content is hashed as `SHA-256(type:title:content)`. If an observation with the same hash exists within the **15-minute dedup window**, the new observation is skipped.
 
 2. **Topic-key upsert**: When re-reviewing the same PR, the PR summary observation uses a topic key (e.g., `pr-summary:owner/repo#42`). Instead of creating a new row, the existing summary is **updated in place** with the `revision_count` incremented. This ensures re-reviews evolve knowledge rather than duplicate it.
@@ -208,12 +205,12 @@ Two mechanisms prevent duplicate observations:
 
 Memory is available in **all 3 distribution modes**:
 
-| Distribution | Storage Backend | Search Engine | Persistence |
-|-------------|-----------------|---------------|-------------|
-| Server (SaaS) | PostgreSQL | tsvector + GIN index | Database |
-| CLI | SQLite (sql.js WASM) | FTS5 + BM25 | `~/.config/ghagga/memory.db` |
-| CLI + Engram | Engram HTTP API | Delegated to Engram | Engram server |
-| GitHub Action | SQLite (sql.js WASM) | FTS5 + BM25 | Persisted via `@actions/cache` |
+| Distribution  | Storage Backend      | Search Engine        | Persistence                    |
+| ------------- | -------------------- | -------------------- | ------------------------------ |
+| Server (SaaS) | PostgreSQL           | tsvector + GIN index | Database                       |
+| CLI           | SQLite (sql.js WASM) | FTS5 + BM25          | `~/.config/ghagga/memory.db`   |
+| CLI + Engram  | Engram HTTP API      | Delegated to Engram  | Engram server                  |
+| GitHub Action | SQLite (sql.js WASM) | FTS5 + BM25          | Persisted via `@actions/cache` |
 
 The pipeline degrades gracefully -- if the memory database is inaccessible for any reason, reviews still work using only the current diff and static analysis.
 
@@ -256,12 +253,12 @@ export GHAGGA_ENGRAM_TIMEOUT=5                     # seconds, default
 
 GHAGGA observations are mapped to Engram memories as follows:
 
-| GHAGGA Field | Engram Field | Format |
-|-------------|-------------|--------|
-| `severity` | content tag | `[severity:xxx]` tag in content |
-| `filePaths` | content footer | `Files: ...` appended to content |
-| `topicKey` | `topic_key` | Direct mapping |
-| Source | content tag | Tagged as `Source: ghagga` |
+| GHAGGA Field | Engram Field   | Format                           |
+| ------------ | -------------- | -------------------------------- |
+| `severity`   | content tag    | `[severity:xxx]` tag in content  |
+| `filePaths`  | content footer | `Files: ...` appended to content |
+| `topicKey`   | `topic_key`    | Direct mapping                   |
+| Source       | content tag    | Tagged as `Source: ghagga`       |
 
 ### What Engram Enables
 
@@ -291,13 +288,13 @@ The Dashboard's Memory page provides a full-featured React UI for browsing, insp
 
 Destructive actions use a progressive confirmation system to prevent accidental data loss:
 
-| Tier | Action | Confirmation |
-|------|--------|-------------|
-| **Tier 1** | Delete single observation | Simple confirm modal |
-| **Tier 2** | Delete batch of observations | Confirm with count display |
-| **Tier 3** | Clear all observations for a repo | Type the repo name to confirm |
-| **Tier 4** | Purge ALL observations | Type "DELETE ALL" + 5-second countdown |
-| **Tier 5** | Delete sessions | Confirm with session detail |
+| Tier       | Action                            | Confirmation                           |
+| ---------- | --------------------------------- | -------------------------------------- |
+| **Tier 1** | Delete single observation         | Simple confirm modal                   |
+| **Tier 2** | Delete batch of observations      | Confirm with count display             |
+| **Tier 3** | Clear all observations for a repo | Type the repo name to confirm          |
+| **Tier 4** | Purge ALL observations            | Type "DELETE ALL" + 5-second countdown |
+| **Tier 5** | Delete sessions                   | Confirm with session detail            |
 
 Additional management actions:
 - **Delete sessions** -- remove individual memory sessions
@@ -307,8 +304,8 @@ All destructive actions trigger **Toast notifications** confirming success or re
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GHAGGA_MEMORY_BACKEND` | `sqlite` | Memory backend for CLI: `sqlite` or `engram` |
-| `GHAGGA_ENGRAM_HOST` | `http://localhost:7437` | Engram server URL |
-| `GHAGGA_ENGRAM_TIMEOUT` | `5` (seconds) | Engram connection timeout |
+| Variable                | Default                 | Description                                  |
+| ----------------------- | ----------------------- | -------------------------------------------- |
+| `GHAGGA_MEMORY_BACKEND` | `sqlite`                | Memory backend for CLI: `sqlite` or `engram` |
+| `GHAGGA_ENGRAM_HOST`    | `http://localhost:7437` | Engram server URL                            |
+| `GHAGGA_ENGRAM_TIMEOUT` | `5` (seconds)           | Engram connection timeout                    |

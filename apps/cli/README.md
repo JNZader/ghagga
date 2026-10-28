@@ -13,13 +13,13 @@ Login only stores the GitHub token and selects `gateway`. The model call still n
 
 GHAGGA is a multi-agent AI code reviewer. CLI `--mode` values: `simple`, `workflow`, `consensus`, `fan-out`, and `hybrid-4r`. The CLI rejects `diagnostic`.
 
-| Mode | Speed | Depth | LLM Calls |
-|------|-------|-------|-----------|
-| **simple** | ~2s | Single-pass review | 1 |
-| **workflow** | ~15s | 5 specialist agents + synthesis | 6 |
-| **consensus** | ~7s | Three perspectives + algorithmic vote | 3 |
-| **fan-out** | varies | Parallel lenses | ~5 |
-| **hybrid-4r** | varies | Fan-out with lenses pinned to the first model | ~5 |
+| Mode          | Speed  | Depth                                         | LLM Calls |
+| ------------- | ------ | --------------------------------------------- | --------- |
+| **simple**    | ~2s    | Single-pass review                            | 1         |
+| **workflow**  | ~15s   | 5 specialist agents + synthesis               | 6         |
+| **consensus** | ~7s    | Three perspectives + algorithmic vote         | 3         |
+| **fan-out**   | varies | Parallel lenses                               | ~5        |
+| **hybrid-4r** | varies | Fan-out with lenses pinned to the first model | ~5        |
 
 ## Quick Start
 
@@ -177,10 +177,10 @@ ghagga health --output json
 
 Options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `[path]` | `.` | Path to repository or subdirectory |
-| `--top <n>` | `5` | Number of top issues to display |
+| Option              | Default    | Description                                |
+| ------------------- | ---------- | ------------------------------------------ |
+| `[path]`            | `.`        | Path to repository or subdirectory         |
+| `--top <n>`         | `5`        | Number of top issues to display            |
 | `--output <format>` | `markdown` | Output format (inherits global `--output`) |
 
 ## BYOK (Bring Your Own Key)

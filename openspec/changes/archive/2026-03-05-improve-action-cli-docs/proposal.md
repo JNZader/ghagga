@@ -91,24 +91,24 @@ The structural template for both guides:
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `docs/github-action.md` | Modified (major) | Full rewrite with guided onboarding structure, ~2.5x current size |
-| `docs/cli.md` | Modified (major) | Full rewrite with guided onboarding structure, ~2.5x current size |
-| `apps/cli/README.md` | Modified | Fix 8 wrong package name references, add missing providers to Options |
-| `README.md` | Modified | Fix broken `--config` example if present, consistency updates |
-| `docs/quick-start.md` | Modified (minor) | Fix contradictory "Recommended" labels |
-| `docs/configuration.md` | Modified (minor) | Fix broken `--config` inline JSON example |
+| Area                    | Impact           | Description                                                           |
+| ----------------------- | ---------------- | --------------------------------------------------------------------- |
+| `docs/github-action.md` | Modified (major) | Full rewrite with guided onboarding structure, ~2.5x current size     |
+| `docs/cli.md`           | Modified (major) | Full rewrite with guided onboarding structure, ~2.5x current size     |
+| `apps/cli/README.md`    | Modified         | Fix 8 wrong package name references, add missing providers to Options |
+| `README.md`             | Modified         | Fix broken `--config` example if present, consistency updates         |
+| `docs/quick-start.md`   | Modified (minor) | Fix contradictory "Recommended" labels                                |
+| `docs/configuration.md` | Modified (minor) | Fix broken `--config` inline JSON example                             |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Introducing new inaccuracies while rewriting | Medium | Cross-reference every claim against source code (`action.yml`, `apps/cli/src/`, `packages/core/`) |
-| Documentation drifts from code over time | Medium | Include verification steps users can follow to confirm behavior |
-| Mermaid diagrams don't render in all contexts | Low | Use simple flowcharts; provide text description as fallback in flow |
-| Breaking existing doc links | Low | Keep same filenames; only change content within files |
-| Over-documenting — guides become too long to read | Low | Target 250-300 lines (vs current ~110). SaaS guide at 220 lines is well-received. Self-Hosted at 424 is the upper bound. |
+| Risk                                              | Likelihood | Mitigation                                                                                                               |
+| ------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Introducing new inaccuracies while rewriting      | Medium     | Cross-reference every claim against source code (`action.yml`, `apps/cli/src/`, `packages/core/`)                        |
+| Documentation drifts from code over time          | Medium     | Include verification steps users can follow to confirm behavior                                                          |
+| Mermaid diagrams don't render in all contexts     | Low        | Use simple flowcharts; provide text description as fallback in flow                                                      |
+| Breaking existing doc links                       | Low        | Keep same filenames; only change content within files                                                                    |
+| Over-documenting — guides become too long to read | Low        | Target 250-300 lines (vs current ~110). SaaS guide at 220 lines is well-received. Self-Hosted at 424 is the upper bound. |
 
 ## Rollback Plan
 

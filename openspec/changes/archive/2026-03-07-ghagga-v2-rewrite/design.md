@@ -132,62 +132,62 @@ PR Event → .github/workflows/ghagga.yml
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `package.json` | Create | Root workspace config (pnpm + Turborepo) |
-| `pnpm-workspace.yaml` | Create | Workspace package definitions |
-| `turbo.json` | Create | Turborepo pipeline config |
-| `tsconfig.base.json` | Create | Shared TypeScript config |
-| `.gitignore` | Create | Standard Node.js + build ignores |
-| `packages/core/package.json` | Create | Core engine package |
-| `packages/core/src/index.ts` | Create | Public API exports |
-| `packages/core/src/pipeline.ts` | Create | Review pipeline orchestrator |
-| `packages/core/src/agents/simple.ts` | Create | Simple review agent |
-| `packages/core/src/agents/workflow.ts` | Create | Workflow multi-agent orchestrator |
-| `packages/core/src/agents/consensus.ts` | Create | Consensus voting engine |
-| `packages/core/src/agents/prompts.ts` | Create | All agent prompts (rescued from v1) |
-| `packages/core/src/tools/semgrep.ts` | Create | Semgrep binary runner |
-| `packages/core/src/tools/trivy.ts` | Create | Trivy binary runner |
-| `packages/core/src/tools/cpd.ts` | Create | PMD/CPD binary runner |
-| `packages/core/src/tools/runner.ts` | Create | Parallel tool execution orchestrator |
-| `packages/core/src/memory/search.ts` | Create | Memory search (tsvector queries) |
-| `packages/core/src/memory/persist.ts` | Create | Observation persistence |
-| `packages/core/src/memory/context.ts` | Create | Memory-to-prompt formatter |
-| `packages/core/src/memory/privacy.ts` | Create | Privacy stripping (rescued from v1) |
-| `packages/core/src/providers/index.ts` | Create | Vercel AI SDK provider setup |
-| `packages/core/src/providers/fallback.ts` | Create | Provider fallback chain |
-| `packages/core/src/utils/diff.ts` | Create | Diff parsing and truncation |
-| `packages/core/src/utils/stack-detect.ts` | Create | Tech stack detection (rescued from v1) |
-| `packages/core/src/utils/token-budget.ts` | Create | Token budget management |
-| `packages/core/src/types.ts` | Create | Shared type definitions |
-| `packages/db/package.json` | Create | Database package |
-| `packages/db/src/schema.ts` | Create | Drizzle table schemas |
-| `packages/db/src/queries.ts` | Create | Typed database queries |
-| `packages/db/src/migrate.ts` | Create | Migration runner |
-| `packages/db/src/crypto.ts` | Create | AES-256-GCM key encryption |
-| `packages/db/drizzle.config.ts` | Create | Drizzle CLI config |
-| `apps/server/package.json` | Create | Server package |
-| `apps/server/src/index.ts` | Create | Hono app entry point |
-| `apps/server/src/routes/webhook.ts` | Create | GitHub webhook handler |
-| `apps/server/src/routes/api.ts` | Create | Dashboard REST API routes |
-| `apps/server/src/middleware/auth.ts` | Create | GitHub OAuth token verification |
-| `apps/server/src/inngest/client.ts` | Create | Inngest client setup |
-| `apps/server/src/inngest/review.ts` | Create | Review durable function |
-| `apps/server/src/github/client.ts` | Create | GitHub API client (diff, comments) |
-| `apps/dashboard/package.json` | Create | Dashboard package |
-| `apps/dashboard/src/main.tsx` | Create | React entry point |
-| `apps/dashboard/src/App.tsx` | Create | Router + layout |
-| `apps/dashboard/src/pages/*` | Create | Dashboard, Reviews, Settings, Memory pages |
-| `apps/dashboard/src/components/*` | Create | shadcn/ui components + custom components |
-| `apps/dashboard/src/lib/api.ts` | Create | API client (TanStack Query) |
-| `apps/dashboard/src/lib/auth.ts` | Create | Auth context + GitHub OAuth |
-| `apps/cli/package.json` | Create | CLI package |
-| `apps/cli/src/index.ts` | Create | CLI entry point (commander.js) |
-| `apps/cli/src/commands/review.ts` | Create | Review command |
-| `apps/action/action.yml` | Create | GitHub Action definition |
-| `apps/action/src/index.ts` | Create | Action entry point |
-| `Dockerfile` | Create | Multi-stage build with Semgrep + Trivy + CPD |
-| `docker-compose.yml` | Create | Local dev setup (server + postgres) |
+| File                                      | Action | Description                                  |
+| ----------------------------------------- | ------ | -------------------------------------------- |
+| `package.json`                            | Create | Root workspace config (pnpm + Turborepo)     |
+| `pnpm-workspace.yaml`                     | Create | Workspace package definitions                |
+| `turbo.json`                              | Create | Turborepo pipeline config                    |
+| `tsconfig.base.json`                      | Create | Shared TypeScript config                     |
+| `.gitignore`                              | Create | Standard Node.js + build ignores             |
+| `packages/core/package.json`              | Create | Core engine package                          |
+| `packages/core/src/index.ts`              | Create | Public API exports                           |
+| `packages/core/src/pipeline.ts`           | Create | Review pipeline orchestrator                 |
+| `packages/core/src/agents/simple.ts`      | Create | Simple review agent                          |
+| `packages/core/src/agents/workflow.ts`    | Create | Workflow multi-agent orchestrator            |
+| `packages/core/src/agents/consensus.ts`   | Create | Consensus voting engine                      |
+| `packages/core/src/agents/prompts.ts`     | Create | All agent prompts (rescued from v1)          |
+| `packages/core/src/tools/semgrep.ts`      | Create | Semgrep binary runner                        |
+| `packages/core/src/tools/trivy.ts`        | Create | Trivy binary runner                          |
+| `packages/core/src/tools/cpd.ts`          | Create | PMD/CPD binary runner                        |
+| `packages/core/src/tools/runner.ts`       | Create | Parallel tool execution orchestrator         |
+| `packages/core/src/memory/search.ts`      | Create | Memory search (tsvector queries)             |
+| `packages/core/src/memory/persist.ts`     | Create | Observation persistence                      |
+| `packages/core/src/memory/context.ts`     | Create | Memory-to-prompt formatter                   |
+| `packages/core/src/memory/privacy.ts`     | Create | Privacy stripping (rescued from v1)          |
+| `packages/core/src/providers/index.ts`    | Create | Vercel AI SDK provider setup                 |
+| `packages/core/src/providers/fallback.ts` | Create | Provider fallback chain                      |
+| `packages/core/src/utils/diff.ts`         | Create | Diff parsing and truncation                  |
+| `packages/core/src/utils/stack-detect.ts` | Create | Tech stack detection (rescued from v1)       |
+| `packages/core/src/utils/token-budget.ts` | Create | Token budget management                      |
+| `packages/core/src/types.ts`              | Create | Shared type definitions                      |
+| `packages/db/package.json`                | Create | Database package                             |
+| `packages/db/src/schema.ts`               | Create | Drizzle table schemas                        |
+| `packages/db/src/queries.ts`              | Create | Typed database queries                       |
+| `packages/db/src/migrate.ts`              | Create | Migration runner                             |
+| `packages/db/src/crypto.ts`               | Create | AES-256-GCM key encryption                   |
+| `packages/db/drizzle.config.ts`           | Create | Drizzle CLI config                           |
+| `apps/server/package.json`                | Create | Server package                               |
+| `apps/server/src/index.ts`                | Create | Hono app entry point                         |
+| `apps/server/src/routes/webhook.ts`       | Create | GitHub webhook handler                       |
+| `apps/server/src/routes/api.ts`           | Create | Dashboard REST API routes                    |
+| `apps/server/src/middleware/auth.ts`      | Create | GitHub OAuth token verification              |
+| `apps/server/src/inngest/client.ts`       | Create | Inngest client setup                         |
+| `apps/server/src/inngest/review.ts`       | Create | Review durable function                      |
+| `apps/server/src/github/client.ts`        | Create | GitHub API client (diff, comments)           |
+| `apps/dashboard/package.json`             | Create | Dashboard package                            |
+| `apps/dashboard/src/main.tsx`             | Create | React entry point                            |
+| `apps/dashboard/src/App.tsx`              | Create | Router + layout                              |
+| `apps/dashboard/src/pages/*`              | Create | Dashboard, Reviews, Settings, Memory pages   |
+| `apps/dashboard/src/components/*`         | Create | shadcn/ui components + custom components     |
+| `apps/dashboard/src/lib/api.ts`           | Create | API client (TanStack Query)                  |
+| `apps/dashboard/src/lib/auth.ts`          | Create | Auth context + GitHub OAuth                  |
+| `apps/cli/package.json`                   | Create | CLI package                                  |
+| `apps/cli/src/index.ts`                   | Create | CLI entry point (commander.js)               |
+| `apps/cli/src/commands/review.ts`         | Create | Review command                               |
+| `apps/action/action.yml`                  | Create | GitHub Action definition                     |
+| `apps/action/src/index.ts`                | Create | Action entry point                           |
+| `Dockerfile`                              | Create | Multi-stage build with Semgrep + Trivy + CPD |
+| `docker-compose.yml`                      | Create | Local dev setup (server + postgres)          |
 
 ## Interfaces / Contracts
 
@@ -267,8 +267,17 @@ interface ToolResult {
 ```typescript
 // packages/db/src/schema.ts
 
-import { pgTable, serial, text, varchar, timestamp,
-         boolean, jsonb, integer, index } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  serial,
+  text,
+  varchar,
+  timestamp,
+  boolean,
+  jsonb,
+  integer,
+  index,
+} from 'drizzle-orm/pg-core';
 
 export const installations = pgTable('installations', {
   id: serial('id').primaryKey(),
@@ -308,36 +317,42 @@ export const reviews = pgTable('reviews', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-export const memorySessions = pgTable('memory_sessions', {
-  id: serial('id').primaryKey(),
-  project: varchar('project', { length: 255 }).notNull(), // "owner/repo"
-  prNumber: integer('pr_number'),
-  summary: text('summary'),
-  startedAt: timestamp('started_at').defaultNow(),
-  endedAt: timestamp('ended_at'),
-}, (t) => [
-  index('idx_memory_sessions_project').on(t.project),
-]);
+export const memorySessions = pgTable(
+  'memory_sessions',
+  {
+    id: serial('id').primaryKey(),
+    project: varchar('project', { length: 255 }).notNull(), // "owner/repo"
+    prNumber: integer('pr_number'),
+    summary: text('summary'),
+    startedAt: timestamp('started_at').defaultNow(),
+    endedAt: timestamp('ended_at'),
+  },
+  (t) => [index('idx_memory_sessions_project').on(t.project)],
+);
 
-export const memoryObservations = pgTable('memory_observations', {
-  id: serial('id').primaryKey(),
-  sessionId: integer('session_id').references(() => memorySessions.id),
-  project: varchar('project', { length: 255 }).notNull(),
-  type: varchar('type', { length: 30 }).notNull(), // decision | pattern | bugfix | learning | architecture | config | discovery
-  title: varchar('title', { length: 500 }).notNull(),
-  content: text('content').notNull(),
-  topicKey: varchar('topic_key', { length: 255 }),
-  filePaths: jsonb('file_paths').$type<string[]>().default([]),
-  contentHash: varchar('content_hash', { length: 64 }),
-  revisionCount: integer('revision_count').default(1),
-  // tsvector column for full-text search — created via raw SQL migration
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-}, (t) => [
-  index('idx_observations_project').on(t.project),
-  index('idx_observations_topic_key').on(t.topicKey),
-  index('idx_observations_type').on(t.type),
-]);
+export const memoryObservations = pgTable(
+  'memory_observations',
+  {
+    id: serial('id').primaryKey(),
+    sessionId: integer('session_id').references(() => memorySessions.id),
+    project: varchar('project', { length: 255 }).notNull(),
+    type: varchar('type', { length: 30 }).notNull(), // decision | pattern | bugfix | learning | architecture | config | discovery
+    title: varchar('title', { length: 500 }).notNull(),
+    content: text('content').notNull(),
+    topicKey: varchar('topic_key', { length: 255 }),
+    filePaths: jsonb('file_paths').$type<string[]>().default([]),
+    contentHash: varchar('content_hash', { length: 64 }),
+    revisionCount: integer('revision_count').default(1),
+    // tsvector column for full-text search — created via raw SQL migration
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (t) => [
+    index('idx_observations_project').on(t.project),
+    index('idx_observations_topic_key').on(t.topicKey),
+    index('idx_observations_type').on(t.type),
+  ],
+);
 ```
 
 ### Inngest Review Function
@@ -373,8 +388,10 @@ export const reviewFunction = inngest.createFunction(
     // Step 4: AI Review (Layer 2)
     const reviewResult = await step.run('ai-review', async () => {
       return executeReview({
-        diff, mode: config.reviewMode,
-        provider: config.llmProvider, model: config.llmModel,
+        diff,
+        mode: config.reviewMode,
+        provider: config.llmProvider,
+        model: config.llmModel,
         apiKey: decrypt(config.encryptedApiKey),
         staticFindings: staticResults,
         memoryContext,
@@ -398,16 +415,16 @@ export const reviewFunction = inngest.createFunction(
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | Agent prompt construction, diff parsing, token budgeting, stack detection, privacy stripping, consensus voting | Vitest with mocked AI responses |
-| Unit | Database queries, schema validation, encryption/decryption | Vitest with test database |
-| Unit | Static analysis output parsing (Semgrep JSON, Trivy JSON, CPD XML) | Vitest with fixture files |
-| Integration | Full review pipeline (mock LLM, real static analysis) | Vitest with binary stubs |
-| Integration | Hono routes (webhook validation, API endpoints) | Vitest + supertest-like Hono test client |
-| Integration | Inngest functions (step execution, retry behavior) | Inngest test mode |
-| E2E | Dashboard login, settings, review browsing | Playwright against dev server |
-| E2E | Full webhook → review → comment flow | Test GitHub App against a test repo |
+| Layer       | What to Test                                                                                                   | Approach                                 |
+| ----------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Unit        | Agent prompt construction, diff parsing, token budgeting, stack detection, privacy stripping, consensus voting | Vitest with mocked AI responses          |
+| Unit        | Database queries, schema validation, encryption/decryption                                                     | Vitest with test database                |
+| Unit        | Static analysis output parsing (Semgrep JSON, Trivy JSON, CPD XML)                                             | Vitest with fixture files                |
+| Integration | Full review pipeline (mock LLM, real static analysis)                                                          | Vitest with binary stubs                 |
+| Integration | Hono routes (webhook validation, API endpoints)                                                                | Vitest + supertest-like Hono test client |
+| Integration | Inngest functions (step execution, retry behavior)                                                             | Inngest test mode                        |
+| E2E         | Dashboard login, settings, review browsing                                                                     | Playwright against dev server            |
+| E2E         | Full webhook → review → comment flow                                                                           | Test GitHub App against a test repo      |
 
 ## Migration / Rollout
 

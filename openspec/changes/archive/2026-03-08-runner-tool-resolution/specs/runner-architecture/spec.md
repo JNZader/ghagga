@@ -39,7 +39,6 @@ The runner workflow MUST accept `enabledTools` and `disabledTools` as optional s
 The runner workflow MUST include a "Resolve Tools" step that determines which tools to execute. The resolution algorithm MUST mirror the logic in `packages/core/src/tools/resolve.ts`.
 
 The resolution order MUST be:
-
 1. Start with all always-on tools: `semgrep`, `trivy`, `cpd`, `gitleaks`, `shellcheck`, `markdownlint`, `lizard`
 2. For each auto-detect tool, check if relevant files exist in `target-repo/`:
    - `ruff`: any `.py` or `.pyi` file exists
@@ -190,7 +189,6 @@ Tools that MAY skip dedicated caching (minimal install overhead):
 ### Requirement: Security — Silent Tool Execution
 
 All 15 tools MUST follow the same security contract as the existing 3 tools:
-
 1. All tool stdout and stderr MUST be redirected to files (e.g., `/tmp/{tool}-raw.json`), NEVER printed to workflow logs
 2. All `echo` or `jq` processing MUST redirect stderr to `/dev/null`
 3. Tool error messages in result JSON MUST be generic (e.g., `"{tool}: execution failed"`), MUST NOT contain file paths or code content from the target repository

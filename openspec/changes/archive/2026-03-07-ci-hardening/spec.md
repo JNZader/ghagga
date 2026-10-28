@@ -32,6 +32,7 @@
 ## Scenarios
 
 ### Scenario 1: PR triggers CI
+
 - `security` job runs, may warn about advisories
 - `check` and `lint` jobs run in parallel
 - `test` job runs with coverage after check+lint pass
@@ -39,12 +40,14 @@
 - `mutation` job does NOT run (PR, not push to main)
 
 ### Scenario 2: Push to main triggers CI
+
 - All of Scenario 1, plus:
 - `mutation` job runs after `test` completes
 - Stryker runs on `packages/core` with 30-min timeout
 - Mutation report artifact is uploaded
 
 ### Scenario 3: pnpm audit finds high vulnerability
+
 - `security` job reports the vulnerability in logs
 - CI continues (does not fail) due to `continue-on-error: true`
 

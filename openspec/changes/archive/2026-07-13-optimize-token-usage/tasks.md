@@ -2,11 +2,12 @@
 
 **Status**: ready  
 **Design**: [design.md](./design.md)  
-**Date**: 2026-03-16  
+**Date**: 2026-03-16
 
 ## Phase 1: Utilities & Types (foundation — no dependencies)
 
 ### 1.1 Create concurrency limiter utility
+
 **File**: `packages/core/src/utils/concurrency.ts` (NEW)  
 **Change**:
 - Implement `runWithConcurrency<T>(tasks, concurrency, delayMs?)`:
@@ -37,6 +38,7 @@ export async function runWithConcurrency<T>(
 **Estimate**: 10 min
 
 ### 1.2 Create concurrency limiter tests
+
 **File**: `packages/core/src/utils/concurrency.test.ts` (NEW)  
 **Change**:
 - Test `concurrency: 1` runs tasks sequentially (verify execution order via timestamps)
@@ -48,12 +50,14 @@ export async function runWithConcurrency<T>(
 - Test error handling: failed tasks appear as `rejected` in results, other tasks still run
 - Test empty task array returns empty results
 - Test concurrency > tasks.length still works (single batch)
-**Estimate**: 15 min
+  **Estimate**: 15 min
 
 ### 1.3 Add reviewConcurrency and reviewDelayMs to ReviewSettings
+
 **File**: `packages/core/src/types.ts`  
 **Change**:
 - Add to `ReviewSettings` interface:
+
   ```typescript
   /** Max concurrent LLM calls in workflow/consensus modes (1=sequential, 5=parallel). Default: 2. */
   reviewConcurrency?: 1 | 2 | 3 | 5;
@@ -61,20 +65,23 @@ export async function runWithConcurrency<T>(
   reviewDelayMs?: number;
   ```
 - Do NOT add to `DEFAULT_SETTINGS` (undefined = agent applies its own default)
-**Estimate**: 3 min
+  **Estimate**: 3 min
 
 ## Phase 2: Fallback Enhancement (depends on Phase 1.3 for types)
 
 ### 2.1 Add 413 to retryable errors
+
 **File**: `packages/core/src/providers/fallback.ts`  
 **Change**:
 - In `isRetryableError()`, modify the status code check:
+
   ```typescript
   // Before: return status >= 500;
   // After:
   return status >= 500 || status === 413;
   ```
 - Add text-based detection after the status code check:
+
   ```typescript
   // Payload too large (some providers don't include status code in message)
   if (message.includes('too large') || message.includes('payload too large')) {
@@ -82,35 +89,41 @@ export async function runWithConcurrency<T>(
   }
   ```
 - Update JSDoc comment to mention 413
-**Estimate**: 5 min
+  **Estimate**: 5 min
 
 ### 2.2 Add 413 fallback tests
+
 **File**: `packages/core/src/providers/fallback.test.ts`  
 **Change**:
 - Add test: `'falls back to second provider on 413 error from first'`
+
   ```typescript
   mockGenerateText.mockRejectedValueOnce(new Error('status: 413 Request Entity Too Large'));
   mockGenerateText.mockResolvedValueOnce(successResult('413 fallback'));
   // Expect: result from second provider
   ```
 - Add test: `'falls back on "too large" error message'`
+
   ```typescript
   mockGenerateText.mockRejectedValueOnce(new Error('Request too large for model context'));
   mockGenerateText.mockResolvedValueOnce(successResult('too large fallback'));
   ```
 - Add test: `'falls back on "payload too large" error message'`
-**Estimate**: 5 min
+  **Estimate**: 5 min
 
 ## Phase 3: Compact Prompts (depends on nothing, can run parallel with Phase 2)
 
 ### 3.1 Add compact calibration to prompts
+
 **File**: `packages/core/src/agents/prompts.ts`  
 **Change**:
 - Add new exported constant:
+
   ```typescript
   export const COMPACT_CALIBRATION = `Only report findings you are 80%+ confident about based on the actual code shown. Do not flag stylistic preferences or hypothetical edge cases.`;
   ```
 - Add builder function:
+
   ```typescript
   export function buildCompactCalibration(): string {
     return COMPACT_CALIBRATION;
@@ -119,25 +132,30 @@ export async function runWithConcurrency<T>(
 **Estimate**: 3 min
 
 ### 3.2 Add compact prompts tests
+
 **File**: `packages/core/src/agents/prompts.test.ts`  
 **Change**:
 - Add test: `'COMPACT_CALIBRATION contains confidence threshold'`
+
   ```typescript
   expect(COMPACT_CALIBRATION).toContain('80%');
   ```
 - Add test: `'COMPACT_CALIBRATION is shorter than REVIEW_CALIBRATION'`
+
   ```typescript
   expect(COMPACT_CALIBRATION.length).toBeLessThan(REVIEW_CALIBRATION.length);
   ```
 - Add test: `'buildCompactCalibration returns COMPACT_CALIBRATION'`
-**Estimate**: 5 min
+  **Estimate**: 5 min
 
 ## Phase 4: Workflow Agent Refactoring (depends on Phases 1, 2, 3)
 
 ### 4.1 Refactor WorkflowReviewInput to accept providerChain
+
 **File**: `packages/core/src/agents/workflow.ts`  
 **Change**:
 - Update `WorkflowReviewInput`:
+
   ```typescript
   export interface WorkflowReviewInput {
     diff: string;
@@ -156,12 +174,14 @@ export async function runWithConcurrency<T>(
 - Add import: `COMPACT_CALIBRATION` from `./prompts.js`
 - Remove import: `generateTextWithTimeout`
 - Remove import: `createModel`
-**Estimate**: 5 min
+  **Estimate**: 5 min
 
 ### 4.2 Implement sequential batching and compact prompts in workflow
+
 **File**: `packages/core/src/agents/workflow.ts`  
 **Change**:
 - Replace the specialist execution block (lines 100-136) with:
+
   ```typescript
   const concurrency = input.reviewConcurrency ?? 2;
   const delayMs = input.reviewDelayMs ?? 0;
@@ -189,12 +209,14 @@ export async function runWithConcurrency<T>(
 - Remove `languageModel` variable
 - Update synthesis call to use `generateWithFallback` with `input.providerChain`
 - Update provider/model in `parseReviewResponse` call to use `providerChain[0]` values
-**Estimate**: 20 min
+  **Estimate**: 20 min
 
 ### 4.3 Update workflow tests for new interface
+
 **File**: `packages/core/src/agents/workflow.test.ts`  
 **Change**:
 - Update `makeInput()` to use `providerChain` instead of `provider/model/apiKey`:
+
   ```typescript
   providerChain: [{ provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: 'sk-test-key' }],
   ```
@@ -214,14 +236,16 @@ export async function runWithConcurrency<T>(
   - `'respects reviewConcurrency setting'`
   - `'respects reviewDelayMs setting'`
   - `'uses generateWithFallback for each specialist call'`
-**Estimate**: 30 min
+    **Estimate**: 30 min
 
 ## Phase 5: Consensus Agent Refactoring (depends on Phases 1, 2)
 
 ### 5.1 Refactor ConsensusReviewInput for concurrency and fallback
+
 **File**: `packages/core/src/agents/consensus.ts`  
 **Change**:
 - Update `ConsensusReviewInput`:
+
   ```typescript
   export interface ConsensusReviewInput {
     diff: string;
@@ -236,6 +260,7 @@ export async function runWithConcurrency<T>(
   }
   ```
 - Update `ConsensusModelConfig` to include optional fallback providers:
+
   ```typescript
   export interface ConsensusModelConfig {
     provider: LLMProvider;
@@ -244,15 +269,17 @@ export async function runWithConcurrency<T>(
     stance: ConsensusStance;
   }
   ```
+
   (No change to ConsensusModelConfig — fallback uses single-entry chain per model)
 - Replace `Promise.allSettled(votePromises)` with `runWithConcurrency` call
 - Replace `generateTextWithTimeout` with `generateWithFallback` (single-entry provider chain per model config)
 - Apply `reviewConcurrency` (default: 1) and `reviewDelayMs` (default: 0)
 - Remove `createModel` import (fallback handles this)
 - Update result collection to map `FallbackResult`
-**Estimate**: 15 min
+  **Estimate**: 15 min
 
 ### 5.2 Update consensus tests for new interface
+
 **File**: `packages/core/src/agents/consensus.test.ts`  
 **Change**:
 - Update mock setup: mock `generateWithFallback` instead of `generateText`
@@ -264,14 +291,16 @@ export async function runWithConcurrency<T>(
   - `'respects reviewDelayMs setting'`
   - `'uses generateWithFallback for each vote call'`
 - Consensus does NOT use compact prompts (each stance needs full context)
-**Estimate**: 20 min
+  **Estimate**: 20 min
 
 ## Phase 6: Pipeline Wiring (depends on Phases 4, 5)
 
 ### 6.1 Pass concurrency config and provider chain to agents
+
 **File**: `packages/core/src/pipeline.ts`  
 **Change**:
 - Update the workflow case (lines 234-246) to pass new fields:
+
   ```typescript
   case 'workflow':
     result = await runWorkflowReview({
@@ -288,6 +317,7 @@ export async function runWithConcurrency<T>(
     break;
   ```
 - Update the consensus case (lines 248-277) to pass new fields:
+
   ```typescript
   case 'consensus':
     result = await runConsensusReview({
@@ -304,6 +334,7 @@ export async function runWithConcurrency<T>(
     break;
   ```
 - Add helper function `buildProviderChain(input: ReviewInput): FallbackProvider[]`:
+
   ```typescript
   function buildProviderChain(input: ReviewInput): FallbackProvider[] {
     if (input.providerChain && input.providerChain.length > 0) {
@@ -320,9 +351,10 @@ export async function runWithConcurrency<T>(
   }
   ```
 - Add import for `FallbackProvider` type
-**Estimate**: 15 min
+  **Estimate**: 15 min
 
 ### 6.2 Update pipeline tests
+
 **File**: `packages/core/src/pipeline.test.ts`  
 **Change**:
 - Verify `runWorkflowReview` is called with `providerChain` instead of flat provider fields
@@ -332,39 +364,41 @@ export async function runWithConcurrency<T>(
 - Add test: `'passes reviewDelayMs from settings to consensus agent'`
 - Add test: `'builds providerChain from single provider fields when no chain exists'`
 - Add test: `'builds providerChain from providerChain when available'`
-**Estimate**: 15 min
+  **Estimate**: 15 min
 
 ## Phase 7: Verification (depends on all above)
 
 ### 7.1 Run full test suite
+
 **Command**: `pnpm test`  
 **Verify**:
 - All existing tests pass
 - New tests pass
 - No TypeScript errors (`pnpm typecheck`)
 - Biome lint passes (`pnpm lint`)
-**Estimate**: 5 min
+  **Estimate**: 5 min
 
 ### 7.2 Manual verification with Groq free tier
+
 **Command**: `ghagga review --provider groq --mode workflow --concurrency 1 --delay 500`  
 **Verify**:
 - No 413 errors
 - Review completes successfully
 - Progress output shows sequential specialist execution
-**Estimate**: 10 min
+  **Estimate**: 10 min
 
 ## Summary
 
-| Phase | Tasks | Files | Est. Time |
-|-------|-------|-------|-----------|
-| 1. Utilities & Types | 3 | 3 | 28 min |
-| 2. Fallback Enhancement | 2 | 2 | 10 min |
-| 3. Compact Prompts | 2 | 2 | 8 min |
-| 4. Workflow Refactoring | 3 | 2 | 55 min |
-| 5. Consensus Refactoring | 2 | 2 | 35 min |
-| 6. Pipeline Wiring | 2 | 2 | 30 min |
-| 7. Verification | 2 | 0 | 15 min |
-| **Total** | **16** | **11** | **~3 hours** |
+| Phase                    | Tasks  | Files  | Est. Time    |
+| ------------------------ | ------ | ------ | ------------ |
+| 1. Utilities & Types     | 3      | 3      | 28 min       |
+| 2. Fallback Enhancement  | 2      | 2      | 10 min       |
+| 3. Compact Prompts       | 2      | 2      | 8 min        |
+| 4. Workflow Refactoring  | 3      | 2      | 55 min       |
+| 5. Consensus Refactoring | 2      | 2      | 35 min       |
+| 6. Pipeline Wiring       | 2      | 2      | 30 min       |
+| 7. Verification          | 2      | 0      | 15 min       |
+| **Total**                | **16** | **11** | **~3 hours** |
 
 ## Execution Order
 

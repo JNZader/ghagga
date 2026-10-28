@@ -25,7 +25,7 @@
 >   ghagga **no está deployado**) — ver su entrada abajo, **ya no es "verificar Render"**.
 > - 5 PRs Dependabot resueltas (4 merge + migración TS6 #246). `actions/checkout` v6 +
 >   `action.yml` node24 (deprecation Node 20).
->
+
 > **Sprint de CI (2026-06-16) — al re-habilitar Actions afloraron 2 workflows rotos:**
 > - deploy-pages.yml (#249): orden `Setup pnpm` antes de `setup-node cache:pnpm`. Verde.
 > - docker.yml/server Dockerfile (#250 types + #251 templates): 2 bugs latentes tapados
@@ -40,7 +40,7 @@
 >   backend, no solo el canary del dashboard.
 > - Lint debt (#254): biome organizeImports en 2 tests de esta sesión. Fix. Quedan
 >   ~250 warnings pre-existentes (no bloquean).
->
+
 > **Gotchas del release (para la próxima):** el publish.yml exige **Actions habilitadas
 > en el repo** + **NPM_TOKEN válido** (granular bypass-2FA o automation). Trusted
 > Publishing bloqueado (pnpm no soporta OIDC, pnpm#9812). Repo público = Actions gratis.
@@ -56,7 +56,7 @@
 > - `apps/action/Dockerfile` (--filter names equivocados + dockerignore, dormido).
 > - cleanup de los ~250 biome warnings.
 > - ~~advisory: `npm install -g ... 2>/dev/null || true` en `apps/server/Dockerfile` enmascara fallos del install global~~ ✅ **RESUELTO 2026-06-18, PR #263**: `--loglevel=error` en vez de `2>/dev/null` → los fallos reales del install se ven en el build log; `|| true` se mantiene (providers opcionales). docker build verificado, 3vr CLEAN.
->
+
 > **PRÓXIMA FEATURE → 3.1.0:** issue-triage agent (webhook `issues` + label-gate →
 > diagnostic + memory dedup + cola de aprobación en dashboard + GH Projects). Diseño
 > completo en engram. Ref: claude.ai/share/9e6b1461.
@@ -116,7 +116,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 >   Ver ticket abajo.
 > - Paridad byte-exacta de `DiffFile.content` verificada (Buffer.equals) → cero cambio en
 >   prompts LLM.
->
+
 > Lo que sigue de esta sección queda como histórico (el estado que describía ya no existe).
 
 **Tipo:** behavior-preserving + arregla bugs latentes. **Riesgo:** medio (corregido a la baja, ver nota).
@@ -138,12 +138,12 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 
 ### Estado actual — 4 parsers independientes y divergentes
 
-| Archivo | Líneas | Qué parsea | Regex clave |
-|---------|-------:|-----------|-------------|
-| `packages/core/src/utils/diff.ts` | 186 | file headers → `DiffFile[]` | `FILE_HEADER_RE = /^diff --git a\/.+ b\/(.+)$/` (`:35`) |
-| `packages/core/src/recursive/patch-extractor.ts` | 151 | file + hunk para aplicar patches | `/^diff --git a\/.+ b\/(.+)$/` (`:86`) + `/^@@ -\d+(?:,\d+)? \+(\d+)/` (`:94`) |
-| `packages/core/src/scope/diff-mapper.ts` | 96 | hunk ranges → símbolos | `HUNK_HEADER_RE = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/` (`:23`) |
-| `packages/core/src/scope/entity-diff.ts` | 268 | hunk + line prefixes por símbolo | `HUNK_RE = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/` (`:61`) |
+| Archivo                                          | Líneas | Qué parsea                       | Regex clave                                                                    |
+| ------------------------------------------------ | -----: | -------------------------------- | ------------------------------------------------------------------------------ |
+| `packages/core/src/utils/diff.ts`                |    186 | file headers → `DiffFile[]`      | `FILE_HEADER_RE = /^diff --git a\/.+ b\/(.+)$/` (`:35`)                        |
+| `packages/core/src/recursive/patch-extractor.ts` |    151 | file + hunk para aplicar patches | `/^diff --git a\/.+ b\/(.+)$/` (`:86`) + `/^@@ -\d+(?:,\d+)? \+(\d+)/` (`:94`) |
+| `packages/core/src/scope/diff-mapper.ts`         |     96 | hunk ranges → símbolos           | `HUNK_HEADER_RE = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/` (`:23`) |
+| `packages/core/src/scope/entity-diff.ts`         |    268 | hunk + line prefixes por símbolo | `HUNK_RE = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/` (`:61`)            |
 
 **Divergencias confirmadas (grep 2026-06-11):**
 - **3 formas distintas de file-header**: dos copian `/^diff --git a\/.+ b\/(.+)$/`, los otros dos no parsean file headers.
@@ -151,11 +151,13 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 - **NINGUNO maneja paths con espacios ni quoted** (`diff --git "a/x y" "b/x y"`) → verificado: el grep de quoted-path handling da vacío. Esos archivos **desaparecen del review** sin warning (bug MEDIUM del audit: CORE-M6, MEM-relacionados CORE-M8/M9 son consecuencia de coordenadas old/new mal mapeadas en `entity-diff`).
 
 ### Bugs que la unificación cierra (todos del audit, sin arreglar aún)
+
 - **CORE-M6** (`diff.ts:35`): paths quoted/con espacios dropeados del review y de las métricas.
 - **CORE-M9** (`entity-diff.ts:80-86`): deletions comparadas contra rangos de símbolo del lado NEW → clasificación cosmetic-vs-logic incorrecta cuando old/new divergen.
 - **CORE-M8** (`entity-diff.ts:168-187`): `computeSimilarity` dice LCS pero compara char por posición (no es de diff parsing pero vive en el mismo archivo, atacarlo en el mismo SDD).
 
 ### Approach propuesto
+
 1. Crear `packages/core/src/diff/` con UN modelo: `parseUnifiedDiff(raw): ParsedDiff` que produzca
    `{ files: [{ oldPath, newPath, hunks: [{ oldStart, oldCount, newStart, newCount, lines }] }] }`.
    - Un solo file-header parser que maneje: forma normal, paths con espacios, **forma quoted**
@@ -168,6 +170,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
    finos sobre el modelo, para no romper sus callers de golpe (migración incremental).
 
 ### Estrategia de testing (CRÍTICA — es lo que hace seguro el refactor)
+
 - Antes de tocar nada: **golden tests** sobre los 4 parsers actuales con un corpus de diffs reales
   (incluí: paths con espacios, quoted, renames, binarios, hunks `@@ -0,0 +1,N @@`, multi-hunk,
   CRLF). Capturar el output actual como baseline.
@@ -177,6 +180,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   entidad antes y después.
 
 ### Riesgos
+
 - `entity-diff` mezcla coordenadas old/new (CORE-M9) — al unificar hay que decidir la semántica
   correcta y eso CAMBIA comportamiento (arregla el bug). Documentar el cambio explícitamente.
 - El recursive patch-extractor aplica patches virtuales — un error de off-by-one rompe la
@@ -217,13 +221,14 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 >    uniformes (blast-radius y el dispatch conservan sus catch bespoke).
 > 5. Bonus: dedupe del shape `FailedStep` — `pipeline/state.ts` ahora lo deriva de
 >    `ReviewResult['failedSteps']` (no puede divergir del tipo público).
->
+
 > Lo que sigue queda como histórico (el estado que describía ya no existe).
 
 **Tipo:** behavior-preserving puro (cosmético estructural). **Riesgo:** alto (es EL motor).
 **Tamaño:** 1 SDD mediano. **Modelo:** Fable (no es seguridad, pero el 4vr sí por ser core crítico).
 
 ### Estado actual
+
 - `reviewPipeline` va de `pipeline.ts:150` a `:1078` (la próxima función es `resolveAiEnabled` en `:1079`)
   = **~928 líneas en una sola función**. El archivo entero son 1505 líneas.
 - Tiene **~13 steps opcionales inline**, cada uno un bloque `try/catch` que muta `result` y pushea a
@@ -232,12 +237,14 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   enhance, trust, exploitability, recursive re-review, doc-validation, ranking, code-intel, etc.
 
 ### Por qué duele (no es solo estético)
+
 - La resiliencia (degradar graceful con `failedSteps`) es un PUNTO FUERTE real — pero está
   implícita y repetida 13 veces. No es testeable por step de forma aislada.
 - Inconsistencia detectada en el audit: solo `PASSED` baja a `PARTIAL` ante fallos (`:1065`); un
   `FAILED`/`NEEDS_HUMAN_REVIEW` con steps degradados no da señal de cobertura incompleta.
 
 ### Approach propuesto
+
 1. Definir un contrato `PipelineStep` uniforme: `{ name, run(ctx): Promise<Partial<Result>>, degrade(err, ctx): void }`.
 2. Extraer cada bloque inline a su propio `PipelineStep` (un archivo por step en `pipeline/steps/`).
    El orquestador queda como una lista de steps + un runner que aplica el patrón try/run/degrade UNA vez.
@@ -246,6 +253,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 4. Comportamiento idéntico: mismo orden, mismos side-effects sobre `result`, mismo output.
 
 ### Estrategia de testing
+
 - `pipeline.test.ts` ya existe (es uno de los que tiene fallas pre-existentes — ARREGLAR ESO PRIMERO,
   ver backlog). Antes de partir: snapshot del `ReviewResult` completo para un set de inputs
   representativos (cada step on/off, cada degradación forzada).
@@ -253,6 +261,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 - Bonus: ahora cada step es testeable aislado — agregar tests por step que hoy no existen.
 
 ### Riesgo
+
 - Es el corazón del producto. NO hacerlo en el mismo PR que ningún otro cambio. Rama dedicada,
   4vr completo, y NO mergear sin canary verde. El valor es mantenibilidad, no funcionalidad —
   así que el listón de "cero cambio de comportamiento" es absoluto.
@@ -262,6 +271,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 ## BACKLOG MENOR (acumulado en los 4 sprints)
 
 ### Seguridad 🔐 (Opus)
+
 - **Engram backend sin decay**: `engram.ts:80-98` (search), `:158-182` (list), `:185-200` (get) no
   aplican `computeStrength`. SQLite y ahora Postgres (sprint 4) sí. Cerrar la paridad o documentar
   que Engram delega el decay al server remoto.
@@ -274,6 +284,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   los 5 agentes (`simple/workflow/consensus/diagnostic/fan-out`).
 
 ### Correctness
+
 - ~~**22 fallas pre-existentes en `ghagga-core`**~~ ✅ **RESUELTO 2026-06-11, PR #209** (`950d2723`, 3vr).
   Diagnóstico: 2 bugs reales de producción (semantic-diff: precedencia del patrón export anulaba
   function_added/removed/modified; taxonomy: `uses` duplicado en relationship+fact) + 6 grupos de
@@ -326,15 +337,15 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
      reporta como "1 import added, 1 import modified".
   2. Una class modificada se reporta como `function_modified` (`semantic-diff/index.ts:312` — el
      union `EntityChangeKind` no tiene `class_modified`).
-  Arreglarlos = delta de comportamiento observable → actualizar `parity-extract-semantic-diff.test.ts`
-  (la copia frozen los reproduce) y el changelog al hacerlo.
-  ✅ **RESUELTO 2026-06-12, PR #219** (`f78f835`, 3vr): union ampliado con
-  `class_modified`/`import_modified`/`export_modified`, ternarios de 3 ramas, buildSummary con
-  modifiedKinds correctos. Bonus descubierto en el fix: (cara B) toda function modificada también
-  contaba en "N class modified", y los imports/exports MODIFICADOS eran alcanzables y se reportaban
-  `*_removed`. Harness convertido a divergencia confinada con evidencia estructural por par
-  (precedente `assertMarkerPathDivergence`); 4 snapshots re-blessed auditados (solo
-  `export_removed→export_modified` + recuentos). Semver minor, changelog incluido.
+     Arreglarlos = delta de comportamiento observable → actualizar `parity-extract-semantic-diff.test.ts`
+     (la copia frozen los reproduce) y el changelog al hacerlo.
+     ✅ **RESUELTO 2026-06-12, PR #219** (`f78f835`, 3vr): union ampliado con
+     `class_modified`/`import_modified`/`export_modified`, ternarios de 3 ramas, buildSummary con
+     modifiedKinds correctos. Bonus descubierto en el fix: (cara B) toda function modificada también
+     contaba en "N class modified", y los imports/exports MODIFICADOS eran alcanzables y se reportaban
+     `*_removed`. Harness convertido a divergencia confinada con evidencia estructural por par
+     (precedente `assertMarkerPathDivergence`); 4 snapshots re-blessed auditados (solo
+     `export_removed→export_modified` + recuentos). Semver minor, changelog incluido.
 - **Limitación documentada de autoridad de path en headers malformados** (SDD unify-diff-parsers,
   `src/diff/parse.ts:17-19`): en el header unquoted `diff --git a/x b/y`, un path con ` b/` literal
   es ambiguo — gana la ÚLTIMA ocurrencia (mismo boundary que la regex histórica). Y cuando el header
@@ -380,7 +391,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   con testcontainers (`postgres:16-alpine`) que valida que `to_tsquery('english')` acepta el output de
   `buildTsQuery` (13 inputs edge + probe tsvector que espeja el SQL de `searchObservations`, no la función).
   Aislamiento doble-barrera: `*.integration.test.ts` excluido del `test` normal (`...configDefaults.exclude`)
-  + config y script `test:integration` separados (no en `turbo.json`) → CI sin Docker intacto. 3vr aprobado.
+  - config y script `test:integration` separados (no en `turbo.json`) → CI sin Docker intacto. 3vr aprobado.
 - ~~**Matrix jobs comparten cache key** (sprint 1)~~ ❌ **FALSO PROBLEMA — verificado 2026-06-13, NO tocar**:
   la key compartida `ghagga-${tool}-${RUNNER_OS}` (`apps/action/src/tools/execution.ts:78,96`) es INTENCIONAL —
   cachea binarios INMUTABLES en paths fijos (trivy/pmd/hadolint) para reusarlos entre jobs. El segundo
@@ -405,6 +416,7 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
   el caso decrypt-failure por consistencia.
 
 ### Dashboard
+
 - **DSH-A5**: el botón "Validate" del gateway no manda `gatewayUrl` → server responde `valid:true`
   siempre. Toca el path SSRF-validado → 🔐 Opus.
 - ~~**DSH-A6**: `AuthCallback` valida el token dos veces~~ ✅ **RESUELTO 2026-06-13, PR #231** (5vr):
@@ -432,9 +444,8 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 
 ## Cómo encarar — plan DX-first (reordenado 2026-06-11)
 
-> Contexto de la decisión: la app no está en uso → la deuda de *producción* (seguridad runtime)
+> Contexto de la decisión: la app no está en uso → la deuda de _producción_ (seguridad runtime)
 > pierde urgencia y el criterio pasa a ser DX puro: qué hace el desarrollo más rápido y confiable.
-
 1. ~~**Mergear** #203→#206 + acción SSRF (#207)~~ ✅ 2026-06-11, canary verde.
 2. ~~**22 fallas pre-existentes de core**~~ ✅ 2026-06-11, PR #209 — core 2702/2702.
 3. ~~**Fase 0 DX**: lint a cero + typecheck verde + hook restaurado (PR #210), notas trackeadas,
@@ -466,7 +477,6 @@ Hay un `// SECURITY TODO(sprint-2 merge)` en el sitio exacto. Al resolver el mer
 
 Estos ítems importan cuando haya tráfico real; hoy no bloquean nada. El día que esto vaya a
 producción con usuarios, esta lista ES el sprint previo:
-
 - Engram backend sin decay (paridad con SQLite/Postgres)
 - 2 pools `createDatabaseFromEnv` con leak + type-guard en `enqueueReview`
 - `checklistContext` wrap preventivo (si se wirea a settings del repo)

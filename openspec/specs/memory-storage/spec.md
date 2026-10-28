@@ -35,10 +35,7 @@ export interface MemoryStorage {
     filePaths?: string[];
   }): Promise<MemoryObservationRow>;
 
-  createSession(data: {
-    project: string;
-    prNumber?: number;
-  }): Promise<{ id: number }>;
+  createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }>;
 
   endSession(sessionId: number, summary: string): Promise<void>;
 
@@ -171,13 +168,13 @@ The `file_paths` column MUST store data as a JSON-encoded string (e.g., `'["src/
 
 The system MUST provide a `PostgresMemoryStorage` class in `apps/server/src/memory/postgres.ts` that implements the `MemoryStorage` interface by wrapping existing `ghagga-db` query functions:
 
-| Interface Method | Delegates To |
-|---|---|
-| `searchObservations` | `ghagga-db.searchObservations` |
-| `saveObservation` | `ghagga-db.saveObservation` |
-| `createSession` | `ghagga-db.createMemorySession` |
-| `endSession` | `ghagga-db.endMemorySession` |
-| `close` | No-op (PostgreSQL connection is managed externally) |
+| Interface Method     | Delegates To                                        |
+| -------------------- | --------------------------------------------------- |
+| `searchObservations` | `ghagga-db.searchObservations`                      |
+| `saveObservation`    | `ghagga-db.saveObservation`                         |
+| `createSession`      | `ghagga-db.createMemorySession`                     |
+| `endSession`         | `ghagga-db.endMemorySession`                        |
+| `close`              | No-op (PostgreSQL connection is managed externally) |
 
 The constructor MUST accept the Drizzle `Database` instance (the existing `db` parameter used throughout the server).
 
@@ -523,7 +520,6 @@ The system MUST provide a one-time backfill job that re-embeds all existing obse
 ### CC1: Graceful Degradation
 
 If memory initialization fails at any point (file permission errors, WASM load failure, sql.js import failure, corrupted database file, etc.), the review MUST still proceed without memory. Specifically:
-
 - `SqliteMemoryStorage.create()` SHOULD be wrapped in a try/catch at the call site (CLI and Action). On failure, `memoryStorage` MUST be set to `undefined` and a warning MUST be logged.
 - The pipeline's existing graceful degradation in `searchMemorySafe` and `persistReviewObservations` MUST remain: errors are caught, logged as warnings, and the pipeline continues.
 - Memory failures MUST NOT cause the review to fail or throw.
@@ -531,7 +527,6 @@ If memory initialization fails at any point (file permission errors, WASM load f
 ### CC2: sql.js WASM Loading
 
 The sql.js WASM binary (~1MB) MUST be loadable in both environments:
-
 - **CLI** (direct Node.js): sql.js loads its WASM binary from its npm package's `dist/` directory by default. This MUST work without special configuration.
 - **Action** (ncc-bundled): The Action uses `@vercel/ncc` for bundling. The WASM binary MUST be included as an asset. If ncc cannot inline the WASM, the `locateFile` option of sql.js MUST be used to load it from a known sibling path.
 
@@ -856,6 +851,7 @@ Then each URL MUST be normalized to the corresponding Expected Project ID
 14. All memory failures (WASM load, corrupted DB, file permissions) degrade gracefully with warnings, never breaking the review
 
 ---
+
 ---
 
 ## Memory Management Extension
@@ -916,16 +912,16 @@ export interface MemoryObservationDetail {
   project: string;
   topicKey: string | null;
   revisionCount: number;
-  createdAt: string;   // ISO 8601
-  updatedAt: string;   // ISO 8601
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 export interface MemoryStats {
   totalObservations: number;
   byType: Record<string, number>;
   byProject: Record<string, number>;
-  oldestObservation: string | null;  // ISO 8601, null if no observations
-  newestObservation: string | null;  // ISO 8601, null if no observations
+  oldestObservation: string | null; // ISO 8601, null if no observations
+  newestObservation: string | null; // ISO 8601, null if no observations
 }
 ```
 
@@ -972,7 +968,6 @@ This trigger MUST be appended to the existing `SCHEMA_SQL` alongside the existin
 ##### R14.4: getStats
 
 Three queries for total/date range, count by type, and count by project.
-
 - MUST return a `MemoryStats` object.
 - If no observations exist, `totalObservations` MUST be 0, `byType` and `byProject` MUST be empty objects, `oldestObservation` and `newestObservation` MUST be `null`.
 
@@ -1000,11 +995,11 @@ A new `memory` command group MUST be registered in `apps/cli/src/index.ts`. The 
 
 ##### R17.1: Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--repo <owner/repo>` | string | (none) | Filter by project field |
-| `--type <type>` | string | (none) | Filter by observation type |
-| `--limit <n>` | number | 20 | Maximum rows to display |
+| Option                | Type   | Defaults | Description                |
+| --------------------- | ------ | -------- | -------------------------- |
+| `--repo <owner/repo>` | string | (none)   | Filter by project field    |
+| `--type <type>`       | string | (none)   | Filter by observation type |
+| `--limit <n>`         | number | 20       | Maximum rows to display    |
 
 ##### R17.2: Output Format
 
@@ -1082,10 +1077,10 @@ Print: `No memory database found. Run "ghagga review" first to build memory.`
 
 ##### R22.1: Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--repo <owner/repo>` | string | (none) | Scope deletion to a single project |
-| `--force` | boolean | false | Skip confirmation prompt |
+| Option                | Type    | Defaults | Description                        |
+| --------------------- | ------- | -------- | ---------------------------------- |
+| `--repo <owner/repo>` | string  | (none)   | Scope deletion to a single project |
+| `--force`             | boolean | false    | Skip confirmation prompt           |
 
 ##### R22.2: Confirmation Flow
 
@@ -1129,16 +1124,16 @@ All command output MUST be plain text. No ANSI color codes, no TUI components, n
 
 #### CC7: Error Exit Codes
 
-| Scenario | Exit Code |
-|----------|-----------|
-| Success (data found and displayed) | 0 |
-| Success (no data / empty results) | 0 |
-| No database file exists | 0 |
-| Observation not found (show/delete) | 1 |
-| Invalid input (bad ID format) | 1 |
-| Non-TTY without --force | 1 |
-| Database open/read error | 1 |
-| Cancelled by user | 0 |
+| Scenario                            | Exit Code |
+| ----------------------------------- | --------- |
+| Success (data found and displayed)  | 0         |
+| Success (no data / empty results)   | 0         |
+| No database file exists             | 0         |
+| Observation not found (show/delete) | 1         |
+| Invalid input (bad ID format)       | 1         |
+| Non-TTY without --force             | 1         |
+| Database open/read error            | 1         |
+| Cancelled by user                   | 0         |
 
 #### CC8: ID Display Format
 
@@ -1791,12 +1786,12 @@ The 5 stub methods in `apps/server/src/memory/postgres.ts` that currently throw 
 
 Each method MUST delegate to the appropriate `ghagga-db` query function:
 
-| Method | Delegates To |
-|--------|-------------|
-| `listObservations(options?)` | New `listMemoryObservations(db, installationId, options)` query |
-| `getObservation(id)` | New `getMemoryObservation(db, installationId, id)` query |
-| `deleteObservation(id)` | `deleteMemoryObservation(db, installationId, id)` (R26) |
-| `getStats()` | New `getMemoryStats(db, installationId)` query |
+| Method                        | Delegates To                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `listObservations(options?)`  | New `listMemoryObservations(db, installationId, options)` query                                               |
+| `getObservation(id)`          | New `getMemoryObservation(db, installationId, id)` query                                                      |
+| `deleteObservation(id)`       | `deleteMemoryObservation(db, installationId, id)` (R26)                                                       |
+| `getStats()`                  | New `getMemoryStats(db, installationId)` query                                                                |
 | `clearObservations(options?)` | `clearMemoryObservationsByProject` (R27) or `clearAllMemoryObservations` (R28) depending on `options.project` |
 
 The `PostgresMemoryStorage` constructor MUST be extended to accept an `installationId: number` parameter (or the adapter must receive it per-call via the API route context).
@@ -2043,7 +2038,7 @@ Three new mutation hooks MUST be added to `apps/dashboard/src/lib/api.ts`:
 #### R36.1: useDeleteObservation
 
 ```typescript
-export function useDeleteObservation()
+export function useDeleteObservation();
 ```
 
 MUST:
@@ -2055,7 +2050,7 @@ MUST:
 #### R36.2: useClearRepoMemory
 
 ```typescript
-export function useClearRepoMemory()
+export function useClearRepoMemory();
 ```
 
 MUST:
@@ -2067,7 +2062,7 @@ MUST:
 #### R36.3: usePurgeAllMemory
 
 ```typescript
-export function usePurgeAllMemory()
+export function usePurgeAllMemory();
 ```
 
 MUST:
@@ -2168,7 +2163,6 @@ The confirmation modals MUST:
 ### R39: Dashboard UI — Success Feedback
 
 After a successful destructive operation, the UI MUST provide clear feedback:
-
 - **Single delete**: A brief toast/notification saying "Observation deleted" (auto-dismiss after 3-5 seconds)
 - **Clear repo**: A toast saying "Cleared {N} observations from {repoName}" (auto-dismiss after 3-5 seconds)
 - **Purge all**: A toast saying "Purged {N} observations from all repositories" (auto-dismiss after 5 seconds)
@@ -2242,7 +2236,6 @@ The TanStack Query `refetchOnWindowFocus` behavior SHOULD handle stale data when
 #### CC11: Empty States
 
 After clearing all observations for a repo or purging all memory, the UI MUST display an appropriate empty state rather than showing stale data or a blank page.
-
 - After clearing a repo: the session list for that repo SHOULD show an empty message (e.g., "No memory sessions for this repository")
 - After purging all: the Memory page SHOULD show a global empty state (e.g., "No memory yet. Memory builds as GHAGGA reviews your pull requests.")
 
@@ -2372,7 +2365,6 @@ This extension MUST NOT add any new npm dependencies to any package. All functio
 > **Depends on**: Dashboard Memory Management extension above (which implemented delete/clear/purge + ConfirmDialog + Toast)
 
 This section defines two areas of change:
-
 1. **Backend**: Expand the memory significance filter to include `medium` severity findings, add a `severity` column to the observation data model (both PostgreSQL and SQLite), and propagate severity through the persistence and query pipeline.
 
 2. **Dashboard**: Enhance the Memory page with severity badges, PR links, an observation detail modal, stats bar, severity filter, and sort options — transforming the page from a basic observation browser into a comprehensive memory management interface.
@@ -2639,7 +2631,6 @@ Each `SessionItem` MUST display a PR link (e.g., "PR #42") linking to `https://g
 ### R49: Dashboard — Enhanced ObservationCard Display
 
 Each `ObservationCard` MUST be enhanced with the following display improvements:
-
 1. **Revision count badge**: When `revisionCount > 1`, display a badge like "3 revisions"
 2. **File path chips**: Display file paths as styled chips/tags (not plain text)
 3. **Content styling**: Observation content MUST use `font-mono` for code-like formatting with `whitespace-pre-wrap`
@@ -2841,7 +2832,6 @@ The sort MUST be applied client-side after filtering.
 ### R54: Dashboard — SessionItem Enhancements
 
 Each `SessionItem` in the Memory page MUST be enhanced with:
-
 1. **PR link**: Clickable link to the GitHub PR (R48)
 2. **Severity summary**: Small colored dots or count text showing the distribution of severities in that session (e.g., "2● 3● 1●" with critical=red, high=orange, medium=yellow dots)
 
@@ -3022,6 +3012,7 @@ The observation detail modal MUST follow the same portal/overlay pattern establi
 86. Existing tests continue passing
 
 ---
+
 ---
 
 ## Extension: Engram Memory Adapter — Shared Memory Across the Developer Ecosystem
@@ -3337,15 +3328,15 @@ The adapter MUST include a bidirectional mapping layer that translates between G
 
 When saving, the adapter MUST map GHAGGA fields to Engram fields:
 
-| GHAGGA Field | Engram Field | Mapping |
-|---|---|---|
-| `type` | `type` | Direct |
-| `title` | `title` | Direct |
-| `content` | `content` | Wrapped in structured JSON with `source`, `body`, `severity`, `filePaths`, and `project` |
-| `topicKey` | `topic_key` | Rename |
-| `project` | `project` | Direct |
-| `filePaths` | (in content) | Encoded in structured content JSON |
-| `severity` | (in content) | Encoded in structured content JSON |
+| GHAGGA Field | Engram Field | Mapping                                                                                  |
+| ------------ | ------------ | ---------------------------------------------------------------------------------------- |
+| `type`       | `type`       | Direct                                                                                   |
+| `title`      | `title`      | Direct                                                                                   |
+| `content`    | `content`    | Wrapped in structured JSON with `source`, `body`, `severity`, `filePaths`, and `project` |
+| `topicKey`   | `topic_key`  | Rename                                                                                   |
+| `project`    | `project`    | Direct                                                                                   |
+| `filePaths`  | (in content) | Encoded in structured content JSON                                                       |
+| `severity`   | (in content) | Encoded in structured content JSON                                                       |
 
 The structured content JSON MUST follow the format:
 

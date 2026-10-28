@@ -115,7 +115,6 @@ The server MUST reject callbacks older than `CALLBACK_SECRET_TTL_MS` (11 minutes
 ### R4 (P0): HMAC Verification on Callback
 
 The server MUST export a `verifyCallbackSignature(callbackId: string, payload: string, signatureHeader: string): boolean` function that verifies the runner's callback signature. The verification MUST follow this sequence:
-
 1. **Extract timestamp**: Parse the timestamp from the `callbackId` (everything after the last `.`). If no `.` exists, return `false`.
 2. **Check TTL**: If `Date.now() - timestamp > CALLBACK_SECRET_TTL_MS`, return `false`.
 3. **Derive secret**: Compute `deriveCallbackSecret(callbackId)`.
@@ -180,7 +179,6 @@ The function MUST use timing-safe comparison to prevent timing attacks.
 ### R5 (P0): Secret Transmission via Workflow Dispatch
 
 The derived secret MUST be transmitted to the runner via the existing workflow dispatch mechanism. Specifically:
-
 1. `dispatchWorkflow()` MUST generate the `callbackId` with embedded timestamp (R2).
 2. `dispatchWorkflow()` MUST derive the secret using `deriveCallbackSecret(callbackId)` (R1).
 3. The derived secret MUST be included in the `WorkflowDispatchInputs.callbackSecret` field.
@@ -215,7 +213,6 @@ The derived secret MUST be transmitted to the runner via the existing workflow d
 ### R6 (P0): Replay Protection
 
 Replayed callbacks MUST be handled safely. The stateless design means the server can re-derive the secret and verify the HMAC for any callback within the TTL window. Replay protection is provided by the downstream Inngest `waitForEvent` correlation mechanism.
-
 1. The server MUST NOT provide one-time-use semantics for callback verification itself.
 2. A replayed callback with a valid signature within the TTL window MUST receive HTTP 200 from the callback endpoint.
 3. The Inngest `waitForEvent` with `match: "data.callbackId"` MUST ensure the replayed event has no effect — the waiting step was already consumed by the first callback.
@@ -249,7 +246,6 @@ Replayed callbacks MUST be handled safely. The stateless design means the server
 ### R7 (P1): Backward Compatibility During Deployment
 
 During the deployment transition, callbacks with old-format `callbackId`s (plain UUID without embedded timestamp) will be in flight. The server SHOULD handle this gracefully.
-
 1. If a `callbackId` contains no `.` separator, `verifyCallbackSignature()` MUST return `false`.
 2. This is acceptable because: (a) the same scenario (redeploy losing in-memory state) already causes callback failure today, and (b) the window is identical (~5 minutes of in-flight callbacks).
 3. The system SHOULD NOT maintain dual-mode verification (checking both old and new formats) because the old format requires in-memory state that no longer exists after the deploy.
@@ -275,7 +271,6 @@ During the deployment transition, callbacks with old-format `callbackId`s (plain
 ### R8 (P0): No In-Memory State
 
 The system MUST NOT use any in-memory `Map`, `Set`, or similar data structure for callback secret storage. All the following MUST be removed from `apps/server/src/github/runner.ts`:
-
 1. The `secretStore` Map (`Map<string, StoredSecret>`).
 2. The `StoredSecret` interface.
 3. The `storeCallbackSecret()` function.
@@ -315,7 +310,6 @@ The replacement functions (`deriveCallbackSecret`, `verifyCallbackSignature`) MU
 ### CC1: Reuse of STATE_SECRET Environment Variable
 
 The system MUST reuse the existing `STATE_SECRET` environment variable (already provisioned on Render for the OAuth web flow). No new environment variables MUST be introduced.
-
 1. `deriveCallbackSecret()` MUST read `process.env.STATE_SECRET` as its HMAC key.
 2. The `STATE_SECRET` variable is already used by `generateState()` and `validateState()` in `apps/server/src/routes/oauth.ts`.
 3. If `STATE_SECRET` is not defined, `deriveCallbackSecret()` MUST throw an error rather than silently producing an insecure derivation.
@@ -348,24 +342,24 @@ All in-memory store code MUST be removed from `apps/server/src/github/runner.ts`
 
 The following MUST be deleted:
 
-| Code Element | Current Location |
-|---|---|
-| `const CALLBACK_SECRET_TTL_MS = 11 * 60 * 1000;` | Line 108 — MUST be **retained** (used by TTL check in `verifyCallbackSignature`) |
-| `interface StoredSecret` | Lines 110-113 — MUST be deleted |
-| `const secretStore = new Map<string, StoredSecret>()` | Line 115 — MUST be deleted |
-| `const cleanupInterval = setInterval(...)` | Lines 118-125 — MUST be deleted |
-| `cleanupInterval.unref()` | Line 128 — MUST be deleted |
-| `storeCallbackSecret()` | Lines 130-138 — MUST be deleted |
-| `verifyAndConsumeSecret()` | Lines 140-197 — MUST be deleted |
-| `secretStore.delete(callbackId)` in `dispatchWorkflow()` error path | Line 364 — MUST be deleted |
+| Code Element                                                        | Current Location                                                                 |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `const CALLBACK_SECRET_TTL_MS = 11 * 60 * 1000;`                    | Line 108 — MUST be **retained** (used by TTL check in `verifyCallbackSignature`) |
+| `interface StoredSecret`                                            | Lines 110-113 — MUST be deleted                                                  |
+| `const secretStore = new Map<string, StoredSecret>()`               | Line 115 — MUST be deleted                                                       |
+| `const cleanupInterval = setInterval(...)`                          | Lines 118-125 — MUST be deleted                                                  |
+| `cleanupInterval.unref()`                                           | Line 128 — MUST be deleted                                                       |
+| `storeCallbackSecret()`                                             | Lines 130-138 — MUST be deleted                                                  |
+| `verifyAndConsumeSecret()`                                          | Lines 140-197 — MUST be deleted                                                  |
+| `secretStore.delete(callbackId)` in `dispatchWorkflow()` error path | Line 364 — MUST be deleted                                                       |
 
 The following MUST be added or retained:
 
-| Code Element | Purpose |
-|---|---|
-| `const CALLBACK_SECRET_TTL_MS = 11 * 60 * 1000;` | Retained — used by `verifyCallbackSignature` for TTL check |
-| `deriveCallbackSecret(callbackId: string): string` | New — deterministic secret derivation |
-| `verifyCallbackSignature(callbackId: string, payload: string, signatureHeader: string): boolean` | New — stateless verification |
+| Code Element                                                                                     | Purpose                                                    |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `const CALLBACK_SECRET_TTL_MS = 11 * 60 * 1000;`                                                 | Retained — used by `verifyCallbackSignature` for TTL check |
+| `deriveCallbackSecret(callbackId: string): string`                                               | New — deterministic secret derivation                      |
+| `verifyCallbackSignature(callbackId: string, payload: string, signatureHeader: string): boolean` | New — stateless verification                               |
 
 #### Scenario: S-CC2.1 — Import update in runner-callback route
 
@@ -437,15 +431,15 @@ The following MUST be added or retained:
 
 ## Acceptance Criteria Summary
 
-| ID | Priority | Requirement | Acceptance Criteria |
-|----|----------|-------------|---------------------|
-| R1 | P0 | Stateless Secret Derivation | `deriveCallbackSecret` computes `HMAC-SHA256(STATE_SECRET, callbackId)` deterministically; output is 64-char hex |
-| R2 | P0 | CallbackId with Embedded Timestamp | Format is `{uuid}.{timestamp_base36}`; `dispatchWorkflow` generates this format |
-| R3 | P0 | TTL Enforcement | Callbacks >11 minutes are rejected based on embedded timestamp; boundary at exactly 11 min rejects |
-| R4 | P0 | HMAC Verification on Callback | `verifyCallbackSignature` re-derives secret, validates sha256= prefix, uses timingSafeEqual; replaces `verifyAndConsumeSecret` |
-| R5 | P0 | Secret Transmission | Derived secret sent via dispatch inputs and `setRunnerSecret`; no `storeCallbackSecret` call |
-| R6 | P0 | Replay Protection | Replayed callbacks pass HMAC within TTL; Inngest `waitForEvent` deduplicates downstream; after TTL, 401 |
-| R7 | P1 | Backward Compatibility | Old-format callbackIds (no timestamp) return `false`; same failure mode as current redeploy scenario |
-| R8 | P0 | No In-Memory State | `secretStore` Map, `StoredSecret`, `storeCallbackSecret`, `verifyAndConsumeSecret`, cleanup interval all removed |
-| CC1 | P0 | Reuse STATE_SECRET | No new env vars; `STATE_SECRET` used for both OAuth state and callback derivation; throws if undefined |
-| CC2 | P0 | Cleanup | All in-memory store code deleted; imports updated in `runner-callback.ts`; `randomBytes` import removed |
+| ID  | Priority | Requirement                        | Acceptance Criteria                                                                                                            |
+| --- | -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| R1  | P0       | Stateless Secret Derivation        | `deriveCallbackSecret` computes `HMAC-SHA256(STATE_SECRET, callbackId)` deterministically; output is 64-char hex               |
+| R2  | P0       | CallbackId with Embedded Timestamp | Format is `{uuid}.{timestamp_base36}`; `dispatchWorkflow` generates this format                                                |
+| R3  | P0       | TTL Enforcement                    | Callbacks >11 minutes are rejected based on embedded timestamp; boundary at exactly 11 min rejects                             |
+| R4  | P0       | HMAC Verification on Callback      | `verifyCallbackSignature` re-derives secret, validates sha256= prefix, uses timingSafeEqual; replaces `verifyAndConsumeSecret` |
+| R5  | P0       | Secret Transmission                | Derived secret sent via dispatch inputs and `setRunnerSecret`; no `storeCallbackSecret` call                                   |
+| R6  | P0       | Replay Protection                  | Replayed callbacks pass HMAC within TTL; Inngest `waitForEvent` deduplicates downstream; after TTL, 401                        |
+| R7  | P1       | Backward Compatibility             | Old-format callbackIds (no timestamp) return `false`; same failure mode as current redeploy scenario                           |
+| R8  | P0       | No In-Memory State                 | `secretStore` Map, `StoredSecret`, `storeCallbackSecret`, `verifyAndConsumeSecret`, cleanup interval all removed               |
+| CC1 | P0       | Reuse STATE_SECRET                 | No new env vars; `STATE_SECRET` used for both OAuth state and callback derivation; throws if undefined                         |
+| CC2 | P0       | Cleanup                            | All in-memory store code deleted; imports updated in `runner-callback.ts`; `randomBytes` import removed                        |

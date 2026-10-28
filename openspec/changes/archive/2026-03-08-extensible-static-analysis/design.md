@@ -179,54 +179,54 @@ The CLI provides a `NodeExecutionContext` (using `child_process`), the action pr
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/core/src/tools/types.ts` | Create | `ToolDefinition`, `ToolCategory`, `ToolName`, `RawToolOutput`, `ExecutionContext`, `TimeBudget` interfaces |
-| `packages/core/src/tools/registry.ts` | Create | `ToolRegistry` class: `register()`, `getAll()`, `getByName()`, `getByTier()`, `validateAll()` |
-| `packages/core/src/tools/resolve.ts` | Create | `resolveActivatedTools()` — tier + detect + settings override resolution logic |
-| `packages/core/src/tools/budget.ts` | Create | `allocateTimeBudget()`, `rolloverBudget()` — time budget allocator |
-| `packages/core/src/tools/orchestrator.ts` | Create | `runToolsWithRegistry()` — registry-driven sequential execution loop with isolation |
-| `packages/core/src/tools/execution.ts` | Create | `NodeExecutionContext` — child_process-based context for CLI/server |
-| `packages/core/src/tools/plugins/semgrep.ts` | Create | Semgrep `ToolDefinition` — adapted from existing `packages/core/src/tools/semgrep.ts` |
-| `packages/core/src/tools/plugins/trivy.ts` | Create | Trivy `ToolDefinition` — adapted from `packages/core/src/tools/trivy.ts` + license scanning |
-| `packages/core/src/tools/plugins/cpd.ts` | Create | CPD `ToolDefinition` — adapted from `packages/core/src/tools/cpd.ts` |
-| `packages/core/src/tools/plugins/gitleaks.ts` | Create | Gitleaks plugin — secret detection |
-| `packages/core/src/tools/plugins/shellcheck.ts` | Create | ShellCheck plugin — shell script linting |
-| `packages/core/src/tools/plugins/markdownlint.ts` | Create | markdownlint-cli2 plugin — Markdown quality |
-| `packages/core/src/tools/plugins/lizard.ts` | Create | Lizard plugin — cyclomatic complexity |
-| `packages/core/src/tools/plugins/ruff.ts` | Create | Ruff plugin — Python linting (auto-detect) |
-| `packages/core/src/tools/plugins/bandit.ts` | Create | Bandit plugin — Python security (auto-detect) |
-| `packages/core/src/tools/plugins/golangci-lint.ts` | Create | golangci-lint plugin — Go analysis (auto-detect) |
-| `packages/core/src/tools/plugins/biome.ts` | Create | Biome plugin — JS/TS linting (auto-detect) |
-| `packages/core/src/tools/plugins/pmd.ts` | Create | PMD full plugin — Java quality (auto-detect, shared install with CPD) |
-| `packages/core/src/tools/plugins/psalm.ts` | Create | Psalm plugin — PHP analysis (auto-detect) |
-| `packages/core/src/tools/plugins/clippy.ts` | Create | Clippy plugin — Rust linting (auto-detect) |
-| `packages/core/src/tools/plugins/hadolint.ts` | Create | Hadolint plugin — Dockerfile linting (auto-detect) |
-| `packages/core/src/tools/plugins/index.ts` | Create | Auto-registers all 15 plugins with the registry |
-| `packages/core/src/types.ts` | Modify | `StaticAnalysisResult` → intersection type; `FindingSource` → `'ai' \| ToolName`; `ReviewSettings` adds `enabledTools?`, `disabledTools?`; `DEFAULT_SETTINGS` updated |
-| `packages/core/src/tools/runner.ts` | Modify | `runStaticAnalysis()` gates on `GHAGGA_TOOL_REGISTRY` flag; new path calls `runToolsWithRegistry()`; `formatStaticAnalysisContext()` iterates `Object.entries()` instead of hardcoded keys; add finding cap (200) |
-| `packages/core/src/pipeline.ts` | Modify | `runStaticAnalysisSafe()` passes new settings fields; step 7 finding merge uses `Object.values()` instead of hardcoded `semgrep`/`trivy`/`cpd`; `createStaticOnlyResult()` + `createSkippedResult()` use dynamic tool list |
-| `packages/core/src/format.ts` | Modify | `SOURCE_LABELS` generated from registry; `formatReviewComment()` renders all sources dynamically |
-| `packages/core/src/index.ts` | Modify | Export new types (`ToolDefinition`, `ToolCategory`, `ToolName`, `RawToolOutput`) and registry |
-| `packages/core/src/tools/semgrep.ts` | Deprecate | Keep for backward compat during migration window; `GHAGGA_TOOL_REGISTRY=false` still uses this |
-| `packages/core/src/tools/trivy.ts` | Deprecate | Same as above |
-| `packages/core/src/tools/cpd.ts` | Deprecate | Same as above |
-| `apps/action/src/tools/orchestrator.ts` | Modify | `runLocalAnalysis()` gates on feature flag; new path creates `ActionsExecutionContext`, calls `runToolsWithRegistry()` |
-| `apps/action/src/tools/execution.ts` | Create | `ActionsExecutionContext` — wraps `@actions/exec` + `@actions/cache` |
-| `apps/action/src/tools/types.ts` | Modify | `ToolName` re-exported from `packages/core`; `TOOL_VERSIONS` kept for backward compat |
-| `apps/action/src/tools/cache.ts` | Modify | `CACHE_PATHS` becomes dynamic (registered via `ToolDefinition.cachePaths`) |
-| `apps/action/src/index.ts` | Modify | Replace per-tool `enable-*` input reading with `enabled-tools`/`disabled-tools` inputs; pass to `runLocalAnalysis()` |
-| `apps/server/src/github/runner.ts` | Modify | `WorkflowDispatchInputs` and `DispatchParams`: replace `enableSemgrep`/`enableTrivy`/`enableCpd` with `enabledTools`/`disabledTools` string fields |
-| `apps/server/src/routes/runner-callback.ts` | Modify | `CallbackPayload.staticAnalysis` already typed as `StaticAnalysisResult` — no change needed (type widens automatically) |
-| `apps/server/src/routes/api/settings.ts` | Modify | `RepoSettingsSchema` adds `enabledTools`, `disabledTools` Zod fields; GET response includes `registeredTools` list; PUT handles translation between old booleans and new arrays |
-| `apps/server/src/inngest/client.ts` | Modify | `ReviewRequestedData.settings` adds `enabledTools?`, `disabledTools?` fields |
-| `apps/server/src/inngest/review.ts` | Modify | Pass `enabledTools`/`disabledTools` to runner dispatch |
-| `packages/db/src/schema.ts` | Modify | `RepoSettings` interface adds `enabledTools?`, `disabledTools?`; `repositories` table: no new columns (stored in existing `settings` JSONB) |
-| `apps/cli/src/index.ts` | Modify | Add `--disable-tool <name>`, `--enable-tool <name>`, `--list-tools` options; deprecation warnings for `--no-semgrep`/`--no-trivy`/`--no-cpd` |
-| `apps/cli/src/commands/review.ts` | Modify | `ReviewOptions` adds `disableTools: string[]`, `enableTools: string[]`; `mergeSettings()` maps to `ReviewSettings.disabledTools`/`enabledTools` |
-| `apps/cli/src/ui/theme.ts` | Modify | `SOURCE_LABELS` generated from registry `getAll().map()` |
-| `apps/cli/src/ui/format.ts` | Modify | `formatMarkdownResult()` renders all sources dynamically instead of hardcoded `['semgrep', 'trivy', 'cpd', 'ai']` |
-| `action.yml` | Modify | Add `enabled-tools` and `disabled-tools` inputs; deprecate `enable-semgrep`, `enable-trivy`, `enable-cpd` |
+| File                                               | Action    | Description                                                                                                                                                                                                                |
+| -------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/tools/types.ts`                 | Create    | `ToolDefinition`, `ToolCategory`, `ToolName`, `RawToolOutput`, `ExecutionContext`, `TimeBudget` interfaces                                                                                                                 |
+| `packages/core/src/tools/registry.ts`              | Create    | `ToolRegistry` class: `register()`, `getAll()`, `getByName()`, `getByTier()`, `validateAll()`                                                                                                                              |
+| `packages/core/src/tools/resolve.ts`               | Create    | `resolveActivatedTools()` — tier + detect + settings override resolution logic                                                                                                                                             |
+| `packages/core/src/tools/budget.ts`                | Create    | `allocateTimeBudget()`, `rolloverBudget()` — time budget allocator                                                                                                                                                         |
+| `packages/core/src/tools/orchestrator.ts`          | Create    | `runToolsWithRegistry()` — registry-driven sequential execution loop with isolation                                                                                                                                        |
+| `packages/core/src/tools/execution.ts`             | Create    | `NodeExecutionContext` — child_process-based context for CLI/server                                                                                                                                                        |
+| `packages/core/src/tools/plugins/semgrep.ts`       | Create    | Semgrep `ToolDefinition` — adapted from existing `packages/core/src/tools/semgrep.ts`                                                                                                                                      |
+| `packages/core/src/tools/plugins/trivy.ts`         | Create    | Trivy `ToolDefinition` — adapted from `packages/core/src/tools/trivy.ts` + license scanning                                                                                                                                |
+| `packages/core/src/tools/plugins/cpd.ts`           | Create    | CPD `ToolDefinition` — adapted from `packages/core/src/tools/cpd.ts`                                                                                                                                                       |
+| `packages/core/src/tools/plugins/gitleaks.ts`      | Create    | Gitleaks plugin — secret detection                                                                                                                                                                                         |
+| `packages/core/src/tools/plugins/shellcheck.ts`    | Create    | ShellCheck plugin — shell script linting                                                                                                                                                                                   |
+| `packages/core/src/tools/plugins/markdownlint.ts`  | Create    | markdownlint-cli2 plugin — Markdown quality                                                                                                                                                                                |
+| `packages/core/src/tools/plugins/lizard.ts`        | Create    | Lizard plugin — cyclomatic complexity                                                                                                                                                                                      |
+| `packages/core/src/tools/plugins/ruff.ts`          | Create    | Ruff plugin — Python linting (auto-detect)                                                                                                                                                                                 |
+| `packages/core/src/tools/plugins/bandit.ts`        | Create    | Bandit plugin — Python security (auto-detect)                                                                                                                                                                              |
+| `packages/core/src/tools/plugins/golangci-lint.ts` | Create    | golangci-lint plugin — Go analysis (auto-detect)                                                                                                                                                                           |
+| `packages/core/src/tools/plugins/biome.ts`         | Create    | Biome plugin — JS/TS linting (auto-detect)                                                                                                                                                                                 |
+| `packages/core/src/tools/plugins/pmd.ts`           | Create    | PMD full plugin — Java quality (auto-detect, shared install with CPD)                                                                                                                                                      |
+| `packages/core/src/tools/plugins/psalm.ts`         | Create    | Psalm plugin — PHP analysis (auto-detect)                                                                                                                                                                                  |
+| `packages/core/src/tools/plugins/clippy.ts`        | Create    | Clippy plugin — Rust linting (auto-detect)                                                                                                                                                                                 |
+| `packages/core/src/tools/plugins/hadolint.ts`      | Create    | Hadolint plugin — Dockerfile linting (auto-detect)                                                                                                                                                                         |
+| `packages/core/src/tools/plugins/index.ts`         | Create    | Auto-registers all 15 plugins with the registry                                                                                                                                                                            |
+| `packages/core/src/types.ts`                       | Modify    | `StaticAnalysisResult` → intersection type; `FindingSource` → `'ai' \| ToolName`; `ReviewSettings` adds `enabledTools?`, `disabledTools?`; `DEFAULT_SETTINGS` updated                                                      |
+| `packages/core/src/tools/runner.ts`                | Modify    | `runStaticAnalysis()` gates on `GHAGGA_TOOL_REGISTRY` flag; new path calls `runToolsWithRegistry()`; `formatStaticAnalysisContext()` iterates `Object.entries()` instead of hardcoded keys; add finding cap (200)          |
+| `packages/core/src/pipeline.ts`                    | Modify    | `runStaticAnalysisSafe()` passes new settings fields; step 7 finding merge uses `Object.values()` instead of hardcoded `semgrep`/`trivy`/`cpd`; `createStaticOnlyResult()` + `createSkippedResult()` use dynamic tool list |
+| `packages/core/src/format.ts`                      | Modify    | `SOURCE_LABELS` generated from registry; `formatReviewComment()` renders all sources dynamically                                                                                                                           |
+| `packages/core/src/index.ts`                       | Modify    | Export new types (`ToolDefinition`, `ToolCategory`, `ToolName`, `RawToolOutput`) and registry                                                                                                                              |
+| `packages/core/src/tools/semgrep.ts`               | Deprecate | Keep for backward compat during migration window; `GHAGGA_TOOL_REGISTRY=false` still uses this                                                                                                                             |
+| `packages/core/src/tools/trivy.ts`                 | Deprecate | Same as above                                                                                                                                                                                                              |
+| `packages/core/src/tools/cpd.ts`                   | Deprecate | Same as above                                                                                                                                                                                                              |
+| `apps/action/src/tools/orchestrator.ts`            | Modify    | `runLocalAnalysis()` gates on feature flag; new path creates `ActionsExecutionContext`, calls `runToolsWithRegistry()`                                                                                                     |
+| `apps/action/src/tools/execution.ts`               | Create    | `ActionsExecutionContext` — wraps `@actions/exec` + `@actions/cache`                                                                                                                                                       |
+| `apps/action/src/tools/types.ts`                   | Modify    | `ToolName` re-exported from `packages/core`; `TOOL_VERSIONS` kept for backward compat                                                                                                                                      |
+| `apps/action/src/tools/cache.ts`                   | Modify    | `CACHE_PATHS` becomes dynamic (registered via `ToolDefinition.cachePaths`)                                                                                                                                                 |
+| `apps/action/src/index.ts`                         | Modify    | Replace per-tool `enable-*` input reading with `enabled-tools`/`disabled-tools` inputs; pass to `runLocalAnalysis()`                                                                                                       |
+| `apps/server/src/github/runner.ts`                 | Modify    | `WorkflowDispatchInputs` and `DispatchParams`: replace `enableSemgrep`/`enableTrivy`/`enableCpd` with `enabledTools`/`disabledTools` string fields                                                                         |
+| `apps/server/src/routes/runner-callback.ts`        | Modify    | `CallbackPayload.staticAnalysis` already typed as `StaticAnalysisResult` — no change needed (type widens automatically)                                                                                                    |
+| `apps/server/src/routes/api/settings.ts`           | Modify    | `RepoSettingsSchema` adds `enabledTools`, `disabledTools` Zod fields; GET response includes `registeredTools` list; PUT handles translation between old booleans and new arrays                                            |
+| `apps/server/src/inngest/client.ts`                | Modify    | `ReviewRequestedData.settings` adds `enabledTools?`, `disabledTools?` fields                                                                                                                                               |
+| `apps/server/src/inngest/review.ts`                | Modify    | Pass `enabledTools`/`disabledTools` to runner dispatch                                                                                                                                                                     |
+| `packages/db/src/schema.ts`                        | Modify    | `RepoSettings` interface adds `enabledTools?`, `disabledTools?`; `repositories` table: no new columns (stored in existing `settings` JSONB)                                                                                |
+| `apps/cli/src/index.ts`                            | Modify    | Add `--disable-tool <name>`, `--enable-tool <name>`, `--list-tools` options; deprecation warnings for `--no-semgrep`/`--no-trivy`/`--no-cpd`                                                                               |
+| `apps/cli/src/commands/review.ts`                  | Modify    | `ReviewOptions` adds `disableTools: string[]`, `enableTools: string[]`; `mergeSettings()` maps to `ReviewSettings.disabledTools`/`enabledTools`                                                                            |
+| `apps/cli/src/ui/theme.ts`                         | Modify    | `SOURCE_LABELS` generated from registry `getAll().map()`                                                                                                                                                                   |
+| `apps/cli/src/ui/format.ts`                        | Modify    | `formatMarkdownResult()` renders all sources dynamically instead of hardcoded `['semgrep', 'trivy', 'cpd', 'ai']`                                                                                                          |
+| `action.yml`                                       | Modify    | Add `enabled-tools` and `disabled-tools` inputs; deprecate `enable-semgrep`, `enable-trivy`, `enable-cpd`                                                                                                                  |
 
 ## Interfaces / Contracts
 
@@ -236,13 +236,31 @@ The CLI provides a `NodeExecutionContext` (using `child_process`), the action pr
 // packages/core/src/tools/types.ts
 
 export type ToolName =
-  | 'semgrep' | 'trivy' | 'cpd' | 'gitleaks' | 'shellcheck'
-  | 'markdownlint' | 'lizard' | 'ruff' | 'bandit' | 'golangci-lint'
-  | 'biome' | 'pmd' | 'psalm' | 'clippy' | 'hadolint';
+  | 'semgrep'
+  | 'trivy'
+  | 'cpd'
+  | 'gitleaks'
+  | 'shellcheck'
+  | 'markdownlint'
+  | 'lizard'
+  | 'ruff'
+  | 'bandit'
+  | 'golangci-lint'
+  | 'biome'
+  | 'pmd'
+  | 'psalm'
+  | 'clippy'
+  | 'hadolint';
 
 export type ToolCategory =
-  | 'security' | 'quality' | 'secrets' | 'complexity'
-  | 'duplication' | 'sca' | 'docs' | 'linting';
+  | 'security'
+  | 'quality'
+  | 'secrets'
+  | 'complexity'
+  | 'duplication'
+  | 'sca'
+  | 'docs'
+  | 'linting';
 
 export type ToolTier = 'always-on' | 'auto-detect';
 
@@ -273,7 +291,12 @@ export interface ToolDefinition {
   install: (ctx: ExecutionContext) => Promise<void>;
 
   /** Run the tool. Returns raw stdout/stderr/exitCode. */
-  run: (ctx: ExecutionContext, repoDir: string, files: string[], timeout: number) => Promise<RawToolOutput>;
+  run: (
+    ctx: ExecutionContext,
+    repoDir: string,
+    files: string[],
+    timeout: number,
+  ) => Promise<RawToolOutput>;
 
   /** Parse raw output into normalized findings. */
   parse: (raw: RawToolOutput, repoDir: string) => ReviewFinding[];
@@ -530,12 +553,22 @@ export const gitleaksPlugin: ToolDefinition = {
   },
 
   async run(ctx, repoDir, _files, timeout) {
-    return ctx.exec('gitleaks', [
-      'detect', '--source', repoDir,
-      '--report-format', 'json',
-      '--report-path', '/tmp/gitleaks.json',
-      '--no-git', '--exit-code', '0',
-    ], { timeoutMs: timeout, allowExitCodes: [0, 1] });
+    return ctx.exec(
+      'gitleaks',
+      [
+        'detect',
+        '--source',
+        repoDir,
+        '--report-format',
+        'json',
+        '--report-path',
+        '/tmp/gitleaks.json',
+        '--no-git',
+        '--exit-code',
+        '0',
+      ],
+      { timeoutMs: timeout, allowExitCodes: [0, 1] },
+    );
   },
 
   parse(raw, _repoDir): ReviewFinding[] {
@@ -547,7 +580,7 @@ export const gitleaksPlugin: ToolDefinition = {
         File: string;
         StartLine: number;
       }>;
-      return results.map(r => ({
+      return results.map((r) => ({
         severity: 'critical' as const,
         category: 'secrets',
         file: r.File,
@@ -608,21 +641,21 @@ apps/action/src/tools/
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | `ToolRegistry` — register, validate, getByTier | Pure unit tests; no I/O |
-| Unit | `resolveActivatedTools()` — all 5 resolution steps | Parametric tests for each scenario in `specs/runner/spec.md:50-86` |
-| Unit | `allocateTimeBudget()` — equal split, minimum enforcement, rollover | Parametric tests with edge cases (25 tools, 1 tool, 0 tools) |
-| Unit | Each plugin's `parse()` function | Fixture-based: sample JSON/XML/text output → expected findings |
-| Unit | Each plugin's `detect()` function (auto-detect) | File list → boolean (per spec scenarios) |
-| Unit | Backward compat: `result.semgrep` type access | TypeScript compile-time test (type assertion) |
-| Unit | `formatStaticAnalysisContext()` with dynamic keys | Finding cap at 200, severity sort order |
-| Integration | Full orchestrator with `MockExecutionContext` | 15 plugins installed, run, parsed; verify `StaticAnalysisResult` shape |
-| Integration | Feature flag toggle | `GHAGGA_TOOL_REGISTRY=false` → old 3-tool path; `true` → registry path |
-| Integration | Settings migration backward compat | `enableSemgrep: false` → semgrep not in activated tools |
-| E2E | CLI `--disable-tool gitleaks` | Spawn CLI process, verify gitleaks absent from output |
-| E2E | CLI `--list-tools` | Verify 15 tools listed with name, category, tier, version |
-| E2E | Action with registry on real runner | GitHub Actions workflow with `GHAGGA_TOOL_REGISTRY=true` |
+| Layer       | What to Test                                                        | Approach                                                               |
+| ----------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Unit        | `ToolRegistry` — register, validate, getByTier                      | Pure unit tests; no I/O                                                |
+| Unit        | `resolveActivatedTools()` — all 5 resolution steps                  | Parametric tests for each scenario in `specs/runner/spec.md:50-86`     |
+| Unit        | `allocateTimeBudget()` — equal split, minimum enforcement, rollover | Parametric tests with edge cases (25 tools, 1 tool, 0 tools)           |
+| Unit        | Each plugin's `parse()` function                                    | Fixture-based: sample JSON/XML/text output → expected findings         |
+| Unit        | Each plugin's `detect()` function (auto-detect)                     | File list → boolean (per spec scenarios)                               |
+| Unit        | Backward compat: `result.semgrep` type access                       | TypeScript compile-time test (type assertion)                          |
+| Unit        | `formatStaticAnalysisContext()` with dynamic keys                   | Finding cap at 200, severity sort order                                |
+| Integration | Full orchestrator with `MockExecutionContext`                       | 15 plugins installed, run, parsed; verify `StaticAnalysisResult` shape |
+| Integration | Feature flag toggle                                                 | `GHAGGA_TOOL_REGISTRY=false` → old 3-tool path; `true` → registry path |
+| Integration | Settings migration backward compat                                  | `enableSemgrep: false` → semgrep not in activated tools                |
+| E2E         | CLI `--disable-tool gitleaks`                                       | Spawn CLI process, verify gitleaks absent from output                  |
+| E2E         | CLI `--list-tools`                                                  | Verify 15 tools listed with name, category, tier, version              |
+| E2E         | Action with registry on real runner                                 | GitHub Actions workflow with `GHAGGA_TOOL_REGISTRY=true`               |
 
 ## Migration / Rollout
 

@@ -43,6 +43,7 @@ All `TODO(R2-#10)` comments in Dockerfiles that reference this pinning work MUST
 - GIVEN `apps/action/Dockerfile` line 20
 - WHEN the image is pinned
 - THEN the line MUST read:
+
   ```
   FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS builder
   ```
@@ -53,6 +54,7 @@ All `TODO(R2-#10)` comments in Dockerfiles that reference this pinning work MUST
 - GIVEN `apps/action/Dockerfile` line 49
 - WHEN the image is pinned
 - THEN the line MUST read:
+
   ```
   FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9
   ```
@@ -63,6 +65,7 @@ All `TODO(R2-#10)` comments in Dockerfiles that reference this pinning work MUST
 - GIVEN `apps/server/Dockerfile` line 13
 - WHEN the image is pinned
 - THEN the line MUST read:
+
   ```
   FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS builder
   ```
@@ -73,6 +76,7 @@ All `TODO(R2-#10)` comments in Dockerfiles that reference this pinning work MUST
 - GIVEN `apps/server/Dockerfile` line 43
 - WHEN the image is pinned
 - THEN the line MUST read:
+
   ```
   FROM node:22-slim@sha256:9c2c405e3ff9b9afb2873232d24bb06367d649aa3e6259cbe314da59578e81e9 AS runner
   ```
@@ -83,6 +87,7 @@ All `TODO(R2-#10)` comments in Dockerfiles that reference this pinning work MUST
 - GIVEN `docker-compose.yml` line 11
 - WHEN the image is pinned
 - THEN the line MUST read:
+
   ```
   image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
   ```

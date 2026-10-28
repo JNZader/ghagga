@@ -16,7 +16,6 @@ intelligence, multiple review modes, provider routing, forge abstractions,
 privacy controls, and several distribution options.
 
 The approved direction is therefore selective adoption:
-
 1. Keep GHAGGA's core pipeline and security posture.
 2. Add conversational PR intents and visible progress.
 3. Represent suggestions as immutable, explicitly approved artifacts.
@@ -115,21 +114,21 @@ not to the moving default branch.
 
 ## Comparison
 
-| Dimension | Stronger baseline | Decision |
-|---|---|---|
-| PR-native conversation | OpenReview | Adopt the interaction pattern. |
-| Visible staged progress | OpenReview | Adopt with GHAGGA pipeline states. |
-| Full-repository dynamic execution | OpenReview | Add through an optional executor SPI. |
-| Deterministic/reproducible review | GHAGGA | Preserve. |
-| Structured findings and coverage | GHAGGA | Preserve and extend. |
-| Persistent cross-review memory | GHAGGA | Preserve; connect feedback to it. |
-| Code graph and impact context | GHAGGA | Preserve. |
-| Multi-agent and multi-mode review | GHAGGA | Preserve. |
-| Provider neutrality and fallback | GHAGGA | Make mandatory for new runtime work. |
-| Forge and deployment portability | GHAGGA | Preserve and strengthen. |
-| Read-only security boundary | GHAGGA | Preserve; do not copy OpenReview's gate. |
-| Immediate fix UX | OpenReview | Rebuild around immutable approval artifacts. |
-| Tests, CI, and operational maturity | GHAGGA | Preserve GHAGGA's evidence standard. |
+| Dimension                           | Stronger baseline | Decision                                     |
+| ----------------------------------- | ----------------- | -------------------------------------------- |
+| PR-native conversation              | OpenReview        | Adopt the interaction pattern.               |
+| Visible staged progress             | OpenReview        | Adopt with GHAGGA pipeline states.           |
+| Full-repository dynamic execution   | OpenReview        | Add through an optional executor SPI.        |
+| Deterministic/reproducible review   | GHAGGA            | Preserve.                                    |
+| Structured findings and coverage    | GHAGGA            | Preserve and extend.                         |
+| Persistent cross-review memory      | GHAGGA            | Preserve; connect feedback to it.            |
+| Code graph and impact context       | GHAGGA            | Preserve.                                    |
+| Multi-agent and multi-mode review   | GHAGGA            | Preserve.                                    |
+| Provider neutrality and fallback    | GHAGGA            | Make mandatory for new runtime work.         |
+| Forge and deployment portability    | GHAGGA            | Preserve and strengthen.                     |
+| Read-only security boundary         | GHAGGA            | Preserve; do not copy OpenReview's gate.     |
+| Immediate fix UX                    | OpenReview        | Rebuild around immutable approval artifacts. |
+| Tests, CI, and operational maturity | GHAGGA            | Preserve GHAGGA's evidence standard.         |
 
 The useful distinction is architectural: OpenReview is a strong reference for
 an agentic interface and execution runtime, while GHAGGA is the stronger review
@@ -141,7 +140,6 @@ engine and policy foundation.
 
 Introduce a typed `ReviewIntent` above the existing command surface. Initial
 intents should be deliberately narrow:
-
 - `review`: run the normal evidence-producing review.
 - `explain`: answer a question about the affected code without creating
   findings or modifying files.
@@ -165,7 +163,6 @@ credentials by itself.
 ### 3. Provider-neutral `SandboxExecutor`
 
 Define GHAGGA-owned contracts for:
-
 - immutable source materialization;
 - command forecasting and authorization;
 - execution limits, timeouts, and cancellation;
@@ -233,7 +230,6 @@ silently rewrite security policy or turn one reaction into global truth.
 ## Security invariants
 
 These are acceptance requirements, not implementation suggestions:
-
 1. Read-only is the default for every intent.
 2. The invoker's repository association and requested capability are checked.
 3. No forge write token is visible to the model or read-only tool process.
@@ -254,7 +250,6 @@ These are acceptance requirements, not implementation suggestions:
 ## GHAGGA integration seams
 
 The design should extend existing ports instead of bypassing the core:
-
 - `ReviewInput.memoryStorage`
 - `ReviewInput.graphLoader`
 - `ReviewInput.codeIntelProvider`
@@ -362,7 +357,6 @@ next phase requires its evaluation gates to pass against the prior baseline.
 ## Explicitly rejected patterns
 
 GHAGGA must not adopt:
-
 - model-visible forge write credentials;
 - automatic commit or push based only on model behavior;
 - `git add -A`, disabled hooks, or `git commit --no-verify` as remediation
@@ -387,7 +381,6 @@ terms.
 ## Local checkout caveat
 
 The inspected GHAGGA checkout is not a clean implementation baseline:
-
 - branch: `chore/dependabot-lockstep-families`;
 - HEAD: `3d587af`;
 - divergence: one commit ahead and six behind `origin/main`;

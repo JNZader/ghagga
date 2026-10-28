@@ -154,7 +154,6 @@ The `SimpleReviewInput`, `WorkflowReviewInput`, and `ConsensusReviewInput` inter
 ### Requirement: Anti-False-Positive Calibration Block
 
 The system MUST append a `REVIEW_CALIBRATION` constant to the system prompts of **all** review modes. This calibration block MUST contain the following anti-hallucination guardrails:
-
 1. A confidence threshold instruction: only report findings with 80%+ confidence based on the actual code shown.
 2. A prohibition against flagging stylistic preferences unless they violate an explicitly provided rule.
 3. A prohibition against inventing or assuming coding standards that are not provided.
@@ -297,16 +296,16 @@ The `reviewPipeline()` function signature and the `ReviewInput` type MUST NOT ch
 
 ## Traceability Matrix
 
-| Proposal Section | Spec Requirement | Scenarios |
-|------------------|-----------------|-----------|
-| Change 1: Memory limit | Memory Context Retrieval Limit | 3 |
-| Change 1: Instruction reframe | Memory Context Framing in Prompts | 3 |
-| Change 1: Instruction reframe | Aggressive Memory Priming Instruction (REMOVED) | 1 |
-| Change 2: Wire reviewLevel | Review Level Prompt Calibration | 7 |
-| Change 2: Wire reviewLevel | Review Level Plumbing Through Agent Inputs | 3 |
-| Change 3: Anti-false-positive | Anti-False-Positive Calibration Block | 6 |
-| Change 3: Remove phantom standards | Simple Review System Prompt Content | 2 |
-| Cross-cutting | No Schema or API Changes | 2 |
-| Cross-cutting | Cross-Provider Compatibility | 1 |
-| Cross-cutting | Backward Compatibility of Pipeline Calls | 2 |
-| **Totals** | **10 requirements** | **30 scenarios** |
+| Proposal Section                   | Spec Requirement                                | Scenarios        |
+| ---------------------------------- | ----------------------------------------------- | ---------------- |
+| Change 1: Memory limit             | Memory Context Retrieval Limit                  | 3                |
+| Change 1: Instruction reframe      | Memory Context Framing in Prompts               | 3                |
+| Change 1: Instruction reframe      | Aggressive Memory Priming Instruction (REMOVED) | 1                |
+| Change 2: Wire reviewLevel         | Review Level Prompt Calibration                 | 7                |
+| Change 2: Wire reviewLevel         | Review Level Plumbing Through Agent Inputs      | 3                |
+| Change 3: Anti-false-positive      | Anti-False-Positive Calibration Block           | 6                |
+| Change 3: Remove phantom standards | Simple Review System Prompt Content             | 2                |
+| Cross-cutting                      | No Schema or API Changes                        | 2                |
+| Cross-cutting                      | Cross-Provider Compatibility                    | 1                |
+| Cross-cutting                      | Backward Compatibility of Pipeline Calls        | 2                |
+| **Totals**                         | **10 requirements**                             | **30 scenarios** |

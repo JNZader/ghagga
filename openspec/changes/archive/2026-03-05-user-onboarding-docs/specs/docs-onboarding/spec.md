@@ -15,7 +15,6 @@ All requirements are documentation-only — no application code, database, or AP
 A new file `docs/saas-getting-started.md` MUST exist as the definitive step-by-step guide for users of the hosted SaaS (GitHub App) distribution mode.
 
 The guide MUST include the following sections in order:
-
 1. **Title and introduction** — one-paragraph summary of what the user will achieve
 2. **Prerequisites** — GitHub account, a repository (public or private), ability to create a PR
 3. **Step 1: Install the GitHub App** — MUST include the actual GitHub App install URL as a clickable link. MUST describe what permissions the App requests and why.
@@ -453,18 +452,18 @@ Where the same concept appears in abbreviated form (e.g., README vs full guide),
 
 ## Acceptance Criteria Summary
 
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|-------------------|
-| R1 | SaaS Getting Started Guide | New user follows guide from install to first review without consulting other pages |
-| R2 | Post-Install Warning | Warning appears in 3 documents (saas guide, quick-start, README) with Dashboard link |
-| R3 | Dashboard URL Linkification | Zero occurrences of unlinked "Open the Dashboard" in docs |
-| R4 | Landing Page Install CTA | "Install GitHub App" is the primary (most prominent) CTA button |
-| R5 | Choose Your Path Matrix | Decision matrix at top of quick-start with SaaS marked as recommended |
-| R6 | Sidebar Navigation | SaaS guide appears in first 4 items of sidebar Getting Started section |
-| R7 | Cost Transparency | Free/paid model clearly stated in SaaS guide and landing page |
-| R8 | Configuration Callout | SaaS callout with Dashboard link at top of configuration.md |
-| R9 | README SaaS Option | SaaS listed as first (Option 0) in README Quick Start |
-| R10 | Docs Landing Orientation | "New here?" section on docs README with guide links |
-| CC1 | Link Integrity | Zero broken links across all modified files |
-| CC2 | Docsify Compatibility | All new files render correctly in Docsify |
-| CC3 | Consistency | Post-install warning and cost info are consistent across all documents |
+| ID  | Requirement                 | Acceptance Criteria                                                                  |
+| --- | --------------------------- | ------------------------------------------------------------------------------------ |
+| R1  | SaaS Getting Started Guide  | New user follows guide from install to first review without consulting other pages   |
+| R2  | Post-Install Warning        | Warning appears in 3 documents (saas guide, quick-start, README) with Dashboard link |
+| R3  | Dashboard URL Linkification | Zero occurrences of unlinked "Open the Dashboard" in docs                            |
+| R4  | Landing Page Install CTA    | "Install GitHub App" is the primary (most prominent) CTA button                      |
+| R5  | Choose Your Path Matrix     | Decision matrix at top of quick-start with SaaS marked as recommended                |
+| R6  | Sidebar Navigation          | SaaS guide appears in first 4 items of sidebar Getting Started section               |
+| R7  | Cost Transparency           | Free/paid model clearly stated in SaaS guide and landing page                        |
+| R8  | Configuration Callout       | SaaS callout with Dashboard link at top of configuration.md                          |
+| R9  | README SaaS Option          | SaaS listed as first (Option 0) in README Quick Start                                |
+| R10 | Docs Landing Orientation    | "New here?" section on docs README with guide links                                  |
+| CC1 | Link Integrity              | Zero broken links across all modified files                                          |
+| CC2 | Docsify Compatibility       | All new files render correctly in Docsify                                            |
+| CC3 | Consistency                 | Post-install warning and cost info are consistent across all documents               |

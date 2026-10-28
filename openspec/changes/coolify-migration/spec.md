@@ -5,6 +5,7 @@
 ## Requirements
 
 ### R1: Infraestructura Hetzner + Coolify
+
 **Priority**: Critical
 
 The system must run on a self-hosted VPS with PaaS management.
@@ -17,6 +18,7 @@ The system must run on a self-hosted VPS with PaaS management.
 **R1.6**: Configurar api.tudominio.com para la aplicación
 
 ### R2: Base de Datos Self-Hosted
+
 **Priority**: Critical
 
 Replace Neon PostgreSQL with local PostgreSQL.
@@ -29,6 +31,7 @@ Replace Neon PostgreSQL with local PostgreSQL.
 **R2.6**: Opcional: Backups automáticos configurados
 
 ### R3: Message Queue System
+
 **Priority**: Critical
 
 Replace Inngest with BullMQ + Redis.
@@ -36,15 +39,16 @@ Replace Inngest with BullMQ + Redis.
 **R3.1**: Redis 7 corriendo en container Docker
 **R3.2**: BullMQ instalado como dependencia
 **R3.3**: Queue `review` definida con opciones:
-  - attempts: 3
-  - backoff: exponential (1s base)
-  - removeOnComplete: 100
-  - removeOnFail: 50
-**R3.4**: Worker procesando jobs con concurrencia: 3
-**R3.5**: Event handlers para monitoreo (completed, failed)
-**R3.6**: Graceful shutdown implementado
+- attempts: 3
+- backoff: exponential (1s base)
+- removeOnComplete: 100
+- removeOnFail: 50
+  **R3.4**: Worker procesando jobs con concurrencia: 3
+  **R3.5**: Event handlers para monitoreo (completed, failed)
+  **R3.6**: Graceful shutdown implementado
 
 ### R4: Application Code Changes
+
 **Priority**: Critical
 
 **R4.1**: Remover dependencia `inngest` completamente
@@ -57,6 +61,7 @@ Replace Inngest with BullMQ + Redis.
 **R4.8**: Implementar health check endpoint
 
 ### R5: Containerization
+
 **Priority**: Critical
 
 **R5.1**: Dockerfile multi-stage (builder + runner)
@@ -64,13 +69,14 @@ Replace Inngest with BullMQ + Redis.
 **R5.3**: Optimizar layer caching
 **R5.4**: Script `start.sh` para seleccionar server/worker
 **R5.5**: docker-compose.yml con 5 servicios:
-  - server (API)
-  - worker (processor)
-  - postgres (DB)
-  - redis (Queue)
-  - bull-dashboard (monitoreo)
+- server (API)
+- worker (processor)
+- postgres (DB)
+- redis (Queue)
+- bull-dashboard (monitoreo)
 
 ### R6: Environment Configuration
+
 **Priority**: Critical
 
 **R6.1**: DATABASE_URL apunta a PostgreSQL local
@@ -82,6 +88,7 @@ Replace Inngest with BullMQ + Redis.
 **R6.7**: PORT=3000
 
 ### R7: GitHub App Integration
+
 **Priority**: Critical
 
 **R7.1**: Webhook URL actualizada a api.tudominio.com
@@ -92,6 +99,7 @@ Replace Inngest with BullMQ + Redis.
 **R7.6**: Webhook events: issue_comment, pull_request, etc.
 
 ### R8: Testing & Validation
+
 **Priority**: High
 
 **R8.1**: Endpoint /health responde 200
@@ -103,6 +111,7 @@ Replace Inngest with BullMQ + Redis.
 **R8.7**: Dashboard de Bull accesible
 
 ### R9: Cleanup Security
+
 **Priority**: High
 
 **R9.1**: Cuenta Neon eliminada
@@ -114,6 +123,7 @@ Replace Inngest with BullMQ + Redis.
 ## Scenarios
 
 ### S1: Happy Path - Review Requested
+
 ```gherkin
 Given a GitHub PR exists
 When user comments "ghagga review"
@@ -127,6 +137,7 @@ And user sees 👀 then 🚀 reactions
 ```
 
 ### S2: Queue Processing
+
 ```gherkin
 Given BullMQ is running
 When multiple reviews are requested simultaneously
@@ -137,6 +148,7 @@ And failed jobs are logged with error details
 ```
 
 ### S3: Infrastructure Failure Recovery
+
 ```gherkin
 Given PostgreSQL container stops
 When health check fails
@@ -146,6 +158,7 @@ And pending jobs resume processing
 ```
 
 ### S4: Graceful Shutdown
+
 ```gherkin
 Given worker is processing a job
 When SIGTERM is received
@@ -155,6 +168,7 @@ And exits cleanly without data loss
 ```
 
 ### S5: Webhook Validation
+
 ```gherkin
 Given webhook is received
 When signature doesn't match
@@ -166,18 +180,21 @@ And error is logged
 ## Acceptance Criteria
 
 ### AC1: Infrastructure
+
 - [ ] VPS Hetzner CX21 accesible via SSH
 - [ ] Coolify dashboard en HTTPS funcionando
 - [ ] PostgreSQL accesible desde containers
 - [ ] Redis accesible desde containers
 
 ### AC2: Application
+
 - [ ] `pnpm install` funciona sin errores
 - [ ] `pnpm build` compila sin errores
 - [ ] Docker build exitoso
 - [ ] All containers start sin errores
 
 ### AC3: Functionality
+
 - [ ] POST /webhook responde 200 con payload válido
 - [ ] GET /health responde 200
 - [ ] Bull Dashboard muestra colas activas
@@ -185,12 +202,14 @@ And error is logged
 - [ ] Workers procesan jobs exitosamente
 
 ### AC4: End-to-End
+
 - [ ] "ghagga review" en PR dispara webhook
 - [ ] Job se encola inmediatamente
 - [ ] Worker procesa en < 5 minutos
 - [ ] Review completa se postea en PR
 
 ### AC5: Security
+
 - [ ] Zero referencias a Neon en código
 - [ ] Zero referencias a Inngest en código
 - [ ] Nuevos secrets funcionan
@@ -199,37 +218,46 @@ And error is logged
 ## Edge Cases
 
 ### E1: Private Key Format
+
 GitHub private key debe mantener formato PEM con saltos de línea reales. En Coolify usar textarea multilinea, no string single-line.
 
 ### E2: Redis Connection Loss
+
 Si Redis se reinicia, BullMQ debe reconectar automáticamente usando `maxRetriesPerRequest: null`.
 
 ### E3: Database Migration
+
 No migrar datos históricos de Neon. Empezar fresh en PostgreSQL local.
 
 ### E4: Concurrent Jobs
+
 Configurar concurrencia en 3 para evitar sobrecargar la VPS de 4GB RAM.
 
 ### E5: Memory Limits
+
 Container de worker limitado a 512MB RAM para evitar OOM kills.
 
 ## Non-Functional Requirements
 
 ### Performance
+
 - Latencia DB: < 1ms (local network)
 - Job processing: < 5 minutos por review
 - API response: < 100ms para webhooks
 
 ### Reliability
+
 - Uptime target: 99% (backups manuales disponibles)
 - Job retry: 3 attempts con exponential backoff
 - Health checks: Cada 30 segundos
 
 ### Scalability
+
 - Current: 1 VPS, 3 workers concurrentes
 - Future: Escala vertical (upgrade VPS) o horizontal (múltiples workers)
 
 ### Cost
+
 - VPS: $6.55/mes fijo
 - Dominio: ~$1/mes
 - Total: ~$7.55/mes (objetivo)

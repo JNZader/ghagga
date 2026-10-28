@@ -10,10 +10,7 @@
 A `GenerateTextFn` type that abstracts the LLM call:
 
 ```typescript
-type GenerateTextFn = (
-  system: string,
-  prompt: string,
-) => Promise<GenerateTextResult>;
+type GenerateTextFn = (system: string, prompt: string) => Promise<GenerateTextResult>;
 
 interface GenerateTextResult {
   text: string;
@@ -49,7 +46,6 @@ The voting algorithm (`calculateConsensus`) is unchanged.
 ### R4: Pipeline Refactoring
 
 The three-way branch in `reviewPipeline` (`isCliBridge` / `isGateway` / else) is unified:
-
 1. Pipeline resolves which backend to use
 2. Pipeline creates the appropriate `GenerateTextFn`(s)
 3. Pipeline delegates to the mode-appropriate agent: `runSimpleReview`, `runWorkflowReview`, or `runConsensusReview`

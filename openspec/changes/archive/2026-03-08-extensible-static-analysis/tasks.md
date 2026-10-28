@@ -10,7 +10,6 @@
 ## Phase 1: Foundation — Types, Registry, Execution Context, Budget, Orchestrator
 
 > **Goal**: Create the entire core infrastructure in `packages/core/src/tools/` that all subsequent phases depend on. System remains functional because nothing references these new files yet.
-
 - [ ] 1.1 Create `packages/core/src/tools/types.ts` with `ToolName`, `ToolCategory`, `ToolTier`, `RawToolOutput`, `ToolDefinition`, `ExecutionContext`, `ExecOpts` interfaces as specified in `design.md:236-322`
 - [ ] 1.2 Create `packages/core/src/tools/registry.ts` with `ToolRegistry` class implementing `register()`, `getAll()`, `getByName()`, `getByTier()`, `validateAll()`, `size` getter — plus the singleton `toolRegistry` export as specified in `design.md:326-353`
 - [ ] 1.3 Create `packages/core/src/tools/resolve.ts` with `resolveActivatedTools()` implementing the 5-step resolution order: always-on → auto-detect(files) → +enabledTools → -disabledTools → -deprecated booleans as specified in `specs/runner/spec.md:48-86` and `design.md:356-381`
@@ -30,7 +29,6 @@
 ## Phase 2: Migrate Existing 3 Tools to Plugin Pattern
 
 > **Goal**: Convert semgrep, trivy, and cpd into `ToolDefinition` plugins inside `packages/core/src/tools/plugins/`. Wire up the feature flag `GHAGGA_TOOL_REGISTRY` so the old path still works when disabled. All existing tests must pass.
-
 - [ ] 2.1 Create `packages/core/src/tools/plugins/semgrep.ts` implementing `ToolDefinition` — adapt install/run/parse from existing `packages/core/src/tools/semgrep.ts` (uses `ExecutionContext.exec()` instead of direct `child_process`); pin version `1.90.0`; `category: 'security'`; `tier: 'always-on'`; `outputFormat: 'json'`; severity mapping ERROR→high, WARNING→medium, INFO→info — reference `specs/tools/spec.md:14-40`
 - [ ] 2.2 Create `packages/core/src/tools/plugins/trivy.ts` implementing `ToolDefinition` — adapt from `packages/core/src/tools/trivy.ts`; enhance run command with `--scanners vuln,license`; add license finding parser (severity `info`, category `license`); pin version `0.69.3`; `category: 'sca'`; `tier: 'always-on'` — reference `specs/tools/spec.md:42-78`
 - [ ] 2.3 Create `packages/core/src/tools/plugins/cpd.ts` implementing `ToolDefinition` — adapt from `packages/core/src/tools/cpd.ts`; `successExitCodes: [4]` for duplications-found exit; pin version `7.8.0`; `category: 'duplication'`; `tier: 'always-on'`; `outputFormat: 'xml'` — reference `specs/tools/spec.md:80-106`
@@ -47,7 +45,6 @@
 ## Phase 3: Always-On New Tools — Gitleaks, ShellCheck, markdownlint, Lizard
 
 > **Goal**: Add 4 new always-on tool plugins. Each is a single file + test. Register in `plugins/index.ts`. System remains backward compat because these only activate when `GHAGGA_TOOL_REGISTRY=true`.
-
 - [ ] 3.1 Create `packages/core/src/tools/plugins/gitleaks.ts` — `tier: 'always-on'`; `category: 'secrets'`; version `8.21.2`; install from GitHub Releases (`linux_x64.tar.gz`); run `gitleaks detect --source {repoDir} --report-format json --no-git --exit-code 0`; parse JSON findings as severity `critical`; verify binary after install — reference `specs/tools/spec.md:112-147` and `design.md:497-563`
 - [ ] 3.2 Write tests `packages/core/src/tools/plugins/gitleaks.test.ts`: test `parse()` with fixture JSON (leaked AWS key → critical finding with file+line), empty results, malformed JSON handling, timeout → empty findings
 - [ ] 3.3 Create `packages/core/src/tools/plugins/shellcheck.ts` — `tier: 'always-on'`; `category: 'linting'`; version `0.10.0`; install = verify pre-installed or download from GitHub; run `shellcheck --format=json` scoped to `*.sh`/`*.bash` files from `files` param; parse `level` → severity (error→high, warning→medium, info→info, style→low); return empty findings if no shell files — reference `specs/tools/spec.md:148-182`
@@ -63,7 +60,6 @@
 ## Phase 4: Auto-Detect Tools — Python + Go
 
 > **Goal**: Add 3 auto-detect plugins for Python (Ruff, Bandit) and Go (golangci-lint). Each includes a `detect()` function tested against file lists.
-
 - [ ] 4.1 Create `packages/core/src/tools/plugins/ruff.ts` — `tier: 'auto-detect'`; `category: 'linting'`; version `0.9.7`; `detect`: `files.some(f => f.endsWith('.py') || f.endsWith('.pyi'))`; install `pip install ruff`; run `ruff check --output-format json` scoped to changed Python files; parse `code` prefix E→high, W→medium, C/R/I→low — reference `specs/tools/spec.md:270-295`
 - [ ] 4.2 Write tests `packages/core/src/tools/plugins/ruff.test.ts`: test `detect()` (`.py` → true, `.go` → false), `parse()` with fixture JSON (unused import, line length)
 - [ ] 4.3 Create `packages/core/src/tools/plugins/bandit.ts` — `tier: 'auto-detect'`; `category: 'security'`; version `1.8.3`; `detect`: `files.some(f => f.endsWith('.py'))`; install `pip install bandit`; run `bandit -r {repoDir} -f json --quiet`; parse severity HIGH→high, MEDIUM→medium, LOW→low — reference `specs/tools/spec.md:297-323`
@@ -77,7 +73,6 @@
 ## Phase 5: Auto-Detect Tools — JS/TS, Java, PHP, Rust, Docker
 
 > **Goal**: Add 5 more auto-detect plugins. After this phase, all 15 tools are registered.
-
 - [ ] 5.1 Create `packages/core/src/tools/plugins/biome.ts` — `tier: 'auto-detect'`; `category: 'linting'`; version `1.9.4`; `detect`: regex `/\.(ts|tsx|js|jsx|mts|mjs|cts|cjs)$/`; install from GitHub Releases (`biome-linux-x64`); run `biome lint --reporter json`; respect repo `biome.json` — reference `specs/tools/spec.md:358-389`
 - [ ] 5.2 Write tests `packages/core/src/tools/plugins/biome.test.ts`: test `detect()` (`.ts` → true, `.py` → false), `parse()` with fixture JSON
 - [ ] 5.3 Create `packages/core/src/tools/plugins/pmd.ts` — `tier: 'auto-detect'`; `category: 'quality'`; version `7.8.0` (shared install with CPD at `/opt/pmd`); `detect`: `files.some(f => f.endsWith('.java'))`; install = verify CPD already installed, fallback to download; run `pmd check --format xml --rulesets rulesets/java/quickstart.xml`; parse violation `priority` 1→critical, 2→high, 3→medium, 4→low, 5→info — reference `specs/tools/spec.md:391-417`
@@ -96,7 +91,6 @@
 ## Phase 6: Settings Migration — DB Schema, Server API, Dashboard
 
 > **Goal**: Extend DB schema, settings API, and dashboard to support `enabledTools`/`disabledTools` arrays alongside deprecated boolean fields.
-
 - [ ] 6.1 Modify `packages/db/src/schema.ts`: extend `RepoSettings` interface with `enabledTools?: string[]` and `disabledTools?: string[]`; update `DEFAULT_REPO_SETTINGS` with `enabledTools: undefined` (use defaults) and `disabledTools: []` — reference `design.md:476-493`
 - [ ] 6.2 Create DB migration script for backfilling `disabledTools` from existing boolean flags: for repos where `enableSemgrep=false`, add `'semgrep'` to `disabledTools` in the `settings` JSONB; same for trivy and cpd; apply to both `repositories.settings` and `installation_settings.settings` — reference `design.md:639-661` and `specs/settings/spec.md:66-91`
 - [ ] 6.3 Modify `apps/server/src/routes/api/settings.ts`: extend `RepoSettingsSchema` Zod schema to accept `enabledTools: z.array(z.string()).optional()` and `disabledTools: z.array(z.string()).optional()`; validate tool names against known registry names on PUT (400 for unknown tool); GET response includes `registeredTools` array with `name`, `displayName`, `category`, `tier` from registry — reference `specs/settings/spec.md:121-165`
@@ -112,7 +106,6 @@
 ## Phase 7: CLI Update — Flags, Deprecations, Config File
 
 > **Goal**: Add `--disable-tool`, `--enable-tool`, `--list-tools` flags. Deprecate `--no-semgrep`/`--no-trivy`/`--no-cpd` with warnings.
-
 - [ ] 7.1 Modify `apps/cli/src/index.ts`: add `--disable-tool <name>` (repeatable), `--enable-tool <name>` (repeatable), `--list-tools` options to the `review` command; keep `--no-semgrep`/`--no-trivy`/`--no-cpd` as hidden deprecated aliases — reference `specs/cli/spec.md:9-86`
 - [ ] 7.2 Modify `apps/cli/src/commands/review.ts` `ReviewOptions` interface: add `disableTools: string[]` and `enableTools: string[]` fields — reference `specs/cli/spec.md:125-145`
 - [ ] 7.3 Modify `apps/cli/src/commands/review.ts` `mergeSettings()`: map `disableTools` → `ReviewSettings.disabledTools`, `enableTools` → `ReviewSettings.enabledTools`; translate deprecated `--no-semgrep` → `disabledTools: ['semgrep']` with deprecation warning printed to stderr; `--disable-tool` takes precedence over `--enable-tool` for same tool — reference `specs/cli/spec.md:140-145` and `specs/cli/spec.md:62-67`
@@ -130,7 +123,6 @@
 ## Phase 8: Action & Runner Update
 
 > **Goal**: Wire up the action entry point and runner template to use the registry-driven orchestrator.
-
 - [ ] 8.1 Modify `apps/action/src/index.ts`: read new inputs `enabled-tools` and `disabled-tools` (comma-separated strings); parse into `string[]`; pass to `runLocalAnalysis()` alongside existing boolean flags; keep reading `enable-semgrep`/`enable-trivy`/`enable-cpd` for backward compat — reference `design.md:218` and `design.md:229`
 - [ ] 8.2 Modify `apps/action/src/tools/types.ts`: re-export `ToolName` from `packages/core` (replacing local `'semgrep' | 'trivy' | 'cpd'` literal type); keep `TOOL_VERSIONS` for backward compat — reference `design.md:216`
 - [ ] 8.3 Modify `apps/action/src/tools/cache.ts`: make `CACHE_PATHS` dynamic based on registered `ToolDefinition.cachePaths` instead of hardcoded tool-specific paths — reference `design.md:217`
@@ -144,7 +136,6 @@
 ## Phase 9: Verification & Cleanup
 
 > **Goal**: Full test suite pass, lint clean, manual smoke test on all distribution modes.
-
 - [ ] 9.1 Run full test suite: `pnpm test` across all packages — all existing tests must pass without modification; new tests must pass
 - [ ] 9.2 Run lint: `pnpm lint:fix` across the monorepo — ensure no lint errors from new code
 - [ ] 9.3 Run TypeScript type-check: `pnpm typecheck` — verify no type errors from the `StaticAnalysisResult` intersection type change or `FindingSource` extension

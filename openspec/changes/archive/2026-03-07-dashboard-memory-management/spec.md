@@ -261,12 +261,12 @@ The 5 stub methods in `apps/server/src/memory/postgres.ts` that currently throw 
 
 Each method MUST delegate to the appropriate `ghagga-db` query function:
 
-| Method | Delegates To |
-|--------|-------------|
-| `listObservations(options?)` | New `listMemoryObservations(db, installationId, options)` query |
-| `getObservation(id)` | New `getMemoryObservation(db, installationId, id)` query |
-| `deleteObservation(id)` | `deleteMemoryObservation(db, installationId, id)` (R1) |
-| `getStats()` | New `getMemoryStats(db, installationId)` query |
+| Method                        | Delegates To                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `listObservations(options?)`  | New `listMemoryObservations(db, installationId, options)` query                                             |
+| `getObservation(id)`          | New `getMemoryObservation(db, installationId, id)` query                                                    |
+| `deleteObservation(id)`       | `deleteMemoryObservation(db, installationId, id)` (R1)                                                      |
+| `getStats()`                  | New `getMemoryStats(db, installationId)` query                                                              |
 | `clearObservations(options?)` | `clearMemoryObservationsByProject` (R2) or `clearAllMemoryObservations` (R3) depending on `options.project` |
 
 The `PostgresMemoryStorage` constructor MUST be extended to accept an `installationId: number` parameter (or the adapter must receive it per-call via the API route context).
@@ -513,7 +513,7 @@ Three new mutation hooks MUST be added to `apps/dashboard/src/lib/api.ts`:
 #### R11.1: useDeleteObservation
 
 ```typescript
-export function useDeleteObservation()
+export function useDeleteObservation();
 ```
 
 MUST:
@@ -525,7 +525,7 @@ MUST:
 #### R11.2: useClearRepoMemory
 
 ```typescript
-export function useClearRepoMemory()
+export function useClearRepoMemory();
 ```
 
 MUST:
@@ -537,7 +537,7 @@ MUST:
 #### R11.3: usePurgeAllMemory
 
 ```typescript
-export function usePurgeAllMemory()
+export function usePurgeAllMemory();
 ```
 
 MUST:
@@ -638,7 +638,6 @@ The confirmation modals MUST:
 ### R14: Dashboard UI — Success Feedback
 
 After a successful destructive operation, the UI MUST provide clear feedback:
-
 - **Single delete**: A brief toast/notification saying "Observation deleted" (auto-dismiss after 3-5 seconds)
 - **Clear repo**: A toast saying "Cleared {N} observations from {repoName}" (auto-dismiss after 3-5 seconds)
 - **Purge all**: A toast saying "Purged {N} observations from all repositories" (auto-dismiss after 5 seconds)
@@ -712,7 +711,6 @@ The TanStack Query `refetchOnWindowFocus` behavior SHOULD handle stale data when
 ### CC3: Empty States
 
 After clearing all observations for a repo or purging all memory, the UI MUST display an appropriate empty state rather than showing stale data or a blank page.
-
 - After clearing a repo: the session list for that repo SHOULD show an empty message (e.g., "No memory sessions for this repository")
 - After purging all: the Memory page SHOULD show a global empty state (e.g., "No memory yet. Memory builds as GHAGGA reviews your pull requests.")
 

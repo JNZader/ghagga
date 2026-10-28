@@ -27,7 +27,6 @@ human review (CLI or the local web UI)
 ## Security guarantees
 
 These are **type-level and structural** invariants, not conventions:
-
 - **Never auto-posts.** `triageIssue`/`triageNew` write a `PENDING_APPROVAL`
   draft to the local queue and stop. Only `approveIssue` — which a human
   triggers explicitly (CLI `approve` or the web UI's Approve button) — calls
@@ -46,26 +45,36 @@ These are **type-level and structural** invariants, not conventions:
 A `TriageConfig` (zod-validated) is the only source of project-specific
 behavior:
 
-| Field | Type | Notes |
-|---|---|---|
-| `forge` | `'gitlab' \| 'github'` | Which CLI adapter to use (`glab` / `gh`) |
-| `repo` | `string` | `owner/name` |
-| `codeRoot` | `string` | Absolute path to the target repo's checkout |
-| `moduleMap` | `Record<string, string[]>` | `módulo::x` label → code dirs to scan |
-| `synonyms` | `Record<string, string[]>` | ES→EN (or any) keyword bridge |
-| `stopwords` | `string[]` | Overrides the built-in default stopword set |
-| `language` | `'go' \| 'ts' \| 'js' \| 'py' \| 'rust' \| 'java'` | Default `'go'` |
-| `graphExpand` | `boolean` | Use ghagga-core's `buildGraph`/`computeBlastRadius` for EXPAND instead of dir-sibling. **Only `ts`/`js` actually resolve seed→dependents today** (see caveat below) — default `false` |
-| `models` | `{ rerank: string; analysis: string; reproduce?: string }` | Model ids passed to `createCLIBridgeGenerateFn` (`preferredCLI: 'opencode'`). `reproduce` is optional — the CLI's `--reproduce` flag falls back to a hardcoded default (`opencode-go/kimi-k2.7-code`) when it is unset |
-| `app` | `{ baseURL: string; loginRecipe: LoginRecipe }` (optional) | Enables the REPRODUCE stage |
-| `clientReplyPolicy` | `{ language: string; jargonBan?: string[] }` (optional) | Client-reply language + banned jargon terms |
+| Field               | Type                                                       | Notes                                                                                                                                                                                                                  |
+| ------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `forge`             | `'gitlab' \| 'github'`                                     | Which CLI adapter to use (`glab` / `gh`)                                                                                                                                                                               |
+| `repo`              | `string`                                                   | `owner/name`                                                                                                                                                                                                           |
+| `codeRoot`          | `string`                                                   | Absolute path to the target repo's checkout                                                                                                                                                                            |
+| `moduleMap`         | `Record<string, string[]>`                                 | `módulo::x` label → code dirs to scan                                                                                                                                                                                  |
+| `synonyms`          | `Record<string, string[]>`                                 | ES→EN (or any) keyword bridge                                                                                                                                                                                          |
+| `stopwords`         | `string[]`                                                 | Overrides the built-in default stopword set                                                                                                                                                                            |
+| `language`          | `'go' \| 'ts' \| 'js' \| 'py' \| 'rust' \| 'java'`         | Default `'go'`                                                                                                                                                                                                         |
+| `graphExpand`       | `boolean`                                                  | Use ghagga-core's `buildGraph`/`computeBlastRadius` for EXPAND instead of dir-sibling. **Only `ts`/`js` actually resolve seed→dependents today** (see caveat below) — default `false`                                  |
+| `models`            | `{ rerank: string; analysis: string; reproduce?: string }` | Model ids passed to `createCLIBridgeGenerateFn` (`preferredCLI: 'opencode'`). `reproduce` is optional — the CLI's `--reproduce` flag falls back to a hardcoded default (`opencode-go/kimi-k2.7-code`) when it is unset |
+| `app`               | `{ baseURL: string; loginRecipe: LoginRecipe }` (optional) | Enables the REPRODUCE stage                                                                                                                                                                                            |
+| `clientReplyPolicy` | `{ language: string; jargonBan?: string[] }` (optional)    | Client-reply language + banned jargon terms                                                                                                                                                                            |
 
 ### `loginRecipe`
 
 ```ts
 type LoginRecipe =
   | { kind: 'none' }
-  | { kind: 'steps'; steps: Array<{ action: 'goto' | 'fill' | 'click'; role?: string; name?: string; label?: string; value?: string; url?: string }> }
+  | {
+      kind: 'steps';
+      steps: Array<{
+        action: 'goto' | 'fill' | 'click';
+        role?: string;
+        name?: string;
+        label?: string;
+        value?: string;
+        url?: string;
+      }>;
+    }
   | { kind: 'storageState'; path: string };
 ```
 

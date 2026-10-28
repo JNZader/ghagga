@@ -157,7 +157,6 @@ The `SimpleReviewInput`, `WorkflowReviewInput`, and `ConsensusReviewInput` inter
 ### Requirement: Anti-False-Positive Calibration Block
 
 The system MUST append a `REVIEW_CALIBRATION` constant to the system prompts of **all** review modes. This calibration block MUST contain the following anti-hallucination guardrails:
-
 1. A confidence threshold instruction: only report findings with 80%+ confidence based on the actual code shown.
 2. A prohibition against flagging stylistic preferences unless they violate an explicitly provided rule.
 3. A prohibition against inventing or assuming coding standards that are not provided.
@@ -278,15 +277,15 @@ The `reviewPipeline()` function signature and the `ReviewInput` type MUST NOT ch
 
 ## Traceability
 
-| Requirement | Scenarios | Established By |
-|-------------|-----------|----------------|
-| Memory Context Retrieval Limit | 3 | `reduce-false-positives` (2026-03-05) |
-| Memory Context Framing in Prompts | 4 | `reduce-false-positives` (2026-03-05) |
-| Review Level Prompt Calibration | 7 | `reduce-false-positives` (2026-03-05) |
-| Review Level Plumbing Through Agent Inputs | 3 | `reduce-false-positives` (2026-03-05) |
-| Anti-False-Positive Calibration Block | 6 | `reduce-false-positives` (2026-03-05) |
-| Simple Review System Prompt Content | 2 | `reduce-false-positives` (2026-03-05) |
-| No Schema or API Changes | 2 | `reduce-false-positives` (2026-03-05) |
-| Cross-Provider Compatibility | 1 | `reduce-false-positives` (2026-03-05) |
-| Backward Compatibility of Pipeline Calls | 2 | `reduce-false-positives` (2026-03-05) |
-| **Totals** | **30** | |
+| Requirement                                | Scenarios | Established By                        |
+| ------------------------------------------ | --------- | ------------------------------------- |
+| Memory Context Retrieval Limit             | 3         | `reduce-false-positives` (2026-03-05) |
+| Memory Context Framing in Prompts          | 4         | `reduce-false-positives` (2026-03-05) |
+| Review Level Prompt Calibration            | 7         | `reduce-false-positives` (2026-03-05) |
+| Review Level Plumbing Through Agent Inputs | 3         | `reduce-false-positives` (2026-03-05) |
+| Anti-False-Positive Calibration Block      | 6         | `reduce-false-positives` (2026-03-05) |
+| Simple Review System Prompt Content        | 2         | `reduce-false-positives` (2026-03-05) |
+| No Schema or API Changes                   | 2         | `reduce-false-positives` (2026-03-05) |
+| Cross-Provider Compatibility               | 1         | `reduce-false-positives` (2026-03-05) |
+| Backward Compatibility of Pipeline Calls   | 2         | `reduce-false-positives` (2026-03-05) |
+| **Totals**                                 | **30**    |                                       |

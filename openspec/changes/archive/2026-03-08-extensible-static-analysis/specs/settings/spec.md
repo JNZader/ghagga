@@ -156,6 +156,7 @@ The `GET /api/settings` and `PUT /api/settings` endpoints MUST support the new t
 - GIVEN the tool registry has 15 registered tools
 - WHEN `GET /api/settings?repo=owner/repo` is called
 - THEN the response MUST include `registeredTools` with entries like:
+
   ```json
   [
     { "name": "semgrep", "displayName": "Semgrep", "category": "security", "tier": "always-on" },

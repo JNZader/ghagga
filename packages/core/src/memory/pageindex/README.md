@@ -29,10 +29,7 @@ const storage = await SqliteMemoryStorage.create('./memory.db');
 const pageIndex = storage.getPageIndex();
 
 // Create page index for large project memory
-const result = await pageIndex.createPageIndex(
-  'my-project',
-  largeProjectMemoryContent
-);
+const result = await pageIndex.createPageIndex('my-project', largeProjectMemoryContent);
 
 console.log(`Created ${result.pages} pages (${result.tokens} tokens)`);
 ```
@@ -46,9 +43,9 @@ const relevantPages = pageIndex.findRelevantPages({
   prContext: {
     title: 'Add authentication middleware',
     description: 'Implements JWT-based auth with refresh tokens',
-    files: ['src/auth/middleware.ts', 'src/auth/jwt.ts']
+    files: ['src/auth/middleware.ts', 'src/auth/jwt.ts'],
   },
-  maxPages: 3
+  maxPages: 3,
 });
 
 // Build context from relevant pages
@@ -61,7 +58,7 @@ for (const page of relevantPages) {
   if (totalTokens + page.tokenCount > modelLimit * 0.7) {
     break;
   }
-  
+
   context += `\n\n--- Page ${page.pageNum} ---\n`;
   context += `Topics: ${page.topics.join(', ')}\n`;
   context += page.content;
@@ -78,13 +75,13 @@ console.log(`Built context: ${totalTokens} tokens from ${relevantPages.length} p
 const contextWindow = pageIndex.getContext({
   projectId: 'my-project',
   pageNum: 5,
-  windowSize: 1
+  windowSize: 1,
 });
 
 console.log(`Context window has ${contextWindow.totalInContext} pages`);
-console.log(`Previous: ${contextWindow.previousPages.map(p => p.pageNum).join(', ')}`);
+console.log(`Previous: ${contextWindow.previousPages.map((p) => p.pageNum).join(', ')}`);
 console.log(`Current: ${contextWindow.currentPage.pageNum}`);
-console.log(`Next: ${contextWindow.nextPages.map(p => p.pageNum).join(', ')}`);
+console.log(`Next: ${contextWindow.nextPages.map((p) => p.pageNum).join(', ')}`);
 ```
 
 ### Navigation
@@ -96,14 +93,14 @@ import { PageDirection } from '@ghagga/core';
 const nextPage = pageIndex.navigate({
   projectId: 'my-project',
   currentPageNum: 3,
-  direction: PageDirection.NEXT
+  direction: PageDirection.NEXT,
 });
 
 // Navigate to first/last
 const firstPage = pageIndex.navigate({
   projectId: 'my-project',
   currentPageNum: 1,
-  direction: PageDirection.FIRST
+  direction: PageDirection.FIRST,
 });
 ```
 
@@ -126,35 +123,35 @@ async function reviewWithSmallModel(
   storage: SqliteMemoryStorage,
   projectId: string,
   pr: { title: string; description: string; files: string[] },
-  modelMaxTokens: number = 4096
+  modelMaxTokens: number = 4096,
 ) {
   const pageIndex = storage.getPageIndex();
-  
+
   // 1. Check if we have a page index
   const stats = pageIndex.getProjectStats(projectId);
-  
+
   if (stats.pages === 0) {
     // Build page index from project memory
     const memory = await storage.getProjectMemory(projectId);
     await pageIndex.createPageIndex(projectId, memory);
   }
-  
+
   // 2. Check compaction
   const check = pageIndex.checkCompaction(projectId, modelMaxTokens);
   if (!check.safeToProceed) {
     console.log('Using paginated access for large project memory');
   }
-  
+
   // 3. Get relevant pages for this PR
   const relevant = pageIndex.findRelevantPages({
     projectId,
     prContext: pr,
-    maxPages: 3
+    maxPages: 3,
   });
-  
+
   // 4. Build context within token budget
   const context = buildContextFromPages(relevant, modelMaxTokens * 0.6);
-  
+
   // 5. Run review
   return await runReview(context, pr);
 }
@@ -203,12 +200,12 @@ CREATE TABLE project_page_index (
 
 ## Comparison
 
-| Without PageIndex | With PageIndex |
-|-------------------|----------------|
+| Without PageIndex       | With PageIndex       |
+| ----------------------- | -------------------- |
 | Truncate large memories | Paginate into chunks |
-| Compaction loops | Deterministic tokens |
-| All-or-nothing access | Granular page access |
-| Small models struggle | Small models thrive |
+| Compaction loops        | Deterministic tokens |
+| All-or-nothing access   | Granular page access |
+| Small models struggle   | Small models thrive  |
 
 ## Status
 

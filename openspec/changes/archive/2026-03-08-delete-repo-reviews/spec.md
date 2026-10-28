@@ -9,10 +9,10 @@ This spec defines the requirements for deleting all reviews for a specific repos
 
 ## Delta Specs
 
-| Domain | Path | Type | Requirements | Scenarios |
-|--------|------|------|-------------|-----------|
-| server | `specs/server/spec.md` | Delta | 2 added | 11 |
-| dashboard-ui | `specs/dashboard-ui/spec.md` | Delta | 1 modified, 1 added | 13 |
+| Domain       | Path                         | Type  | Requirements        | Scenarios |
+| ------------ | ---------------------------- | ----- | ------------------- | --------- |
+| server       | `specs/server/spec.md`       | Delta | 2 added             | 11        |
+| dashboard-ui | `specs/dashboard-ui/spec.md` | Delta | 1 modified, 1 added | 13        |
 
 **Totals**: 4 requirements (3 added, 1 modified), 24 scenarios
 

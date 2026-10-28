@@ -38,16 +38,16 @@ With this feature, developers install hooks once (`ghagga hooks install`) and ge
 
 ### What Already Exists (No New Work Needed)
 
-| Capability | Status | Location |
-|-----------|--------|----------|
-| Local code review | Working | `ghagga review .` — `apps/cli/src/commands/review.ts` |
-| Semgrep/Trivy/CPD static analysis | Working | `packages/core/src/analyzers/` |
-| LLM multi-provider review | Working | `packages/core/src/pipeline.ts` |
-| SQLite memory | Working | `packages/core/src/memory/sqlite.ts` |
-| TUI with `@clack/prompts` | Working | `apps/cli/src/ui/` |
-| `--plain` flag for CI/non-TTY | Working | `apps/cli/src/index.ts` |
-| `--no-memory` flag | Working | `apps/cli/src/commands/review.ts` |
-| `--no-semgrep`, `--no-trivy`, `--no-cpd` | Working | `apps/cli/src/commands/review.ts` |
+| Capability                               | Status  | Location                                              |
+| ---------------------------------------- | ------- | ----------------------------------------------------- |
+| Local code review                        | Working | `ghagga review .` — `apps/cli/src/commands/review.ts` |
+| Semgrep/Trivy/CPD static analysis        | Working | `packages/core/src/analyzers/`                        |
+| LLM multi-provider review                | Working | `packages/core/src/pipeline.ts`                       |
+| SQLite memory                            | Working | `packages/core/src/memory/sqlite.ts`                  |
+| TUI with `@clack/prompts`                | Working | `apps/cli/src/ui/`                                    |
+| `--plain` flag for CI/non-TTY            | Working | `apps/cli/src/index.ts`                               |
+| `--no-memory` flag                       | Working | `apps/cli/src/commands/review.ts`                     |
+| `--no-semgrep`, `--no-trivy`, `--no-cpd` | Working | `apps/cli/src/commands/review.ts`                     |
 
 ### What Needs to Be Added
 
@@ -93,12 +93,12 @@ The `${GHAGGA_HOOK_ARGS:-}` variable allows developers to pass additional flags 
 
 #### 3. Review Command Extensions
 
-| New Flag | Behavior |
-|----------|----------|
-| `--staged` | Scope review to staged files only. Uses `git diff --staged --name-only` for file list and `git diff --staged` for diff content. Passes the staged diff to the review pipeline instead of the full working tree |
-| `--commit-msg <file>` | Read commit message from file, validate quality via a lightweight LLM prompt. No file analysis — only commit message review |
-| `--exit-on-issues` | Exit code 1 if any finding has severity `critical` or `high`. Exit code 0 otherwise. Default (without flag) is always exit code 0 |
-| `--quick` | Skip LLM review step entirely. Run only static analyzers (Semgrep, Trivy, CPD). Designed for speed in pre-commit hooks |
+| New Flag              | Behavior                                                                                                                                                                                                       |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--staged`            | Scope review to staged files only. Uses `git diff --staged --name-only` for file list and `git diff --staged` for diff content. Passes the staged diff to the review pipeline instead of the full working tree |
+| `--commit-msg <file>` | Read commit message from file, validate quality via a lightweight LLM prompt. No file analysis — only commit message review                                                                                    |
+| `--exit-on-issues`    | Exit code 1 if any finding has severity `critical` or `high`. Exit code 0 otherwise. Default (without flag) is always exit code 0                                                                              |
+| `--quick`             | Skip LLM review step entirely. Run only static analyzers (Semgrep, Trivy, CPD). Designed for speed in pre-commit hooks                                                                                         |
 
 #### 4. Staged File Review Flow
 
@@ -129,26 +129,26 @@ git commit
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `apps/cli/src/commands/hooks/` (new) | New | `install.ts`, `uninstall.ts`, `index.ts` — hook management commands |
-| `apps/cli/src/commands/review.ts` | Modified | Add `--staged`, `--commit-msg`, `--exit-on-issues`, `--quick` flags. Implement staged file scoping and commit message validation mode |
-| `apps/cli/src/index.ts` | Modified | Register `hooks` command group |
-| `packages/core/src/pipeline.ts` | Modified | Support staged diff input mode; support `quick` mode (skip LLM step) |
-| `packages/core/src/types.ts` | Modified | Add `staged`, `commitMsg`, `exitOnIssues`, `quick` fields to `ReviewInput` or `ReviewSettings` |
-| Existing tests | None | New flags are additive; existing behavior unchanged when flags are not set |
-| ncc bundle | None | No new dependencies — hook scripts are plain strings embedded in the bundle |
+| Area                                 | Impact   | Description                                                                                                                           |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/cli/src/commands/hooks/` (new) | New      | `install.ts`, `uninstall.ts`, `index.ts` — hook management commands                                                                   |
+| `apps/cli/src/commands/review.ts`    | Modified | Add `--staged`, `--commit-msg`, `--exit-on-issues`, `--quick` flags. Implement staged file scoping and commit message validation mode |
+| `apps/cli/src/index.ts`              | Modified | Register `hooks` command group                                                                                                        |
+| `packages/core/src/pipeline.ts`      | Modified | Support staged diff input mode; support `quick` mode (skip LLM step)                                                                  |
+| `packages/core/src/types.ts`         | Modified | Add `staged`, `commitMsg`, `exitOnIssues`, `quick` fields to `ReviewInput` or `ReviewSettings`                                        |
+| Existing tests                       | None     | New flags are additive; existing behavior unchanged when flags are not set                                                            |
+| ncc bundle                           | None     | No new dependencies — hook scripts are plain strings embedded in the bundle                                                           |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Node.js not in PATH during git hook execution | Medium | High | Hook scripts must find the `ghagga` binary. If installed globally via npm, it's in PATH. If installed locally, the hook should use `npx ghagga` or a project-relative path. Document requirements clearly. Add a PATH check at the top of hook scripts with a helpful error message |
-| Hook execution speed annoys developers | High | High | Pre-commit hooks run on every commit. Full LLM review takes 10-30s, which is too slow. The `--quick` flag (static analysis only) is the primary mitigation — Semgrep/Trivy/CPD run in 2-5s. Make `--quick` the default for `ghagga hooks install` and let developers opt into full review with `--no-quick` |
-| Staged files not yet on disk (partially staged) | Low | Medium | `git diff --staged` works with the index, not the working tree. Files may be partially staged (some hunks staged, others not). The diff from `git diff --staged` correctly reflects only staged content. Static analyzers that read files from disk (Semgrep) may see un-staged changes. Mitigation: use `git stash --keep-index` before analysis or run analyzers on the diff only |
-| Hook conflicts with Husky/other hook managers | Medium | Low | GHAGGA installs directly to `.git/hooks/`. If Husky is managing hooks via `core.hooksPath`, GHAGGA's hooks won't run. Detect `core.hooksPath` and warn the user. Document coexistence patterns |
-| `--exit-on-issues` blocks commit on false positives | Medium | Medium | Developers can skip hooks with `git commit --no-verify`. Document this escape hatch. Tune severity thresholds — only `critical` and `high` block, not `medium` or `low` |
-| Commit message validation too strict/opinionated | Low | Medium | The LLM prompt should be advisory, not prescriptive. Focus on egregiously bad messages (empty, single word, "fix", "asdf") rather than enforcing a specific format. Make commit-msg hook optional with `--no-commit-msg` during install |
+| Risk                                                | Likelihood | Impact | Mitigation                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------- | ---------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js not in PATH during git hook execution       | Medium     | High   | Hook scripts must find the `ghagga` binary. If installed globally via npm, it's in PATH. If installed locally, the hook should use `npx ghagga` or a project-relative path. Document requirements clearly. Add a PATH check at the top of hook scripts with a helpful error message                                                                                                 |
+| Hook execution speed annoys developers              | High       | High   | Pre-commit hooks run on every commit. Full LLM review takes 10-30s, which is too slow. The `--quick` flag (static analysis only) is the primary mitigation — Semgrep/Trivy/CPD run in 2-5s. Make `--quick` the default for `ghagga hooks install` and let developers opt into full review with `--no-quick`                                                                         |
+| Staged files not yet on disk (partially staged)     | Low        | Medium | `git diff --staged` works with the index, not the working tree. Files may be partially staged (some hunks staged, others not). The diff from `git diff --staged` correctly reflects only staged content. Static analyzers that read files from disk (Semgrep) may see un-staged changes. Mitigation: use `git stash --keep-index` before analysis or run analyzers on the diff only |
+| Hook conflicts with Husky/other hook managers       | Medium     | Low    | GHAGGA installs directly to `.git/hooks/`. If Husky is managing hooks via `core.hooksPath`, GHAGGA's hooks won't run. Detect `core.hooksPath` and warn the user. Document coexistence patterns                                                                                                                                                                                      |
+| `--exit-on-issues` blocks commit on false positives | Medium     | Medium | Developers can skip hooks with `git commit --no-verify`. Document this escape hatch. Tune severity thresholds — only `critical` and `high` block, not `medium` or `low`                                                                                                                                                                                                             |
+| Commit message validation too strict/opinionated    | Low        | Medium | The LLM prompt should be advisory, not prescriptive. Focus on egregiously bad messages (empty, single word, "fix", "asdf") rather than enforcing a specific format. Make commit-msg hook optional with `--no-commit-msg` during install                                                                                                                                             |
 
 ## Rollback Plan
 
@@ -168,16 +168,16 @@ git commit
 
 This feature positions GHAGGA as a complete replacement for GGA (the Bash-based tool):
 
-| Capability | GGA (Bash) | GHAGGA (after this change) |
-|-----------|------------|---------------------------|
-| Pre-commit review | Yes (hooks) | Yes (`ghagga hooks install`) |
-| Commit-msg validation | Yes (hooks) | Yes (`--commit-msg`) |
-| Local review | Yes (`gga review`) | Yes (`ghagga review .`) |
-| PR review (GitHub) | No | Yes (GitHub Action) |
-| SaaS dashboard | No | Yes (web app) |
-| Memory/learning | Limited (Engram bridge) | Yes (SQLite, PostgreSQL) |
-| Multi-provider AI | No (OpenAI only) | Yes (Anthropic, OpenAI, Google) |
-| Static analysis | Basic (ShellCheck) | Full (Semgrep, Trivy, CPD) |
+| Capability            | GGA (Bash)              | GHAGGA (after this change)      |
+| --------------------- | ----------------------- | ------------------------------- |
+| Pre-commit review     | Yes (hooks)             | Yes (`ghagga hooks install`)    |
+| Commit-msg validation | Yes (hooks)             | Yes (`--commit-msg`)            |
+| Local review          | Yes (`gga review`)      | Yes (`ghagga review .`)         |
+| PR review (GitHub)    | No                      | Yes (GitHub Action)             |
+| SaaS dashboard        | No                      | Yes (web app)                   |
+| Memory/learning       | Limited (Engram bridge) | Yes (SQLite, PostgreSQL)        |
+| Multi-provider AI     | No (OpenAI only)        | Yes (Anthropic, OpenAI, Google) |
+| Static analysis       | Basic (ShellCheck)      | Full (Semgrep, Trivy, CPD)      |
 
 After v2.2.0, GGA becomes a legacy/Bash-only alternative for users who prefer zero-dependency shell scripts. GHAGGA covers every use case GGA had, plus PR review, SaaS, dashboard, and multi-provider AI.
 

@@ -2,14 +2,13 @@
 
 **Status**: draft  
 **Proposal**: [proposal.md](./proposal.md)  
-**Date**: 2026-03-17  
+**Date**: 2026-03-17
 
 ## Requirements
 
 ### FR-1: Dependency Graph Schema
 
 The system MUST define a JSON schema for the dependency graph stored in `.ghagga/graph.json`.
-
 - Each node MUST represent a source file, keyed by its relative path from repo root
 - Each node MUST contain:
   - `hash`: SHA-256 hash of the file content (for incremental indexing)
@@ -25,7 +24,6 @@ The system MUST define a JSON schema for the dependency graph stored in `.ghagga
 ### FR-2: Metadata File
 
 The system MUST store indexing metadata in `.ghagga/metadata.json` alongside the graph.
-
 - `lastIndexedCommit`: the full SHA of the commit that was last indexed
 - `lastIndexedAt`: ISO 8601 timestamp of the last index operation
 - `schemaVersion`: integer matching the graph's `version` field
@@ -36,7 +34,6 @@ The system MUST store indexing metadata in `.ghagga/metadata.json` alongside the
 ### FR-3: Tree-Sitter Indexing Engine
 
 The system MUST implement a Tree-sitter-based indexer that parses source files and produces the dependency graph.
-
 - The indexer MUST support these languages via Tree-sitter grammars:
   - TypeScript (`.ts`, `.tsx`)
   - JavaScript (`.js`, `.jsx`, `.mjs`, `.cjs`)
@@ -62,7 +59,6 @@ The system MUST implement a Tree-sitter-based indexer that parses source files a
 ### FR-4: Incremental Index Updates
 
 The system MUST support incremental updates to avoid full re-indexing on every merge.
-
 - On first install (no existing graph), the indexer MUST perform a full index of all source files
 - On subsequent runs, the indexer MUST:
   1. Load the existing graph.json
@@ -76,7 +72,6 @@ The system MUST support incremental updates to avoid full re-indexing on every m
 ### FR-5: Blast-Radius Computation
 
 The system MUST compute the blast radius for a set of changed files using the dependency graph.
-
 - Given an array of changed file paths (from the PR diff), the system MUST:
   1. Find all direct dependents (files that import any changed file) — depth 1
   2. Recursively find transitive dependents up to a configurable depth (default: 3)
@@ -114,7 +109,6 @@ The system MUST support loading the dependency graph from three sources dependin
 ### FR-7: Pipeline Integration
 
 The pipeline (`pipeline.ts`) MUST integrate blast-radius filtering between diff parsing and stack detection.
-
 - A new step "Step 2.5: Blast-radius filter" MUST be inserted after Step 2 (parse/filter diff)
 - The step MUST:
   1. Attempt to load the dependency graph (mode-dependent)
@@ -128,6 +122,7 @@ The pipeline (`pipeline.ts`) MUST integrate blast-radius filtering between diff 
   3. Emit progress event: `"Blast radius: skipped (no graph available)"`
 - The pipeline MUST NOT block or fail due to graph unavailability
 - The blast-radius step MUST add `metadata.blastRadius` to the `ReviewResult`:
+
   ```typescript
   blastRadius?: {
     enabled: boolean;
@@ -141,7 +136,6 @@ The pipeline (`pipeline.ts`) MUST integrate blast-radius filtering between diff 
 ### FR-8: Runner Graph Indexing Workflow
 
 The ghagga-runner MUST include a new GitHub Actions workflow for building and pushing the dependency graph.
-
 - Workflow file: `ghagga-graph-index.yml`
 - Trigger: `workflow_dispatch` (dispatched by the server on installation and on merge to main)
 - Steps:
@@ -159,6 +153,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
   - `incremental`: boolean (true for updates, false for full re-index)
 - The workflow MUST use the repository's own `GITHUB_TOKEN` to push to the orphan branch
 - If the orphan branch doesn't exist, the workflow MUST create it:
+
   ```bash
   git checkout --orphan ghagga/graph
   git rm -rf .
@@ -172,10 +167,10 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **And** no `ghagga/graph` branch exists  
 **When** the server dispatches the graph indexing workflow  
 **Then** the runner performs a full Tree-sitter index of all .ts/.tsx/.js/.jsx files  
-**And** produces a graph.json with ~500 nodes and import/export edges  
+**And** produces a graph.json with ~500 nodes and import/export edges
 **And** creates the `ghagga/graph` orphan branch  
 **And** pushes `.ghagga/graph.json` (~150KB) and `.ghagga/metadata.json`  
-**And** calls the server callback with success status  
+**And** calls the server callback with success status
 
 ### S2: PR review with blast-radius (SaaS mode)
 
@@ -187,7 +182,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **And** computes blast radius: `format.ts` + `handler.ts` + `router.ts` + `format.test.ts`  
 **And** filters the diff to only these 4 files (instead of the full 15-file PR diff)  
 **And** sends 4 files to the LLM instead of 15  
-**And** `metadata.blastRadius.blastRadiusFiles` is 4  
+**And** `metadata.blastRadius.blastRadiusFiles` is 4
 
 ### S3: PR review without graph (fallback)
 
@@ -197,7 +192,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **And** GitHub API returns 404  
 **And** the pipeline logs "no graph available" and continues  
 **And** all filtered files are sent to the LLM (current behavior)  
-**And** `metadata.blastRadius.enabled` is true, `graphAvailable` is false  
+**And** `metadata.blastRadius.enabled` is true, `graphAvailable` is false
 
 ### S4: Incremental graph update on merge to main
 
@@ -209,7 +204,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **And** re-parses only those 3 files with Tree-sitter  
 **And** updates the graph edges for those 3 files  
 **And** pushes the updated graph.json  
-**And** updates metadata.lastIndexedCommit to the new merge commit SHA  
+**And** updates metadata.lastIndexedCommit to the new merge commit SHA
 
 ### S5: Blast radius exceeds max cap
 
@@ -218,7 +213,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **When** blast-radius computation runs  
 **Then** the blast-radius set has 80+ files (exceeds `maxBlastRadiusFiles: 50`)  
 **And** the pipeline falls back to the full diff with a warning  
-**And** `metadata.blastRadius.fallbackReason` is `"blast radius exceeds 50 files"`  
+**And** `metadata.blastRadius.fallbackReason` is `"blast radius exceeds 50 files"`
 
 ### S6: CLI mode with local graph
 
@@ -228,7 +223,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **Then** the CLI builds a local graph via Tree-sitter (scanning the working directory)  
 **And** stores it in `~/.ghagga/graphs/{repo-slug}.db`  
 **And** uses the local graph for blast-radius computation  
-**And** subsequent reviews use the cached graph (incremental updates)  
+**And** subsequent reviews use the cached graph (incremental updates)
 
 ### S7: Multi-language repo (TypeScript + Python)
 
@@ -237,7 +232,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **And** a PR modifies `scripts/deploy.py` which is imported by `scripts/main.py`  
 **When** blast-radius computation runs  
 **Then** the blast radius includes `deploy.py`, `main.py`, and any `test_deploy.py`  
-**And** TypeScript files are not in the blast radius (no cross-language edges)  
+**And** TypeScript files are not in the blast radius (no cross-language edges)
 
 ### S8: Graph staleness warning
 
@@ -245,7 +240,7 @@ The ghagga-runner MUST include a new GitHub Actions workflow for building and pu
 **When** the pipeline loads the graph  
 **Then** the pipeline emits a warning: `"Dependency graph is 14 days stale (last indexed: {date})"`  
 **And** still uses the graph for blast-radius (stale graph is better than no graph)  
-**And** `metadata.blastRadius.graphStale` is true  
+**And** `metadata.blastRadius.graphStale` is true
 
 ## Edge Cases
 

@@ -2,11 +2,12 @@
 
 **Status**: ready  
 **Design**: [design.md](./design.md)  
-**Date**: 2026-03-17  
+**Date**: 2026-03-17
 
 ## Phase 1: Graph Types & Schema (foundation — no dependencies)
 
 ### 1.1 Create graph schema and types
+
 **File**: `packages/core/src/graph/schema.ts` (NEW)  
 **Change**:
 - Define `DependencyGraph` interface (version, rootDir, nodes)
@@ -15,6 +16,7 @@
 - Define `BlastRadiusMetadata` interface (enabled, graphAvailable, totalFiles, blastRadiusFiles, fallbackReason?, graphStale?)
 - Define `SupportedLanguage` type union: `'typescript' | 'javascript' | 'python' | 'go' | 'java' | 'rust'`
 - Define constants:
+
   ```typescript
   export const GRAPH_VERSION = 1;
   export const MAX_GRAPH_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
@@ -51,6 +53,7 @@
 **Estimate**: 30 min
 
 ### 1.2 Create graph schema tests
+
 **File**: `packages/core/src/graph/schema.test.ts` (NEW)  
 **Change**:
 - Test `isTestFile()` for each supported language's test patterns
@@ -69,9 +72,11 @@
 **Estimate**: 20 min
 
 ### 1.3 Add graph config to ReviewSettings and ReviewInput types
+
 **File**: `packages/core/src/types.ts`  
 **Change**:
 - Add to `ReviewSettings`:
+
   ```typescript
   /** Enable blast-radius analysis using dependency graph. Default: false. */
   enableBlastRadius?: boolean;
@@ -81,6 +86,7 @@
   traversalDepth?: number;
   ```
 - Add to `ReviewInput`:
+
   ```typescript
   /**
    * Graph loader for blast-radius analysis.
@@ -90,12 +96,14 @@
   graphLoader?: import('./graph/schema.js').GraphLoader;
   ```
 - Add to `ReviewMetadata`:
+
   ```typescript
   /** Blast-radius analysis results (present when enableBlastRadius is true). */
   blastRadius?: import('./graph/schema.js').BlastRadiusMetadata;
   ```
 - Do NOT add to `DEFAULT_SETTINGS` (undefined = disabled)
 - Add `GraphLoader` interface to `schema.ts`:
+
   ```typescript
   export interface GraphLoader {
     load(): Promise<DependencyGraph | null>;
@@ -107,6 +115,7 @@
 **Estimate**: 15 min
 
 ### 1.4 Create barrel export
+
 **File**: `packages/core/src/graph/index.ts` (NEW)  
 **Change**:
 - Re-export all public types and functions from schema.ts
@@ -118,12 +127,14 @@
 ## Phase 2: Blast-Radius Computation (depends on Phase 1)
 
 ### 2.1 Implement blast-radius computation
+
 **File**: `packages/core/src/graph/blast-radius.ts` (NEW)  
 **Change**:
 - Implement `buildReverseIndex(graph: DependencyGraph): Map<string, Set<string>>`:
   - For each node, for each import, add reverse edge: `import → node.path`
   - Also add reverse edges for `calls[].target → node.path`
 - Implement `computeBlastRadius(graph, changedFiles, options?): BlastRadiusResult`:
+
   ```typescript
   interface BlastRadiusOptions {
     maxDepth?: number;      // default: DEFAULT_TRAVERSAL_DEPTH (3)
@@ -146,6 +157,7 @@
     exceededCap: boolean;
   }
   ```
+
   - Build reverse index
   - BFS from changed files with depth limit
   - Track visited set for cycle handling
@@ -157,9 +169,11 @@
 **Estimate**: 30 min
 
 ### 2.2 Create blast-radius computation tests
+
 **File**: `packages/core/src/graph/blast-radius.test.ts` (NEW)  
 **Change**:
 - Create test fixture: small graph (10 nodes) with known dependency chain
+
   ```
   a.ts → b.ts → c.ts → d.ts
                     ↘ e.ts
@@ -185,9 +199,11 @@
 ## Phase 3: Graph Loading (depends on Phase 1)
 
 ### 3.1 Implement GitHub API graph loader
+
 **File**: `packages/core/src/graph/loader.ts` (NEW)  
 **Change**:
 - Implement `GitHubApiGraphLoader`:
+
   ```typescript
   export class GitHubApiGraphLoader implements GraphLoader {
     constructor(
@@ -206,11 +222,9 @@
         },
         signal: AbortSignal.timeout(5_000),
       });
-      
-      if (response.status === 404) return null;
+        if (response.status === 404) return null;
       if (!response.ok) return null;
-      
-      const json = await response.json();
+        const json = await response.json();
       return validateGraph(json);
     }
 
@@ -220,18 +234,17 @@
   }
   ```
 - Implement `FilesystemGraphLoader`:
+
   ```typescript
   export class FilesystemGraphLoader implements GraphLoader {
     constructor(private graphDir: string) {}
-    
-    async load(): Promise<DependencyGraph | null> {
+      async load(): Promise<DependencyGraph | null> {
       const graphPath = path.join(this.graphDir, '.ghagga', 'graph.json');
       if (!existsSync(graphPath)) return null;
       const json = JSON.parse(readFileSync(graphPath, 'utf-8'));
       return validateGraph(json);
     }
-    
-    async loadMetadata(): Promise<GraphMetadata | null> { /* similar */ }
+      async loadMetadata(): Promise<GraphMetadata | null> { /* similar */ }
   }
   ```
 - Implement `NullGraphLoader` (always returns null — used when blast-radius is disabled)
@@ -241,6 +254,7 @@
 **Estimate**: 25 min
 
 ### 3.2 Create graph loader tests
+
 **File**: `packages/core/src/graph/loader.test.ts` (NEW)  
 **Change**:
 - Test `GitHubApiGraphLoader.load()`: mock fetch → 200 with valid graph → returns DependencyGraph
@@ -259,38 +273,37 @@
 ## Phase 4: Pipeline Integration (depends on Phases 2, 3)
 
 ### 4.1 Integrate blast-radius into the review pipeline
+
 **File**: `packages/core/src/pipeline.ts`  
 **Change**:
 - Add imports:
+
   ```typescript
   import { computeBlastRadius } from './graph/blast-radius.js';
   import type { BlastRadiusMetadata, GraphLoader } from './graph/schema.js';
   ```
 - Insert Step 2.5 between Step 2 (parse/filter) and Step 3 (detect stacks):
+
   ```typescript
   // ── Step 2.5: Blast-radius filter (optional) ───────────────
   let blastRadiusMetadata: BlastRadiusMetadata | undefined;
-  
-  if (input.settings.enableBlastRadius && input.graphLoader) {
+    if (input.settings.enableBlastRadius && input.graphLoader) {
     try {
       const graph = await input.graphLoader.load();
       if (graph) {
         const metadata = await input.graphLoader.loadMetadata();
         const stale = metadata ? isGraphStale(metadata) : false;
-        
-        if (stale) {
+          if (stale) {
           emit({
             step: 'blast-radius',
             message: `Dependency graph is stale (last indexed: ${metadata?.lastIndexedAt})`,
           });
         }
-        
-        const result = computeBlastRadius(graph, fileList, {
+          const result = computeBlastRadius(graph, fileList, {
           maxDepth: input.settings.traversalDepth,
           maxFiles: input.settings.maxBlastRadiusFiles,
         });
-        
-        if (result.exceededCap) {
+          if (result.exceededCap) {
           emit({
             step: 'blast-radius',
             message: `Blast radius exceeds ${input.settings.maxBlastRadiusFiles ?? 50} files — using full diff`,
@@ -347,20 +360,24 @@
   }
   ```
 - After result construction, add blast-radius metadata:
+
   ```typescript
   result.metadata.blastRadius = blastRadiusMetadata;
   ```
 - Update `fileList` variable after blast-radius filter to use filtered paths:
+
   ```typescript
   // After blast-radius filter, update fileList for subsequent steps
   const fileList = filteredFiles.map(f => f.path);
   ```
+
   Note: `fileList` is already used as `const` — need to change to `let` or use a new variable `blastRadiusFileList`
 
 **Commit**: `feat(pipeline): integrate blast-radius filter step`  
 **Estimate**: 30 min
 
 ### 4.2 Update pipeline tests for blast-radius
+
 **File**: `packages/core/src/pipeline.test.ts`  
 **Change**:
 - Add test: `'skips blast-radius when enableBlastRadius is false (default)'`
@@ -388,9 +405,11 @@
 ## Phase 5: SaaS Integration (depends on Phase 4)
 
 ### 5.1 Add graph fetch to GitHub client
+
 **File**: `apps/server/src/github/client.ts`  
 **Change**:
 - Add `fetchGraphFromBranch()`:
+
   ```typescript
   /**
    * Fetch the dependency graph from the ghagga/graph orphan branch.
@@ -402,8 +421,7 @@
     token: string,
   ): Promise<DependencyGraph | null> {
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/.ghagga/graph.json?ref=ghagga/graph`;
-    
-    try {
+      try {
       const response = await githubCircuitBreaker.execute(async () => {
         return fetch(url, {
           headers: {
@@ -414,14 +432,12 @@
           signal: AbortSignal.timeout(5_000),
         });
       });
-      
-      if (response.status === 404) return null;
+        if (response.status === 404) return null;
       if (!response.ok) {
         console.warn(`[ghagga] Failed to fetch graph: ${response.status}`);
         return null;
       }
-      
-      const json = await response.json();
+        const json = await response.json();
       return validateGraph(json);
     } catch {
       return null;
@@ -434,10 +450,12 @@
 **Estimate**: 15 min
 
 ### 5.2 Wire graph loading into the review queue
+
 **File**: `apps/server/src/queues/review.ts`  
 **Change**:
 - Import graph types and PreloadedGraphLoader
 - Before `reviewPipeline(input)` call (after token fetch, around line 157-161):
+
   ```typescript
   // Fetch dependency graph for blast-radius analysis (if enabled)
   let graphLoader: GraphLoader | undefined;
@@ -449,6 +467,7 @@
   }
   ```
 - Pass `graphLoader` to `ReviewInput`:
+
   ```typescript
   const input: ReviewInput = {
     // ... existing fields
@@ -460,6 +479,7 @@
 **Estimate**: 15 min
 
 ### 5.3 Add server graph fetch tests
+
 **File**: `apps/server/src/github/client.test.ts`  
 **Change**:
 - Add test: `'fetchGraphFromBranch returns graph on 200'`
@@ -474,6 +494,7 @@
 ## Phase 6: Tree-sitter Indexer (Runner/CLI — depends on Phase 1)
 
 ### 6.1 Create TypeScript/JavaScript extractor
+
 **File**: `packages/core/src/graph/extractors/typescript.ts` (NEW)  
 **Change**:
 - Install Tree-sitter dependencies: `tree-sitter`, `tree-sitter-typescript`, `tree-sitter-javascript`
@@ -494,6 +515,7 @@
 **Estimate**: 45 min
 
 ### 6.2 Create Python extractor
+
 **File**: `packages/core/src/graph/extractors/python.ts` (NEW)  
 **Change**:
 - Install: `tree-sitter-python`
@@ -507,6 +529,7 @@
 **Estimate**: 30 min
 
 ### 6.3 Create Go extractor
+
 **File**: `packages/core/src/graph/extractors/go.ts` (NEW)  
 **Change**:
 - Install: `tree-sitter-go`
@@ -519,6 +542,7 @@
 **Estimate**: 30 min
 
 ### 6.4 Create Java extractor
+
 **File**: `packages/core/src/graph/extractors/java.ts` (NEW)  
 **Change**:
 - Install: `tree-sitter-java`
@@ -531,6 +555,7 @@
 **Estimate**: 30 min
 
 ### 6.5 Create Rust extractor
+
 **File**: `packages/core/src/graph/extractors/rust.ts` (NEW)  
 **Change**:
 - Install: `tree-sitter-rust`
@@ -543,6 +568,7 @@
 **Estimate**: 30 min
 
 ### 6.6 Create extractor registry and tests
+
 **File**: `packages/core/src/graph/extractors/index.ts` (NEW)  
 **File**: `packages/core/src/graph/extractors/typescript.test.ts` (NEW)  
 **File**: `packages/core/src/graph/extractors/python.test.ts` (NEW)  
@@ -568,6 +594,7 @@
 ## Phase 7: Graph Builder (depends on Phases 1, 6)
 
 ### 7.1 Implement graph builder
+
 **File**: `packages/core/src/graph/indexer.ts` (NEW)  
 **Change**:
 - Implement `buildGraph(rootDir, options?): Promise<DependencyGraph>`:
@@ -590,6 +617,7 @@
 **Estimate**: 40 min
 
 ### 7.2 Create graph builder tests
+
 **File**: `packages/core/src/graph/indexer.test.ts` (NEW)  
 **Change**:
 - Test with a fixture directory containing 5-10 TypeScript files with known imports
@@ -607,6 +635,7 @@
 ## Phase 8: Runner Workflow (ghagga-runner repo — depends on Phase 7)
 
 ### 8.1 Create runner graph indexing workflow
+
 **File**: `ghagga-runner/.github/workflows/ghagga-graph-index.yml` (NEW in ghagga-runner repo)  
 **Change**:
 - Workflow dispatch trigger with inputs:
@@ -614,6 +643,7 @@
 - Steps:
   1. Checkout target repo at headSha
   2. Fetch or create orphan branch:
+
      ```bash
      git fetch origin ghagga/graph:ghagga/graph 2>/dev/null || true
      ```
@@ -621,6 +651,7 @@
   4. Install Tree-sitter + grammars
   5. Run `index-graph.ts` script
   6. Commit and push to ghagga/graph:
+
      ```bash
      git checkout ghagga/graph 2>/dev/null || git checkout --orphan ghagga/graph && git rm -rf . 2>/dev/null || true
      mkdir -p .ghagga
@@ -636,6 +667,7 @@
 **Estimate**: 30 min
 
 ### 8.2 Create runner indexing script
+
 **File**: `ghagga-runner/scripts/index-graph.ts` (NEW in ghagga-runner repo)  
 **Change**:
 - CLI entry point that:
@@ -649,6 +681,7 @@
 **Estimate**: 20 min
 
 ### 8.3 Wire graph indexing dispatch from server
+
 **File**: `apps/server/src/github/runner.ts`  
 **Change**:
 - Add `DispatchGraphIndexParams` interface
@@ -671,9 +704,11 @@
 ## Phase 9: Update Barrel Export & Core Index
 
 ### 9.1 Update package exports
+
 **File**: `packages/core/src/graph/index.ts`  
 **Change**:
 - Export all public types and functions from all graph modules:
+
   ```typescript
   export type { DependencyGraph, GraphNode, GraphMetadata, GraphLoader, BlastRadiusMetadata, SupportedLanguage } from './schema.js';
   export { GRAPH_VERSION, validateGraph, isTestFile, isGraphStale } from './schema.js';
@@ -693,15 +728,17 @@
 ## Phase 10: Verification (depends on all above)
 
 ### 10.1 Run full test suite
+
 **Command**: `pnpm test`  
 **Verify**:
 - All existing tests pass (no regressions)
 - All new graph tests pass
 - No TypeScript errors (`pnpm typecheck`)
 - Biome lint passes (`pnpm lint`)
-**Estimate**: 5 min
+  **Estimate**: 5 min
 
 ### 10.2 Integration test: graph indexing → blast-radius → review
+
 **File**: `packages/core/src/__integration__/blast-radius.integration.test.ts` (NEW)  
 **Change**:
 - Create a temp directory with 10 TypeScript files with known import chains
@@ -715,29 +752,30 @@
 **Estimate**: 30 min
 
 ### 10.3 Manual verification: build graph for GHAGGA's own codebase
+
 **Command**: Run the indexer on the GHAGGA monorepo itself  
 **Verify**:
 - graph.json is generated (check size, node count)
 - Blast radius for a change to `pipeline.ts` includes known dependents
 - Blast radius for a change to `types.ts` exceeds cap (core utility)
 - Performance: indexing <30s, blast-radius <10ms
-**Estimate**: 15 min
+  **Estimate**: 15 min
 
 ## Summary
 
-| Phase | Tasks | Files | Est. Time |
-|-------|-------|-------|-----------|
-| 1. Types & Schema | 4 | 4 | 68 min |
-| 2. Blast-Radius Computation | 2 | 2 | 60 min |
-| 3. Graph Loading | 2 | 2 | 50 min |
-| 4. Pipeline Integration | 2 | 2 | 60 min |
-| 5. SaaS Integration | 3 | 3 | 45 min |
-| 6. Tree-sitter Extractors | 6 | 8 | 205 min |
-| 7. Graph Builder | 2 | 2 | 70 min |
-| 8. Runner Workflow | 3 | 4 | 75 min |
-| 9. Barrel Export | 1 | 2 | 5 min |
-| 10. Verification | 3 | 1 | 50 min |
-| **Total** | **28** | **30** | **~11.5 hours** |
+| Phase                       | Tasks  | Files  | Est. Time       |
+| --------------------------- | ------ | ------ | --------------- |
+| 1. Types & Schema           | 4      | 4      | 68 min          |
+| 2. Blast-Radius Computation | 2      | 2      | 60 min          |
+| 3. Graph Loading            | 2      | 2      | 50 min          |
+| 4. Pipeline Integration     | 2      | 2      | 60 min          |
+| 5. SaaS Integration         | 3      | 3      | 45 min          |
+| 6. Tree-sitter Extractors   | 6      | 8      | 205 min         |
+| 7. Graph Builder            | 2      | 2      | 70 min          |
+| 8. Runner Workflow          | 3      | 4      | 75 min          |
+| 9. Barrel Export            | 1      | 2      | 5 min           |
+| 10. Verification            | 3      | 1      | 50 min          |
+| **Total**                   | **28** | **30** | **~11.5 hours** |
 
 ## Execution Order
 

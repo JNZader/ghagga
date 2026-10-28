@@ -53,23 +53,22 @@ All R5 pre-existing requirements (R5.1-R5.6) unchanged; implementation confirms 
 
 All 38 checklist items in `tasks.md` are checked `[x]`:
 
-| Phase | PR | Status | Evidence |
-|---|---|---|---|
-| 1: Provider Abstraction | #293 | PASS | `resolveEmbeddingConfig`, factory registry, 3 providers, FakeEmbeddingProvider, unit tests |
-| 2: Schema | #294 | PASS | `embedding_model`/`embedding_dim` columns PG+SQLite, additive migration, no destructive changes |
-| 3: SQLite Cosine Union | #295 | PASS | `_hybridSearch` bounded K, dimension guard, union+dedup, positional-rank, `last_accessed_at` scope |
-| 4: PostgreSQL Cosine Union | #296 | PASS | Symmetric union, posRank convention, decay filter sync, PG/SQLite parity tests |
-| 5: Context Wiring | #297 | PASS | Server (env), CLI (config), Action (secrets, HTTP-only coercion) at 3 construction sites |
-| 6: Backfill Script | #298 | PASS | Idempotent batched backfill, CLI subcommand, server script, resumable cursor |
-| 7: Local Optional Provider | #299 | PASS (functional) | Lazy import, degradation, ncc exclude; **DEVIATION documented in verify-report CRITICAL-1** |
-| 8: Documentation | #300 | PASS | Config surface, recommended defaults, backfill usage, Action limitation, rollback |
+| Phase                      | PR   | Status            | Evidence                                                                                           |
+| -------------------------- | ---- | ----------------- | -------------------------------------------------------------------------------------------------- |
+| 1: Provider Abstraction    | #293 | PASS              | `resolveEmbeddingConfig`, factory registry, 3 providers, FakeEmbeddingProvider, unit tests         |
+| 2: Schema                  | #294 | PASS              | `embedding_model`/`embedding_dim` columns PG+SQLite, additive migration, no destructive changes    |
+| 3: SQLite Cosine Union     | #295 | PASS              | `_hybridSearch` bounded K, dimension guard, union+dedup, positional-rank, `last_accessed_at` scope |
+| 4: PostgreSQL Cosine Union | #296 | PASS              | Symmetric union, posRank convention, decay filter sync, PG/SQLite parity tests                     |
+| 5: Context Wiring          | #297 | PASS              | Server (env), CLI (config), Action (secrets, HTTP-only coercion) at 3 construction sites           |
+| 6: Backfill Script         | #298 | PASS              | Idempotent batched backfill, CLI subcommand, server script, resumable cursor                       |
+| 7: Local Optional Provider | #299 | PASS (functional) | Lazy import, degradation, ncc exclude; **DEVIATION documented in verify-report CRITICAL-1**        |
+| 8: Documentation           | #300 | PASS              | Config surface, recommended defaults, backfill usage, Action limitation, rollback                  |
 
 **Caveat**: Phase 7 (local provider) exhibits a documented deviation — the shipped implementation uses an undeclared user-installed optional peer (`pnpm add @xenova/transformers` manually) rather than declaring it as an `optionalDependency`, due to pnpm's default behavior of installing optional dependencies (which would force the 1.4MB ML library + vulnerable transitive `protobufjs` into every install). The behavioral intent is fully implemented and tested (3 scenarios: installed, not-installed, init-throws); only the package.json declaration differs. Verify-report CRITICAL-1 flags this as a documentation/tasks-accuracy gap. The team chose the safer path for end-users.
 
 ## Verification Status: PASS WITH WARNINGS
 
 From `verify-report.md`:
-
 - **Task Completeness**: All 38/38 checklist items checked `[x]`; all phases verified against code @ 468f4fb
 - **Runtime Evidence**: Full test suite passing (5534 tests across core/db/server/cli/action), clean TypeScript builds
 - **Spec Compliance**:
@@ -106,7 +105,6 @@ All artifacts preserved in `/openspec/changes/archive/2026-07-11-semantic-memory
 ## Source of Truth Updated
 
 Main specs now reflect semantic retrieval capability:
-
 - **`openspec/specs/embedding-providers/spec.md`** — new, 6 requirements defining provider abstraction, optional-peer strategy, batching, graceful degradation, metadata, dimension guard
 - **`openspec/specs/memory-storage/spec.md`** — R5 re-titled "FTS5 Search Parity & Semantic Union", R5.7-R5.11 added (union/dedup/scoring/parity), R11 added (backfill), all R1-R10 + R5.1-R5.6 preserved
 
@@ -121,26 +119,29 @@ No migration reversal needed (embeddings columns remain NULL/harmless). Union co
 
 ## Risk Assessment
 
-| Risk | Status | Mitigation |
-|---|---|---|
-| Dimension mismatch across models | **Mitigated** | Per-row metadata + read guard; mix is safe, degrades gracefully |
-| Optional-dep load failure | **Mitigated** | Lazy import + catch + fallback to `none`; no crash on missing package |
-| Action bundle bloat | **Mitigated** | ncc excludes `@xenova/transformers`; Action uses HTTP or `none` only |
-| Embedding API cost | **Mitigated** | Batched backfill, bounded candidate K=200, `none` default, rate control flags |
-| PG/SQLite asymmetry | **Mitigated** | Symmetric Option A union (JS, both backends); decay filter explicitly synced |
-| Accuracy gap (CRITICAL-1) | **Documented** | Deviation noted; functional intent shipped; rec: update spec text not code |
+| Risk                             | Status         | Mitigation                                                                    |
+| -------------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| Dimension mismatch across models | **Mitigated**  | Per-row metadata + read guard; mix is safe, degrades gracefully               |
+| Optional-dep load failure        | **Mitigated**  | Lazy import + catch + fallback to `none`; no crash on missing package         |
+| Action bundle bloat              | **Mitigated**  | ncc excludes `@xenova/transformers`; Action uses HTTP or `none` only          |
+| Embedding API cost               | **Mitigated**  | Batched backfill, bounded candidate K=200, `none` default, rate control flags |
+| PG/SQLite asymmetry              | **Mitigated**  | Symmetric Option A union (JS, both backends); decay filter explicitly synced  |
+| Accuracy gap (CRITICAL-1)        | **Documented** | Deviation noted; functional intent shipped; rec: update spec text not code    |
 
 ## Next Steps
 
 ### Immediate (before user QA)
+
 - (Optional) Update `tasks.md` task 7.1 and `design.md` D7 text to reflect actual undeclared-peer implementation, or explicitly accept deviation in change notes
 - User validation: semantically-close but lexically-disjoint observation retrieval works as intended
 
 ### Follow-Up (post-change)
+
 - **pgvector / real ANN for PostgreSQL** (scale-contingent, deferred per proposal scope)
 - **Vote/consensus ranking improvements** (if prioritized)
 
 ### Observability
+
 - Monitor backfill runs for API cost and rate limits
 - Track `last_accessed_at` updates to confirm final-rows-only scoping
 - A/B test dimension-mismatch scenarios (mixed old/new embeddings) in live environment

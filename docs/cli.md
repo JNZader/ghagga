@@ -9,7 +9,6 @@ Review local code changes from your terminal with AI-powered analysis. The CLI i
 ## When to Choose the CLI
 
 The CLI is best for:
-
 - **Local development** — review changes before committing or pushing
 - **Pre-commit hooks** — automatic review on every commit via `ghagga hooks install`
 - **Pre-push checks** — catch issues before they hit CI
@@ -28,12 +27,12 @@ The CLI is best for:
 
 ## Cost
 
-| Component | Cost |
-|-----------|------|
-| **GHAGGA CLI** | MIT license |
-| **gateway** | Your mcp-llm-bridge and whatever model it bills |
-| **cli-bridge** | A local CLI you already run |
-| **Ollama** | Local. No API key |
+| Component           | Cost                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| **GHAGGA CLI**      | MIT license                                                                        |
+| **gateway**         | Your mcp-llm-bridge and whatever model it bills                                    |
+| **cli-bridge**      | A local CLI you already run                                                        |
+| **Ollama**          | Local. No API key                                                                  |
 | **Static analysis** | The 17-tool registry. SonarQube runs only with MCP. Other tools run when installed |
 
 > `ghagga login` does not make the review free. It saves `gateway`. Ollama is the local no-key mode.
@@ -65,7 +64,6 @@ ghagga login
 ```
 
 The login process uses **GitHub Device Flow**:
-
 1. The CLI displays a one-time code and opens your browser to `https://github.com/login/device`
 2. Enter the code in the browser and click **"Authorize"**
 3. The CLI detects authorization and saves your token
@@ -141,7 +139,6 @@ flowchart LR
 ### Git Hooks Workflow
 
 When git hooks are installed via `ghagga hooks install`, the review runs automatically on each commit:
-
 - **pre-commit**: Runs `ghagga review --staged --plain --exit-on-issues`. Uses `--quick` mode by default for fast feedback (~5-10s). If critical/high issues are found, the commit is blocked.
 - **commit-msg**: Runs `ghagga review --commit-msg <file> --plain --exit-on-issues`. Validates message format (empty, too short, subject >72 chars, trailing period, missing body separation).
 
@@ -275,10 +272,10 @@ ghagga health --top 10
 
 Options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `[path]` | `.` | Path to repository or subdirectory |
-| `--top <n>` | `5` | Number of top issues to display |
+| Option      | Default | Description                        |
+| ----------- | ------- | ---------------------------------- |
+| `[path]`    | `.`     | Path to repository or subdirectory |
+| `--top <n>` | `5`     | Number of top issues to display    |
 
 The health command inherits `--output json` from global options for CI integration. See [Health Check](health.md) for full details.
 
@@ -288,13 +285,13 @@ Build the dependency graph consumed by blast-radius and review (`.ghagga/graph.j
 
 By default this uses a **SCIP-backed backend** for compiler-grade cross-file resolution, covering 8 languages across per-language maturity tiers:
 
-| Maturity | Languages | Indexer(s) | Notes |
-|----------|-----------|------------|-------|
-| `stable` | Go, TypeScript/JavaScript, Rust | `scip-go`, `scip-typescript`, `rust-analyzer` | Captured fixtures, validated in CI |
-| `stable`\* | Python | `scip-python` | Entry shipped; fixture capture is deferred — scip-python 0.6.6 emits 0 documents in some environments |
-| `heavy` | Java, Kotlin | `scip-java` (shared indexer) | Needs a Maven or Gradle build in the target repo; Kotlin support is Gradle-only |
-| `experimental` | C# | `scip-dotnet` | Immature upstream indexer (0.2.x) |
-| `experimental` | PHP | `scip-php` | Solo-maintained upstream indexer |
+| Maturity       | Languages                       | Indexer(s)                                    | Notes                                                                                                 |
+| -------------- | ------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `stable`       | Go, TypeScript/JavaScript, Rust | `scip-go`, `scip-typescript`, `rust-analyzer` | Captured fixtures, validated in CI                                                                    |
+| `stable`\*     | Python                          | `scip-python`                                 | Entry shipped; fixture capture is deferred — scip-python 0.6.6 emits 0 documents in some environments |
+| `heavy`        | Java, Kotlin                    | `scip-java` (shared indexer)                  | Needs a Maven or Gradle build in the target repo; Kotlin support is Gradle-only                       |
+| `experimental` | C#                              | `scip-dotnet`                                 | Immature upstream indexer (0.2.x)                                                                     |
+| `experimental` | PHP                             | `scip-php`                                    | Solo-maintained upstream indexer                                                                      |
 
 \* Registered and dispatched like any other stable entry — only the fixture capture for the test suite is deferred, not the runtime support.
 
@@ -303,7 +300,6 @@ By default this uses a **SCIP-backed backend** for compiler-grade cross-file res
 #### Nested marker detection
 
 Marker files are detected at **any depth** below repo root, not just repo root itself — a monorepo with `apps/backend/go.mod` and `services/worker/go.mod` (and no root-level `go.mod`) gets BOTH indexed, as does a repo mixing a root-level `package.json` with a nested `pyproject.toml`. This matters because most indexers (Go, Rust, Java, C#, PHP) cannot self-discover nested modules from an ancestor working directory — `ghagga index` runs each of them once **per marker directory found**, then merges all runs into one repo-relative graph.
-
 - **Depth bound**: the walk descends up to **4 levels** below repo root by default (covers `apps/*/`, `services/*/`, and one level of `packages/x/y`-style nesting). A marker nested deeper than that is silently not detected — this is a known limitation. Override with `--marker-depth <n>` (must be a positive integer); it's also configurable at the API level via `detectMarkerDirectories(repoPath, { maxDepth })`.
 - **Excluded directories**: the walk always skips `node_modules`, `vendor`, `.git`, `__pycache__`, `target`, `build`, `dist`, `.next`, `.turbo`, `.worktrees`, `.ghagga`, and `.tools` — this is what keeps a `.tools/codeql/` with 100k+ files, or a `.worktrees/` full of parallel git checkouts, from blowing up the walk.
 - **Output isolation**: two marker directories of the SAME indexer (e.g. Python markers in both `apps/ml-service` and `services/ai-assistant`) never clobber each other's `.scip` output — each nested run gets a directory-disambiguated output path, and the merge step disambiguates identically-named documents (e.g. two `main.py`) by their source subdirectory before building the graph.
@@ -332,7 +328,6 @@ ghagga index --marker-depth 6
 ```
 
 When run, `ghagga index`:
-
 1. Walks the repo (depth-bounded, exclusion-aware — see [Nested marker detection](#nested-marker-detection)) to find every `{indexer, marker directory}` pair, not just markers at repo root.
 2. For each unique indexer found, checks once whether its binary (and any required toolchain, e.g. `gradle`/`mvn` for Java) is on `PATH` — a missing toolchain skips ALL of that indexer's marker directories with a single warning.
 3. Runs every available indexer once per marker directory, to a directory-disambiguated isolated `.scip` output (scip-typescript is the exception — always once, at repo root), parses and merges all runs — path-prefixing each document by its source marker directory — and maps the result to the same `.ghagga/graph.json` v1 schema consumed by `blast-radius` and `review` — including cross-file (and cross-language) edges the regex extractor can't resolve (e.g. Go's full-module-path imports, or a Java file referencing a Kotlin symbol).
@@ -341,29 +336,28 @@ When run, `ghagga index`:
 
 Options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `[path]` | `.` | Path to the repository to index |
-| `--out <path>` | `.ghagga/graph.json` | Output path for the graph, relative to the target repo |
-| `--fallback-regex` | off | When no detected language could be SCIP-indexed, use the regex-based indexer instead of failing. Note: the regex path only resolves relative imports and cannot follow module-path imports (Go, Java, etc.) |
-| `--marker-depth <n>` | `4` | Maximum depth (repo root = 0) to walk when detecting nested language markers. Must be a positive integer — `0`/negative/non-numeric values are rejected with an error |
+| Option               | Default              | Description                                                                                                                                                                                                 |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[path]`             | `.`                  | Path to the repository to index                                                                                                                                                                             |
+| `--out <path>`       | `.ghagga/graph.json` | Output path for the graph, relative to the target repo                                                                                                                                                      |
+| `--fallback-regex`   | off                  | When no detected language could be SCIP-indexed, use the regex-based indexer instead of failing. Note: the regex path only resolves relative imports and cannot follow module-path imports (Go, Java, etc.) |
+| `--marker-depth <n>` | `4`                  | Maximum depth (repo root = 0) to walk when detecting nested language markers. Must be a positive integer — `0`/negative/non-numeric values are rejected with an error                                       |
 
 ### Per-language install hints
 
-| Language(s) | Indexer | Install |
-|-------------|---------|---------|
-| Go | `scip-go` | `go install github.com/scip-code/scip-go/cmd/scip-go@latest` |
-| TypeScript/JavaScript | `scip-typescript` | `npm install -g @sourcegraph/scip-typescript` |
-| Python | `scip-python` | `npm install -g @sourcegraph/scip-python` |
-| Rust | `rust-analyzer` | `rustup component add rust-analyzer` |
-| Java, Kotlin | `scip-java` | `curl -fLo coursier https://git.io/coursier-cli && chmod +x coursier && ./coursier bootstrap --standalone -o scip-java org.scip-code:scip-java:latest.stable --main org.scip_code.scip_java.ScipJava` (requires a JDK 17+ host JVM and a Gradle or Maven build in the target repo — Kotlin support is Gradle-only) |
-| C# | `scip-dotnet` | `dotnet tool install --global scip-dotnet` (requires .NET 8.0+ SDK; experimental indexer) |
-| PHP | `scip-php` | `composer require --dev davidrjenni/scip-php && composer dump-autoload` (requires a `composer.json` with autoload psr-4/classmap entries covering the sources to index; experimental, solo-maintained indexer) |
+| Language(s)           | Indexer           | Install                                                                                                                                                                                                                                                                                                            |
+| --------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Go                    | `scip-go`         | `go install github.com/scip-code/scip-go/cmd/scip-go@latest`                                                                                                                                                                                                                                                       |
+| TypeScript/JavaScript | `scip-typescript` | `npm install -g @sourcegraph/scip-typescript`                                                                                                                                                                                                                                                                      |
+| Python                | `scip-python`     | `npm install -g @sourcegraph/scip-python`                                                                                                                                                                                                                                                                          |
+| Rust                  | `rust-analyzer`   | `rustup component add rust-analyzer`                                                                                                                                                                                                                                                                               |
+| Java, Kotlin          | `scip-java`       | `curl -fLo coursier https://git.io/coursier-cli && chmod +x coursier && ./coursier bootstrap --standalone -o scip-java org.scip-code:scip-java:latest.stable --main org.scip_code.scip_java.ScipJava` (requires a JDK 17+ host JVM and a Gradle or Maven build in the target repo — Kotlin support is Gradle-only) |
+| C#                    | `scip-dotnet`     | `dotnet tool install --global scip-dotnet` (requires .NET 8.0+ SDK; experimental indexer)                                                                                                                                                                                                                          |
+| PHP                   | `scip-php`        | `composer require --dev davidrjenni/scip-php && composer dump-autoload` (requires a `composer.json` with autoload psr-4/classmap entries covering the sources to index; experimental, solo-maintained indexer)                                                                                                     |
 
 The resulting `.ghagga/graph.json` is the same file format read by `blast-radius` and `review` — no other command needs to change to benefit from a SCIP-produced graph.
 
 `ghagga index` also writes a sibling `.ghagga/metadata.json` (the indexed commit SHA, timestamp, per-node languages, and schema version) right after `graph.json`. `ghagga review` reads both: blast-radius filtering **auto-enables** whenever `.ghagga/graph.json` exists under the reviewed path — no flag needed — and uses `metadata.json` to warn (never block) when the graph looks stale or only partially covers the languages in your diff:
-
 - **Stale graph**: current git HEAD differs from the commit `ghagga index` last ran against, or the graph is more than 7 days old → re-run `ghagga index` warning.
 - **Missing metadata**: a `graph.json` produced by an older `ghagga index` (or copied in some other way) has no `metadata.json` next to it — blast-radius still runs, but staleness can't be verified, so the CLI warns instead of silently trusting it.
 - **Partial language coverage**: a changed file's language has zero nodes in the graph (e.g. a language `ghagga index` couldn't index, or one that only lives in a subpackage) — that file's dependent count will show as 0, not "confirmed no dependents", and the CLI warns accordingly.
@@ -376,36 +370,35 @@ When blast-radius is enabled AND the graph carries per-import symbol names, the 
 
 The underlying `importSymbols` graph field is populated with different fidelity depending on how the graph was built:
 
-| Source | Coverage |
-|--------|----------|
-| Regex builder — TypeScript/JavaScript | Dense — real named import symbols (`import { X, Y } from './b'`) |
-| Regex builder — Java | Dense — imported class name (last segment) |
-| Regex builder — Python | Populated for `from x import y, z`; empty for bare `import x` (module-only imports carry no named symbol) |
-| Regex builder — Rust | Populated for `use crate::mod::Item;` and grouped `use x::{A, B}`; empty for wildcard `use x::*;` and `mod` declarations |
-| Regex builder — Go | Alias-only — usually empty unless the import uses an explicit alias |
-| SCIP builder (`ghagga index`) | Populated wherever the indexer resolves a reference occurrence to an in-repo symbol definition, for every SCIP-supported language (including Kotlin/C#/PHP, which the regex builder can't index at all) |
+| Source                                | Coverage                                                                                                                                                                                                |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Regex builder — TypeScript/JavaScript | Dense — real named import symbols (`import { X, Y } from './b'`)                                                                                                                                        |
+| Regex builder — Java                  | Dense — imported class name (last segment)                                                                                                                                                              |
+| Regex builder — Python                | Populated for `from x import y, z`; empty for bare `import x` (module-only imports carry no named symbol)                                                                                               |
+| Regex builder — Rust                  | Populated for `use crate::mod::Item;` and grouped `use x::{A, B}`; empty for wildcard `use x::*;` and `mod` declarations                                                                                |
+| Regex builder — Go                    | Alias-only — usually empty unless the import uses an explicit alias                                                                                                                                     |
+| SCIP builder (`ghagga index`)         | Populated wherever the indexer resolves a reference occurrence to an in-repo symbol definition, for every SCIP-supported language (including Kotlin/C#/PHP, which the regex builder can't index at all) |
 
 When an edge has no symbol data (e.g. a Go import without an alias, or a namespace/side-effect import), the block degrades to a file-level line (`A depends on B`) instead of guessing — it never claims a dependent is unaffected when it lacks the information to know that. If the graph has NO `importSymbols` data anywhere, the block is omitted entirely (no behavior change from a pre-symbol-context graph).
 
-Symbol-precise blast-radius *exclusion* (actually removing a dependent from the reviewed file set, not just annotating it) is a separate, **opt-in, CLI-only** feature — see the next section.
+Symbol-precise blast-radius _exclusion_ (actually removing a dependent from the reviewed file set, not just annotating it) is a separate, **opt-in, CLI-only** feature — see the next section.
 
 ### Symbol-precise blast-radius exclusion (opt-in narrowing)
 
 Set `"enableSymbolExclusion": true` in `.ghagga.json` (default: off) to let `ghagga review` **remove** a direct dependent `A` of a changed file `B` from the reviewed file set when `A` provably does not use any symbol that changed in `B`. Unlike Symbol Impact (advisory-only, above), this actually shrinks what gets reviewed — treat it as high-stakes and opt in deliberately.
 
 Three fail-closed preconditions gate every exclusion; any single one failing means **zero** narrowing for that edge (never a partial or "probably fine" exclusion):
-
-1. **A fresh, exact-commit-matched graph.** `ghagga index` must have run at the SAME commit `ghagga review` is diffing against (`metadata.lastIndexedCommit === currentHead`) and not be stale-by-age. Symbol-line attribution is line-number based — a graph indexed even one commit off can silently map a changed line to the wrong symbol. This is a stricter check than the existing warn-only staleness check used for file-level blast radius (which tolerates commit drift because a shifted line still lands in the right *file*).
+1. **A fresh, exact-commit-matched graph.** `ghagga index` must have run at the SAME commit `ghagga review` is diffing against (`metadata.lastIndexedCommit === currentHead`) and not be stale-by-age. Symbol-line attribution is line-number based — a graph indexed even one commit off can silently map a changed line to the wrong symbol. This is a stricter check than the existing warn-only staleness check used for file-level blast radius (which tolerates commit drift because a shifted line still lands in the right _file_).
 2. **Fully-attributed changes only.** Any changed file with even one line that can't be mapped to a known symbol (a module-level statement, a deletion, a rename, or a file with no captured symbol ranges) forces every dependent of that file to stay included — the diff isn't clean enough to reason about symbol-by-symbol.
 3. **A per-language whitelist on the CHANGED file's language** (never the dependent's language) — the gate defaults to `false` and only returns `true` for the enumerated cells below. An unrecognized/unmapped language, or a language absent from this table, always resolves to "keep included":
 
-   | Graph built via | Changed file's language | Exclusion eligible? |
-   |---|---|---|
-   | `ghagga index` (SCIP) | TypeScript, JavaScript, Rust, Java | Yes |
-   | `ghagga index` (SCIP) | Go, Python, Kotlin, C#, PHP | No — partial/unverified SCIP fidelity |
-   | `ghagga index --fallback-regex` | TypeScript, JavaScript, Java | Yes |
-   | `ghagga index --fallback-regex` | Python, Rust | Yes, but only for edges where the dependent's `importSymbols` entry for that file is populated |
-   | `ghagga index --fallback-regex` | Go | No — alias-only data is misleading for exclusion |
+   | Graph built via                 | Changed file's language            | Exclusion eligible?                                                                            |
+   | ------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+   | `ghagga index` (SCIP)           | TypeScript, JavaScript, Rust, Java | Yes                                                                                            |
+   | `ghagga index` (SCIP)           | Go, Python, Kotlin, C#, PHP        | No — partial/unverified SCIP fidelity                                                          |
+   | `ghagga index --fallback-regex` | TypeScript, JavaScript, Java       | Yes                                                                                            |
+   | `ghagga index --fallback-regex` | Python, Rust                       | Yes, but only for edges where the dependent's `importSymbols` entry for that file is populated |
+   | `ghagga index --fallback-regex` | Go                                 | No — alias-only data is misleading for exclusion                                               |
 
 Even when all three preconditions pass, exclusion only ever prunes **direct (depth-1)** dependents — a dependent reached only transitively (through another file) always stays included, by design (the safety margin is deliberately generous rather than maximizing how much gets pruned). A file that appears directly in the diff is never excluded, regardless of any of the above.
 
@@ -413,7 +406,7 @@ Even when all three preconditions pass, exclusion only ever prunes **direct (dep
 
 ### Barrel re-export edges (TypeScript/JavaScript regex builder)
 
-The regex builder now treats `export ... from` lines as import-producing, so a barrel file (`index.ts`) re-exporting a symbol from another module produces a graph edge to that module — closing a false negative where a consumer importing a symbol *through* a barrel was silently excluded from blast-radius when the true source file changed. All three re-export forms are handled: named (`export { X } from './b'`), wildcard (`export * from './b'`), and type-only (`export type { X } from './b'`). Re-exported names are recorded separately from a file's locally-defined `exports` (additive `reExportedSymbols`/`reExportsAll` graph fields) so existing consumers of `node.exports` are unaffected.
+The regex builder now treats `export ... from` lines as import-producing, so a barrel file (`index.ts`) re-exporting a symbol from another module produces a graph edge to that module — closing a false negative where a consumer importing a symbol _through_ a barrel was silently excluded from blast-radius when the true source file changed. All three re-export forms are handled: named (`export { X } from './b'`), wildcard (`export * from './b'`), and type-only (`export type { X } from './b'`). Re-exported names are recorded separately from a file's locally-defined `exports` (additive `reExportedSymbols`/`reExportsAll` graph fields) so existing consumers of `node.exports` are unaffected.
 
 Transitive re-export resolution (a barrel re-exporting from another barrel) and Python/Rust barrel-style re-exports are **not** covered by this fix — deferred. The SCIP builder (`ghagga index`) was verified empirically to already be immune to this class of false negative: it resolves a re-exported reference through the barrel to the symbol's true defining file directly, independent of the regex-extractor fix above.
 
@@ -421,42 +414,42 @@ Transitive re-export resolution (a barrel re-exporting from another barrel) and 
 
 ## Review Command Options
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `[path]` | — | `.` | Optional path to repository or subdirectory |
-| `--mode <mode>` | `-m` | `simple` | Review mode: `simple`, `workflow`, `consensus`, `fan-out`, `hybrid-4r`. The CLI rejects `diagnostic`. |
-| `--provider <provider>` | `-p` | `gateway` | LLM provider: `gateway`, `cli-bridge`, `ollama`. Legacy SDK names exit 1. |
-| `--model <model>` | — | Auto | Model identifier (auto-selects best model per provider) |
-| `--api-key <key>` | — | — | LLM provider API key (or use env vars) |
-| `--output <format>` | `-o` | `markdown` | Output format: `markdown`, `json`, `sarif` |
-| `--format <format>` | `-f` | — | **Deprecated** — use `--output` |
-| `--enhance` | — | — | AI-powered post-analysis enhancement (groups findings, adds fix suggestions) |
-| `--issue <target>` | — | — | Create (`new`) or update (`<number>`) a GitHub issue with review results |
-| `--enable-tool <name>` | — | — | Force-enable a specific tool (can be repeated) |
-| `--disable-tool <name>` | — | — | Force-disable a specific tool (can be repeated) |
-| `--list-tools` | — | — | Show all 17 available tools with status, tier, and languages |
-| `--no-semgrep` | — | — | **Deprecated** — use `--disable-tool semgrep` |
-| `--no-trivy` | — | — | **Deprecated** — use `--disable-tool trivy` |
-| `--no-cpd` | — | — | **Deprecated** — use `--disable-tool cpd` |
-| `--no-memory` | — | — | Disable review memory (skip search and persist steps) |
-| `--no-blast-radius` | — | auto | Disable blast-radius filtering. Auto-enabled when `.ghagga/graph.json` exists (see `ghagga index`); pass this flag to force it off for one run |
-| `--memory-backend <type>` | — | `sqlite` | Memory backend: `sqlite` or `engram` |
-| `--config <path>` | `-c` | `.ghagga.json` | Path to config file (must be a file path, not inline JSON) |
-| `--staged` | — | — | Review only staged files (uses `git diff --cached`; designed for pre-commit hook) |
-| `--quick` | — | — | Static analysis only, skip AI review (~5-10s vs ~30-60s) |
-| `--commit-msg <file>` | — | — | Validate commit message from file (empty, too short, subject >72 chars, trailing period, body separation) |
-| `--exit-on-issues` | — | — | Exit with code 1 if critical/high issues found |
-| `--verbose` | `-v` | — | Show real-time progress of each pipeline step |
+| Option                    | Short | Default        | Description                                                                                                                                    |
+| ------------------------- | ----- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[path]`                  | —     | `.`            | Optional path to repository or subdirectory                                                                                                    |
+| `--mode <mode>`           | `-m`  | `simple`       | Review mode: `simple`, `workflow`, `consensus`, `fan-out`, `hybrid-4r`. The CLI rejects `diagnostic`.                                          |
+| `--provider <provider>`   | `-p`  | `gateway`      | LLM provider: `gateway`, `cli-bridge`, `ollama`. Legacy SDK names exit 1.                                                                      |
+| `--model <model>`         | —     | Auto           | Model identifier (auto-selects best model per provider)                                                                                        |
+| `--api-key <key>`         | —     | —              | LLM provider API key (or use env vars)                                                                                                         |
+| `--output <format>`       | `-o`  | `markdown`     | Output format: `markdown`, `json`, `sarif`                                                                                                     |
+| `--format <format>`       | `-f`  | —              | **Deprecated** — use `--output`                                                                                                                |
+| `--enhance`               | —     | —              | AI-powered post-analysis enhancement (groups findings, adds fix suggestions)                                                                   |
+| `--issue <target>`        | —     | —              | Create (`new`) or update (`<number>`) a GitHub issue with review results                                                                       |
+| `--enable-tool <name>`    | —     | —              | Force-enable a specific tool (can be repeated)                                                                                                 |
+| `--disable-tool <name>`   | —     | —              | Force-disable a specific tool (can be repeated)                                                                                                |
+| `--list-tools`            | —     | —              | Show all 17 available tools with status, tier, and languages                                                                                   |
+| `--no-semgrep`            | —     | —              | **Deprecated** — use `--disable-tool semgrep`                                                                                                  |
+| `--no-trivy`              | —     | —              | **Deprecated** — use `--disable-tool trivy`                                                                                                    |
+| `--no-cpd`                | —     | —              | **Deprecated** — use `--disable-tool cpd`                                                                                                      |
+| `--no-memory`             | —     | —              | Disable review memory (skip search and persist steps)                                                                                          |
+| `--no-blast-radius`       | —     | auto           | Disable blast-radius filtering. Auto-enabled when `.ghagga/graph.json` exists (see `ghagga index`); pass this flag to force it off for one run |
+| `--memory-backend <type>` | —     | `sqlite`       | Memory backend: `sqlite` or `engram`                                                                                                           |
+| `--config <path>`         | `-c`  | `.ghagga.json` | Path to config file (must be a file path, not inline JSON)                                                                                     |
+| `--staged`                | —     | —              | Review only staged files (uses `git diff --cached`; designed for pre-commit hook)                                                              |
+| `--quick`                 | —     | —              | Static analysis only, skip AI review (~5-10s vs ~30-60s)                                                                                       |
+| `--commit-msg <file>`     | —     | —              | Validate commit message from file (empty, too short, subject >72 chars, trailing period, body separation)                                      |
+| `--exit-on-issues`        | —     | —              | Exit with code 1 if critical/high issues found                                                                                                 |
+| `--verbose`               | `-v`  | —              | Show real-time progress of each pipeline step                                                                                                  |
 
 ---
 
 ## Global Options
 
-| Option | Description |
-|--------|-------------|
-| `--plain` | Disable styled terminal output (colored headers, spinners). Automatically enabled in non-TTY environments and CI (`!process.stdout.isTTY \|\| !!process.env.CI`). |
-| `--version` | Show version number |
-| `--help` | Show help |
+| Option      | Description                                                                                                                                                       |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--plain`   | Disable styled terminal output (colored headers, spinners). Automatically enabled in non-TTY environments and CI (`!process.stdout.isTTY \|\| !!process.env.CI`). |
+| `--version` | Show version number                                                                                                                                               |
+| `--help`    | Show help                                                                                                                                                         |
 
 > 💡 **Terminal UI**: The CLI uses [`@clack/prompts`](https://github.com/natemoo-re/clack) for styled terminal output — colored severity indicators, box-drawing summary panels, step progress (`[n/m]`), and section dividers. In non-TTY or CI environments, output automatically falls back to plain `console.log` with zero ANSI escape codes. Use `--plain` to force plain output in any environment.
 
@@ -479,7 +472,6 @@ GITHUB_TOKEN=<token>              # GitHub token (fallback for github provider)
 ### Resolution Priority
 
 The CLI resolves configuration in this order (highest to lowest priority):
-
 1. **CLI flags** (`--provider`, `--model`, `--api-key`)
 2. **Environment variables** (`GHAGGA_PROVIDER`, `GHAGGA_MODEL`, `GHAGGA_API_KEY`)
 3. **Stored config** (from `ghagga login` — saved at `~/.config/ghagga/config.json`)
@@ -650,10 +642,10 @@ The SARIF (Static Analysis Results Interchange Format) output is compatible with
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Review passed (`PASSED`) or was skipped (`SKIPPED`) |
-| `1` | Review failed (`FAILED`) or needs human review (`NEEDS_HUMAN_REVIEW`) |
+| Code | Meaning                                                               |
+| ---- | --------------------------------------------------------------------- |
+| `0`  | Review passed (`PASSED`) or was skipped (`SKIPPED`)                   |
+| `1`  | Review failed (`FAILED`) or needs human review (`NEEDS_HUMAN_REVIEW`) |
 
 Use exit codes in CI/CD to fail pipelines on review failures:
 
@@ -678,11 +670,11 @@ ghagga memory list --repo octocat/my-app --type pattern --limit 5
 
 Options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--repo <owner/repo>` | — | Filter by repository |
-| `--type <type>` | — | Filter by observation type (`decision`, `pattern`, `bugfix`, `learning`, `architecture`, `config`, `discovery`) |
-| `--limit <n>` | `20` | Maximum rows to display |
+| Option                | Default | Description                                                                                                     |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `--repo <owner/repo>` | —       | Filter by repository                                                                                            |
+| `--type <type>`       | —       | Filter by observation type (`decision`, `pattern`, `bugfix`, `learning`, `architecture`, `config`, `discovery`) |
+| `--limit <n>`         | `20`    | Maximum rows to display                                                                                         |
 
 ### `ghagga memory search <query>`
 
@@ -695,10 +687,10 @@ ghagga memory search --repo octocat/my-app "authentication"
 
 Options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
+| Option                | Default                       | Description                           |
+| --------------------- | ----------------------------- | ------------------------------------- |
 | `--repo <owner/repo>` | Auto-detected from git remote | Scope search to a specific repository |
-| `--limit <n>` | `10` | Maximum results |
+| `--limit <n>`         | `10`                          | Maximum results                       |
 
 ### `ghagga memory show <id>`
 
@@ -719,8 +711,8 @@ ghagga memory delete --force 42
 
 Options:
 
-| Option | Description |
-|--------|-------------|
+| Option    | Description              |
+| --------- | ------------------------ |
 | `--force` | Skip confirmation prompt |
 
 ### `ghagga memory stats`
@@ -743,10 +735,10 @@ ghagga memory clear --force
 
 Options:
 
-| Option | Description |
-|--------|-------------|
+| Option                | Description                                       |
+| --------------------- | ------------------------------------------------- |
 | `--repo <owner/repo>` | Only clear observations for a specific repository |
-| `--force` | Skip confirmation prompt |
+| `--force`             | Skip confirmation prompt                          |
 
 ---
 

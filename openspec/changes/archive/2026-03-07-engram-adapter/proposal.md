@@ -88,18 +88,18 @@ if (opts.memory) {
 
 ### API Endpoint Mapping
 
-| MemoryStorage Method | Engram HTTP Endpoint | Notes |
-|---------------------|---------------------|-------|
-| `searchObservations(project, query, options)` | `GET /api/search?query=<query>&limit=<limit>` | Filter results client-side by project. Engram's search is global; GHAGGA scopes by project |
-| `saveObservation(data)` | `POST /api/save` | Body: `{ content, type, topic_key, metadata }`. Encode GHAGGA fields (severity, filePaths) as structured content |
-| `createSession(data)` | `POST /api/sessions` | Body: `{ metadata: { source: "ghagga", project, prNumber } }` |
-| `endSession(sessionId, summary)` | `POST /api/sessions/:id/summary` | Body: `{ summary }` |
-| `getObservation(id)` | `GET /api/observations/:id` | Map Engram observation to `MemoryObservationDetail` |
-| `deleteObservation(id)` | `DELETE /api/observations/:id` | Direct mapping |
-| `getStats()` | `GET /api/stats` | Map Engram stats to `MemoryStats` format |
-| `listObservations(options)` | `GET /api/search` with filters | Use Engram search with metadata filters for project/type |
-| `clearObservations(options)` | Not mapped | Engram has no bulk delete via HTTP. Throw `Error('clearObservations not supported with Engram backend. Use engram CLI directly.')` |
-| `close()` | No-op | No resources to release (HTTP is stateless) |
+| MemoryStorage Method                          | Engram HTTP Endpoint                          | Notes                                                                                                                              |
+| --------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `searchObservations(project, query, options)` | `GET /api/search?query=<query>&limit=<limit>` | Filter results client-side by project. Engram's search is global; GHAGGA scopes by project                                         |
+| `saveObservation(data)`                       | `POST /api/save`                              | Body: `{ content, type, topic_key, metadata }`. Encode GHAGGA fields (severity, filePaths) as structured content                   |
+| `createSession(data)`                         | `POST /api/sessions`                          | Body: `{ metadata: { source: "ghagga", project, prNumber } }`                                                                      |
+| `endSession(sessionId, summary)`              | `POST /api/sessions/:id/summary`              | Body: `{ summary }`                                                                                                                |
+| `getObservation(id)`                          | `GET /api/observations/:id`                   | Map Engram observation to `MemoryObservationDetail`                                                                                |
+| `deleteObservation(id)`                       | `DELETE /api/observations/:id`                | Direct mapping                                                                                                                     |
+| `getStats()`                                  | `GET /api/stats`                              | Map Engram stats to `MemoryStats` format                                                                                           |
+| `listObservations(options)`                   | `GET /api/search` with filters                | Use Engram search with metadata filters for project/type                                                                           |
+| `clearObservations(options)`                  | Not mapped                                    | Engram has no bulk delete via HTTP. Throw `Error('clearObservations not supported with Engram backend. Use engram CLI directly.')` |
+| `close()`                                     | No-op                                         | No resources to release (HTTP is stateless)                                                                                        |
 
 ### Schema Mapping
 
@@ -179,7 +179,6 @@ The health check happens once during initialization. Individual method calls als
 ### What This Enables
 
 Once the adapter is in place:
-
 1. **GHAGGA review insights are available everywhere**: `ghagga review .` saves findings to Engram. Later, `mem_search "auth patterns"` in Claude Code surfaces those findings
 2. **Cross-tool context enriches reviews**: Before reviewing, GHAGGA searches Engram for relevant context. If a developer discussed auth patterns with Claude Code earlier, GHAGGA sees that context
 3. **GGA and GHAGGA share memory**: GGA's Engram bridge (PR #51) writes to the same Engram store. GHAGGA reads those observations, and vice versa
@@ -188,27 +187,27 @@ Once the adapter is in place:
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/core/src/memory/engram.ts` (new) | New | `EngramMemoryStorage` class — HTTP client, schema mapping, graceful degradation |
-| `apps/cli/src/commands/review.ts` | Modified | Add `--memory-backend` option. Backend selection logic: `engram` → `EngramMemoryStorage`, default → `SqliteMemoryStorage` |
-| `apps/cli/src/index.ts` | Modified | Register `--memory-backend` global option (or per-command option on `review`) |
-| `packages/core/src/types.ts` | None | No interface changes — `EngramMemoryStorage` implements the existing `MemoryStorage` interface |
-| `apps/server/` | None | SaaS path unchanged — always PostgreSQL |
-| `apps/action/` | None | Action path unchanged — always SQLite with cache |
-| Existing tests | None | New adapter is additive; existing behavior unchanged |
-| `packages/core/package.json` | None | Uses Node.js built-in `fetch` — no new dependencies |
+| Area                                       | Impact   | Description                                                                                                               |
+| ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/memory/engram.ts` (new) | New      | `EngramMemoryStorage` class — HTTP client, schema mapping, graceful degradation                                           |
+| `apps/cli/src/commands/review.ts`          | Modified | Add `--memory-backend` option. Backend selection logic: `engram` → `EngramMemoryStorage`, default → `SqliteMemoryStorage` |
+| `apps/cli/src/index.ts`                    | Modified | Register `--memory-backend` global option (or per-command option on `review`)                                             |
+| `packages/core/src/types.ts`               | None     | No interface changes — `EngramMemoryStorage` implements the existing `MemoryStorage` interface                            |
+| `apps/server/`                             | None     | SaaS path unchanged — always PostgreSQL                                                                                   |
+| `apps/action/`                             | None     | Action path unchanged — always SQLite with cache                                                                          |
+| Existing tests                             | None     | New adapter is additive; existing behavior unchanged                                                                      |
+| `packages/core/package.json`               | None     | Uses Node.js built-in `fetch` — no new dependencies                                                                       |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Engram not running locally | High | Medium | Graceful degradation to SQLite is the primary mitigation. The adapter attempts a health check at startup. If Engram is unreachable, it falls back silently with a warning. Developers who don't use Engram are never affected |
-| Engram API changes between versions | Medium | Medium | Pin to a known Engram API version in the health check (e.g., check `GET /api/stats` response format). If the response structure changes, log a version mismatch warning and fall back to SQLite. Document the minimum Engram version in GHAGGA docs |
-| Schema mapping loses information | Medium | Low | GHAGGA fields that don't have native Engram equivalents (severity, filePaths) are encoded as structured JSON in the `content` field. This is lossless for GHAGGA-to-GHAGGA round-trips. For cross-tool reads (Claude Code reading GHAGGA observations), the structured content is human-readable JSON — not ideal but functional |
-| Performance: HTTP round-trips vs. SQLite | Medium | Low | Each memory operation (search, save) is one HTTP request. For a typical review: 1 search + 3-5 saves = 4-6 HTTP requests to localhost. At localhost latency (~1ms per request), total overhead is < 10ms — negligible compared to LLM review time (10-30s). If Engram is on a remote host, latency increases but is still small relative to LLM time |
-| Project scoping: Engram search is global | Medium | Low | Engram's `GET /api/search` returns results across all sources. The adapter must filter client-side by `project` field (from metadata or structured content). This may return slightly more data than needed from the API, but the client-side filter ensures correctness |
-| Content field parsing: non-GHAGGA observations | Low | Low | When reading observations from Engram that were written by other tools (Claude Code, GGA), the `content` field won't be GHAGGA-structured JSON. The adapter gracefully handles this: if `JSON.parse` fails, it treats content as plain text and maps with defaults. Cross-tool observations appear in GHAGGA with `type: "observation"` and the raw content |
+| Risk                                           | Likelihood | Impact | Mitigation                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------- | ---------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Engram not running locally                     | High       | Medium | Graceful degradation to SQLite is the primary mitigation. The adapter attempts a health check at startup. If Engram is unreachable, it falls back silently with a warning. Developers who don't use Engram are never affected                                                                                                                               |
+| Engram API changes between versions            | Medium     | Medium | Pin to a known Engram API version in the health check (e.g., check `GET /api/stats` response format). If the response structure changes, log a version mismatch warning and fall back to SQLite. Document the minimum Engram version in GHAGGA docs                                                                                                         |
+| Schema mapping loses information               | Medium     | Low    | GHAGGA fields that don't have native Engram equivalents (severity, filePaths) are encoded as structured JSON in the `content` field. This is lossless for GHAGGA-to-GHAGGA round-trips. For cross-tool reads (Claude Code reading GHAGGA observations), the structured content is human-readable JSON — not ideal but functional                            |
+| Performance: HTTP round-trips vs. SQLite       | Medium     | Low    | Each memory operation (search, save) is one HTTP request. For a typical review: 1 search + 3-5 saves = 4-6 HTTP requests to localhost. At localhost latency (~1ms per request), total overhead is < 10ms — negligible compared to LLM review time (10-30s). If Engram is on a remote host, latency increases but is still small relative to LLM time        |
+| Project scoping: Engram search is global       | Medium     | Low    | Engram's `GET /api/search` returns results across all sources. The adapter must filter client-side by `project` field (from metadata or structured content). This may return slightly more data than needed from the API, but the client-side filter ensures correctness                                                                                    |
+| Content field parsing: non-GHAGGA observations | Low        | Low    | When reading observations from Engram that were written by other tools (Claude Code, GGA), the `content` field won't be GHAGGA-structured JSON. The adapter gracefully handles this: if `JSON.parse` fails, it treats content as plain text and maps with defaults. Cross-tool observations appear in GHAGGA with `type: "observation"` and the raw content |
 
 ## Rollback Plan
 
@@ -227,7 +226,6 @@ Once the adapter is in place:
 ## Precedent
 
 The GGA project (gentleman-guardian-angel) already has a working Engram bridge (PR #51) that demonstrates the bidirectional pattern:
-
 1. **Before review**: Search Engram for relevant context → inject into review prompt
 2. **After review**: Export review insights to Engram as observations
 

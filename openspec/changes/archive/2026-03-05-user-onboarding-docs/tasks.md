@@ -12,18 +12,17 @@
 
 ### Commits
 
-| Hash | Message |
-|------|---------|
-| `046944a` | docs(sdd): add user-onboarding-docs change artifacts |
+| Hash      | Message                                                                  |
+| --------- | ------------------------------------------------------------------------ |
+| `046944a` | docs(sdd): add user-onboarding-docs change artifacts                     |
 | `302d189` | docs(onboarding): add SaaS getting started guide and onboarding overhaul |
-| `3e00003` | docs(sdd): archive auto-runner-creation change |
+| `3e00003` | docs(sdd): archive auto-runner-creation change                           |
 
 ---
 
 ## Phase 1: Core SaaS Guide (P0)
 
 The critical missing piece. No other task depends on the exact content of the SaaS guide, but all cross-references in later phases link to it — so it must exist first.
-
 - [x] **1.1** Create `docs/saas-getting-started.md` — the full step-by-step SaaS guide
   - **Files**: `docs/saas-getting-started.md` (new)
   - **Dependencies**: None
@@ -43,9 +42,7 @@ The critical missing piece. No other task depends on the exact content of the Sa
       11. **What happens without configuration** — 3 states table: (a) No LLM key → no AI review posted, (b) LLM key but no runner → AI-only review (no static analysis), (c) Both → full review with static analysis + AI.
       12. **Troubleshooting** section covering: "No review comment posted" (check LLM provider config, check App is installed on that repo), "Review comment is empty or minimal" (check runner is enabled for static analysis), "Runner not discovered" (repo must be named `ghagga-runner`, must be public), "OAuth re-authentication" (one-time scope upgrade for `public_repo`).
       13. **Cost summary** — GHAGGA is free and open source (MIT). GitHub Models is free (no API key). Other providers are BYOK. Static analysis runs on free GitHub Actions minutes.
-      14. **Next steps** — links to Review Modes, Memory System, Configuration, Runner Architecture docs.
-    - Use Docsify-compatible Markdown: standard headings, tables, blockquotes, code blocks
-    - Match the quality/depth of `docs/self-hosted.md` (~150-250 lines)
+      14. **Next steps** — links to Review Modes, Memory System, Configuration, Runner Architecture docs. - Use Docsify-compatible Markdown: standard headings, tables, blockquotes, code blocks - Match the quality/depth of `docs/self-hosted.md` (~150-250 lines)
   - **Acceptance criteria**:
     - [ ] File exists at `docs/saas-getting-started.md`
     - [ ] Contains all 5 numbered steps with verification checkpoints
@@ -83,7 +80,6 @@ The critical missing piece. No other task depends on the exact content of the Sa
 ## Phase 2: Landing Page & Navigation (P1)
 
 These tasks make the SaaS path discoverable. The landing page is the highest-traffic entry point; the sidebar and decision matrix guide users once they're in the docs.
-
 - [x] **2.1** Update `landing/index.html` — Install CTA, Getting Started steps, pricing section
   - **Files**: `landing/index.html` (modified)
   - **Dependencies**: 1.1 (need the SaaS guide to exist for the link target)
@@ -92,18 +88,14 @@ These tasks make the SaaS path discoverable. The landing page is the highest-tra
     - **Hero CTA changes**: Replace current CTAs with 3 buttons:
       1. Primary: "Install GitHub App" → `https://github.com/apps/ghagga-review/installations/new` (use existing `.btn-primary` style)
       2. Secondary: "Documentation" → `docs/` (use existing `.btn-secondary` style)
-      3. Secondary: "Open Dashboard" → `app/` (use existing `.btn-secondary` style)
-    - **New "How to Get Started" section**: Add below the features grid, before the pipeline section. 3-4 numbered steps in a horizontal layout (matching the `.pipe-step` visual style):
-      1. "Install" — Install the GitHub App on your repos
-      2. "Configure" — Log in to the Dashboard, pick your LLM provider
-      3. "Review" — Open a PR and get AI-powered review in ~1-2 min
-    - **New "Free & Open Source" section**: Add below the stats strip, before the footer. Brief section:
+      3. Secondary: "Open Dashboard" → `app/` (use existing `.btn-secondary` style) - **New "How to Get Started" section**: Add below the features grid, before the pipeline section. 3-4 numbered steps in a horizontal layout (matching the `.pipe-step` visual style):
+      4. "Install" — Install the GitHub App on your repos
+      5. "Configure" — Log in to the Dashboard, pick your LLM provider
+      6. "Review" — Open a PR and get AI-powered review in ~1-2 min - **New "Free & Open Source" section**: Add below the stats strip, before the footer. Brief section:
       - "GHAGGA is free and open source (MIT license)"
       - "GitHub Models provides free AI reviews — no API key needed"
       - "Bring your own key for Anthropic, OpenAI, Google, Qwen, or Ollama"
-      - "Static analysis runs on free GitHub Actions minutes"
-    - **Responsive**: All new sections must follow existing responsive patterns (stack vertically on ≤768px). Add corresponding `@media` rules using the same breakpoint pattern.
-    - **Preserve**: Do NOT remove or reorder existing sections (features, pipeline, stats). Do NOT change the ambient background, grid pattern, or animations.
+      - "Static analysis runs on free GitHub Actions minutes" - **Responsive**: All new sections must follow existing responsive patterns (stack vertically on ≤768px). Add corresponding `@media` rules using the same breakpoint pattern. - **Preserve**: Do NOT remove or reorder existing sections (features, pipeline, stats). Do NOT change the ambient background, grid pattern, or animations.
   - **Acceptance criteria**:
     - [ ] "Install GitHub App" is the primary CTA in the hero (`.btn-primary` style)
     - [ ] Install CTA links to `https://github.com/apps/ghagga-review/installations/new`
@@ -146,6 +138,7 @@ These tasks make the SaaS path discoverable. The landing page is the highest-tra
   - **Effort**: S
   - **What to do**:
     - Add `[SaaS Guide (GitHub App)](saas-getting-started.md)` to the Getting Started section, between "Quick Start" and "Configuration":
+
       ```markdown
       - Getting Started
         - [Overview](README.md)
@@ -154,6 +147,7 @@ These tasks make the SaaS path discoverable. The landing page is the highest-tra
         - [Configuration](configuration.md)
       ```
     - Also add the SaaS guide to the Distribution section:
+
       ```markdown
       - Distribution
         - [SaaS (GitHub App)](saas-getting-started.md)
@@ -161,6 +155,7 @@ These tasks make the SaaS path discoverable. The landing page is the highest-tra
         - [CLI](cli.md)
         - [Self-Hosted (Docker)](self-hosted.md)
       ```
+
   - **Acceptance criteria**:
     - [ ] SaaS guide appears in "Getting Started" section (position 3, after Quick Start)
     - [ ] SaaS guide appears in "Distribution" section (position 1, before GitHub Action)
@@ -172,13 +167,13 @@ These tasks make the SaaS path discoverable. The landing page is the highest-tra
 ## Phase 3: README & Remaining Docs (P2)
 
 Cross-references, callouts, and orientation — bringing all entry points into alignment.
-
 - [x] **3.1** Add SaaS option (Option 0) to `README.md` Quick Start section
   - **Files**: `README.md` (modified)
   - **Dependencies**: 1.1 (SaaS guide must exist for the link)
   - **Effort**: M
   - **What to do**:
     - Insert a new section before the current "### Option 1: GitHub Action" (line 63):
+
       ```markdown
       ### Option 0: GitHub App (SaaS) — ⭐ Recommended
 
@@ -209,9 +204,11 @@ Cross-references, callouts, and orientation — bringing all entry points into a
   - **Effort**: S
   - **What to do**:
     - Insert after `# Configuration` (line 1) and before `## Environment Variables` (line 3):
+
       ```markdown
       > **Using the SaaS (GitHub App)?** Configure everything in the [Dashboard](https://jnzader.github.io/ghagga/app/) → Settings. The environment variables and config file below are for **CLI** and **self-hosted** deployments only.
       ```
+
   - **Acceptance criteria**:
     - [ ] Callout blockquote is the first content after `# Configuration`
     - [ ] Dashboard URL is a clickable link
@@ -224,6 +221,7 @@ Cross-references, callouts, and orientation — bringing all entry points into a
   - **Effort**: S
   - **What to do**:
     - Insert a "New here?" section after the title block and before "## How It Works" (line 8):
+
       ```markdown
       ## New Here? Start with Your Guide
 
@@ -235,6 +233,7 @@ Cross-references, callouts, and orientation — bringing all entry points into a
       | I want to self-host | [Self-Hosted (Docker)](self-hosted.md) |
       | I just want to explore | Keep reading below, then check [Quick Start](quick-start.md) |
       ```
+
   - **Acceptance criteria**:
     - [ ] "New Here?" section exists before "How It Works"
     - [ ] SaaS guide is listed first and marked as recommended
@@ -247,13 +246,16 @@ Cross-references, callouts, and orientation — bringing all entry points into a
   - **Effort**: S
   - **What to do**:
     - In the existing "## BYOK — Bring Your Own Key" section (line 76), add a brief cost clarity note before the provider table:
+
       ```markdown
       > **Free by default**: GHAGGA is free and open source. GitHub Models provides free LLM access (`gpt-4o-mini`) — no API key needed. The providers below are optional if you want different models.
       ```
     - After the provider table, add:
+
       ```markdown
       Static analysis tools (Semgrep, Trivy, CPD) are always free — they run on GitHub Actions runners (unlimited free minutes for public repos).
       ```
+
   - **Acceptance criteria**:
     - [ ] "Free by default" callout exists in BYOK section
     - [ ] GitHub Models identified as the free default
@@ -274,8 +276,7 @@ Cross-references, callouts, and orientation — bringing all entry points into a
     - Specifically verify:
       - `saas-getting-started.md` exists and is linked from sidebar, quick-start, README, docs/README
       - `https://github.com/apps/ghagga-review/installations/new` is used consistently
-      - `https://jnzader.github.io/ghagga/app/` is used for all Dashboard references
-    - Verify no "Open the Dashboard" text exists as plain (unlinked) text in any doc
+      - `https://jnzader.github.io/ghagga/app/` is used for all Dashboard references - Verify no "Open the Dashboard" text exists as plain (unlinked) text in any doc
   - **Acceptance criteria**:
     - [ ] Zero broken internal links
     - [ ] Zero unlinked "Open the Dashboard" references
@@ -305,8 +306,7 @@ Cross-references, callouts, and orientation — bringing all entry points into a
     - Open `landing/index.html` in a browser and test:
       - Desktop (1200px+): 3 CTAs visible in hero, getting-started steps horizontal
       - Tablet (768px): Steps begin to stack, all CTAs visible
-      - Mobile (375px): Everything stacks vertically, no horizontal overflow, CTAs are full-width
-    - Verify Install CTA is the most visually prominent button
+      - Mobile (375px): Everything stacks vertically, no horizontal overflow, CTAs are full-width - Verify Install CTA is the most visually prominent button
   - **Acceptance criteria**:
     - [ ] No horizontal overflow at any viewport width down to 375px
     - [ ] Install CTA is visually primary (purple gradient, largest)
@@ -316,13 +316,13 @@ Cross-references, callouts, and orientation — bringing all entry points into a
 
 ## Summary
 
-| Phase | Tasks | Focus | Effort |
-|-------|-------|-------|--------|
-| Phase 1: Core SaaS Guide (P0) | 3 | SaaS guide + post-install warning + Dashboard links | 1L + 2S |
-| Phase 2: Landing & Navigation (P1) | 3 | Landing page CTA + decision matrix + sidebar | 1L + 1M + 1S |
-| Phase 3: README & Remaining (P2) | 4 | README option + config callout + docs orientation + cost notes | 1M + 3S |
-| Phase 4: Verification | 3 | Link check + Docsify rendering + responsive test | 3S |
-| **Total** | **13** | | **2L + 2M + 9S** |
+| Phase                              | Tasks  | Focus                                                          | Effort           |
+| ---------------------------------- | ------ | -------------------------------------------------------------- | ---------------- |
+| Phase 1: Core SaaS Guide (P0)      | 3      | SaaS guide + post-install warning + Dashboard links            | 1L + 2S          |
+| Phase 2: Landing & Navigation (P1) | 3      | Landing page CTA + decision matrix + sidebar                   | 1L + 1M + 1S     |
+| Phase 3: README & Remaining (P2)   | 4      | README option + config callout + docs orientation + cost notes | 1M + 3S          |
+| Phase 4: Verification              | 3      | Link check + Docsify rendering + responsive test               | 3S               |
+| **Total**                          | **13** |                                                                | **2L + 2M + 9S** |
 
 ### Implementation Order
 

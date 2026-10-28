@@ -42,6 +42,25 @@ function createEntry(overrides: Partial<ProviderEntryState> = {}): ProviderEntry
   };
 }
 
+function ChainEditorHarness({
+  initial = [],
+  onChain,
+}: {
+  initial?: ProviderEntryState[];
+  onChain: (next: ProviderEntryState[]) => void;
+}) {
+  const [chain, setChain] = useState<ProviderEntryState[]>(initial);
+  return (
+    <ProviderChainEditor
+      chain={chain}
+      onChange={(next) => {
+        onChain(next);
+        setChain(next);
+      }}
+    />
+  );
+}
+
 // ─── Setup ─────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -94,20 +113,13 @@ describe('ProviderChainEditor', () => {
   it('generates a distinct id for each added provider entry', () => {
     const chains: ProviderEntryState[][] = [];
 
-    function Harness() {
-      const [chain, setChain] = useState<ProviderEntryState[]>([]);
-      return (
-        <ProviderChainEditor
-          chain={chain}
-          onChange={(next) => {
-            chains.push(next);
-            setChain(next);
-          }}
-        />
-      );
-    }
-
-    renderWithQuery(<Harness />);
+    renderWithQuery(
+      <ChainEditorHarness
+        onChain={(next) => {
+          chains.push(next);
+        }}
+      />,
+    );
 
     // First add (empty state), then a fallback add
     fireEvent.click(screen.getByText('+ Add Provider'));
@@ -134,20 +146,13 @@ describe('ProviderChainEditor', () => {
     try {
       const chains: ProviderEntryState[][] = [];
 
-      function Harness() {
-        const [chain, setChain] = useState<ProviderEntryState[]>([]);
-        return (
-          <ProviderChainEditor
-            chain={chain}
-            onChange={(next) => {
-              chains.push(next);
-              setChain(next);
-            }}
-          />
-        );
-      }
-
-      renderWithQuery(<Harness />);
+      renderWithQuery(
+        <ChainEditorHarness
+          onChain={(next) => {
+            chains.push(next);
+          }}
+        />,
+      );
 
       fireEvent.click(screen.getByText('+ Add Provider'));
       fireEvent.click(screen.getByText('+ Add Fallback Provider'));
@@ -169,23 +174,17 @@ describe('ProviderChainEditor', () => {
   it('removing the first entry leaves the second entry intact', () => {
     const chains: ProviderEntryState[][] = [];
 
-    function Harness() {
-      const [chain, setChain] = useState<ProviderEntryState[]>([
-        createEntry({ id: 'entry-a', provider: 'gateway', model: 'auto' }),
-        createEntry({ id: 'entry-b', provider: 'ollama', model: 'llama3' }),
-      ]);
-      return (
-        <ProviderChainEditor
-          chain={chain}
-          onChange={(next) => {
-            chains.push(next);
-            setChain(next);
-          }}
-        />
-      );
-    }
-
-    renderWithQuery(<Harness />);
+    renderWithQuery(
+      <ChainEditorHarness
+        initial={[
+          createEntry({ id: 'entry-a', provider: 'gateway', model: 'auto' }),
+          createEntry({ id: 'entry-b', provider: 'ollama', model: 'llama3' }),
+        ]}
+        onChain={(next) => {
+          chains.push(next);
+        }}
+      />,
+    );
 
     const removeButtons = screen.getAllByTitle('Remove provider');
     fireEvent.click(removeButtons[0]!);

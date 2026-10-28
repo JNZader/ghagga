@@ -11,22 +11,26 @@ GitHub App users need an explicit way to ask why code changed without turning th
 ## Scope
 
 ### In Scope
+
 - Accept explanations only from `OWNER`, `MEMBER`, or `COLLABORATOR`; leave review eligibility unchanged.
 - Bind principal (forge instance/installation, stable actor identity) and target (repository, PR, requested head SHA); reject superseded requests.
 - Produce finding-free answers, isolated monotonic progress, durable retry/republication idempotency, and explicit AI-unavailable outcomes.
 - Launch behind a reversible GitHub App opt-in while preserving CLI, Action, GitLab, 1-click, and existing review behavior.
 
 ### Out of Scope
+
 - Persistent transcripts, sandbox/tools, patches or mutation, skills, SDK/dependency migrations, live benchmarks, and broader UX rollout.
 
 ## Capabilities
 
 ### New Capabilities
+
 - `pr-explanation`: Explicit question parsing, eligibility, immutable snapshot execution, finding-free results, and unavailable semantics.
 - `invocation-replay`: Stable invocation claims and terminal-result replay across webhook delivery, queue retries, and publication retries.
 - `pr-progress-publication`: Truthful monotonic progress and separate explanation/progress publication namespaces.
 
 ### Modified Capabilities
+
 - `core-engine`: Expose provider/forge/runtime-neutral read-only intent, snapshot, progress, and explanation contracts without forge dependencies or review finalization.
 - `server`: Route authorized explanation commands, preserve review authorization, and execute opt-in GitHub App orchestration.
 
@@ -36,21 +40,21 @@ Introduce a typed intent envelope and a distinct explanation path over shared pu
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|---|---|---|
-| `packages/core` | Modified | Neutral contracts and finding-free execution seams |
-| `packages/forge` | Modified | Principal/snapshot reads and isolated markers |
-| `apps/server` | Modified | Parsing, policy, dispatch, progress, replay |
-| `packages/db` | Modified | Durable invocation claim/result |
+| Area             | Impact   | Description                                        |
+| ---------------- | -------- | -------------------------------------------------- |
+| `packages/core`  | Modified | Neutral contracts and finding-free execution seams |
+| `packages/forge` | Modified | Principal/snapshot reads and isolated markers      |
+| `apps/server`    | Modified | Parsing, policy, dispatch, progress, replay        |
+| `packages/db`    | Modified | Durable invocation claim/result                    |
 
 ## Risks
 
-| Risk | Mitigation |
-|---|---|
-| Stale or cross-principal answer | Verify full identities and requested SHA; reject mismatch |
-| Duplicate cost/output | Claim once; replay terminal state; idempotent marker updates |
-| Review contamination | Separate result/finalizer; no findings, verdict, coverage, or review-memory writes |
-| False progress | Bounded monotonic states; explicit failure/unavailable terminal state |
+| Risk                            | Mitigation                                                                         |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| Stale or cross-principal answer | Verify full identities and requested SHA; reject mismatch                          |
+| Duplicate cost/output           | Claim once; replay terminal state; idempotent marker updates                       |
+| Review contamination            | Separate result/finalizer; no findings, verdict, coverage, or review-memory writes |
+| False progress                  | Bounded monotonic states; explicit failure/unavailable terminal state              |
 
 ## Rollback Plan
 

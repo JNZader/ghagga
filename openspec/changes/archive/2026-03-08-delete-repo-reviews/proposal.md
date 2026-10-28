@@ -35,10 +35,7 @@ This change adds the ability to delete all reviews for a specific repository, wi
 Add one new function to `packages/db/src/queries.ts`:
 
 ```typescript
-export async function deleteReviewsByRepoId(
-  db: Database,
-  repositoryId: number,
-): Promise<number>
+export async function deleteReviewsByRepoId(db: Database, repositoryId: number): Promise<number>;
 ```
 
 This uses Drizzle's `.delete(reviews).where(eq(reviews.repositoryId, repositoryId))` and returns the count of deleted rows. The `reviews` table has a `CASCADE` foreign key to `repositories`, but we're deleting by `repositoryId` directly, so no join is needed. The existing `idx_reviews_repository` index makes this efficient.
@@ -84,7 +81,13 @@ Add to `apps/dashboard/src/lib/api.ts`:
 export function useDeleteRepoReviews() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ repoFullName, includeMemory }: { repoFullName: string; includeMemory?: boolean }) =>
+    mutationFn: ({
+      repoFullName,
+      includeMemory,
+    }: {
+      repoFullName: string;
+      includeMemory?: boolean;
+    }) =>
       fetchData<{ deletedReviews: number; clearedMemory: number | null }>(
         `/api/reviews/${encodeURIComponent(repoFullName)}${includeMemory ? '?includeMemory=true' : ''}`,
         { method: 'DELETE' },
@@ -108,25 +111,25 @@ This is opt-in (default unchecked) because some users may want to keep memory ob
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/db/src/queries.ts` | Modified | Add `deleteReviewsByRepoId` function |
-| `apps/server/src/routes/api/reviews.ts` | Modified | Add `DELETE /api/reviews/:repoFullName` route |
-| `apps/dashboard/src/pages/Reviews.tsx` | Modified | Add "Delete Reviews" button with Tier 2 confirmation dialog |
-| `apps/dashboard/src/lib/api.ts` | Modified | Add `useDeleteRepoReviews` mutation hook |
-| `packages/db/src/queries.test.ts` | Modified | Add tests for `deleteReviewsByRepoId` |
-| `apps/server/src/routes/api/reviews.test.ts` | New | Tests for the DELETE endpoint (auth, 403, 404, success, includeMemory) |
-| `apps/dashboard/src/pages/Reviews.test.tsx` | Modified | Add tests for delete button, Tier 2 confirmation flow |
+| Area                                         | Impact   | Description                                                            |
+| -------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `packages/db/src/queries.ts`                 | Modified | Add `deleteReviewsByRepoId` function                                   |
+| `apps/server/src/routes/api/reviews.ts`      | Modified | Add `DELETE /api/reviews/:repoFullName` route                          |
+| `apps/dashboard/src/pages/Reviews.tsx`       | Modified | Add "Delete Reviews" button with Tier 2 confirmation dialog            |
+| `apps/dashboard/src/lib/api.ts`              | Modified | Add `useDeleteRepoReviews` mutation hook                               |
+| `packages/db/src/queries.test.ts`            | Modified | Add tests for `deleteReviewsByRepoId`                                  |
+| `apps/server/src/routes/api/reviews.test.ts` | New      | Tests for the DELETE endpoint (auth, 403, 404, success, includeMemory) |
+| `apps/dashboard/src/pages/Reviews.test.tsx`  | Modified | Add tests for delete button, Tier 2 confirmation flow                  |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Accidental deletion of review history | Medium | Tier 2 confirmation requires typing the exact repo name. The delete button only appears when a repo is selected (not on the "All repositories" view). |
-| IDOR — user deletes another user's reviews by guessing repo name | Low | Authorization check verifies `repo.installationId in user.installationIds` before deletion, same pattern as all existing routes. |
-| `includeMemory` silently fails if memory functions are unavailable | Low | The `clearMemoryObservationsByProject` function already exists and is battle-tested. Wrap in try/catch and return partial success if memory clear fails. |
-| Stats page shows cached stale data after deletion | Low | TanStack Query invalidation of `['stats', repoFullName]` forces a refetch. Stats are computed from the reviews table, so they'll be zero after deletion. |
-| Deleting reviews for a repo with thousands of rows is slow | Low | The `idx_reviews_repository` index ensures efficient deletion. PostgreSQL handles bulk deletes well. If needed, batch with `LIMIT` + loop, but unlikely for typical datasets. |
+| Risk                                                               | Likelihood | Mitigation                                                                                                                                                                    |
+| ------------------------------------------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Accidental deletion of review history                              | Medium     | Tier 2 confirmation requires typing the exact repo name. The delete button only appears when a repo is selected (not on the "All repositories" view).                         |
+| IDOR — user deletes another user's reviews by guessing repo name   | Low        | Authorization check verifies `repo.installationId in user.installationIds` before deletion, same pattern as all existing routes.                                              |
+| `includeMemory` silently fails if memory functions are unavailable | Low        | The `clearMemoryObservationsByProject` function already exists and is battle-tested. Wrap in try/catch and return partial success if memory clear fails.                      |
+| Stats page shows cached stale data after deletion                  | Low        | TanStack Query invalidation of `['stats', repoFullName]` forces a refetch. Stats are computed from the reviews table, so they'll be zero after deletion.                      |
+| Deleting reviews for a repo with thousands of rows is slow         | Low        | The `idx_reviews_repository` index ensures efficient deletion. PostgreSQL handles bulk deletes well. If needed, batch with `LIMIT` + loop, but unlikely for typical datasets. |
 
 ## Rollback Plan
 

@@ -19,7 +19,7 @@ spec:
   image:
     dockerfile: apps/server/Dockerfile
     registry: auto-build
-    
+
   runtime:
     command: []
     args: []
@@ -38,23 +38,23 @@ spec:
     # - STATE_SECRET
     # - GITHUB_CLIENT_SECRET
     # - WORKER_CONCURRENCY (optional, default: 3)
-    
+
   networking:
     ports:
       - port: 3000
         protocol: http
         public: true
     domain: auto
-    
+
   resources:
     compute:
       cpu: 100m
       memory: 512Mi
-      
+
   scaling:
     min: 1
     max: 1
-    
+
   healthCheck:
     enabled: true
     path: /health
@@ -63,7 +63,7 @@ spec:
     periodSeconds: 30
     timeoutSeconds: 5
     failureThreshold: 3
-    
+
   # Auto-deploy from GitHub
   build:
     type: github

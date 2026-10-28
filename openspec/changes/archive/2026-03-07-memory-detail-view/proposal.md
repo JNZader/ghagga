@@ -51,7 +51,9 @@ function isSignificantFinding(finding: ReviewFinding): boolean {
 
 // After
 function isSignificantFinding(finding: ReviewFinding): boolean {
-  return finding.severity === 'critical' || finding.severity === 'high' || finding.severity === 'medium';
+  return (
+    finding.severity === 'critical' || finding.severity === 'high' || finding.severity === 'medium'
+  );
 }
 ```
 
@@ -151,32 +153,32 @@ Update queries:
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/core/src/memory/persist.ts` | Modified | Expand `isSignificantFinding()` to include `medium`; pass `severity` to `saveObservation()` |
-| `packages/core/src/types.ts` | Modified | Add `severity` to `saveObservation` interface, `MemoryObservationRow`, `MemoryObservationDetail` |
-| `packages/core/src/memory/sqlite.ts` | Modified | Add `severity` column to CREATE TABLE; add ALTER TABLE migration; update `mapToDetail`; update `saveObservation` and `searchObservations` |
-| `packages/db/src/schema.ts` | Modified | Add `severity` varchar column to `memoryObservations` table |
-| `packages/db/src/queries.ts` | Modified | Update `saveObservation`, `getObservationsBySession`, `searchObservations`; update `getSessionsByProject` for severity distribution |
-| `packages/db/drizzle/0006_add_severity_column.sql` | New | PostgreSQL migration to add `severity` column |
-| `apps/dashboard/src/lib/types.ts` | Modified | Extend `Observation` with `severity`, `topicKey`, `revisionCount`, `updatedAt`; extend `MemorySession` |
-| `apps/dashboard/src/lib/api.ts` | Modified | Update API response handling if needed for new fields |
-| `apps/dashboard/src/pages/Memory.tsx` | Modified | Enhanced ObservationCard, SessionItem, new detail modal, stats bar, severity filter, sort options |
-| `apps/dashboard/src/components/ObservationDetailModal.tsx` | New | Full observation detail view modal/panel |
-| `packages/core/src/memory/persist.test.ts` | Modified | Update tests for medium severity inclusion and severity persistence |
-| `packages/db/src/queries.test.ts` | Modified | Update tests for severity in saveObservation and queries |
+| Area                                                       | Impact   | Description                                                                                                                               |
+| ---------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/memory/persist.ts`                      | Modified | Expand `isSignificantFinding()` to include `medium`; pass `severity` to `saveObservation()`                                               |
+| `packages/core/src/types.ts`                               | Modified | Add `severity` to `saveObservation` interface, `MemoryObservationRow`, `MemoryObservationDetail`                                          |
+| `packages/core/src/memory/sqlite.ts`                       | Modified | Add `severity` column to CREATE TABLE; add ALTER TABLE migration; update `mapToDetail`; update `saveObservation` and `searchObservations` |
+| `packages/db/src/schema.ts`                                | Modified | Add `severity` varchar column to `memoryObservations` table                                                                               |
+| `packages/db/src/queries.ts`                               | Modified | Update `saveObservation`, `getObservationsBySession`, `searchObservations`; update `getSessionsByProject` for severity distribution       |
+| `packages/db/drizzle/0006_add_severity_column.sql`         | New      | PostgreSQL migration to add `severity` column                                                                                             |
+| `apps/dashboard/src/lib/types.ts`                          | Modified | Extend `Observation` with `severity`, `topicKey`, `revisionCount`, `updatedAt`; extend `MemorySession`                                    |
+| `apps/dashboard/src/lib/api.ts`                            | Modified | Update API response handling if needed for new fields                                                                                     |
+| `apps/dashboard/src/pages/Memory.tsx`                      | Modified | Enhanced ObservationCard, SessionItem, new detail modal, stats bar, severity filter, sort options                                         |
+| `apps/dashboard/src/components/ObservationDetailModal.tsx` | New      | Full observation detail view modal/panel                                                                                                  |
+| `packages/core/src/memory/persist.test.ts`                 | Modified | Update tests for medium severity inclusion and severity persistence                                                                       |
+| `packages/db/src/queries.test.ts`                          | Modified | Update tests for severity in saveObservation and queries                                                                                  |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Increased memory storage from medium-severity findings | Medium | Low | Medium-severity findings are typically 30-50% more per review. Storage impact is minimal — observations are small text records. Monitor via existing `getStats()`. |
-| Existing observations have NULL severity | Certain | Low | All UI components handle `null` severity with a fallback display (no badge shown, sorted last in severity sort). No backfill migration needed. |
-| `ALTER TABLE` on existing SQLite databases with many rows | Low | Low | SQLite ALTER TABLE ADD COLUMN is O(1) — it only modifies the schema, not existing rows. Nullable columns are added instantly regardless of table size. |
-| PostgreSQL migration on production databases | Low | Low | `ALTER TABLE ADD COLUMN` with no default is O(1) in PostgreSQL (only modifies the catalog, doesn't rewrite the table). Zero downtime. |
-| `SeverityBadge` component type mismatch | Low | Low | The existing `SeverityBadge` accepts `Finding['severity']` which is `'critical' \| 'high' \| 'medium' \| 'low' \| 'info'`. Observations will have `string \| null`, so we need a type guard to ensure only valid severities are passed. |
-| Breaking `MemoryStorage` interface by adding `severity` to `saveObservation` | Low | Medium | The `severity` field is optional (`severity?: string`). Existing callers without severity continue to work. Both SQLite and PostgreSQL adapters handle the absence. |
-| Dashboard Memory page complexity (722 lines, adding more) | Medium | Medium | Extract new functionality into separate components: `ObservationDetailModal`, stats bar, filter/sort controls. Keep Memory.tsx as the orchestrator. |
+| Risk                                                                         | Likelihood | Impact | Mitigation                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------- | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Increased memory storage from medium-severity findings                       | Medium     | Low    | Medium-severity findings are typically 30-50% more per review. Storage impact is minimal — observations are small text records. Monitor via existing `getStats()`.                                                                      |
+| Existing observations have NULL severity                                     | Certain    | Low    | All UI components handle `null` severity with a fallback display (no badge shown, sorted last in severity sort). No backfill migration needed.                                                                                          |
+| `ALTER TABLE` on existing SQLite databases with many rows                    | Low        | Low    | SQLite ALTER TABLE ADD COLUMN is O(1) — it only modifies the schema, not existing rows. Nullable columns are added instantly regardless of table size.                                                                                  |
+| PostgreSQL migration on production databases                                 | Low        | Low    | `ALTER TABLE ADD COLUMN` with no default is O(1) in PostgreSQL (only modifies the catalog, doesn't rewrite the table). Zero downtime.                                                                                                   |
+| `SeverityBadge` component type mismatch                                      | Low        | Low    | The existing `SeverityBadge` accepts `Finding['severity']` which is `'critical' \| 'high' \| 'medium' \| 'low' \| 'info'`. Observations will have `string \| null`, so we need a type guard to ensure only valid severities are passed. |
+| Breaking `MemoryStorage` interface by adding `severity` to `saveObservation` | Low        | Medium | The `severity` field is optional (`severity?: string`). Existing callers without severity continue to work. Both SQLite and PostgreSQL adapters handle the absence.                                                                     |
+| Dashboard Memory page complexity (722 lines, adding more)                    | Medium     | Medium | Extract new functionality into separate components: `ObservationDetailModal`, stats bar, filter/sort controls. Keep Memory.tsx as the orchestrator.                                                                                     |
 
 ## Rollback Plan
 
@@ -202,12 +204,12 @@ Update queries:
 
 ## Distribution Mode Impact
 
-| Mode | Impact |
-|------|--------|
-| **SaaS** | Primary target — dashboard gets enhanced Memory page; PostgreSQL migration adds severity column |
-| **CLI** | Benefits from expanded significance filter (medium-severity findings now saved); SQLite schema gets severity column; `ghagga memory list` shows severity in output |
-| **GitHub Action** | Benefits from expanded significance filter; SQLite schema gets severity column; cached memory now includes medium-severity observations |
-| **1-Click Deploy** | Benefits automatically — uses SaaS server, so dashboard changes and PostgreSQL migration are inherited |
+| Mode               | Impact                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **SaaS**           | Primary target — dashboard gets enhanced Memory page; PostgreSQL migration adds severity column                                                                    |
+| **CLI**            | Benefits from expanded significance filter (medium-severity findings now saved); SQLite schema gets severity column; `ghagga memory list` shows severity in output |
+| **GitHub Action**  | Benefits from expanded significance filter; SQLite schema gets severity column; cached memory now includes medium-severity observations                            |
+| **1-Click Deploy** | Benefits automatically — uses SaaS server, so dashboard changes and PostgreSQL migration are inherited                                                             |
 
 ## Success Criteria
 
