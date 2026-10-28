@@ -1,6 +1,7 @@
 # Proposal: Add zizmor — GitHub Actions Security Analysis
 
 ## Status
+
 Draft
 
 ## Problem
@@ -30,11 +31,12 @@ After integration:
 Zizmor integrates as an **auto-detect tier** plugin, following the exact same pattern used by hadolint (Dockerfiles) and shellcheck (shell scripts). The implementation touches these layers:
 
 ### 1. Type Registration
+
 Add `'zizmor'` to the `ToolName` union type in `packages/core/src/tools/types.ts` (line 15-30). This is the same union that currently lists all 15 tools.
 
 ### 2. Plugin Implementation
-Create `packages/core/src/tools/plugins/zizmor.ts` implementing `ToolDefinition` (interface at `packages/core/src/tools/types.ts:97-138`):
 
+Create `packages/core/src/tools/plugins/zizmor.ts` implementing `ToolDefinition` (interface at `packages/core/src/tools/types.ts:97-138`):
 - **`name`**: `'zizmor'`
 - **`category`**: `'security'` (same as semgrep, trivy, gitleaks, bandit)
 - **`tier`**: `'auto-detect'` — activates when `.github/workflows/*.yml` or `.github/workflows/*.yaml` files are present in the changed file list
@@ -46,9 +48,11 @@ Create `packages/core/src/tools/plugins/zizmor.ts` implementing `ToolDefinition`
 - **`version`**: `'1.23.1'` (current stable)
 
 ### 3. Registry Registration
+
 Import and add `zizmorPlugin` to the `DEFAULT_PLUGINS` array in `packages/core/src/tools/plugins/index.ts` (line 35-55), as a Phase 6 auto-detect tool.
 
 ### 4. Severity Mapping
+
 Map zizmor's SARIF severity levels to GHAGGA's `FindingSeverity`:
 - `error` → `high`
 - `warning` → `medium`
@@ -58,6 +62,7 @@ Map zizmor's SARIF severity levels to GHAGGA's `FindingSeverity`:
 Use `'critical'` for zizmor rules known to indicate direct code execution risk (e.g., template injection).
 
 ### 5. Tests
+
 Create `packages/core/src/tools/plugins/__tests__/zizmor.test.ts` following the hadolint test pattern (`__tests__/hadolint.test.ts`):
 - Plugin metadata validation
 - `detect()` function with positive/negative cases
@@ -66,11 +71,13 @@ Create `packages/core/src/tools/plugins/__tests__/zizmor.test.ts` following the 
 - Edge cases: empty output, malformed JSON, timeout
 
 ### 6. Activation Flow
+
 No changes needed to the resolver (`packages/core/src/tools/resolve.ts`) or orchestrator (`packages/core/src/tools/orchestrator.ts`). The existing auto-detect flow (resolve.ts:50-55) automatically picks up any registered tool with `tier: 'auto-detect'` and a `detect()` function. The orchestrator's sequential install → run → parse loop (orchestrator.ts:51-121) handles failure isolation per tool.
 
 ## Scope
 
 ### In scope
+
 - New file: `packages/core/src/tools/plugins/zizmor.ts` — plugin implementation
 - New file: `packages/core/src/tools/plugins/__tests__/zizmor.test.ts` — unit tests
 - New file: `packages/core/src/tools/plugins/__tests__/fixtures/zizmor-output.json` — SARIF fixture
@@ -79,6 +86,7 @@ No changes needed to the resolver (`packages/core/src/tools/resolve.ts`) or orch
 - Documentation update for the new tool in docs/
 
 ### Out of scope
+
 - Custom zizmor rules or rule configuration (use zizmor defaults)
 - `.zizmor.yml` config file support (can be added later)
 - Scanning non-workflow YAML files (actions, reusable workflows) — focus on `.github/workflows/` only for initial release
@@ -88,13 +96,13 @@ No changes needed to the resolver (`packages/core/src/tools/resolve.ts`) or orch
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| zizmor binary unavailable in CI environment | Medium | Medium | Binary install with cache, same pattern as hadolint; graceful skip on install failure per orchestrator isolation (orchestrator.ts:107-120) |
-| SARIF output format changes between zizmor versions | Low | Medium | Pin version (`1.23.1`), validate fixture-based parse tests, SARIF is a standard format |
-| False positives in workflow analysis | Medium | Low | Findings are surfaced alongside AI review which can contextualize; users can disable via `disabledTools: ['zizmor']` |
-| Large repos with many workflows slow down pipeline | Low | Medium | Per-tool timeout via `TimeBudget` system (budget.ts), only scans changed files |
-| Platform compatibility (Rust binary, x86_64/arm64) | Low | Medium | Use multi-platform release assets from zizmor releases; Docker image already runs on x86_64 |
+| Risk                                                | Likelihood | Impact | Mitigation                                                                                                                                 |
+| --------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| zizmor binary unavailable in CI environment         | Medium     | Medium | Binary install with cache, same pattern as hadolint; graceful skip on install failure per orchestrator isolation (orchestrator.ts:107-120) |
+| SARIF output format changes between zizmor versions | Low        | Medium | Pin version (`1.23.1`), validate fixture-based parse tests, SARIF is a standard format                                                     |
+| False positives in workflow analysis                | Medium     | Low    | Findings are surfaced alongside AI review which can contextualize; users can disable via `disabledTools: ['zizmor']`                       |
+| Large repos with many workflows slow down pipeline  | Low        | Medium | Per-tool timeout via `TimeBudget` system (budget.ts), only scans changed files                                                             |
+| Platform compatibility (Rust binary, x86_64/arm64)  | Low        | Medium | Use multi-platform release assets from zizmor releases; Docker image already runs on x86_64                                                |
 
 ## Acceptance Criteria
 

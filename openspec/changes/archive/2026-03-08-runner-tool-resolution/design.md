@@ -103,8 +103,8 @@ enableSemgrep: 'true'      ──→  (legacy compat)
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
+| File                            | Action | Description                                                                                                 |
+| ------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
 | `templates/ghagga-analysis.yml` | Modify | Add 2 new inputs, resolve step, 12 new tool blocks, extended assemble step. Grows from ~350 to ~1200 lines. |
 
 No other files change. The server and core library already support the full 15-tool ecosystem.
@@ -146,28 +146,28 @@ Each tool block in the YAML follows this structure:
 
 ### Always-On Tools
 
-| Tool | Version | Install | Run | Parse | Cache |
-|------|---------|---------|-----|-------|-------|
-| semgrep | 1.90.0 | `pip install semgrep==1.90.0` | `semgrep --json --config auto --quiet target-repo` | jq: `.results[]` → severity mapping (ERROR→high, WARNING→medium, INFO→info) | `~/.cache/pip` |
-| trivy | 0.69.3 | `curl install.sh \| sh -s -- v0.69.3` | `trivy fs --format json --scanners vuln,license --quiet target-repo` | jq: `.Results[].Vulnerabilities[]` severity mapping | `~/.cache/trivy` |
-| cpd | 7.8.0 | PMD zip extract to `/opt/pmd` | `pmd cpd --format xml --minimum-tokens 100 --dir target-repo --skip-lexical-errors` | python3: XML parse `<duplication>` elements | `/opt/pmd` |
-| gitleaks | 8.21.2 | `curl tar.gz → /usr/local/bin/gitleaks` | `gitleaks detect --source target-repo --report-format json --report-path /tmp/gitleaks-raw.json --no-git --exit-code 0` | jq: `.[]` → `severity: "critical"`, `category: "secrets"` | `/usr/local/bin/gitleaks` |
-| shellcheck | 0.10.0 | Verify pre-installed; fallback: `curl tar.xz` | `shellcheck --format=json $(find target-repo -name '*.sh' -o -name '*.bash')` | jq: `.[]` → level mapping (error→high, warning→medium) | none (pre-installed) |
-| markdownlint | 0.17.1 | `npm install -g markdownlint-cli2@0.17.1` | `markdownlint-cli2 "target-repo/**/*.md"` | jq: parse output → `severity: "info"`, `category: "docs"` | none (fast npm) |
-| lizard | 1.17.13 | `pip install lizard==1.17.13` | `lizard --json target-repo` | python3: `.function_list[].cyclomatic_complexity` → severity thresholds (>20→high, >15→medium, >10→low) | `~/.cache/pip` |
+| Tool         | Version | Install                                       | Run                                                                                                                     | Parse                                                                                                   | Cache                     |
+| ------------ | ------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------- |
+| semgrep      | 1.90.0  | `pip install semgrep==1.90.0`                 | `semgrep --json --config auto --quiet target-repo`                                                                      | jq: `.results[]` → severity mapping (ERROR→high, WARNING→medium, INFO→info)                             | `~/.cache/pip`            |
+| trivy        | 0.69.3  | `curl install.sh \| sh -s -- v0.69.3`         | `trivy fs --format json --scanners vuln,license --quiet target-repo`                                                    | jq: `.Results[].Vulnerabilities[]` severity mapping                                                     | `~/.cache/trivy`          |
+| cpd          | 7.8.0   | PMD zip extract to `/opt/pmd`                 | `pmd cpd --format xml --minimum-tokens 100 --dir target-repo --skip-lexical-errors`                                     | python3: XML parse `<duplication>` elements                                                             | `/opt/pmd`                |
+| gitleaks     | 8.21.2  | `curl tar.gz → /usr/local/bin/gitleaks`       | `gitleaks detect --source target-repo --report-format json --report-path /tmp/gitleaks-raw.json --no-git --exit-code 0` | jq: `.[]` → `severity: "critical"`, `category: "secrets"`                                               | `/usr/local/bin/gitleaks` |
+| shellcheck   | 0.10.0  | Verify pre-installed; fallback: `curl tar.xz` | `shellcheck --format=json $(find target-repo -name '*.sh' -o -name '*.bash')`                                           | jq: `.[]` → level mapping (error→high, warning→medium)                                                  | none (pre-installed)      |
+| markdownlint | 0.17.1  | `npm install -g markdownlint-cli2@0.17.1`     | `markdownlint-cli2 "target-repo/**/*.md"`                                                                               | jq: parse output → `severity: "info"`, `category: "docs"`                                               | none (fast npm)           |
+| lizard       | 1.17.13 | `pip install lizard==1.17.13`                 | `lizard --json target-repo`                                                                                             | python3: `.function_list[].cyclomatic_complexity` → severity thresholds (>20→high, >15→medium, >10→low) | `~/.cache/pip`            |
 
 ### Auto-Detect Tools
 
-| Tool | Version | Detect | Install | Run | Parse | Cache |
-|------|---------|--------|---------|-----|-------|-------|
-| ruff | 0.9.7 | `.py`, `.pyi` | `pip install ruff==0.9.7` | `ruff check --output-format json target-repo` | jq: code prefix mapping (F→high, E→medium, W→low) | `~/.cache/pip` |
-| bandit | 1.8.3 | `.py` | `pip install bandit==1.8.3` | `bandit -r target-repo -f json --quiet` | jq: `.results[]` → severity mapping (HIGH→high, MEDIUM→medium) | `~/.cache/pip` |
-| golangci-lint | 1.63.4 | `go.mod`, `.go` | `curl install.sh → /usr/local/bin` | `golangci-lint run --out-format json` (cwd=target-repo) | jq: `.Issues[]` → FromLinter-based mapping | `/usr/local/bin/golangci-lint` |
-| biome | 1.9.4 | `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.mjs`, `.cts`, `.cjs` | `npm install -g @biomejs/biome@1.9.4` | `biome lint --reporter json target-repo` | jq: `.diagnostics[]` → severity mapping | none (fast npm) |
-| pmd | 7.8.0 | `.java`, `.kt` | Shared with CPD (check `/opt/pmd/bin/pmd`) | `pmd check --format json --dir target-repo --rulesets rulesets/java/quickstart.xml` | jq: `.files[].violations[]` → priority mapping (1→critical..5→info) | `/opt/pmd` (shared) |
-| psalm | 6.5.1 | `.php`, `composer.json` | `composer global require vimeo/psalm:6.5.1` | `psalm --output-format=json --no-cache` (cwd=target-repo) | none (small PHAR) |
-| clippy | toolchain | `Cargo.toml`, `.rs` | Verify `cargo` exists | `cargo clippy --message-format=json -- -W clippy::all` (cwd=target-repo) | none (uses project toolchain) |
-| hadolint | 2.12.0 | `Dockerfile*` | `curl binary → /usr/local/bin/hadolint` | `hadolint --format json $(find target-repo -name 'Dockerfile*')` | jq: `.[]` → level mapping | `/usr/local/bin/hadolint` |
+| Tool          | Version   | Detect                                                       | Install                                     | Run                                                                                 | Parse                                                               | Cache                          |
+| ------------- | --------- | ------------------------------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------ |
+| ruff          | 0.9.7     | `.py`, `.pyi`                                                | `pip install ruff==0.9.7`                   | `ruff check --output-format json target-repo`                                       | jq: code prefix mapping (F→high, E→medium, W→low)                   | `~/.cache/pip`                 |
+| bandit        | 1.8.3     | `.py`                                                        | `pip install bandit==1.8.3`                 | `bandit -r target-repo -f json --quiet`                                             | jq: `.results[]` → severity mapping (HIGH→high, MEDIUM→medium)      | `~/.cache/pip`                 |
+| golangci-lint | 1.63.4    | `go.mod`, `.go`                                              | `curl install.sh → /usr/local/bin`          | `golangci-lint run --out-format json` (cwd=target-repo)                             | jq: `.Issues[]` → FromLinter-based mapping                          | `/usr/local/bin/golangci-lint` |
+| biome         | 1.9.4     | `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.mjs`, `.cts`, `.cjs` | `npm install -g @biomejs/biome@1.9.4`       | `biome lint --reporter json target-repo`                                            | jq: `.diagnostics[]` → severity mapping                             | none (fast npm)                |
+| pmd           | 7.8.0     | `.java`, `.kt`                                               | Shared with CPD (check `/opt/pmd/bin/pmd`)  | `pmd check --format json --dir target-repo --rulesets rulesets/java/quickstart.xml` | jq: `.files[].violations[]` → priority mapping (1→critical..5→info) | `/opt/pmd` (shared)            |
+| psalm         | 6.5.1     | `.php`, `composer.json`                                      | `composer global require vimeo/psalm:6.5.1` | `psalm --output-format=json --no-cache` (cwd=target-repo)                           | none (small PHAR)                                                   |
+| clippy        | toolchain | `Cargo.toml`, `.rs`                                          | Verify `cargo` exists                       | `cargo clippy --message-format=json -- -W clippy::all` (cwd=target-repo)            | none (uses project toolchain)                                       |
+| hadolint      | 2.12.0    | `Dockerfile*`                                                | `curl binary → /usr/local/bin/hadolint`     | `hadolint --format json $(find target-repo -name 'Dockerfile*')`                    | jq: `.[]` → level mapping                                           | `/usr/local/bin/hadolint`      |
 
 ## Resolve Step Algorithm (Bash)
 
@@ -268,15 +268,15 @@ PAYLOAD=$(jq -n \
 
 ```yaml
 enabledTools:
-  description: 'JSON array of force-enabled tool names'
+  description: "JSON array of force-enabled tool names"
   required: false
   type: string
-  default: '[]'
+  default: "[]"
 disabledTools:
-  description: 'JSON array of force-disabled tool names'
+  description: "JSON array of force-disabled tool names"
   required: false
   type: string
-  default: '[]'
+  default: "[]"
 ```
 
 ### Resolve Step Output
@@ -309,17 +309,16 @@ steps.resolve.outputs.tools = '["semgrep","trivy","cpd","gitleaks","shellcheck",
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | Resolve logic | Create a shell script that replicates resolve, test with different file trees and input combos. Run locally via docker. |
-| Integration | Full YAML | Manually dispatch to a test runner repo with a known target repo. Verify callback payload contains all expected tool keys. |
-| Regression | Backward compat | Dispatch with ONLY legacy booleans (no enabledTools/disabledTools). Verify payload has exactly semgrep/trivy/cpd. |
-| Security | Log inspection | Run against a private repo, download workflow logs before deletion, grep for any target-repo content. |
+| Layer       | What to Test    | Approach                                                                                                                   |
+| ----------- | --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | Resolve logic   | Create a shell script that replicates resolve, test with different file trees and input combos. Run locally via docker.    |
+| Integration | Full YAML       | Manually dispatch to a test runner repo with a known target repo. Verify callback payload contains all expected tool keys. |
+| Regression  | Backward compat | Dispatch with ONLY legacy booleans (no enabledTools/disabledTools). Verify payload has exactly semgrep/trivy/cpd.          |
+| Security    | Log inspection  | Run against a private repo, download workflow logs before deletion, grep for any target-repo content.                      |
 
 ## Migration / Rollout
 
 No migration required. The change is a single YAML template file update:
-
 1. Update `templates/ghagga-analysis.yml` locally
 2. The server's `verifyWorkflowFile()` computes a SHA-256 hash of the template — after this change, any existing runner repos will have a stale hash
 3. On next dispatch, the server detects the hash mismatch, re-commits the new template to the user's runner repo, and proceeds

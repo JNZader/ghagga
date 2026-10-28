@@ -6,25 +6,25 @@
 
 ### Commits
 
-| Hash | Message | Tasks |
-|------|---------|-------|
+| Hash      | Message                                        | Tasks                  |
+| --------- | ---------------------------------------------- | ---------------------- |
 | `7c30a5b` | feat(runner): createRunnerRepo() + OAuth scope | T1.1, T1.2, T1.3, T1.4 |
-| `d6a2ce9` | feat(runner): runner management endpoints | T2.1, T2.2 |
-| `a9e120b` | feat(dashboard): Runner card UI | T3.1, T3.2, T3.3, T3.4 |
-| `2a3f3c8` | test(runner): 226 tests (534 total) | T1.5, T2.3 |
-| `35f1778` | docs(runner): docs + SDD artifacts | T4.1, T4.2 |
+| `d6a2ce9` | feat(runner): runner management endpoints      | T2.1, T2.2             |
+| `a9e120b` | feat(dashboard): Runner card UI                | T3.1, T3.2, T3.3, T3.4 |
+| `2a3f3c8` | test(runner): 226 tests (534 total)            | T1.5, T2.3             |
+| `35f1778` | docs(runner): docs + SDD artifacts             | T4.1, T4.2             |
 
 ---
 
 ## Summary
 
-| Phase | Tasks | Focus | Est. Effort |
-|-------|-------|-------|-------------|
-| Phase 1 | 5 | Server Foundation (types, OAuth, runner functions) | ~3h |
-| Phase 2 | 3 | Server Endpoints + Tests | ~3h |
-| Phase 3 | 4 | Dashboard UI (types, hooks, auth, UI) | ~3h |
-| Phase 4 | 2 | Documentation & Cleanup | ~1.5h |
-| **Total** | **14** | | **~10.5h** |
+| Phase     | Tasks  | Focus                                              | Est. Effort |
+| --------- | ------ | -------------------------------------------------- | ----------- |
+| Phase 1   | 5      | Server Foundation (types, OAuth, runner functions) | ~3h         |
+| Phase 2   | 3      | Server Endpoints + Tests                           | ~3h         |
+| Phase 3   | 4      | Dashboard UI (types, hooks, auth, UI)              | ~3h         |
+| Phase 4   | 2      | Documentation & Cleanup                            | ~1.5h       |
+| **Total** | **14** |                                                    | **~10.5h**  |
 
 ---
 
@@ -417,21 +417,21 @@ T3.3 (reAuth)    ─────────────────────
 
 ## Acceptance Criteria Cross-Reference
 
-| ARC ID | Description | Covered by Tasks |
-|--------|-------------|------------------|
-| ARC-01 | OAuth scope upgrade | T1.3 |
-| ARC-02 | Runner create endpoint | T1.4, T2.2 |
-| ARC-03 | Runner status endpoint | T1.2, T2.1 |
-| ARC-04 | Secret auto-configuration | T1.4, T2.2 |
-| ARC-05 | Dashboard Runner UI (5 states) | T3.4 |
-| ARC-06 | Scope mismatch detection | T1.4, T2.2, T3.3, T3.4 |
-| ARC-07 | Existing repo handling (409) | T1.4, T2.2, T3.4 |
-| ARC-08 | Repo must be public | T1.4, T2.2 |
-| ARC-09 | Idempotent create | T1.4, T3.4 |
-| ARC-10 | Template unavailable | T1.4, T2.2 |
-| ARC-11 | Rate limit handling | T1.4, T2.2 |
-| ARC-12 | Private repo warning | T1.2, T2.1, T3.4 |
-| ARC-13 | GitHub App permission reduction | T4.2 |
-| ARC-14 | Documentation updates | T4.1 |
-| ARC-15 | Secret refresh | T2.2, T3.4 |
-| ARC-16 | Org repo creation | T1.4, T2.2 |
+| ARC ID | Description                     | Covered by Tasks       |
+| ------ | ------------------------------- | ---------------------- |
+| ARC-01 | OAuth scope upgrade             | T1.3                   |
+| ARC-02 | Runner create endpoint          | T1.4, T2.2             |
+| ARC-03 | Runner status endpoint          | T1.2, T2.1             |
+| ARC-04 | Secret auto-configuration       | T1.4, T2.2             |
+| ARC-05 | Dashboard Runner UI (5 states)  | T3.4                   |
+| ARC-06 | Scope mismatch detection        | T1.4, T2.2, T3.3, T3.4 |
+| ARC-07 | Existing repo handling (409)    | T1.4, T2.2, T3.4       |
+| ARC-08 | Repo must be public             | T1.4, T2.2             |
+| ARC-09 | Idempotent create               | T1.4, T3.4             |
+| ARC-10 | Template unavailable            | T1.4, T2.2             |
+| ARC-11 | Rate limit handling             | T1.4, T2.2             |
+| ARC-12 | Private repo warning            | T1.2, T2.1, T3.4       |
+| ARC-13 | GitHub App permission reduction | T4.2                   |
+| ARC-14 | Documentation updates           | T4.1                   |
+| ARC-15 | Secret refresh                  | T2.2, T3.4             |
+| ARC-16 | Org repo creation               | T1.4, T2.2             |

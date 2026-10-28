@@ -55,7 +55,7 @@ options, so no changes are expected.
 
 - [x] Verify `generateText({ model, system, prompt, temperature })` compiles
 - [x] Verify `result.usage?.inputTokens` and `result.usage?.outputTokens`
-      access compiles (renamed from promptTokens/completionTokens)
+  access compiles (renamed from promptTokens/completionTokens)
 - [x] Verify `result.text` access compiles
 
 **File:** `packages/core/src/providers/fallback.ts`
@@ -96,7 +96,7 @@ options, so no changes are expected.
 ### 4.1 Verify Zod Schema Compilation
 
 - [x] Verify `z.object()`, `z.boolean()`, `z.string()`, `z.enum()`,
-      `z.union()`, `z.array()` still compile
+  `z.union()`, `z.array()` still compile
 - [x] Verify `.optional()`, `.strict()`, `.safeParse()` still compile
 - [x] Verify the `import { z } from 'zod'` import still works
 
@@ -105,7 +105,7 @@ options, so no changes are expected.
 ### 4.2 Check `.issues` vs `.errors` on `ZodError`
 
 - [x] If `parsed.error.issues` causes a type error, change to `parsed.error.errors`
-      → No change needed: `.issues` still compiles with Zod v4 (backward compatible alias)
+  → No change needed: `.issues` still compiles with Zod v4 (backward compatible alias)
 - [x] Verify `.path` and `.message` properties still exist on error items
 
 **File:** `apps/server/src/routes/api/settings.ts` line 148
@@ -120,11 +120,11 @@ details: parsed.error.errors.map((i) => ({
 ### 4.3 Verify TypeScript Performance
 
 - [x] After all changes, check that `pnpm typecheck` completes in reasonable
-      time (< 30 seconds) — both packages typecheck instantly
+  time (< 30 seconds) — both packages typecheck instantly
 - [x] If slow, verify `tsconfig.base.json` has compatible `moduleResolution`
-      → Not needed, typecheck is fast
+  → Not needed, typecheck is fast
 - [x] If needed, ensure zod version is `>=4.1.8` (not an earlier v4 release)
-      → Confirmed via package.json constraint
+  → Confirmed via package.json constraint
 
 ---
 
@@ -134,7 +134,7 @@ details: parsed.error.errors.map((i) => ({
 
 - [x] Run `pnpm test` from monorepo root
 - [x] Record which tests pass and which fail
-      → 4 failures in fallback.test.ts and workflow.test.ts (mock usage property names)
+  → 4 failures in fallback.test.ts and workflow.test.ts (mock usage property names)
 
 ### 5.2 Fix Failing Tests (if any)
 
@@ -143,13 +143,12 @@ Expected areas where tests might need updates:
 #### 5.2.1 Mock Return Types
 
 If `generateText` return type changed in ways that affect even `as any` casts:
-
 - [x] Update `fallback.test.ts` mock return values if needed
-      → Changed promptTokens→inputTokens, completionTokens→outputTokens in mocks
+  → Changed promptTokens→inputTokens, completionTokens→outputTokens in mocks
 - [x] Update `workflow.test.ts` mock return values if needed
-      → Changed promptTokens→inputTokens, completionTokens→outputTokens in mocks
+  → Changed promptTokens→inputTokens, completionTokens→outputTokens in mocks
 - [x] Update `consensus-review.test.ts` mock return values if needed
-      → Changed promptTokens→inputTokens, completionTokens→outputTokens in mocks
+  → Changed promptTokens→inputTokens, completionTokens→outputTokens in mocks
 
 **Files:**
 - `packages/core/src/providers/fallback.test.ts`
@@ -159,7 +158,7 @@ If `generateText` return type changed in ways that affect even `as any` casts:
 #### 5.2.2 Zod Error Assertions
 
 - [x] If `apps/server` has tests that assert on Zod error shapes, verify they
-      still pass with Zod v4 — all 475 server tests pass
+  still pass with Zod v4 — all 475 server tests pass
 
 ### 5.3 Run Full Test Suite Again
 
@@ -173,7 +172,7 @@ If `generateText` return type changed in ways that affect even `as any` casts:
 ### 6.1 Build Check
 
 - [x] Run `pnpm build` to verify the full monorepo builds
-      → `pnpm exec turbo typecheck build` — 14/14 tasks successful
+  → `pnpm exec turbo typecheck build` — 14/14 tasks successful
 - [x] Verify no runtime import errors in the built output
 
 ### 6.2 Review Checklist
@@ -192,14 +191,14 @@ If `generateText` return type changed in ways that affect even `as any` casts:
 
 ## Estimated Effort
 
-| Phase | Estimate | Notes |
-|-------|----------|-------|
-| Phase 1 | 5 min | Package.json edits + install |
-| Phase 2 | 10 min | Typecheck-driven; likely zero code changes |
-| Phase 3 | 10 min | Typecheck-driven; likely zero code changes |
-| Phase 4 | 10 min | One possible `.issues` → `.errors` change |
-| Phase 5 | 15 min | Run tests, fix any mock/assertion issues |
-| Phase 6 | 5 min | Build + final verification |
+| Phase     | Estimate    | Notes                                         |
+| --------- | ----------- | --------------------------------------------- |
+| Phase 1   | 5 min       | Package.json edits + install                  |
+| Phase 2   | 10 min      | Typecheck-driven; likely zero code changes    |
+| Phase 3   | 10 min      | Typecheck-driven; likely zero code changes    |
+| Phase 4   | 10 min      | One possible `.issues` → `.errors` change     |
+| Phase 5   | 15 min      | Run tests, fix any mock/assertion issues      |
+| Phase 6   | 5 min       | Build + final verification                    |
 | **Total** | **~55 min** | Low-risk migration due to minimal API surface |
 
 ## Dependencies

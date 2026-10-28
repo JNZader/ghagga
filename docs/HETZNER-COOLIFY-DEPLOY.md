@@ -45,8 +45,7 @@ Migrar GHAGGA de Render/Northflank/Neon/Inngest a un stack 100% self-hosted en H
    ```bash
    # En tu terminal local, ejecutar:
    cat ~/.ssh/id_rsa.pub
-   
-   # Si no existe, generar primero:
+      # Si no existe, generar primero:
    ssh-keygen -t rsa -b 4096 -C "tu-email@ejemplo.com"
    # Presionar Enter 3 veces (valores por defecto)
    ```
@@ -59,14 +58,14 @@ Migrar GHAGGA de Render/Northflank/Neon/Inngest a un stack 100% self-hosted en H
 2. Click **"Add Server"** (botón azul grande)
 3. Configurar:
 
-   | Campo | Valor |
-   |-------|-------|
-   | **Location** | `Falkenstein` (Alemania) o `Helsinki` |
-   | **Image** | `Ubuntu 22.04` (seleccionar de la lista) |
-   | **Type** | `Shared vCPU` → `CX21` (2 vCPU, 4GB RAM, 40GB) |
-   | **Networking** | ✅ IPv4 (default), ✅ IPv6 (default) |
-   | **SSH Key** | Seleccionar la que creaste (`mi-laptop`) |
-   | **Name** | `coolify-server` |
+   | Campo          | Valor                                          |
+   | -------------- | ---------------------------------------------- |
+   | **Location**   | `Falkenstein` (Alemania) o `Helsinki`          |
+   | **Image**      | `Ubuntu 22.04` (seleccionar de la lista)       |
+   | **Type**       | `Shared vCPU` → `CX21` (2 vCPU, 4GB RAM, 40GB) |
+   | **Networking** | ✅ IPv4 (default), ✅ IPv6 (default)           |
+   | **SSH Key**    | Seleccionar la que creaste (`mi-laptop`)       |
+   | **Name**       | `coolify-server`                               |
 
 4. Click **"Create & Buy Now"**
 5. Esperar 1 minuto a que diga **"Running"**
@@ -99,13 +98,13 @@ Si funciona: `exit` para salir
 4. Click **"Add record"**
 5. Configurar:
 
-   | Campo | Valor |
-   |-------|-------|
-   | **Type** | `A` |
-   | **Name** | `coolify` (esto creará coolify.tudominio.com) |
-   | **IPv4 address** | `TU_IP_DE_HETZNER` (ej: 78.46.123.45) |
-   | **TTL** | `Auto` |
-   | **Proxy status** | 🟡 DNS only (gris, NARANJA APAGADO) |
+   | Campo            | Valor                                         |
+   | ---------------- | --------------------------------------------- |
+   | **Type**         | `A`                                           |
+   | **Name**         | `coolify` (esto creará coolify.tudominio.com) |
+   | **IPv4 address** | `TU_IP_DE_HETZNER` (ej: 78.46.123.45)         |
+   | **TTL**          | `Auto`                                        |
+   | **Proxy status** | 🟡 DNS only (gris, NARANJA APAGADO)           |
 
 6. Click **"Save"**
 
@@ -114,13 +113,13 @@ Si funciona: `exit` para salir
 1. Click **"Add record"** otra vez
 2. Configurar:
 
-   | Campo | Valor |
-   |-------|-------|
-   | **Type** | `A` |
-   | **Name** | `api` (esto creará api.tudominio.com) |
-   | **IPv4 address** | `TU_IP_DE_HETZNER` (misma IP) |
-   | **TTL** | `Auto` |
-   | **Proxy status** | 🟡 DNS only (gris, NARANJA APAGADO) |
+   | Campo            | Valor                                 |
+   | ---------------- | ------------------------------------- |
+   | **Type**         | `A`                                   |
+   | **Name**         | `api` (esto creará api.tudominio.com) |
+   | **IPv4 address** | `TU_IP_DE_HETZNER` (misma IP)         |
+   | **TTL**          | `Auto`                                |
+   | **Proxy status** | 🟡 DNS only (gris, NARANJA APAGADO)   |
 
 3. Click **"Save"**
 
@@ -276,6 +275,7 @@ docker ps
 5. Esperar 1 minuto a que diga **"Running"**
 6. Click en el servicio `ghagga-db` para ver detalles
 7. **Anotar el DATABASE_URL** que muestra (algo como):
+
    ```
    postgresql://ghagga:PASSWORD@ghagga-db:5432/ghagga
    ```
@@ -290,6 +290,7 @@ docker ps
 4. Click **"Create"**
 5. Esperar a que diga **"Running"**
 6. **Anotar el REDIS_URL** (debería ser):
+
    ```
    redis://ghagga-redis:6379
    ```
@@ -301,11 +302,11 @@ docker ps
 3. Seleccionar tu repositorio `ghagga` de la lista
 4. Configurar:
 
-   | Campo | Valor |
-   |-------|-------|
-   | **Name** | `ghagga-server` |
-   | **Build Pack** | `Docker Compose` |
-   | **Base Directory** | `/` (raíz del repo) |
+   | Campo                       | Valor                |
+   | --------------------------- | -------------------- |
+   | **Name**                    | `ghagga-server`      |
+   | **Build Pack**              | `Docker Compose`     |
+   | **Base Directory**          | `/` (raíz del repo)  |
    | **Docker Compose Location** | `docker-compose.yml` |
 
 5. Click **"Continue"**
@@ -313,17 +314,19 @@ docker ps
 ### Paso 5.5: Configurar Variables de Entorno
 
 **IMPORTANTE**: Usar los NUEVOS secretos rotados, NUNCA los viejos expuestos.
-
 1. En la configuración de la aplicación → tab **"Environment Variables"**
 2. Agregar variables una por una:
 
    **Base de datos:**
+
    ```
    DATABASE_URL=postgresql://ghagga:PASSWORD@ghagga-db:5432/ghagga
    ```
+
    (Reemplazar PASSWORD con la que generaste)
 
    **Redis:**
+
    ```
    REDIS_URL=redis://ghagga-redis:6379
    REDIS_HOST=ghagga-redis
@@ -331,6 +334,7 @@ docker ps
    ```
 
    **GitHub App (NUEVOS valores):**
+
    ```
    GITHUB_APP_ID=2991025
    GITHUB_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----
@@ -338,6 +342,7 @@ docker ps
    ...
    -----END RSA PRIVATE KEY-----
    ```
+
    (Pegar la nueva private key completa, con saltos de línea)
 
    ```
@@ -346,11 +351,13 @@ docker ps
    ```
 
    **Secrets (GENERAR NUEVOS):**
+
    ```bash
    # En tu terminal local, generar:
    openssl rand -hex 32
    # Resultado: 64 caracteres hex
    ```
+
    ```
    ENCRYPTION_KEY=los_64_caracteres_hex_aqui
    ```
@@ -359,11 +366,13 @@ docker ps
    # Generar otro:
    openssl rand -base64 32
    ```
+
    ```
    STATE_SECRET=el_resultado_base64_aqui
    ```
 
    **Configuración:**
+
    ```
    NODE_ENV=production
    PORT=3000
@@ -439,7 +448,6 @@ docker ps
 ### Paso 7.3: Verificar Bull Dashboard (opcional)
 
 Si configuraste el bull-dashboard en docker-compose:
-
 1. En Coolify → **"+ New Resource"** → **"Service"**
 2. Buscar `bull-board` o similar
 3. O acceder directamente si expusiste el puerto 3001
@@ -485,16 +493,19 @@ Si configuraste el bull-dashboard en docker-compose:
 ## ✅ CHECKLIST FINAL
 
 ### Pre-migración:
+
 - [ ] Secretos rotados (GitHub App)
 - [ ] Nuevos secretos generados (ENCRYPTION_KEY, STATE_SECRET)
 
 ### Infraestructura:
+
 - [ ] VPS Hetzner CX21 creado
 - [ ] DNS configurado en Cloudflare
 - [ ] Coolify instalado y accesible en HTTPS
 - [ ] GitHub conectado a Coolify
 
 ### Deploy:
+
 - [ ] PostgreSQL creado en Coolify
 - [ ] Redis creado en Coolify
 - [ ] Aplicación GHAGGA deployada
@@ -503,17 +514,20 @@ Si configuraste el bull-dashboard en docker-compose:
 - [ ] /health responde OK
 
 ### GitHub App:
+
 - [ ] Webhook URL actualizada
 - [ ] Webhook Secret nuevo configurado
 - [ ] Homepage URL actualizada
 - [ ] Callback URL actualizada
 
 ### Testing:
+
 - [ ] Comando "ghagga review" funciona
 - [ ] Review se genera y se postea
 - [ ] No hay errores en logs
 
 ### Cleanup:
+
 - [ ] Cuenta Neon eliminada
 - [ ] Cuenta Inngest eliminada
 - [ ] Servicio Render cancelado
@@ -560,11 +574,11 @@ NO usar \n ni formato JSON.
 
 ## 📊 Costo Final Mensual
 
-| Servicio | Costo |
-|----------|-------|
-| Hetzner CX21 | $6.55 |
-| Dominio .com | ~$1.00 |
-| **Total** | **~$7.55/mes** |
+| Servicio     | Costo          |
+| ------------ | -------------- |
+| Hetzner CX21 | $6.55          |
+| Dominio .com | ~$1.00         |
+| **Total**    | **~$7.55/mes** |
 
 **Ahorro**: ~$20-50/mes vs SaaS
 

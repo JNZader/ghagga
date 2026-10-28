@@ -2,14 +2,14 @@
 
 ## Review Workload Forecast
 
-| Field | Value |
-|-------|-------|
+| Field                   | Value                                                                                                                                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Estimated changed lines | ~1100-1400 (provider factory ~250, HTTP provider ~120, local provider ~100, schema+migration ~60, SQLite union ~180, PG union ~180, 3 wiring sites ~120, backfill script ~150, tests ~300+, docs ~60) |
-| 400-line budget risk | High |
-| Chained PRs recommended | Yes |
-| Suggested split | PR1 → PR2 → PR3 → PR4 → PR5 → PR6 → PR7 → PR8 |
-| Delivery strategy | auto-chain |
-| Chain strategy | stacked-to-main |
+| 400-line budget risk    | High                                                                                                                                                                                                  |
+| Chained PRs recommended | Yes                                                                                                                                                                                                   |
+| Suggested split         | PR1 → PR2 → PR3 → PR4 → PR5 → PR6 → PR7 → PR8                                                                                                                                                         |
+| Delivery strategy       | auto-chain                                                                                                                                                                                            |
+| Chain strategy          | stacked-to-main                                                                                                                                                                                       |
 
 Decision needed before apply: No
 Chained PRs recommended: Yes
@@ -18,16 +18,16 @@ Chain strategy: stacked-to-main
 
 ### Suggested Work Units
 
-| Unit | Goal | Likely PR | Notes |
-|------|------|-----------|-------|
-| 1 | Provider abstraction: `resolveEmbeddingConfig`, factory, `FakeEmbeddingProvider`, unit tests | PR 1 | Base = main. No behavior change (nothing wired yet). ~250-350 lines. |
-| 2 | Schema: `embedding_model`/`embedding_dim` columns + additive migration (PG + SQLite) | PR 2 | Base = PR 1. Nullable, additive only. ~60-100 lines. |
-| 3 | SQLite cosine union + dedup + posRank + read guard + `none`-parity tests | PR 3 | Base = PR 2. Touches `packages/core/src/memory/sqlite.ts:257-515`. ~250-350 lines. |
-| 4 | Postgres cosine union + dedup + posRank reconcile + decay sync + `none`-parity tests | PR 4 | Base = PR 3. Touches `packages/db/src/queries.ts:732-851`, `apps/server/src/memory/postgres.ts`. ~250-350 lines. |
-| 5 | Context wiring: server (env), CLI (config), Action (secrets, HTTP-only) | PR 5 | Base = PR 4. Injects `createEmbeddingProvider` at 3 construction sites. ~150-200 lines. |
-| 6 | Backfill script `packages/core/scripts/backfill-embeddings.ts` + CLI subcommand + server admin script + idempotency tests | PR 6 | Base = PR 5. ~200-250 lines. |
-| 7 | Local Transformers.js provider (undeclared user-installed peer) + lazy import + ncc exclude for Action | PR 7 | Base = PR 6. ~150-200 lines. |
-| 8 | Docs: config surface, recommended default, rollout/rollback, backfill usage | PR 8 | Base = PR 7. ~60-100 lines, docs only. |
+| Unit | Goal                                                                                                                      | Likely PR | Notes                                                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
+| 1    | Provider abstraction: `resolveEmbeddingConfig`, factory, `FakeEmbeddingProvider`, unit tests                              | PR 1      | Base = main. No behavior change (nothing wired yet). ~250-350 lines.                                             |
+| 2    | Schema: `embedding_model`/`embedding_dim` columns + additive migration (PG + SQLite)                                      | PR 2      | Base = PR 1. Nullable, additive only. ~60-100 lines.                                                             |
+| 3    | SQLite cosine union + dedup + posRank + read guard + `none`-parity tests                                                  | PR 3      | Base = PR 2. Touches `packages/core/src/memory/sqlite.ts:257-515`. ~250-350 lines.                               |
+| 4    | Postgres cosine union + dedup + posRank reconcile + decay sync + `none`-parity tests                                      | PR 4      | Base = PR 3. Touches `packages/db/src/queries.ts:732-851`, `apps/server/src/memory/postgres.ts`. ~250-350 lines. |
+| 5    | Context wiring: server (env), CLI (config), Action (secrets, HTTP-only)                                                   | PR 5      | Base = PR 4. Injects `createEmbeddingProvider` at 3 construction sites. ~150-200 lines.                          |
+| 6    | Backfill script `packages/core/scripts/backfill-embeddings.ts` + CLI subcommand + server admin script + idempotency tests | PR 6      | Base = PR 5. ~200-250 lines.                                                                                     |
+| 7    | Local Transformers.js provider (undeclared user-installed peer) + lazy import + ncc exclude for Action                    | PR 7      | Base = PR 6. ~150-200 lines.                                                                                     |
+| 8    | Docs: config surface, recommended default, rollout/rollback, backfill usage                                               | PR 8      | Base = PR 7. ~60-100 lines, docs only.                                                                           |
 
 Each slice keeps `none`-default parity as its own acceptance gate (see Phase 3/6/7 tasks below) — no slice may regress the keyword-only baseline before its own merge.
 

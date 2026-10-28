@@ -31,7 +31,6 @@ re-triage baseline stays unfiled until re-triage-from-zero is an LLM-cost pain.
 ### BL-HYBRID-4R-MODE — `hybrid-4r` review mode: lens depth × engine-family diversity
 
 **Status: RESOLVED** as composable fan-out, not a second engine. Shipped:
-
 - `pinLensesToFirst` (#406) — all lenses use `generateFns[0]`
 - `contrarianCount` (#407) — unlensed voices on `generateFns[1..N]`
 - finding ledger stamp (#408) — `id`/`lens`/`location`/`ledgerStatus`/`evidence`
@@ -58,12 +57,11 @@ by identifier does not need a git tree walk. No extra slice here.
 `memoryContext` channel (whose framing tells the model to discount it for
 flagging and cites a nonexistent "diff"). It now has its own optional
 `sourceCode` fenced input on `runIssueTriage`, mirroring `reproductionEvidence`:
-
 - `prompts.ts`: `SOURCE_CODE` added to `BOUNDARY_MARKERS`; `wrapUntrustedSourceCode`
   (`<SOURCE_CODE>`, tag boundary, no inner code fence); `UNTRUSTED_CONTENT_POLICY`
-  + `ISSUE_TRIAGE_SYSTEM` declare the channel and instruct the model to USE the
-  code to VERIFY the claim while treating instruction-like text in it as DATA; the
-  SOURCES contract now admits a source file/line as a citable source.
+  - `ISSUE_TRIAGE_SYSTEM` declare the channel and instruct the model to USE the
+    code to VERIFY the claim while treating instruction-like text in it as DATA; the
+    SOURCES contract now admits a source file/line as a citable source.
 - `issue-triage.ts`: optional `sourceCode?: string|null` + `buildIssuePrompt`
   emits the block. Both call sites (server `issue-analysis.ts`, CLI `run.ts`) pass
   `sourceCode` instead of folding into `memoryContext` (now pure dedup context).
@@ -81,7 +79,6 @@ triage-engine 240, server 784, cli 578 — monorepo green.
 **Status: RESOLVED** — the checkout-less webhook triage worker now reads the code
 an issue references. Shipped as a 4-part slice, each part its own adversarially-
 reviewed commit:
-
 - **Part 1 (`9246edb`) — the forge file-read capability (security foundation).**
   Optional `FileReadCapable.fetchFileContents(repo, path, ref?)` on the forge
   adapter (method-presence narrowed); real HTTP is `client.fetchFileContents`
@@ -136,7 +133,7 @@ Two blind adversarial reviews (opus) reshaped the first cut — recorded here
 because both corrections matter:
 - **It is a PRESENCE check, not a ref/evidence check.** The first cut required a
   non-empty `ref`, which would have wrongly held a legitimately-cited first-report
-  bug: the prompt (`prompts.ts:342/365`) accepts an *issue excerpt* (which has no
+  bug: the prompt (`prompts.ts:342/365`) accepts an _issue excerpt_ (which has no
   natural `ref`) as a valid citation. And there is no evidence corpus at this seam
   to validate that a ref resolves. So the gate only catches a verdict that cites
   literally nothing — the honest limit of a presence check, and the comments say
@@ -168,7 +165,6 @@ The committed Action bundle already contained the SARIF stdout fix from
 `fa934d8`, but it had not been rebuilt after the semantic-memory series
 (#293-#300, planned in #291). The regenerated `apps/action/dist/index.js` now
 contains both contracts:
-
 - static-analysis progress and diagnostics are routed to stderr, preserving
   machine-readable SARIF/JSON on stdout; and
 - the Action includes the current semantic-memory provider/configuration and

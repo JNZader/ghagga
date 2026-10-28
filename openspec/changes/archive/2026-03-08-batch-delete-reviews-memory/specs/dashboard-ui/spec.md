@@ -185,7 +185,6 @@ On confirm, the system MUST call the `useBatchDeleteObservations` mutation with 
 ### Requirement: Selection State Reset Behavior
 
 Selection state on both the Reviews and Memory pages MUST be cleared automatically in the following situations to prevent stale selections:
-
 1. **After successful batch delete**: The selection set MUST be cleared when the batch delete mutation succeeds.
 2. **On filter change**: The selection set MUST be cleared when any filter control changes (repository select, status filter, search text, severity filter, sort option).
 3. **On pagination change**: The selection set MUST be cleared when the user navigates to a different page (Reviews page only, since Memory observations are not paginated).
@@ -250,7 +249,6 @@ Selection state MUST NOT persist across page navigation (it is local `useState`,
 ### Requirement: Dashboard API Hooks for Granular and Batch Deletes
 
 The `apps/dashboard/src/lib/api.ts` module MUST export three new mutation hooks:
-
 1. **`useDeleteReview()`** — Calls `DELETE /api/reviews/:reviewId`. On success, MUST invalidate `['reviews']` and `['stats']` query keys.
 
 2. **`useBatchDeleteReviews()`** — Calls `DELETE /api/reviews/batch` with body `{ ids: number[] }`. On success, MUST invalidate `['reviews']` and `['stats']` query keys.

@@ -329,15 +329,15 @@ The adapter MUST include a bidirectional mapping layer that translates between G
 
 When saving, the adapter MUST map GHAGGA fields to Engram fields:
 
-| GHAGGA Field | Engram Field | Mapping |
-|---|---|---|
-| `type` | `type` | Direct |
-| `title` | `title` | Direct |
-| `content` | `content` | Wrapped in structured JSON with `source`, `body`, `severity`, `filePaths`, and `project` |
-| `topicKey` | `topic_key` | Rename |
-| `project` | `project` | Direct |
-| `filePaths` | (in content) | Encoded in structured content JSON |
-| `severity` | (in content) | Encoded in structured content JSON |
+| GHAGGA Field | Engram Field | Mapping                                                                                  |
+| ------------ | ------------ | ---------------------------------------------------------------------------------------- |
+| `type`       | `type`       | Direct                                                                                   |
+| `title`      | `title`      | Direct                                                                                   |
+| `content`    | `content`    | Wrapped in structured JSON with `source`, `body`, `severity`, `filePaths`, and `project` |
+| `topicKey`   | `topic_key`  | Rename                                                                                   |
+| `project`    | `project`    | Direct                                                                                   |
+| `filePaths`  | (in content) | Encoded in structured content JSON                                                       |
+| `severity`   | (in content) | Encoded in structured content JSON                                                       |
 
 The structured content JSON MUST follow the format:
 

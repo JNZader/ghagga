@@ -229,7 +229,6 @@ Route registration: This route MUST be registered AFTER `DELETE /api/memory/obse
 ### Requirement: Database Query Functions for Granular and Batch Deletes
 
 The `packages/db/src/queries.ts` module MUST export three new functions:
-
 1. `deleteReviewById(db, installationId, reviewId)` — Deletes a single review by its numeric ID, scoped to the given installation. MUST join through the `repositories` table to verify the review's repository belongs to the installation. MUST return `true` if a row was deleted, `false` otherwise.
 
 2. `deleteReviewsByIds(db, installationId, reviewIds)` — Deletes multiple reviews by their IDs, scoped to the given installation. MUST use Drizzle's `inArray` with installation scoping via a subquery on `repositories`. MUST return the count of actually deleted rows. MUST be a no-op (return 0) if `reviewIds` is empty.

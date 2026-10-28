@@ -12,7 +12,7 @@
 
 **Decision**: Resolve effective settings in `webhook.ts` before dispatching to Inngest. The Inngest event always contains the fully-resolved settings.
 
-**Rationale**: 
+**Rationale**:
 - The pipeline (`packages/core`) is distribution-agnostic. It shouldn't know about installations or global settings — it just receives a `ReviewInput` with a resolved `providerChain`.
 - Keeps core clean: no DB dependency in core.
 - The webhook already has the DB handle and the repo data. Adding one more query (installation settings) is trivial.
@@ -145,7 +145,7 @@ CREATE TABLE installation_settings (
 interface InstallationSettingsResponse {
   installationId: number;
   accountLogin: string;
-  providerChain: ProviderChainView[];  // masked keys
+  providerChain: ProviderChainView[]; // masked keys
   aiReviewEnabled: boolean;
   reviewMode: string;
   enableSemgrep: boolean;
@@ -164,6 +164,6 @@ interface InstallationSettingsResponse {
 interface SettingsResponse {
   // ... existing fields ...
   useGlobalSettings: boolean;
-  globalSettings?: InstallationSettingsResponse;  // present when installation settings exist
+  globalSettings?: InstallationSettingsResponse; // present when installation settings exist
 }
 ```

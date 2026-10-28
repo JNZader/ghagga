@@ -40,6 +40,7 @@ The server MUST expose `PUT /api/settings` that updates all settings for a repos
 
 - GIVEN an authenticated user with access to repo `JNZader/my-app`
 - WHEN `PUT /api/settings` is called with body:
+
   ```json
   {
     "repoFullName": "JNZader/my-app",

@@ -3,17 +3,15 @@
 **Status**: draft-v2  
 **Proposal**: [proposal.md](./proposal.md)  
 **Spec**: [spec.md](./spec.md)  
-**Date**: 2026-03-18  
+**Date**: 2026-03-18
 
 ## 1. Architecture Overview
 
 This change keeps the existing provider-chain architecture intact and extends the `cli-bridge` branch of that flow with two new concepts:
-
 1. a persisted CLI tool choice stored in the existing `model` field (`auto`, `opencode`, `gemini`, `copilot`)
 2. an optional persisted OpenCode model stored in a new `cliModel` field (`provider/model`)
 
 The implementation spans four layers:
-
 - **DB layer**: `DbProviderChainEntry` gains optional `cliModel?: string`; `encryptedApiKey` continues to store the installation-scoped secret for `cli-bridge` entries.
 - **Server/API layer**: settings endpoints read and write `cliModel`, reuse existing encryption/masking logic, and return richer CLI validation metadata for the dashboard.
 - **Core pipeline**: `reviewPipeline()` and `runCLIBridgeReview()` resolve the selected CLI tool, decrypt the stored credential, map OpenCode provider prefixes to env vars, and launch a subprocess with a minimal environment.
@@ -49,7 +47,6 @@ export interface DbProviderChainEntry {
 ```
 
 Notes:
-
 - `cliModel` is optional and only meaningful when `provider === 'cli-bridge'`.
 - No SQL migration is required because `provider_chain` is already JSONB.
 - Existing rows remain valid because missing `cliModel` means "legacy behavior".
@@ -57,18 +54,17 @@ Notes:
 ### Runtime / shared API types
 
 These interfaces should be updated consistently:
-
 - `packages/core/src/types.ts` - add `cliModel?: string` to `ProviderChainEntry`
 - `packages/types/src/api.ts` - add `cliModel?: string` to `ProviderChainView` and `ProviderChainUpdate`
 - `apps/dashboard/src/components/settings/ProviderEntry.tsx` - add `cliModel?: string` to local component state
 
 ### Semantics of stored fields for `cli-bridge`
 
-| Field | Meaning |
-|-------|---------|
-| `provider` | Always `cli-bridge` |
-| `model` | CLI tool selector: `auto`, `opencode`, `gemini`, `copilot` |
-| `cliModel` | OpenCode-only explicit model in `provider/model` format |
+| Field             | Meaning                                                                          |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `provider`        | Always `cli-bridge`                                                              |
+| `model`           | CLI tool selector: `auto`, `opencode`, `gemini`, `copilot`                       |
+| `cliModel`        | OpenCode-only explicit model in `provider/model` format                          |
 | `encryptedApiKey` | Encrypted installation credential for the selected CLI tool or OpenCode provider |
 
 `encryptedApiKey` is reused rather than introducing a separate CLI-secret column. This keeps the encryption, masking, copy-to-global, and key-preservation behavior aligned with the rest of the settings system.
@@ -78,7 +74,6 @@ These interfaces should be updated consistently:
 ### Request/response contract changes
 
 `apps/server/src/routes/api/settings.ts`, `apps/server/src/routes/api/installations.ts`, and `apps/server/src/routes/api/utils.ts` should treat `cli-bridge` entries like any other provider-chain entry, with two additions:
-
 - accept `cliModel` on `PUT`
 - include `cliModel` on `GET`
 
@@ -97,7 +92,6 @@ These interfaces should be updated consistently:
 ### Save flow
 
 For both repo and installation settings:
-
 1. parse `providerChain` entries including optional `cliModel`
 2. validate `cliModel` only when `provider === 'cli-bridge' && model === 'opencode'`
 3. encrypt `apiKey` when present
@@ -127,7 +121,6 @@ interface ValidationResponse {
 ```
 
 Behavior:
-
 - `detectedCliTools` comes from `getAvailableCLIs()` after the adapter list is updated.
 - `models` remains populated for backward compatibility; for `cli-bridge` it should contain the detected tool ids plus `auto`.
 - `cliModelSuggestions` contains a curated OpenCode list, not a runtime shell-out to `opencode`.
@@ -147,7 +140,6 @@ Curated OpenCode suggestions should live server-side near `CURATED_MODELS` so th
 ### Adapter set
 
 `packages/core/src/providers/cli-bridge.ts` should move from the current `claude/gemini/codex/copilot` list to:
-
 - `opencode`
 - `gemini`
 - `copilot`
@@ -185,7 +177,6 @@ echo "${prompt}" | opencode run --model provider/model --format json
 OpenCode auto-detects piped stdin — no trailing `-` is needed.
 
 The `--format json` flag is **required** for GHAGGA to parse the output programmatically. Without it, OpenCode emits formatted terminal output. With `--format json`, the response is newline-delimited JSON where each line is an object with a `type` field:
-
 - `step_start` — marks the beginning of a reasoning step
 - `text` — contains the actual LLM response text in `part.text`
 - `step_finish` — contains token usage in `part.tokens` and cost in `part.cost`
@@ -195,7 +186,6 @@ The adapter should collect all `text` events and concatenate their `part.text` v
 **Model name validation**: Model names must be exact versions, not aliases. For example, `anthropic/claude-sonnet-4-5` works, but `anthropic/claude-sonnet-4` does NOT. On mismatch, OpenCode returns a `ProviderModelNotFoundError` with a helpful `suggestions` array that can be surfaced in GHAGGA's error messages.
 
 Implementation details:
-
 - pass the combined system + user prompt through stdin, matching the large-prompt protection used for Gemini
 - always include `--format json` so the adapter can parse structured events
 - always prefer explicit `--model ${cliModel}` when `cliModel` is present
@@ -205,7 +195,6 @@ Implementation details:
 ### Credential resolution
 
 `packages/core/src/pipeline.ts` should resolve the selected CLI bridge entry before calling `runCLIBridgeReview()`:
-
 1. read the active `ProviderChainEntry`
 2. if `provider !== 'cli-bridge'`, use existing logic unchanged
 3. if `provider === 'cli-bridge'`:
@@ -231,7 +220,6 @@ const OPENCODE_ENV_BY_PREFIX = {
 ```
 
 Tool-specific resolution:
-
 - `opencode` -> derive env var from `cliModel` prefix
 - `gemini` -> `GEMINI_API_KEY`
 - `copilot` -> prefer `COPILOT_GITHUB_TOKEN`, optionally tolerate `GH_TOKEN` as server fallback only
@@ -257,7 +245,6 @@ This distinction prevents misconfiguration from being hidden by silent fallback.
 ### Subprocess environment
 
 `execSync` should no longer inherit the full server environment by default. Instead of building the env from scratch (which risks breaking CLIs that need `HTTP_PROXY`, `SSL_CERT_FILE`, `NODE_TLS_REJECT_UNAUTHORIZED`, etc.), use a **subtraction approach**:
-
 1. Start with a copy of `process.env`
 2. **Remove** known sensitive env vars that belong to other providers: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GITHUB_TOKEN`, `GH_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `COPILOT_GITHUB_TOKEN`, and any other provider-specific secrets
 3. **Add** only the single credential env var required for the chosen tool (e.g., `ANTHROPIC_API_KEY` for `opencode` with `anthropic/*` model)
@@ -269,7 +256,6 @@ This approach is more robust than an allowlist because CLIs may depend on enviro
 ### State model
 
 `ProviderEntry.tsx` currently uses `entry.model` as the only CLI-bridge control. That is no longer sufficient. The local state should separate:
-
 - `model`: CLI tool selector (`auto`, `opencode`, `gemini`, `copilot`)
 - `cliModel`: OpenCode `provider/model` string
 - `apiKey`: optional new credential value being typed
@@ -277,7 +263,6 @@ This approach is more robust than an allowlist because CLIs may depend on enviro
 ### UI behavior
 
 When `provider === 'cli-bridge'`:
-
 1. show **CLI tool** select first
 2. if tool is `opencode`, show **Model** text input with datalist suggestions
 3. if tool is `opencode`, `gemini`, or `copilot`, show **Credential** input using masked-key reuse behavior
@@ -286,7 +271,6 @@ When `provider === 'cli-bridge'`:
 **On tool change**: When the user changes the CLI tool selector (e.g., from `opencode` to `gemini`), the component should reset the credential field and clear any previously entered API key from the UI state, since credentials are tool/provider-specific. This prevents accidental reuse of an incompatible credential.
 
 Suggested labels:
-
 - `opencode` + `anthropic/...` -> "Anthropic API Key"
 - `opencode` + `google/...` -> "Gemini API Key"
 - `gemini` -> "Gemini API Key"
@@ -299,13 +283,11 @@ If the OpenCode provider prefix is not yet known because the user has not entere
 The validate action should call `POST /api/providers/validate` with `provider: 'cli-bridge'` and optional `apiKey` only when the user typed a new credential.
 
 On success the component should update:
-
 - `availableModels` for the CLI tool selector from `detectedCliTools`
 - OpenCode datalist suggestions from `cliModelSuggestions`
 - validation status and warnings when OpenCode is unavailable
 
 `KNOWN_MODELS['cli-bridge']` should stop pretending CLI tool ids are model ids. Instead, keep local fallback constants split into:
-
 - `KNOWN_CLI_TOOLS`
 - `KNOWN_OPENCODE_MODELS`
 
@@ -314,7 +296,6 @@ This avoids conflating tool choice with model choice.
 ### Page save/load wiring
 
 `apps/dashboard/src/pages/Settings.tsx` and `apps/dashboard/src/pages/GlobalSettings.tsx` should:
-
 - read `cliModel` from `ProviderChainView`
 - initialize local provider-chain state with it
 - include `cliModel` in `ProviderChainUpdate` on save
@@ -341,7 +322,6 @@ Validation is split into three layers.
 ### Test coverage
 
 Key tests should cover:
-
 - `DbProviderChainEntry` round-trip with and without `cliModel`
 - `buildProviderChainView()` exposes `cliModel` but never raw credentials
 - settings/installations `PUT` preserve existing encrypted CLI keys while updating `cliModel`
@@ -364,7 +344,6 @@ For OpenCode specifically, do not inject multiple possible provider env vars "ju
 ## 8. Backward Compatibility
 
 Compatibility is preserved by keeping current meanings intact where already deployed:
-
 - existing `provider: 'cli-bridge', model: 'auto'` entries with no `cliModel` continue unchanged
 - existing `provider: 'cli-bridge', model: 'claude'` entries are treated as `opencode` at runtime with default `cliModel: 'anthropic/claude-sonnet-4'`, so they continue working without manual reconfiguration
 - missing `cliModel` remains valid in DB, API, and dashboard state

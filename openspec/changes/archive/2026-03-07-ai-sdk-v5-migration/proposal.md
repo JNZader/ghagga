@@ -56,7 +56,6 @@ versions and `zod` from v3 to v4.
 ## Approach
 
 This is a dependency upgrade, not an architecture change. The approach is:
-
 1. Update `package.json` files with new version constraints.
 2. Run `pnpm install` to resolve and lock new versions.
 3. Apply breaking API changes file by file (see spec for details).
@@ -66,15 +65,15 @@ This is a dependency upgrade, not an architecture change. The approach is:
 
 ## Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| `generateText()` API breakage | **High** (confirmed) | Low | Well-documented migration path; our usage is simple |
-| `LanguageModel` type rename/move | **Medium** | Low | Check if type still exists or was renamed |
-| Provider factory API changes (`createAnthropic`, etc.) | **Low** | Medium | v5 docs show same factory pattern still works |
-| `result.usage` property changes | **High** (confirmed) | Low | `usage` now has `totalUsage` vs per-step `usage`; our single-call usage should be unaffected |
-| Zod v4 breaking changes | **Low** | Low | Our zod usage is basic (simple object schemas with `.safeParse()`) |
-| Test mocks breaking | **Medium** | Low | Mocks use `as any` casts; may need minor adjustments |
-| Model behavior changes | **None** | N/A | API calls are identical; models are server-side |
+| Risk                                                   | Likelihood           | Impact | Mitigation                                                                                   |
+| ------------------------------------------------------ | -------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| `generateText()` API breakage                          | **High** (confirmed) | Low    | Well-documented migration path; our usage is simple                                          |
+| `LanguageModel` type rename/move                       | **Medium**           | Low    | Check if type still exists or was renamed                                                    |
+| Provider factory API changes (`createAnthropic`, etc.) | **Low**              | Medium | v5 docs show same factory pattern still works                                                |
+| `result.usage` property changes                        | **High** (confirmed) | Low    | `usage` now has `totalUsage` vs per-step `usage`; our single-call usage should be unaffected |
+| Zod v4 breaking changes                                | **Low**              | Low    | Our zod usage is basic (simple object schemas with `.safeParse()`)                           |
+| Test mocks breaking                                    | **Medium**           | Low    | Mocks use `as any` casts; may need minor adjustments                                         |
+| Model behavior changes                                 | **None**             | N/A    | API calls are identical; models are server-side                                              |
 
 ## Affected Modules
 

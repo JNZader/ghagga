@@ -328,13 +328,13 @@ Final consistency pass. Must run after all rewrites are done.
 
 ## Summary
 
-| Phase | Tasks | Focus | Effort |
-|-------|-------|-------|--------|
-| Phase 1: Bug Fixes | T1.1, T1.2, T1.3 | 3 P0 bugs across 4 files | 3× S |
-| Phase 2: Action Guide | T2.1, T2.2 | Rewrite `docs/github-action.md` + README sync | L + S |
-| Phase 3: CLI Guide | T3.1, T3.2, T3.3 | Rewrite `docs/cli.md` + README/CLI README sync | L + 2× S |
-| Phase 4: Cleanup | T4.1, T4.2 | Quick-start fix + final verification | S + M |
-| **Total** | **11 tasks** | | **2L + 1M + 8S** |
+| Phase                 | Tasks            | Focus                                          | Effort           |
+| --------------------- | ---------------- | ---------------------------------------------- | ---------------- |
+| Phase 1: Bug Fixes    | T1.1, T1.2, T1.3 | 3 P0 bugs across 4 files                       | 3× S             |
+| Phase 2: Action Guide | T2.1, T2.2       | Rewrite `docs/github-action.md` + README sync  | L + S            |
+| Phase 3: CLI Guide    | T3.1, T3.2, T3.3 | Rewrite `docs/cli.md` + README/CLI README sync | L + 2× S         |
+| Phase 4: Cleanup      | T4.1, T4.2       | Quick-start fix + final verification           | S + M            |
+| **Total**             | **11 tasks**     |                                                | **2L + 1M + 8S** |
 
 ## Dependency Graph
 

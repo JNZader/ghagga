@@ -2,12 +2,12 @@
 
 ## Choose Your Path
 
-| If you want... | Use | Time | Requires | Guide |
-|---|---|---|---|---|
-| **Easiest setup — install and go** | **SaaS (GitHub App)** ⭐ Recommended | ~5 min | GitHub account | [SaaS Guide](saas-getting-started.md) |
-| CI/CD integration — runs in your pipeline | GitHub Action | ~10 min | Repo admin access | [Action Guide](github-action.md) |
-| Local review from your terminal | CLI | ~5 min | Node.js >= 22.22.2 | [CLI Guide](cli.md) |
-| Full control — your own server | Self-Hosted (Docker) | ~30 min | Docker, PostgreSQL | [Self-Hosted Guide](self-hosted.md) |
+| If you want...                            | Use                                  | Time    | Requires           | Guide                                 |
+| ----------------------------------------- | ------------------------------------ | ------- | ------------------ | ------------------------------------- |
+| **Easiest setup — install and go**        | **SaaS (GitHub App)** ⭐ Recommended | ~5 min  | GitHub account     | [SaaS Guide](saas-getting-started.md) |
+| CI/CD integration — runs in your pipeline | GitHub Action                        | ~10 min | Repo admin access  | [Action Guide](github-action.md)      |
+| Local review from your terminal           | CLI                                  | ~5 min  | Node.js >= 22.22.2 | [CLI Guide](cli.md)                   |
+| Full control — your own server            | Self-Hosted (Docker)                 | ~30 min | Docker, PostgreSQL | [Self-Hosted Guide](self-hosted.md)   |
 
 All modes use the same review engine under the hood. [Learn more about the architecture](architecture.md).
 
@@ -92,7 +92,6 @@ If you're using the hosted GHAGGA SaaS, static analysis runs as an **inline GitH
 > **Auth note**: Dashboard login is GitHub OAuth. It does not select a model. Configure a provider chain (`gateway`, `cli-bridge`, or `ollama`) before reviews call an LLM.
 
 There is nothing to enable manually for static analysis — on each PR review, the server:
-
 1. PUTs `.github/workflows/ghagga.yml` into your repo (if it's missing or out-of-date).
 2. Triggers `workflow_dispatch` with a per-dispatch HMAC callback secret.
 3. Receives the signed callback at `/runner/callback` and merges the findings into the AI review.
@@ -107,10 +106,10 @@ See [Architecture — Inline Static-Analysis Workflow](architecture.md#inline-st
 
 GHAGGA stores provider credentials encrypted with AES-256-GCM. The provider modes are:
 
-| Mode | What it calls |
-|------|----------------|
-| `gateway` | mcp-llm-bridge. This is what `ghagga login` saves |
+| Mode         | What it calls                                          |
+| ------------ | ------------------------------------------------------ |
+| `gateway`    | mcp-llm-bridge. This is what `ghagga login` saves      |
 | `cli-bridge` | A local CLI (Claude, Codex, OpenCode, Gemini, Copilot) |
-| `ollama` | A local Ollama model |
+| `ollama`     | A local Ollama model                                   |
 
 Static analysis tools (Semgrep, Trivy, CPD) are always free — they run on GitHub Actions runners (unlimited free minutes for public repos).

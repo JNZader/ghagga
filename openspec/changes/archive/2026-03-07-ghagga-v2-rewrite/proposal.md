@@ -126,28 +126,28 @@ The agent prompts from v1 are well-designed and battle-tested. We rescue:
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/core/` | New | Review engine, agents, static analysis, memory |
-| `packages/db/` | New | Drizzle schemas, migrations, queries |
-| `apps/server/` | New | Hono API replacing Supabase Edge Functions |
-| `apps/dashboard/` | New | React + shadcn replacing Mantine dashboard |
-| `apps/cli/` | New | CLI distribution mode |
-| `apps/action/` | New | GitHub Action distribution mode |
-| `supabase/` | Removed | Entire Supabase backend replaced |
+| Area               | Impact  | Description                                              |
+| ------------------ | ------- | -------------------------------------------------------- |
+| `packages/core/`   | New     | Review engine, agents, static analysis, memory           |
+| `packages/db/`     | New     | Drizzle schemas, migrations, queries                     |
+| `apps/server/`     | New     | Hono API replacing Supabase Edge Functions               |
+| `apps/dashboard/`  | New     | React + shadcn replacing Mantine dashboard               |
+| `apps/cli/`        | New     | CLI distribution mode                                    |
+| `apps/action/`     | New     | GitHub Action distribution mode                          |
+| `supabase/`        | Removed | Entire Supabase backend replaced                         |
 | `semgrep-service/` | Removed | Python microservice replaced by binary execution in core |
-| `dashboard/` | Removed | Mantine dashboard replaced |
+| `dashboard/`       | Removed | Mantine dashboard replaced                               |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Inngest 50k event limit for community usage | Medium | Design graceful degradation (static-only mode). Prepare BullMQ migration path. Batch agent steps to reduce event count. |
-| Oracle Cloud free tier account setup friction | Medium | Support Koyeb as alternative. Provide Docker Compose for any VPS. |
-| Semgrep/Trivy/CPD binary installation in Action | Low | Use official Docker images. Pre-built container with all tools. |
-| Vercel AI SDK breaking changes | Low | Pin versions. SDK is stable and well-maintained. |
-| PMD/CPD requires JVM | Medium | Use Docker in CI. For CLI mode, make CPD optional (skip if Java not installed). |
-| GitHub API rate limits during large PR reviews | Low | Token budgeting already designed in v1. Respect rate limits with backoff. |
+| Risk                                            | Likelihood | Mitigation                                                                                                              |
+| ----------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Inngest 50k event limit for community usage     | Medium     | Design graceful degradation (static-only mode). Prepare BullMQ migration path. Batch agent steps to reduce event count. |
+| Oracle Cloud free tier account setup friction   | Medium     | Support Koyeb as alternative. Provide Docker Compose for any VPS.                                                       |
+| Semgrep/Trivy/CPD binary installation in Action | Low        | Use official Docker images. Pre-built container with all tools.                                                         |
+| Vercel AI SDK breaking changes                  | Low        | Pin versions. SDK is stable and well-maintained.                                                                        |
+| PMD/CPD requires JVM                            | Medium     | Use Docker in CI. For CLI mode, make CPD optional (skip if Java not installed).                                         |
+| GitHub API rate limits during large PR reviews  | Low        | Token budgeting already designed in v1. Respect rate limits with backoff.                                               |
 
 ## Rollback Plan
 

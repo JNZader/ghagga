@@ -46,34 +46,34 @@ const BRAND = chalk.hex('#a78bfa');
 
 /** Semantic color functions for styled mode */
 export const c = {
-  brand:    (s: string) => BRAND(s),
+  brand: (s: string) => BRAND(s),
   critical: (s: string) => chalk.red(s),
-  high:     (s: string) => chalk.hex('#f97316')(s),  // orange
-  medium:   (s: string) => chalk.yellow(s),
-  low:      (s: string) => chalk.green(s),
-  info:     (s: string) => chalk.hex('#a78bfa')(s),  // purple
-  success:  (s: string) => chalk.green(s),
-  warning:  (s: string) => chalk.yellow(s),
-  error:    (s: string) => chalk.red(s),
-  dim:      (s: string) => chalk.dim(s),
-  bold:     (s: string) => chalk.bold(s),
-  white:    (s: string) => chalk.white(s),
+  high: (s: string) => chalk.hex('#f97316')(s), // orange
+  medium: (s: string) => chalk.yellow(s),
+  low: (s: string) => chalk.green(s),
+  info: (s: string) => chalk.hex('#a78bfa')(s), // purple
+  success: (s: string) => chalk.green(s),
+  warning: (s: string) => chalk.yellow(s),
+  error: (s: string) => chalk.red(s),
+  dim: (s: string) => chalk.dim(s),
+  bold: (s: string) => chalk.bold(s),
+  white: (s: string) => chalk.white(s),
 } as const;
 
 /** No-op color functions for plain mode */
 export const cPlain: typeof c = {
-  brand:    (s) => s,
+  brand: (s) => s,
   critical: (s) => s,
-  high:     (s) => s,
-  medium:   (s) => s,
-  low:      (s) => s,
-  info:     (s) => s,
-  success:  (s) => s,
-  warning:  (s) => s,
-  error:    (s) => s,
-  dim:      (s) => s,
-  bold:     (s) => s,
-  white:    (s) => s,
+  high: (s) => s,
+  medium: (s) => s,
+  low: (s) => s,
+  info: (s) => s,
+  success: (s) => s,
+  warning: (s) => s,
+  error: (s) => s,
+  dim: (s) => s,
+  bold: (s) => s,
+  white: (s) => s,
 };
 ```
 
@@ -94,6 +94,7 @@ tui.log.info(`${c.critical('CRITICAL')} SQL injection in ${c.dim('src/db.ts:42')
 ```
 
 ### Effort: 4 hours
+
 ### Impact: High — biggest visual improvement for least effort
 
 ---
@@ -116,8 +117,8 @@ export function box(title: string, lines: string[], width?: number): void {
     console.log('═'.repeat(title.length + 8));
     return;
   }
-  
-  const w = width ?? Math.max(60, ...lines.map(l => stripAnsi(l).length + 4));
+
+  const w = width ?? Math.max(60, ...lines.map((l) => stripAnsi(l).length + 4));
   const c = colors();
   console.log(c.dim(`╭─ ${title} ${'─'.repeat(Math.max(0, w - title.length - 4))}╮`));
   for (const line of lines) {
@@ -140,6 +141,7 @@ export function box(title: string, lines: string[], width?: number): void {
 ```
 
 ### Effort: 4 hours
+
 ### Impact: High — frames the review result as a polished artifact
 
 ---
@@ -175,6 +177,7 @@ export function stepOf(current: number, total: number, message: string): string 
 ```
 
 ### Effort: 3 hours
+
 ### Impact: Medium — gives users confidence the process is progressing
 
 ---
@@ -199,15 +202,15 @@ ghagga health --output health-report.md   # (future health command)
 
 ```typescript
 if (options.output) {
-  const content = options.format === 'json'
-    ? JSON.stringify(result, null, 2)
-    : formatMarkdownResult(result);
+  const content =
+    options.format === 'json' ? JSON.stringify(result, null, 2) : formatMarkdownResult(result);
   writeFileSync(options.output, content, 'utf-8');
   tui.log.success(`Report saved to ${options.output}`);
 }
 ```
 
 ### Effort: 2 hours
+
 ### Impact: Medium — essential for CI pipelines and archival
 
 ---
@@ -235,9 +238,12 @@ import { platform } from 'node:os';
 
 function copyToClipboard(text: string): boolean {
   try {
-    const cmd = platform() === 'darwin' ? 'pbcopy'
-              : platform() === 'win32'  ? 'clip'
-              : 'xclip -selection clipboard';
+    const cmd =
+      platform() === 'darwin'
+        ? 'pbcopy'
+        : platform() === 'win32'
+          ? 'clip'
+          : 'xclip -selection clipboard';
     execSync(cmd, { input: text });
     return true;
   } catch {
@@ -247,6 +253,7 @@ function copyToClipboard(text: string): boolean {
 ```
 
 ### Effort: 2 hours
+
 ### Impact: Low-Medium — convenience for terminal users
 
 ---
@@ -266,12 +273,12 @@ export function scoreBar(score: number, width: number = 20): string {
   const filled = Math.round((score / 100) * width);
   const empty = width - filled;
   const c = colors();
-  
+
   const color = score >= 80 ? c.success : score >= 60 ? c.warning : c.error;
   const label = score >= 80 ? 'GOOD' : score >= 60 ? 'FAIR' : 'POOR';
-  
+
   if (_plain) return `[${score}/100] ${label}`;
-  
+
   return `${color(`${'█'.repeat(filled)}${'░'.repeat(empty)}`)} ${color(`${score}%`)} ${c.dim(`[${label}]`)}`;
 }
 ```
@@ -285,6 +292,7 @@ export function scoreBar(score: number, width: number = 20): string {
 ```
 
 ### Effort: 2 hours
+
 ### Impact: High — essential for health feature, strong visual impression
 
 ---
@@ -306,7 +314,9 @@ export function section(title: string): void {
     return;
   }
   const c = colors();
-  console.log(`\n  ${c.brand('━━━')} ${c.bold(title)} ${c.brand('━'.repeat(Math.max(0, 50 - title.length)))}`);
+  console.log(
+    `\n  ${c.brand('━━━')} ${c.bold(title)} ${c.brand('━'.repeat(Math.max(0, 50 - title.length)))}`,
+  );
 }
 ```
 
@@ -324,6 +334,7 @@ export function section(title: string): void {
 ```
 
 ### Effort: 2 hours
+
 ### Impact: Medium — better visual hierarchy in output
 
 ---
@@ -341,15 +352,16 @@ Add per-mode timeout and step limits in the pipeline:
 ```typescript
 // packages/core/src/constants.ts
 export const AGENT_LIMITS = {
-  simple:    { maxSteps: 1,  timeoutMs: 60_000  },
-  workflow:  { maxSteps: 10, timeoutMs: 180_000 },
-  consensus: { maxSteps: 6,  timeoutMs: 180_000 },
+  simple: { maxSteps: 1, timeoutMs: 60_000 },
+  workflow: { maxSteps: 10, timeoutMs: 180_000 },
+  consensus: { maxSteps: 6, timeoutMs: 180_000 },
 } as const;
 ```
 
 **Integration in pipeline.ts**: wrap each agent call with `AbortSignal.timeout()` and a step counter. If limits are exceeded, gracefully degrade to available results.
 
 ### Effort: 4 hours
+
 ### Impact: Medium-High — prevents token waste in production
 
 ---
@@ -382,6 +394,7 @@ In `format.ts`, apply color to severity text and dim the metadata:
 Where `CRITICAL` is in red, `src/db.ts:42` is dimmed, and the suggestion is in the default color.
 
 ### Effort: 3 hours
+
 ### Impact: High — makes findings scannable at a glance
 
 ---
@@ -390,43 +403,43 @@ Where `CRITICAL` is in red, `src/db.ts:42` is dimmed, and the suggestion is in t
 
 ### v2.4.0 — TUI Polish (Week 1-2)
 
-| # | Proposal | Effort | Files Changed |
-|---|----------|--------|---------------|
-| 1 | Color theming with chalk | 4h | `theme.ts`, `tui.ts` |
-| 2 | Box-drawing summary | 4h | `tui.ts`, `review.ts` |
-| 3 | Step progress indicator | 3h | `tui.ts`, `review.ts` |
-| 4 | `--output` flag | 2h | `index.ts`, `review.ts` |
-| 7 | Section dividers | 2h | `tui.ts`, `format.ts` |
-| 8 | Agent step limits | 4h | `pipeline.ts`, `constants.ts` |
-| 9 | Colored findings | 3h | `format.ts` |
-| | Tests (~50 new) | 8h | `*.test.ts` |
-| | **Total** | **~30h** | |
+| #   | Proposal                 | Effort   | Files Changed                 |
+| --- | ------------------------ | -------- | ----------------------------- |
+| 1   | Color theming with chalk | 4h       | `theme.ts`, `tui.ts`          |
+| 2   | Box-drawing summary      | 4h       | `tui.ts`, `review.ts`         |
+| 3   | Step progress indicator  | 3h       | `tui.ts`, `review.ts`         |
+| 4   | `--output` flag          | 2h       | `index.ts`, `review.ts`       |
+| 7   | Section dividers         | 2h       | `tui.ts`, `format.ts`         |
+| 8   | Agent step limits        | 4h       | `pipeline.ts`, `constants.ts` |
+| 9   | Colored findings         | 3h       | `format.ts`                   |
+|     | Tests (~50 new)          | 8h       | `*.test.ts`                   |
+|     | **Total**                | **~30h** |                               |
 
 ### v2.5.0 — Health Feature (Weeks 3-6)
 
-| # | Proposal | Effort | Files Changed |
-|---|----------|--------|---------------|
-| 5 | `--copy` flag | 2h | `review.ts`, `health.ts` |
-| 6 | Score visualization bar | 2h | `tui.ts` |
-| | Health engine | ~90h | See product-strategy-v2.5.md |
-| | **Total** | **~94h** | |
+| #   | Proposal                | Effort   | Files Changed                |
+| --- | ----------------------- | -------- | ---------------------------- |
+| 5   | `--copy` flag           | 2h       | `review.ts`, `health.ts`     |
+| 6   | Score visualization bar | 2h       | `tui.ts`                     |
+|     | Health engine           | ~90h     | See product-strategy-v2.5.md |
+|     | **Total**               | **~94h** |                              |
 
 ### Rejected
 
-| Proposal | Reason |
-|----------|--------|
-| Interactive REPL | Wrong interaction model — GHAGGA is run-and-exit |
-| Local Web UI | Redundant with Dashboard (GitHub Pages) |
-| ASCII logo animation | Vanity — wastes terminal space |
-| Model selector UI | Flags are faster and more scriptable |
+| Proposal             | Reason                                           |
+| -------------------- | ------------------------------------------------ |
+| Interactive REPL     | Wrong interaction model — GHAGGA is run-and-exit |
+| Local Web UI         | Redundant with Dashboard (GitHub Pages)          |
+| ASCII logo animation | Vanity — wastes terminal space                   |
+| Model selector UI    | Flags are faster and more scriptable             |
 
 ---
 
 ## Dependencies
 
-| Package | Version | Size | Purpose | ncc-compatible? |
-|---------|---------|------|---------|-----------------|
-| `chalk` | ^5.3.0 | ~5KB | Terminal colors | Yes (ESM) |
+| Package | Version | Size | Purpose         | ncc-compatible? |
+| ------- | ------- | ---- | --------------- | --------------- |
+| `chalk` | ^5.3.0  | ~5KB | Terminal colors | Yes (ESM)       |
 
 No other new dependencies. `--copy` uses native `pbcopy`/`xclip`/`clip` via `child_process.execSync`.
 

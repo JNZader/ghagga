@@ -13,18 +13,18 @@ on:
     # (PRODOPS-002) — a path missing here means merged changes silently don't
     # rebuild/redeploy the image.
     paths:
-      - 'apps/server/**'
-      - 'packages/core/**'
-      - 'packages/db/**'
-      - 'packages/types/**'
-      - 'packages/forge/**'
-      - 'templates/**'
-      - 'tsconfig.base.json'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/docker.yml'
-      - 'apps/server/Dockerfile'
+      - "apps/server/**"
+      - "packages/core/**"
+      - "packages/db/**"
+      - "packages/types/**"
+      - "packages/forge/**"
+      - "templates/**"
+      - "tsconfig.base.json"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/docker.yml"
+      - "apps/server/Dockerfile"
 
 env:
   REGISTRY: ghcr.io

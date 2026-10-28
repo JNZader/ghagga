@@ -8,7 +8,7 @@
 > - `046944a` — docs(sdd): add user-onboarding-docs change artifacts
 > - `302d189` — docs(onboarding): add SaaS getting started guide and onboarding overhaul
 > - `3e00003` — docs(sdd): archive auto-runner-creation change
->
+
 > **Files created** (1): `docs/saas-getting-started.md`
 > **Files modified** (7): `README.md`, `docs/quick-start.md`, `docs/_sidebar.md`, `docs/README.md`, `docs/configuration.md`, `docs/runner-architecture.md`, `landing/index.html`
 
@@ -70,12 +70,12 @@ Landing Page  →  Choose Your Path  →  SaaS Guide  →  First Review
 
 2. **Restructure `quick-start.md`** — Replace the current "GitHub Action (Recommended)" header with a decision matrix:
 
-   | If you want... | Use this | Time to first review | Requires |
-   |----------------|----------|---------------------|----------|
-   | Easiest setup — install and go | **SaaS (GitHub App)** | ~5 min | GitHub account |
-   | CI/CD integration — no server | **GitHub Action** | ~10 min | Repo admin access |
-   | Local review — no cloud | **CLI** | ~5 min | Node.js 22+ |
-   | Full control — self-hosted | **Docker** | ~30 min | Docker, PostgreSQL |
+   | If you want...                 | Use this              | Time to first review | Requires           |
+   | ------------------------------ | --------------------- | -------------------- | ------------------ |
+   | Easiest setup — install and go | **SaaS (GitHub App)** | ~5 min               | GitHub account     |
+   | CI/CD integration — no server  | **GitHub Action**     | ~10 min              | Repo admin access  |
+   | Local review — no cloud        | **CLI**               | ~5 min               | Node.js 22+        |
+   | Full control — self-hosted     | **Docker**            | ~30 min              | Docker, PostgreSQL |
 
 3. **Update landing page** — Add "Install GitHub App" as primary CTA (purple button), move "Documentation" to secondary. Add a "How to Get Started" 3-step visual below the hero. Add a "Free & Open Source" section clarifying the cost model.
 
@@ -87,32 +87,31 @@ Landing Page  →  Choose Your Path  →  SaaS Guide  →  First Review
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `docs/saas-getting-started.md` | **New** | Definitive SaaS getting-started guide (~150-200 lines) |
-| `docs/quick-start.md` | Modified | Add decision matrix, post-install warning, SaaS as recommended |
-| `docs/_sidebar.md` | Modified | Add SaaS guide link in Getting Started section |
-| `docs/README.md` | Modified | Add "Start here" section with path selection |
-| `docs/configuration.md` | Modified | Add SaaS callout at top |
-| `docs/runner-architecture.md` | Modified | Linkify Dashboard URL |
-| `landing/index.html` | Modified | Add Install CTA, getting-started steps, pricing section |
-| `README.md` | Modified | Add Option 0 (SaaS), install link, reorder options |
+| Area                           | Impact   | Description                                                    |
+| ------------------------------ | -------- | -------------------------------------------------------------- |
+| `docs/saas-getting-started.md` | **New**  | Definitive SaaS getting-started guide (~150-200 lines)         |
+| `docs/quick-start.md`          | Modified | Add decision matrix, post-install warning, SaaS as recommended |
+| `docs/_sidebar.md`             | Modified | Add SaaS guide link in Getting Started section                 |
+| `docs/README.md`               | Modified | Add "Start here" section with path selection                   |
+| `docs/configuration.md`        | Modified | Add SaaS callout at top                                        |
+| `docs/runner-architecture.md`  | Modified | Linkify Dashboard URL                                          |
+| `landing/index.html`           | Modified | Add Install CTA, getting-started steps, pricing section        |
+| `README.md`                    | Modified | Add Option 0 (SaaS), install link, reorder options             |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| GitHub App install URL is wrong or changes | Medium | Verify URL from actual GitHub App settings before publishing; use the canonical format `https://github.com/apps/{app-slug}/installations/new` |
-| SaaS backend is down and new users follow the guide | Low | Add a note about checking [GitHub status](https://github.com/JNZader/ghagga) for known issues; the guide itself is static docs so it's always accessible |
-| Landing page layout breaks on mobile after adding sections | Medium | Test responsive breakpoints; all new sections must use the existing responsive CSS patterns |
-| Inconsistency between README and docs descriptions | Low | Write docs first, then copy relevant sections to README to ensure single source of truth |
-| Dashboard URL or App URL changes in the future | Low | Use relative links where possible (e.g., `app/` instead of full URL in landing page); document the canonical URLs in one place |
-| Existing quick-start links break | Low | Keep the same filename `quick-start.md`; only restructure content, don't rename or remove anchors |
+| Risk                                                       | Likelihood | Mitigation                                                                                                                                               |
+| ---------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub App install URL is wrong or changes                 | Medium     | Verify URL from actual GitHub App settings before publishing; use the canonical format `https://github.com/apps/{app-slug}/installations/new`            |
+| SaaS backend is down and new users follow the guide        | Low        | Add a note about checking [GitHub status](https://github.com/JNZader/ghagga) for known issues; the guide itself is static docs so it's always accessible |
+| Landing page layout breaks on mobile after adding sections | Medium     | Test responsive breakpoints; all new sections must use the existing responsive CSS patterns                                                              |
+| Inconsistency between README and docs descriptions         | Low        | Write docs first, then copy relevant sections to README to ensure single source of truth                                                                 |
+| Dashboard URL or App URL changes in the future             | Low        | Use relative links where possible (e.g., `app/` instead of full URL in landing page); document the canonical URLs in one place                           |
+| Existing quick-start links break                           | Low        | Keep the same filename `quick-start.md`; only restructure content, don't rename or remove anchors                                                        |
 
 ## Rollback Plan
 
 All changes are documentation-only (Markdown files + static HTML). Rollback is trivial:
-
 1. `git revert <commit>` to undo all changes in a single commit
 2. No database migrations, no API changes, no configuration changes
 3. The landing page is static HTML on GitHub Pages — revert deploys automatically on push to main

@@ -30,7 +30,6 @@ Read this in: [English](README.md) · [Español](README.es.md)
 GHAGGA is a production AI code-review system — not a prompt wrapper. One review engine, four delivery surfaces: a hosted **GitHub App**, a **GitHub Action**, a **CLI** for local pre-push review, and a fully **self-hosted** Docker deployment.
 
 What makes it different:
-
 - **Static analysis runs first.** 17 deterministic tools (Semgrep, Trivy, Gitleaks, Ruff, clippy, …) catch known issues before a single LLM token is spent. Findings are injected into the review prompt so the model spends its attention on logic and architecture, not lint.
 - **It remembers.** Past decisions, bugfixes, and patterns persist across reviews (PostgreSQL, SQLite, or [Engram](https://github.com/Gentleman-Programming/engram)) and feed back into future ones — with full-text search, strength decay, and privacy stripping.
 - **Six orchestration strategies.** From a single fast pass to multi-agent fan-out and `hybrid-4r`, chosen per review by the cost/confidence tradeoff you want.
@@ -39,14 +38,14 @@ What makes it different:
 
 ## By the Numbers
 
-| | |
-|---|---|
-| **Production code** | ~62,000 lines of strict TypeScript across 8 workspaces |
-| **Test code** | ~73,000 lines — *more test code than production code* |
-| **Test suite** | 4,500+ test cases in 231 test files (Vitest), plus mutation testing with Stryker |
-| **Static analysis** | 17 tools — 7 always-on, 10 auto-detected by stack |
-| **Review modes** | 6 orchestration strategies (`simple` through `hybrid-4r`) |
-| **Distribution** | GitHub App (SaaS) · GitHub Action · npm CLI · self-hosted Docker |
+|                     |                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------- |
+| **Production code** | ~62,000 lines of strict TypeScript across 8 workspaces                           |
+| **Test code**       | ~73,000 lines — _more test code than production code_                            |
+| **Test suite**      | 4,500+ test cases in 231 test files (Vitest), plus mutation testing with Stryker |
+| **Static analysis** | 17 tools — 7 always-on, 10 auto-detected by stack                                |
+| **Review modes**    | 6 orchestration strategies (`simple` through `hybrid-4r`)                        |
+| **Distribution**    | GitHub App (SaaS) · GitHub Action · npm CLI · self-hosted Docker                 |
 
 ## Architecture
 
@@ -163,14 +162,14 @@ Full setup guides: [Quick Start](https://ghagga.javierzader.com/docs/quick-start
 
 Six strategies with explicit cost/confidence tradeoffs:
 
-| Mode | How it works | Token cost | Best for |
-|------|--------------|:---:|----------|
-| `simple` | Single LLM pass | ~1x | Small PRs, fast feedback |
-| `consensus` | 3 stances (advocate / critic / observer) + algorithmic vote | ~3x | High-confidence approval decisions |
-| `fan-out` | 5 independent lenses (security, typing, performance, a11y, error handling) merged by severity | ~5x | Broad category coverage, custom lenses |
-| `workflow` | 5 specialists in parallel + synthesis step | ~6x | Thorough multi-angle reviews |
-| `diagnostic` | Hypothesis-driven analysis with verification steps for each hypothesis | varies | Digging into suspicious changes |
-| `hybrid-4r` | Fan-out with `pinLensesToFirst` forced on. Contrarians, refuters, and `--anchor` stay opt-in. Reported `metadata.mode` stays `fan-out` | ~5x | One engine family for every lens, other families for unlensed voices |
+| Mode         | How it works                                                                                                                           | Token cost | Best for                                                             |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- | :--------: | -------------------------------------------------------------------- |
+| `simple`     | Single LLM pass                                                                                                                        |    ~1x     | Small PRs, fast feedback                                             |
+| `consensus`  | 3 stances (advocate / critic / observer) + algorithmic vote                                                                            |    ~3x     | High-confidence approval decisions                                   |
+| `fan-out`    | 5 independent lenses (security, typing, performance, a11y, error handling) merged by severity                                          |    ~5x     | Broad category coverage, custom lenses                               |
+| `workflow`   | 5 specialists in parallel + synthesis step                                                                                             |    ~6x     | Thorough multi-angle reviews                                         |
+| `diagnostic` | Hypothesis-driven analysis with verification steps for each hypothesis                                                                 |   varies   | Digging into suspicious changes                                      |
+| `hybrid-4r`  | Fan-out with `pinLensesToFirst` forced on. Contrarians, refuters, and `--anchor` stay opt-in. Reported `metadata.mode` stays `fan-out` |    ~5x     | One engine family for every lens, other families for unlensed voices |
 
 `fan-out` is the multi-agent workhorse: independent lenses review the same diff in parallel, then findings are merged by severity into one result. Custom lenses can be supplied with `--lenses` and `--lens-dir`.
 
@@ -193,7 +192,6 @@ flowchart TD
 ## Static Analysis — Layer 0
 
 Deterministic checks run before the expensive stochastic layer. All tools are optional and skipped gracefully when missing.
-
 - **Always-on (7):** Semgrep, Trivy, Gitleaks, ShellCheck, CPD, markdownlint, Lizard
 - **Auto-detected by stack (10):** Ruff + Bandit (Python), golangci-lint (Go), Biome (JS/TS), clippy (Rust), PMD (Java), Psalm (PHP), Hadolint (Docker), zizmor (GitHub Actions), SonarQube (via MCP)
 
@@ -204,7 +202,6 @@ In server mode, this layer runs as an **inline workflow injected into the target
 ## Project Memory
 
 The part that makes reviews compound over time:
-
 - **Search before review** — relevant past observations are injected into prompts as context.
 - **Persist after review** — significant findings are stored as typed observations (`decision`, `pattern`, `bugfix`, `architecture`, …) with deduplication.
 - **Strength decay** — stale observations fade out of context instead of polluting it forever.
@@ -215,17 +212,17 @@ Backends: PostgreSQL (`tsvector` + `ts_rank`) for server mode, SQLite (FTS5 + BM
 
 ## Security
 
-| Control | Implementation |
-|---------|----------------|
-| Provider API keys | AES-256-GCM encryption at rest, per-installation keys |
-| GitHub webhooks | HMAC-SHA256 with constant-time comparison |
-| Runner callbacks | Per-dispatch derived HMAC secrets + embedded-timestamp TTL |
-| Memory writes | Privacy stripping (24 redaction patterns) |
-| Outbound gateway URLs | SSRF guard — IP-range + DNS validation at persist time, re-validated at execution time |
-| LLM prompts | Trust boundary — repo content, memory, and prior findings framed and sanitized as untrusted input |
-| Job queue | Credentials never enter Redis payloads — workers re-fetch encrypted keys from PostgreSQL |
-| Injected workflow | `permissions: contents: read`, secret masking, output normalization |
-| Test coverage | Dedicated security suite: encryption tamper detection, HMAC correctness, no-secret-logging, no-eval, prototype-pollution checks |
+| Control               | Implementation                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Provider API keys     | AES-256-GCM encryption at rest, per-installation keys                                                                           |
+| GitHub webhooks       | HMAC-SHA256 with constant-time comparison                                                                                       |
+| Runner callbacks      | Per-dispatch derived HMAC secrets + embedded-timestamp TTL                                                                      |
+| Memory writes         | Privacy stripping (24 redaction patterns)                                                                                       |
+| Outbound gateway URLs | SSRF guard — IP-range + DNS validation at persist time, re-validated at execution time                                          |
+| LLM prompts           | Trust boundary — repo content, memory, and prior findings framed and sanitized as untrusted input                               |
+| Job queue             | Credentials never enter Redis payloads — workers re-fetch encrypted keys from PostgreSQL                                        |
+| Injected workflow     | `permissions: contents: read`, secret masking, output normalization                                                             |
+| Test coverage         | Dedicated security suite: encryption tamper detection, HMAC correctness, no-secret-logging, no-eval, prototype-pollution checks |
 
 Vulnerability reports: see [SECURITY.md](SECURITY.md).
 
@@ -257,7 +254,6 @@ Published packages: `ghagga` (CLI), `ghagga-core`, `ghagga-db`, `ghagga-forge`, 
 ## Engineering Notes
 
 A few decisions worth calling out:
-
 - **Core/adapter split.** The review engine is transport- and forge-agnostic; server, Action, and CLI are thin IO translators. Adding a delivery mode doesn't touch the pipeline.
 - **Tests outweigh production code** (~73k vs ~62k LOC), with mutation testing (Stryker) guarding core, server, and Action against assertion-free tests.
 - **v2 was a real rewrite**, not a patch: v1's Deno + Node + Python sprawl collapsed into a single-runtime Node monorepo with async orchestration (BullMQ), a 17-tool registry (up from Semgrep-only), and an actually-used memory system.

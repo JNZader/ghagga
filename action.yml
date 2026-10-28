@@ -1,4 +1,4 @@
-name: 'GHAGGA Code Review'
+name: "GHAGGA Code Review"
 description: >-
   AI-powered multi-agent code review for PRs with built-in static analysis.
   Runs the static-analysis registry on the GitHub Actions runner (cached).
@@ -6,8 +6,8 @@ description: >-
   3 provider modes: gateway (mcp-llm-bridge), cli-bridge (local CLIs), ollama.
 
 branding:
-  icon: 'eye'
-  color: 'purple'
+  icon: "eye"
+  color: "purple"
 
 inputs:
   provider:
@@ -17,7 +17,7 @@ inputs:
       Legacy values (github, anthropic, openai, google, etc.) are automatically
       remapped to "gateway" for backward compatibility.
     required: false
-    default: 'gateway'
+    default: "gateway"
 
   model:
     description: >-
@@ -30,7 +30,7 @@ inputs:
       Review mode. simple, workflow, consensus, diagnostic, fan-out, or hybrid-4r.
       Default is simple. hybrid-4r is fan-out with pinLensesToFirst forced on.
     required: false
-    default: 'simple'
+    default: "simple"
 
   api-key:
     description: >-
@@ -50,14 +50,14 @@ inputs:
       Comma-separated list of tool names to force-enable (overrides auto-detect).
       Example: "ruff,clippy,bandit". See README for the 17-tool registry.
     required: false
-    default: ''
+    default: ""
 
   disabled-tools:
     description: >-
       Comma-separated list of tool names to force-disable (overrides always-on and auto-detect).
       Example: "gitleaks,cpd". See README for the 17-tool registry.
     required: false
-    default: ''
+    default: ""
 
   enable-semgrep:
     description: >-
@@ -65,7 +65,7 @@ inputs:
       Enable Semgrep security analysis. Runs directly on the runner.
       First run installs via pip (~2 min), subsequent runs use cache (~10s).
     required: false
-    default: 'true'
+    default: "true"
 
   enable-trivy:
     description: >-
@@ -73,7 +73,7 @@ inputs:
       Enable Trivy vulnerability scanning. Runs directly on the runner.
       First run installs via official script (~1 min), subsequent runs use cache (~5s).
     required: false
-    default: 'true'
+    default: "true"
 
   enable-cpd:
     description: >-
@@ -81,14 +81,14 @@ inputs:
       Enable PMD/CPD copy-paste detection. Runs directly on the runner.
       First run downloads PMD (~1 min), subsequent runs use cache (~5s).
     required: false
-    default: 'true'
+    default: "true"
 
   enable-memory:
     description: >-
       Enable review memory. Caches observations between runs via @actions/cache.
       Set to 'false' to disable.
     required: false
-    default: 'true'
+    default: "true"
 
   embedding-provider:
     description: >-
@@ -98,7 +98,7 @@ inputs:
       self-hosted servers). "local" is NOT available in the Action (no bundled
       model) and is coerced to "none" with a warning.
     required: false
-    default: 'none'
+    default: "none"
 
   embedding-model:
     description: >-
@@ -132,10 +132,10 @@ inputs:
 
 outputs:
   status:
-    description: 'Review status: PASSED, FAILED, NEEDS_HUMAN_REVIEW, or SKIPPED'
+    description: "Review status: PASSED, FAILED, NEEDS_HUMAN_REVIEW, or SKIPPED"
   findings-count:
-    description: 'Number of findings from the review'
+    description: "Number of findings from the review"
 
 runs:
-  using: 'node24'
-  main: 'apps/action/dist/index.js'
+  using: "node24"
+  main: "apps/action/dist/index.js"

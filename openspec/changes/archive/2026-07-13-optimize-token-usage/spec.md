@@ -2,14 +2,13 @@
 
 **Status**: draft  
 **Proposal**: [proposal.md](./proposal.md)  
-**Date**: 2026-03-16  
+**Date**: 2026-03-16
 
 ## Requirements
 
 ### R1: Concurrency-Limited Execution
 
 The system MUST replace `Promise.allSettled(all)` in workflow and consensus modes with a concurrency-limited executor that processes at most `N` LLM calls simultaneously.
-
 - Workflow mode MUST default to `concurrency: 2` (2 specialists at a time)
 - Consensus mode MUST default to `concurrency: 1` (sequential)
 - The concurrency value MUST be configurable via `ReviewSettings.reviewConcurrency`
@@ -19,7 +18,6 @@ The system MUST replace `Promise.allSettled(all)` in workflow and consensus mode
 ### R2: Inter-Batch Delay
 
 The system MUST support a configurable delay between concurrency batches.
-
 - Default: `reviewDelayMs: 0` (no delay)
 - The delay MUST be applied **after each individual LLM call completes**, not between batches
 - When `reviewDelayMs > 0`, each specialist/stance call MUST wait at least `reviewDelayMs` milliseconds after the previous call completes before starting
@@ -29,7 +27,6 @@ The system MUST support a configurable delay between concurrency batches.
 ### R3: Compact Prompts (Shared Context Deduplication)
 
 The system MUST provide a compact system prompt variant for workflow specialists.
-
 - The **first specialist** in each workflow review MUST receive the full system prompt (specialist instructions + staticContext + memoryContext + stackHints + reviewLevel + REVIEW_CALIBRATION)
 - **Subsequent specialists** (2nd through 5th) MUST receive a compact system prompt that includes:
   - The specialist-specific instructions (unchanged)
@@ -44,7 +41,6 @@ The system MUST provide a compact system prompt variant for workflow specialists
 ### R4: generateWithFallback Integration
 
 The system MUST wire `generateWithFallback` into both workflow and consensus modes.
-
 - `WorkflowReviewInput` MUST accept an optional `providerChain: FallbackProvider[]` in addition to the existing single-provider fields
 - When `providerChain` is provided, each specialist call MUST use `generateWithFallback` instead of `generateTextWithTimeout`
 - When only single provider fields are provided, the system MUST construct a single-entry chain and still use `generateWithFallback` (for consistent code paths)
@@ -54,7 +50,6 @@ The system MUST wire `generateWithFallback` into both workflow and consensus mod
 ### R5: 413 as Retryable Error
 
 The `isRetryableError()` function in `fallback.ts` MUST treat HTTP 413 responses as retryable.
-
 - Status code 413 in error messages MUST trigger fallback to the next provider
 - Error messages containing `"too large"` or `"payload"` (case-insensitive) MUST also trigger fallback
 - This allows a provider with higher TPM limits to handle the request
@@ -78,7 +73,6 @@ Both fields MUST be optional with defaults applied at the agent level, not in th
 ### R7: Pipeline Pass-Through
 
 The pipeline (`pipeline.ts`) MUST pass `reviewConcurrency` and `reviewDelayMs` from `ReviewSettings` through to the agent functions.
-
 - `WorkflowReviewInput` MUST accept optional `reviewConcurrency` and `reviewDelayMs`
 - `ConsensusReviewInput` MUST accept optional `reviewConcurrency` and `reviewDelayMs`
 - The pipeline MUST forward `input.settings.reviewConcurrency` and `input.settings.reviewDelayMs` to agent calls
@@ -101,8 +95,8 @@ The pipeline (`pipeline.ts`) MUST pass `reviewConcurrency` and `reviewDelayMs` f
 **When** a workflow review is triggered with a 2K token diff  
 **Then** each specialist runs sequentially (one at a time)  
 **And** a 500ms delay is inserted between each specialist call  
-**And** peak TPM never exceeds ~3.5K (one call at a time)  
-**And** the review completes successfully (no 413 errors)  
+**And** peak TPM never exceeds ~3.5K (one call at a time)
+**And** the review completes successfully (no 413 errors)
 
 ### S2: Workflow review with default settings (concurrency: 2, delay: 0)
 
@@ -111,7 +105,7 @@ The pipeline (`pipeline.ts`) MUST pass `reviewConcurrency` and `reviewDelayMs` f
 **When** a workflow review is triggered  
 **Then** specialists run in batches of 2 (2, 2, 1)  
 **And** no delay between calls  
-**And** the review completes with the same findings as fully parallel mode  
+**And** the review completes with the same findings as fully parallel mode
 
 ### S3: Consensus review with Gemini (concurrency: 1, delay: 1000)
 
@@ -120,18 +114,18 @@ The pipeline (`pipeline.ts`) MUST pass `reviewConcurrency` and `reviewDelayMs` f
 **When** a consensus review is triggered  
 **Then** each stance (for, against, neutral) runs sequentially  
 **And** a 1000ms delay is inserted between calls  
-**And** total time is ~3s for 3 calls + LLM time  
-**And** RPM usage is 3 requests per review (within 20 RPM limit)  
+**And** total time is ~3s for 3 calls + LLM time
+**And** RPM usage is 3 requests per review (within 20 RPM limit)
 
 ### S4: Compact prompts reduce token usage in workflow mode
 
 **Given** a workflow review with compact prompts enabled (default)  
 **And** staticContext is 300 tokens, memoryContext is 200 tokens, stackHints is 100 tokens, REVIEW_CALIBRATION is 200 tokens  
 **When** the review runs  
-**Then** the first specialist receives ~800 tokens of shared context  
-**And** specialists 2-5 receive ~50 tokens of compact calibration instead of ~800  
+**Then** the first specialist receives ~800 tokens of shared context
+**And** specialists 2-5 receive ~50 tokens of compact calibration instead of ~800
 **And** total shared context tokens = 800 + (50 * 4) = 1000 instead of 800 * 5 = 4000  
-**And** savings = ~3000 tokens per workflow review  
+**And** savings = ~3000 tokens per workflow review
 
 ### S5: 413 triggers fallback to next provider
 
@@ -139,7 +133,7 @@ The pipeline (`pipeline.ts`) MUST pass `reviewConcurrency` and `reviewDelayMs` f
 **And** the diff is too large for Groq's TPM limit  
 **When** Groq returns HTTP 413 "Request Entity Too Large"  
 **Then** the fallback chain tries Anthropic  
-**And** the review completes using Anthropic  
+**And** the review completes using Anthropic
 
 ### S6: Provider chain in workflow mode
 
@@ -148,21 +142,21 @@ The pipeline (`pipeline.ts`) MUST pass `reviewConcurrency` and `reviewDelayMs` f
 **When** DeepSeek returns 429 during the 3rd specialist call  
 **Then** that specialist call falls back to Groq  
 **And** remaining specialists continue using DeepSeek (fallback is per-call)  
-**And** the synthesis call uses the primary provider (DeepSeek)  
+**And** the synthesis call uses the primary provider (DeepSeek)
 
 ### S7: Full parallelism opt-in (concurrency: 5)
 
 **Given** `reviewConcurrency: 5` and a provider with high limits  
 **When** a workflow review runs  
 **Then** all 5 specialists fire simultaneously (same as current behavior)  
-**And** the review behaves identically to the pre-optimization code  
+**And** the review behaves identically to the pre-optimization code
 
 ### S8: Simple mode unchanged
 
 **Given** any concurrency and delay configuration  
 **When** a simple review is triggered  
 **Then** the review makes exactly 1 LLM call  
-**And** `reviewConcurrency` and `reviewDelayMs` are ignored  
+**And** `reviewConcurrency` and `reviewDelayMs` are ignored
 
 ## Edge Cases
 

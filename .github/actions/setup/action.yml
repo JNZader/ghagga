@@ -1,5 +1,5 @@
-name: 'Setup pnpm + Node + install'
-description: 'Install pnpm, set up Node 22.22.2 with the pnpm cache, and install frozen deps. Run AFTER actions/checkout.'
+name: "Setup pnpm + Node + install"
+description: "Install pnpm, set up Node 22.22.2 with the pnpm cache, and install frozen deps. Run AFTER actions/checkout."
 
 runs:
   using: composite
@@ -11,7 +11,7 @@ runs:
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: 22.22.2
-        cache: 'pnpm'
+        cache: "pnpm"
 
     - name: Install dependencies
       run: pnpm install --frozen-lockfile

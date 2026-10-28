@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -237,6 +237,12 @@
             "noRestrictedImports": "off"
           }
         }
+      }
+    },
+    {
+      "includes": ["openspec/changes/archive/2026-03-05-reduce-false-positives/verify-report.md"],
+      "formatter": {
+        "enabled": false
       }
     }
   ]

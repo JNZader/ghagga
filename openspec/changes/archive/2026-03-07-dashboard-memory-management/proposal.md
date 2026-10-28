@@ -4,7 +4,7 @@
 
 The CLI already gives users full control over their local memory: `ghagga memory delete`, `ghagga memory clear`, `ghagga memory stats`. But SaaS Dashboard users — the primary audience — are stuck with a **read-only** Memory page. They can browse sessions and observations but cannot delete a single incorrect observation, clear stale memory for a repo, or purge everything to start fresh.
 
-The `PostgresMemoryStorage` adapter has five method stubs (`listObservations`, `getObservation`, `deleteObservation`, `getStats`, `clearObservations`) that throw `Error('Not implemented')` with comments explicitly saying *"These will be implemented via the Dashboard UI in a future change."* That future change is now.
+The `PostgresMemoryStorage` adapter has five method stubs (`listObservations`, `getObservation`, `deleteObservation`, `getStats`, `clearObservations`) that throw `Error('Not implemented')` with comments explicitly saying _"These will be implemented via the Dashboard UI in a future change."_ That future change is now.
 
 This matters because memory directly influences review quality — stale or incorrect observations produce misleading AI reviews. Users need a way to prune bad observations without contacting support or losing everything.
 
@@ -51,18 +51,23 @@ Add three new functions to `packages/db/src/queries.ts`:
 ```typescript
 // Delete a single observation by ID, scoped to installation
 export async function deleteMemoryObservation(
-  db: Database, installationId: number, observationId: number
-): Promise<boolean>
+  db: Database,
+  installationId: number,
+  observationId: number,
+): Promise<boolean>;
 
 // Clear all observations for a specific project, scoped to installation
 export async function clearMemoryObservationsByProject(
-  db: Database, installationId: number, project: string
-): Promise<number>
+  db: Database,
+  installationId: number,
+  project: string,
+): Promise<number>;
 
 // Clear all observations for an installation
 export async function clearAllMemoryObservations(
-  db: Database, installationId: number
-): Promise<number>
+  db: Database,
+  installationId: number,
+): Promise<number>;
 ```
 
 All functions accept `installationId` as the authorization scope. `deleteMemoryObservation` joins through `repositories` to verify the observation's project belongs to the given installation — preventing IDOR. `clearAllMemoryObservations` deletes all observations for repos belonging to the given installation.
@@ -73,16 +78,15 @@ The PostgreSQL `tsvector` search column is updated by a database trigger (`tsvec
 
 Add three DELETE routes to the existing `createApiRouter` in `apps/server/src/routes/api.ts`:
 
-| Endpoint | Body/Query | Action |
-|----------|-----------|--------|
-| `DELETE /api/memory/observations/:id` | — | Delete single observation |
-| `DELETE /api/memory/projects/:project/observations` | — | Clear repo memory |
-| `DELETE /api/memory/observations` | — | Purge all user memory |
+| Endpoint                                            | Body/Query | Action                    |
+| --------------------------------------------------- | ---------- | ------------------------- |
+| `DELETE /api/memory/observations/:id`               | —          | Delete single observation |
+| `DELETE /api/memory/projects/:project/observations` | —          | Clear repo memory         |
+| `DELETE /api/memory/observations`                   | —          | Purge all user memory     |
 
 The `:project` param uses URL encoding for `owner/repo` (e.g., `/api/memory/projects/acme%2Fwidgets/observations`).
 
 All routes use the existing `authMiddleware` which populates `c.get('user')` with `{ githubUserId, githubLogin, installationIds }`. Authorization flow:
-
 1. **Single delete**: Look up observation → join through `repositories` to get `installationId` → verify it's in `user.installationIds` → delete
 2. **Clear repo**: Look up repo by `:project` param → verify `repo.installationId` is in `user.installationIds` → delete all observations for that project
 3. **Purge all**: Use `user.installationIds` directly → delete all observations for repos belonging to those installations
@@ -95,12 +99,12 @@ Responses follow the existing `{ data: ... }` envelope pattern:
 
 Replace the 5 `throw new Error('Not implemented')` stubs with real implementations. Each method delegates to the appropriate `ghagga-db` query function:
 
-| Method | Delegates To |
-|--------|-------------|
-| `listObservations` | New `listMemoryObservations` query |
-| `getObservation` | New `getMemoryObservation` query |
-| `deleteObservation` | New `deleteMemoryObservation` query |
-| `getStats` | New `getMemoryStats` query |
+| Method              | Delegates To                                                          |
+| ------------------- | --------------------------------------------------------------------- |
+| `listObservations`  | New `listMemoryObservations` query                                    |
+| `getObservation`    | New `getMemoryObservation` query                                      |
+| `deleteObservation` | New `deleteMemoryObservation` query                                   |
+| `getStats`          | New `getMemoryStats` query                                            |
 | `clearObservations` | New `clearMemoryObservationsByProject` / `clearAllMemoryObservations` |
 
 Note: `listObservations` and `getStats` need new read queries too — they didn't exist in the DB layer because the CLI used SQLite directly. The PostgresMemoryStorage constructor already has the `db` instance, so the pattern is identical to the existing `searchObservations` → `ghagga-db.searchObservations` delegation.
@@ -109,7 +113,7 @@ Note: `listObservations` and `getStats` need new read queries too — they didn'
 
 **ObservationCard changes** (`Memory.tsx`):
 - Add a trash icon button (top-right corner of each card)
-- On click → open **Tier 1** confirmation modal: *"Delete this observation? This action cannot be undone."* with "Cancel" and "Delete" buttons
+- On click → open **Tier 1** confirmation modal: _"Delete this observation? This action cannot be undone."_ with "Cancel" and "Delete" buttons
 - On confirm → call `useDeleteObservation` mutation → invalidate observation queries
 
 **Repo-level clear** (new button near session list header):
@@ -136,9 +140,9 @@ Note: `listObservations` and `getStats` need new read queries too — they didn'
 Add to `apps/dashboard/src/lib/api.ts`:
 
 ```typescript
-export function useDeleteObservation()  // DELETE /api/memory/observations/:id
-export function useClearRepoMemory()     // DELETE /api/memory/projects/:project/observations
-export function usePurgeAllMemory()      // DELETE /api/memory/observations
+export function useDeleteObservation(); // DELETE /api/memory/observations/:id
+export function useClearRepoMemory(); // DELETE /api/memory/projects/:project/observations
+export function usePurgeAllMemory(); // DELETE /api/memory/observations
 ```
 
 Each mutation hook uses `useMutation` from TanStack Query and invalidates the appropriate query keys (`['memory', 'sessions', ...]`, `['memory', 'observations', ...]`) on success.
@@ -146,7 +150,6 @@ Each mutation hook uses `useMutation` from TanStack Query and invalidates the ap
 ### 6. Security Model
 
 The existing auth middleware + installation-scoped access model handles authorization:
-
 1. `authMiddleware` verifies the GitHub token and resolves `user.installationIds`
 2. API routes look up the repo by `fullName`, check `repo.installationId in user.installationIds`
 3. DB queries scope deletions by project/installation — no cross-tenant leakage possible
@@ -155,30 +158,30 @@ This is the same pattern used by all existing API routes (reviews, settings, etc
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/db/src/queries.ts` | Modified | Add 5 new query functions: `deleteMemoryObservation`, `clearMemoryObservationsByProject`, `clearAllMemoryObservations`, `listMemoryObservations`, `getMemoryStats` |
-| `apps/server/src/routes/api.ts` | Modified | Add 3 DELETE routes for memory management under existing `createApiRouter` |
-| `apps/server/src/memory/postgres.ts` | Modified | Replace 5 stub methods with real implementations delegating to new DB queries |
-| `apps/dashboard/src/pages/Memory.tsx` | Modified | Add delete buttons on observations, clear repo button, purge all button, confirmation modals |
-| `apps/dashboard/src/lib/api.ts` | Modified | Add 3 mutation hooks: `useDeleteObservation`, `useClearRepoMemory`, `usePurgeAllMemory` |
-| `apps/dashboard/src/lib/types.ts` | Modified | Add response types for delete operations if needed |
-| `packages/db/src/queries.test.ts` (or new) | New/Modified | Unit tests for all 5 new query functions |
-| `apps/server/src/routes/api.test.ts` | Modified | Add tests for 3 DELETE routes (auth, 403, 404, success, empty purge) |
-| `apps/server/src/memory/postgres.test.ts` | Modified | Replace stub-throws tests with real implementation tests |
-| `apps/dashboard/src/pages/Memory.test.tsx` (new) | New | Component tests for delete buttons, modals, mutation flow |
+| Area                                             | Impact       | Description                                                                                                                                                        |
+| ------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/db/src/queries.ts`                     | Modified     | Add 5 new query functions: `deleteMemoryObservation`, `clearMemoryObservationsByProject`, `clearAllMemoryObservations`, `listMemoryObservations`, `getMemoryStats` |
+| `apps/server/src/routes/api.ts`                  | Modified     | Add 3 DELETE routes for memory management under existing `createApiRouter`                                                                                         |
+| `apps/server/src/memory/postgres.ts`             | Modified     | Replace 5 stub methods with real implementations delegating to new DB queries                                                                                      |
+| `apps/dashboard/src/pages/Memory.tsx`            | Modified     | Add delete buttons on observations, clear repo button, purge all button, confirmation modals                                                                       |
+| `apps/dashboard/src/lib/api.ts`                  | Modified     | Add 3 mutation hooks: `useDeleteObservation`, `useClearRepoMemory`, `usePurgeAllMemory`                                                                            |
+| `apps/dashboard/src/lib/types.ts`                | Modified     | Add response types for delete operations if needed                                                                                                                 |
+| `packages/db/src/queries.test.ts` (or new)       | New/Modified | Unit tests for all 5 new query functions                                                                                                                           |
+| `apps/server/src/routes/api.test.ts`             | Modified     | Add tests for 3 DELETE routes (auth, 403, 404, success, empty purge)                                                                                               |
+| `apps/server/src/memory/postgres.test.ts`        | Modified     | Replace stub-throws tests with real implementation tests                                                                                                           |
+| `apps/dashboard/src/pages/Memory.test.tsx` (new) | New          | Component tests for delete buttons, modals, mutation flow                                                                                                          |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Accidental mass deletion (user clicks purge without understanding scope) | Medium | High | **3-tier confirmation system**: Tier 1 (single delete) = simple modal. Tier 2 (clear repo) = modal + type repo name. Tier 3 (purge all) = modal + type "DELETE ALL" + 5-second countdown timer on the confirm button. Each tier adds protection proportional to the blast radius. |
-| IDOR — user deletes another user's observation by guessing ID | Low | Critical | All delete operations verify `repo.installationId in user.installationIds`. DB queries additionally scope by project. Test explicitly with cross-tenant scenarios. |
-| Race condition: observation deleted while another tab is viewing it | Low | Low | TanStack Query will refetch on window focus. Deleted observation returns 404 — handle gracefully in UI (show toast, remove card). |
-| `clearAllMemoryObservations` is slow for large datasets | Low | Medium | The query deletes by `project IN (SELECT full_name FROM repositories WHERE installation_id IN (...))`. PostgreSQL handles this efficiently with the existing `idx_observations_project` index. If performance is an issue, add `LIMIT` + loop, but unlikely for typical datasets (<10K observations). |
-| `PostgresMemoryStorage.clearObservations` without project param needs access to installationIds | Medium | Medium | The `clearObservations(options?)` interface method only accepts `{ project?: string }`. For purge-all, the API route calls the DB query directly with `user.installationIds`, bypassing the adapter method. Document this design decision. |
-| Project param with slashes in URL path (owner/repo) | Low | Medium | Use URL encoding for the `:project` parameter in `DELETE /api/memory/projects/:project/observations` (e.g., `acme%2Fwidgets`). The Hono router handles `decodeURIComponent` automatically. |
-| Adding DELETE routes to existing router file increases its size (~740 lines already) | Low | Low | The routes follow the exact same pattern as existing ones. If the file grows too large, extract to a sub-module in a future refactor. |
+| Risk                                                                                            | Likelihood | Impact   | Mitigation                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------------- | ---------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Accidental mass deletion (user clicks purge without understanding scope)                        | Medium     | High     | **3-tier confirmation system**: Tier 1 (single delete) = simple modal. Tier 2 (clear repo) = modal + type repo name. Tier 3 (purge all) = modal + type "DELETE ALL" + 5-second countdown timer on the confirm button. Each tier adds protection proportional to the blast radius.                     |
+| IDOR — user deletes another user's observation by guessing ID                                   | Low        | Critical | All delete operations verify `repo.installationId in user.installationIds`. DB queries additionally scope by project. Test explicitly with cross-tenant scenarios.                                                                                                                                    |
+| Race condition: observation deleted while another tab is viewing it                             | Low        | Low      | TanStack Query will refetch on window focus. Deleted observation returns 404 — handle gracefully in UI (show toast, remove card).                                                                                                                                                                     |
+| `clearAllMemoryObservations` is slow for large datasets                                         | Low        | Medium   | The query deletes by `project IN (SELECT full_name FROM repositories WHERE installation_id IN (...))`. PostgreSQL handles this efficiently with the existing `idx_observations_project` index. If performance is an issue, add `LIMIT` + loop, but unlikely for typical datasets (<10K observations). |
+| `PostgresMemoryStorage.clearObservations` without project param needs access to installationIds | Medium     | Medium   | The `clearObservations(options?)` interface method only accepts `{ project?: string }`. For purge-all, the API route calls the DB query directly with `user.installationIds`, bypassing the adapter method. Document this design decision.                                                            |
+| Project param with slashes in URL path (owner/repo)                                             | Low        | Medium   | Use URL encoding for the `:project` parameter in `DELETE /api/memory/projects/:project/observations` (e.g., `acme%2Fwidgets`). The Hono router handles `decodeURIComponent` automatically.                                                                                                            |
+| Adding DELETE routes to existing router file increases its size (~740 lines already)            | Low        | Low      | The routes follow the exact same pattern as existing ones. If the file grows too large, extract to a sub-module in a future refactor.                                                                                                                                                                 |
 
 ## Rollback Plan
 
@@ -202,11 +205,11 @@ This is the same pattern used by all existing API routes (reviews, settings, etc
 
 ## Distribution Mode Impact
 
-| Mode | Impact |
-|------|--------|
-| **SaaS** | Primary target — dashboard gets full memory management capabilities |
-| **CLI** | No impact — CLI uses `SqliteMemoryStorage` which already implements all management methods |
-| **GitHub Action** | No impact — Actions don't expose memory management |
+| Mode               | Impact                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------ |
+| **SaaS**           | Primary target — dashboard gets full memory management capabilities                              |
+| **CLI**            | No impact — CLI uses `SqliteMemoryStorage` which already implements all management methods       |
+| **GitHub Action**  | No impact — Actions don't expose memory management                                               |
 | **1-Click Deploy** | Benefits automatically — 1-click deploy uses the SaaS server, so dashboard changes are inherited |
 
 ## Success Criteria

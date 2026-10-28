@@ -173,20 +173,20 @@ sequenceDiagram
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/server/src/routes/oauth.ts` | Modify | Change `scope: ''` to `scope: 'public_repo'` on line 36 |
-| `apps/server/src/github/runner.ts` | Modify | Add `createRunnerRepo()` function and `RunnerCreationResult` type |
-| `apps/server/src/routes/api.ts` | Modify | Add 3 new endpoints: `GET /api/runner/status`, `POST /api/runner/create`, `POST /api/runner/configure-secret` |
-| `apps/server/src/routes/api.test.ts` | Modify | Add test suites for all 3 new runner endpoints |
-| `apps/dashboard/src/lib/types.ts` | Modify | Add `RunnerStatus`, `RunnerCreateResponse`, `RunnerConfigureResponse` types |
-| `apps/dashboard/src/lib/api.ts` | Modify | Add `useRunnerStatus()`, `useCreateRunner()`, `useConfigureRunnerSecret()` hooks |
-| `apps/dashboard/src/pages/GlobalSettings.tsx` | Modify | Add Runner section with status display and enable/reconfigure actions |
-| `apps/dashboard/src/lib/auth.tsx` | Modify | Add `reAuthenticate()` method to AuthContext for scope upgrade flow |
-| `docs/security.md` | Modify | Document `public_repo` scope implications |
-| `docs/quick-start.md` | Modify | Replace manual repo creation with "Enable Runner" instructions |
-| `docs/self-hosted.md` | Modify | Note that auto-creation is SaaS-only |
-| `docs/runner-architecture.md` | Modify | Update creation flow diagrams |
+| File                                          | Action | Description                                                                                                   |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `apps/server/src/routes/oauth.ts`             | Modify | Change `scope: ''` to `scope: 'public_repo'` on line 36                                                       |
+| `apps/server/src/github/runner.ts`            | Modify | Add `createRunnerRepo()` function and `RunnerCreationResult` type                                             |
+| `apps/server/src/routes/api.ts`               | Modify | Add 3 new endpoints: `GET /api/runner/status`, `POST /api/runner/create`, `POST /api/runner/configure-secret` |
+| `apps/server/src/routes/api.test.ts`          | Modify | Add test suites for all 3 new runner endpoints                                                                |
+| `apps/dashboard/src/lib/types.ts`             | Modify | Add `RunnerStatus`, `RunnerCreateResponse`, `RunnerConfigureResponse` types                                   |
+| `apps/dashboard/src/lib/api.ts`               | Modify | Add `useRunnerStatus()`, `useCreateRunner()`, `useConfigureRunnerSecret()` hooks                              |
+| `apps/dashboard/src/pages/GlobalSettings.tsx` | Modify | Add Runner section with status display and enable/reconfigure actions                                         |
+| `apps/dashboard/src/lib/auth.tsx`             | Modify | Add `reAuthenticate()` method to AuthContext for scope upgrade flow                                           |
+| `docs/security.md`                            | Modify | Document `public_repo` scope implications                                                                     |
+| `docs/quick-start.md`                         | Modify | Replace manual repo creation with "Enable Runner" instructions                                                |
+| `docs/self-hosted.md`                         | Modify | Note that auto-creation is SaaS-only                                                                          |
+| `docs/runner-architecture.md`                 | Modify | Update creation flow diagrams                                                                                 |
 
 ---
 
@@ -264,9 +264,9 @@ export class RunnerCreationError extends Error {
 // Success envelope: { data: RunnerStatusResponse }
 interface RunnerStatusResponse {
   exists: boolean;
-  repoFullName?: string;   // e.g. "alice/ghagga-runner"
-  isPrivate?: boolean;      // true if repo is private (warning)
-  warning?: string;         // e.g. "Runner repo is private — ..."
+  repoFullName?: string; // e.g. "alice/ghagga-runner"
+  isPrivate?: boolean; // true if repo is private (warning)
+  warning?: string; // e.g. "Runner repo is private — ..."
 }
 ```
 
@@ -279,7 +279,7 @@ interface RunnerCreateResponse {
   repoFullName: string;
   secretConfigured: boolean;
   isPrivate: boolean;
-  warning?: string;         // if repo is private
+  warning?: string; // if repo is private
 }
 
 // 403 Insufficient scope
@@ -297,7 +297,7 @@ interface AlreadyExistsError {
 // 429 Rate limited
 interface RateLimitError {
   error: 'rate_limited';
-  retryAfter: number;       // seconds
+  retryAfter: number; // seconds
 }
 
 // 502 Template unavailable / GitHub error
@@ -365,7 +365,7 @@ export function useRunnerStatus(ownerLogin?: string) {
     queryKey: ['runner', 'status', ownerLogin],
     queryFn: () => fetchData<RunnerStatus>('/api/runner/status'),
     enabled: !!ownerLogin,
-    staleTime: 30_000,       // 30s — don't hammer GitHub API
+    staleTime: 30_000, // 30s — don't hammer GitHub API
     retry: 1,
   });
 }
@@ -450,18 +450,15 @@ router.get('/api/runner/status', async (c) => {
 
     // Check if repo is private (discoverRunnerRepo returns the full repo object)
     // We need to extend discoverRunnerRepo or make a separate check
-    const repoResponse = await fetch(
-      `https://api.github.com/repos/${runner.fullName}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.v3+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
+    const repoResponse = await fetch(`https://api.github.com/repos/${runner.fullName}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
       },
-    );
+    });
 
-    const repoData = await repoResponse.json() as { private: boolean };
+    const repoData = (await repoResponse.json()) as { private: boolean };
     const isPrivate = repoData.private;
 
     const response: Record<string, unknown> = {
@@ -471,13 +468,17 @@ router.get('/api/runner/status', async (c) => {
 
     if (isPrivate) {
       response.isPrivate = true;
-      response.warning = 'Runner repo is private — GitHub Actions minutes will be consumed from your quota (2000 min/month for free accounts).';
+      response.warning =
+        'Runner repo is private — GitHub Actions minutes will be consumed from your quota (2000 min/month for free accounts).';
     }
 
     return c.json({ data: response });
   } catch (err) {
     logger.error({ err, user: user.githubLogin }, 'Failed to check runner status');
-    return c.json({ error: 'github_unavailable', message: 'Could not check runner status. Please try again.' }, 502);
+    return c.json(
+      { error: 'github_unavailable', message: 'Could not check runner status. Please try again.' },
+      502,
+    );
   }
 });
 ```
@@ -488,7 +489,7 @@ router.get('/api/runner/status', async (c) => {
 export interface DiscoveredRunner {
   repoId: number;
   fullName: string;
-  isPrivate: boolean;  // NEW FIELD
+  isPrivate: boolean; // NEW FIELD
 }
 ```
 
@@ -515,7 +516,8 @@ router.post('/api/runner/create', async (c) => {
     };
 
     if (result.isPrivate) {
-      response.warning = 'The runner repo was created as private. Private repos consume your GitHub Actions minutes quota (2000 min/month).';
+      response.warning =
+        'The runner repo was created as private. Private repos consume your GitHub Actions minutes quota (2000 min/month).';
     }
 
     return c.json({ data: response }, 201);
@@ -534,17 +536,26 @@ router.post('/api/runner/create', async (c) => {
         case 'org_permission_denied':
           return c.json({ error: 'org_permission_denied', message: err.message }, 403);
         case 'creation_timeout':
-          return c.json({ error: 'github_error', message: 'Repository creation timed out. Please check GitHub and try again.' }, 502);
+          return c.json(
+            {
+              error: 'github_error',
+              message: 'Repository creation timed out. Please check GitHub and try again.',
+            },
+            502,
+          );
         case 'secret_failed':
           // Repo was created but secret setup failed — return partial success
-          return c.json({
-            data: {
-              created: true,
-              repoFullName: err.repoFullName,
-              secretConfigured: false,
-              isPrivate: false,
+          return c.json(
+            {
+              data: {
+                created: true,
+                repoFullName: err.repoFullName,
+                secretConfigured: false,
+                isPrivate: false,
+              },
             },
-          }, 201);
+            201,
+          );
         default:
           return c.json({ error: 'github_error', message: err.message }, 502);
       }
@@ -570,7 +581,10 @@ router.post('/api/runner/configure-secret', async (c) => {
     // Verify runner repo exists
     const runner = await discoverRunnerRepo(user.githubLogin, token);
     if (!runner) {
-      return c.json({ error: 'runner_not_found', message: 'Runner repo not found. Create it first.' }, 404);
+      return c.json(
+        { error: 'runner_not_found', message: 'Runner repo not found. Create it first.' },
+        404,
+      );
     }
 
     await setRunnerSecret(
@@ -609,7 +623,12 @@ export async function createRunnerRepo(
   // Step 1: Check if repo already exists
   const existing = await discoverRunnerRepo(ownerLogin, token);
   if (existing) {
-    throw new RunnerCreationError('already_exists', 'Runner repo already exists', undefined, repoFullName);
+    throw new RunnerCreationError(
+      'already_exists',
+      'Runner repo already exists',
+      undefined,
+      repoFullName,
+    );
   }
 
   // Step 2: Create from template
@@ -637,7 +656,12 @@ export async function createRunnerRepo(
 
     if (status === 422) {
       // Name conflict — repo was created between our check and the generate call
-      throw new RunnerCreationError('already_exists', 'Runner repo already exists', undefined, repoFullName);
+      throw new RunnerCreationError(
+        'already_exists',
+        'Runner repo already exists',
+        undefined,
+        repoFullName,
+      );
     }
 
     if (status === 403) {
@@ -645,28 +669,39 @@ export async function createRunnerRepo(
       const remaining = generateResponse.headers.get('X-RateLimit-Remaining');
       if (remaining === '0') {
         const resetHeader = generateResponse.headers.get('X-RateLimit-Reset');
-        const retryAfter = resetHeader ? Math.max(0, parseInt(resetHeader, 10) - Math.floor(Date.now() / 1000)) : 60;
+        const retryAfter = resetHeader
+          ? Math.max(0, parseInt(resetHeader, 10) - Math.floor(Date.now() / 1000))
+          : 60;
         throw new RunnerCreationError('rate_limited', 'GitHub API rate limit exceeded', retryAfter);
       }
 
       // Check if this is an org permission issue
       const body = await generateResponse.text();
       if (body.includes('organization') || body.includes('permission')) {
-        throw new RunnerCreationError('org_permission_denied', `You don't have permission to create repositories in ${ownerLogin}`);
+        throw new RunnerCreationError(
+          'org_permission_denied',
+          `You don't have permission to create repositories in ${ownerLogin}`,
+        );
       }
 
-      throw new RunnerCreationError('insufficient_scope', "Your token doesn't have permission to create repositories. Please re-authenticate.");
+      throw new RunnerCreationError(
+        'insufficient_scope',
+        "Your token doesn't have permission to create repositories. Please re-authenticate.",
+      );
     }
 
     if (status === 404) {
-      throw new RunnerCreationError('template_unavailable', 'The runner template is temporarily unavailable. Please try again later or contact support.');
+      throw new RunnerCreationError(
+        'template_unavailable',
+        'The runner template is temporarily unavailable. Please try again later or contact support.',
+      );
     }
 
     const body = await generateResponse.text();
     throw new RunnerCreationError('github_error', `GitHub API error: ${status} — ${body}`);
   }
 
-  const createData = await generateResponse.json() as { full_name: string; private: boolean };
+  const createData = (await generateResponse.json()) as { full_name: string; private: boolean };
 
   // Step 3: Poll until repo is accessible
   let repoReady = false;
@@ -685,7 +720,12 @@ export async function createRunnerRepo(
   }
 
   if (!repoReady) {
-    throw new RunnerCreationError('creation_timeout', 'Repository was created but is not accessible yet. Please try again in a few moments.', undefined, repoFullName);
+    throw new RunnerCreationError(
+      'creation_timeout',
+      'Repository was created but is not accessible yet. Please try again in a few moments.',
+      undefined,
+      repoFullName,
+    );
   }
 
   // Step 4: Set GHAGGA_CALLBACK_SECRET
@@ -697,7 +737,10 @@ export async function createRunnerRepo(
     secretConfigured = false;
   }
 
-  logger.info({ repoFullName, secretConfigured, isPrivate: createData.private }, 'Runner repo created');
+  logger.info(
+    { repoFullName, secretConfigured, isPrivate: createData.private },
+    'Runner repo created',
+  );
 
   return {
     created: true,
@@ -741,21 +784,23 @@ The runner section is placed **before** the Static Analysis card (since the runn
 
 #### State Definitions
 
-| State | Trigger | UI |
-|-------|---------|-----|
-| `checking` | `useRunnerStatus` is loading | Spinner with "Checking runner status..." |
-| `not_configured` | `status.exists === false` | "Enable Runner" button + explanation |
-| `creating` | `createRunner.isPending` | Disabled button + spinner + "Creating runner repository..." |
-| `ready` | `status.exists === true` | Green checkmark + repo link + "Reconfigure Secret" button |
-| `error` | `createRunner.isError` (not 403/409) | Red error message + "Retry" button |
-| `needs_reauth` | `createRunner.isError` and status is 403 | Warning + "Re-authenticate" button |
+| State            | Trigger                                  | UI                                                          |
+| ---------------- | ---------------------------------------- | ----------------------------------------------------------- |
+| `checking`       | `useRunnerStatus` is loading             | Spinner with "Checking runner status..."                    |
+| `not_configured` | `status.exists === false`                | "Enable Runner" button + explanation                        |
+| `creating`       | `createRunner.isPending`                 | Disabled button + spinner + "Creating runner repository..." |
+| `ready`          | `status.exists === true`                 | Green checkmark + repo link + "Reconfigure Secret" button   |
+| `error`          | `createRunner.isError` (not 403/409)     | Red error message + "Retry" button                          |
+| `needs_reauth`   | `createRunner.isError` and status is 403 | Warning + "Re-authenticate" button                          |
 
 #### Component Structure
 
 ```tsx
 // Inside GlobalSettings.tsx, before the Static Analysis card
 
-{/* ── Runner ─────────────────────────────────────── */}
+{
+  /* ── Runner ─────────────────────────────────────── */
+}
 <Card>
   <CardHeader
     title="Static Analysis Runner"
@@ -803,29 +848,29 @@ The runner section is placed **before** the Static Analysis card (since the runn
   )}
 
   {/* State: not_configured */}
-  {!runnerStatus.isLoading && !runnerStatus.data?.exists && !createRunner.isPending && !needsReauth && (
-    <div className="space-y-3">
-      <p className="text-sm text-text-secondary">
-        GHAGGA uses a GitHub Actions runner in your account for static analysis
-        (Semgrep, Trivy, PMD/CPD). This creates a public repository named
-        <code className="mx-1 rounded bg-surface-bg px-1 text-xs">ghagga-runner</code>
-        in your GitHub account.
-      </p>
-      <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
-        <p className="text-xs text-yellow-300">
-          This requires the <code>public_repo</code> OAuth scope, which grants write
-          access to your public repositories. The token is only used server-side to
-          create the runner repo and configure its secrets.
+  {!runnerStatus.isLoading &&
+    !runnerStatus.data?.exists &&
+    !createRunner.isPending &&
+    !needsReauth && (
+      <div className="space-y-3">
+        <p className="text-sm text-text-secondary">
+          GHAGGA uses a GitHub Actions runner in your account for static analysis (Semgrep, Trivy,
+          PMD/CPD). This creates a public repository named
+          <code className="mx-1 rounded bg-surface-bg px-1 text-xs">ghagga-runner</code>
+          in your GitHub account.
         </p>
+        <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
+          <p className="text-xs text-yellow-300">
+            This requires the <code>public_repo</code> OAuth scope, which grants write access to
+            your public repositories. The token is only used server-side to create the runner repo
+            and configure its secrets.
+          </p>
+        </div>
+        <button onClick={() => createRunner.mutate()} className="btn-primary">
+          Enable Runner
+        </button>
       </div>
-      <button
-        onClick={() => createRunner.mutate()}
-        className="btn-primary"
-      >
-        Enable Runner
-      </button>
-    </div>
-  )}
+    )}
 
   {/* State: creating */}
   {createRunner.isPending && (
@@ -841,14 +886,11 @@ The runner section is placed **before** the Static Analysis card (since the runn
       <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
         <p className="text-sm text-yellow-300">
           Your session needs to be refreshed to enable the runner. The
-          <code className="mx-1">public_repo</code> scope is required to create
-          the runner repository.
+          <code className="mx-1">public_repo</code> scope is required to create the runner
+          repository.
         </p>
       </div>
-      <button
-        onClick={() => reAuthenticate()}
-        className="btn-primary"
-      >
+      <button onClick={() => reAuthenticate()} className="btn-primary">
         Re-authenticate
       </button>
     </div>
@@ -862,15 +904,12 @@ The runner section is placed **before** the Static Analysis card (since the runn
           Failed to create runner repository. Please try again.
         </p>
       </div>
-      <button
-        onClick={() => createRunner.mutate()}
-        className="btn-primary"
-      >
+      <button onClick={() => createRunner.mutate()} className="btn-primary">
         Retry
       </button>
     </div>
   )}
-</Card>
+</Card>;
 ```
 
 #### Scope Error Detection Logic
@@ -890,7 +929,9 @@ useEffect(() => {
           setNeedsReauth(true);
           return;
         }
-      } catch { /* not JSON */ }
+      } catch {
+        /* not JSON */
+      }
     }
     setNeedsReauth(false);
   }
@@ -924,7 +965,12 @@ vi.mock('../github/runner.js', () => ({
   createRunnerRepo: (...args: unknown[]) => mockCreateRunnerRepo(...args),
   setRunnerSecret: (...args: unknown[]) => mockSetRunnerSecret(...args),
   RunnerCreationError: class RunnerCreationError extends Error {
-    constructor(public code: string, message: string, public retryAfter?: number, public repoFullName?: string) {
+    constructor(
+      public code: string,
+      message: string,
+      public retryAfter?: number,
+      public repoFullName?: string,
+    ) {
       super(message);
       this.name = 'RunnerCreationError';
     }
@@ -934,29 +980,29 @@ vi.mock('../github/runner.js', () => ({
 
 ### Test Matrix
 
-| Layer | Suite | What to Test | Approach |
-|-------|-------|-------------|----------|
-| Unit | `runner.ts` | `createRunnerRepo()` — all error codes, polling, timeout | Mock `fetch` globally, verify API call sequence |
-| Unit | `runner.ts` | `RunnerCreationError` construction | Direct instantiation |
-| Integration | `api.test.ts` | `GET /api/runner/status` — repo exists | Mock `discoverRunnerRepo` → return value |
-| Integration | `api.test.ts` | `GET /api/runner/status` — repo not found | Mock `discoverRunnerRepo` → return null |
-| Integration | `api.test.ts` | `GET /api/runner/status` — private repo | Mock with `isPrivate: true` |
-| Integration | `api.test.ts` | `GET /api/runner/status` — GitHub API error | Mock `discoverRunnerRepo` → throw |
-| Integration | `api.test.ts` | `POST /api/runner/create` — happy path | Mock `createRunnerRepo` → success |
-| Integration | `api.test.ts` | `POST /api/runner/create` — already exists (pre-check) | Mock → throw `already_exists` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — already exists (422) | Mock → throw `already_exists` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — insufficient scope | Mock → throw `insufficient_scope` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — rate limited | Mock → throw `rate_limited` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — template unavailable | Mock → throw `template_unavailable` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — org permission denied | Mock → throw `org_permission_denied` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — creation timeout | Mock → throw `creation_timeout` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — secret setup failed | Mock → return `secretConfigured: false` |
-| Integration | `api.test.ts` | `POST /api/runner/create` — private repo warning | Mock → return `isPrivate: true` |
-| Integration | `api.test.ts` | `POST /api/runner/configure-secret` — happy path | Mock `discoverRunnerRepo` + `setRunnerSecret` |
-| Integration | `api.test.ts` | `POST /api/runner/configure-secret` — repo not found | Mock `discoverRunnerRepo` → null |
-| Integration | `api.test.ts` | `POST /api/runner/configure-secret` — secret set fails | Mock `setRunnerSecret` → throw |
-| Integration | `api.test.ts` | Token extraction | Verify mock user receives correct auth header |
-| Integration | `oauth.ts` | Scope change | Verify `scope: 'public_repo'` in the Device Flow request body |
+| Layer       | Suite         | What to Test                                             | Approach                                                      |
+| ----------- | ------------- | -------------------------------------------------------- | ------------------------------------------------------------- |
+| Unit        | `runner.ts`   | `createRunnerRepo()` — all error codes, polling, timeout | Mock `fetch` globally, verify API call sequence               |
+| Unit        | `runner.ts`   | `RunnerCreationError` construction                       | Direct instantiation                                          |
+| Integration | `api.test.ts` | `GET /api/runner/status` — repo exists                   | Mock `discoverRunnerRepo` → return value                      |
+| Integration | `api.test.ts` | `GET /api/runner/status` — repo not found                | Mock `discoverRunnerRepo` → return null                       |
+| Integration | `api.test.ts` | `GET /api/runner/status` — private repo                  | Mock with `isPrivate: true`                                   |
+| Integration | `api.test.ts` | `GET /api/runner/status` — GitHub API error              | Mock `discoverRunnerRepo` → throw                             |
+| Integration | `api.test.ts` | `POST /api/runner/create` — happy path                   | Mock `createRunnerRepo` → success                             |
+| Integration | `api.test.ts` | `POST /api/runner/create` — already exists (pre-check)   | Mock → throw `already_exists`                                 |
+| Integration | `api.test.ts` | `POST /api/runner/create` — already exists (422)         | Mock → throw `already_exists`                                 |
+| Integration | `api.test.ts` | `POST /api/runner/create` — insufficient scope           | Mock → throw `insufficient_scope`                             |
+| Integration | `api.test.ts` | `POST /api/runner/create` — rate limited                 | Mock → throw `rate_limited`                                   |
+| Integration | `api.test.ts` | `POST /api/runner/create` — template unavailable         | Mock → throw `template_unavailable`                           |
+| Integration | `api.test.ts` | `POST /api/runner/create` — org permission denied        | Mock → throw `org_permission_denied`                          |
+| Integration | `api.test.ts` | `POST /api/runner/create` — creation timeout             | Mock → throw `creation_timeout`                               |
+| Integration | `api.test.ts` | `POST /api/runner/create` — secret setup failed          | Mock → return `secretConfigured: false`                       |
+| Integration | `api.test.ts` | `POST /api/runner/create` — private repo warning         | Mock → return `isPrivate: true`                               |
+| Integration | `api.test.ts` | `POST /api/runner/configure-secret` — happy path         | Mock `discoverRunnerRepo` + `setRunnerSecret`                 |
+| Integration | `api.test.ts` | `POST /api/runner/configure-secret` — repo not found     | Mock `discoverRunnerRepo` → null                              |
+| Integration | `api.test.ts` | `POST /api/runner/configure-secret` — secret set fails   | Mock `setRunnerSecret` → throw                                |
+| Integration | `api.test.ts` | Token extraction                                         | Verify mock user receives correct auth header                 |
+| Integration | `oauth.ts`    | Scope change                                             | Verify `scope: 'public_repo'` in the Device Flow request body |
 
 ### Example Test Case
 
@@ -1019,7 +1065,6 @@ describe('GET /api/runner/status', () => {
 ### Phase 2: Reduce GitHub App Permissions (Manual)
 
 After deployment is verified working:
-
 1. Go to GitHub App settings
 2. Remove `Administration: Read & Write` permission
 3. Remove `Contents: Read & Write` permission

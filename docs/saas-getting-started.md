@@ -15,7 +15,6 @@ Go from zero to your first AI code review in under 5 minutes. This guide walks y
 ## Step 1: Install the GitHub App
 
 **[Install the GHAGGA GitHub App](https://github.com/apps/ghagga-review/installations/new)**
-
 1. Click the link above — it opens the GitHub App installation page
 2. Choose which repositories GHAGGA should have access to:
    - **All repositories** — GHAGGA reviews PRs on every repo in your account
@@ -24,13 +23,13 @@ Go from zero to your first AI code review in under 5 minutes. This guide walks y
 
 ### What permissions does the App request?
 
-| Permission | Access | Why |
-|-----------|--------|-----|
-| **Pull requests** | Read and write | Fetch PR diffs and post review comments |
-| **Contents** | Read and write | Inject the static-analysis workflow at `.github/workflows/ghagga.yml` |
-| **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
-| **Issues** | Read and write | Issue-triage (`/ghagga triage`): read the issue + its comments, post the approved draft comment |
-| **Metadata** | Read-only | List repositories (auto-selected by GitHub) |
+| Permission        | Access         | Why                                                                                             |
+| ----------------- | -------------- | ----------------------------------------------------------------------------------------------- |
+| **Pull requests** | Read and write | Fetch PR diffs and post review comments                                                         |
+| **Contents**      | Read and write | Inject the static-analysis workflow at `.github/workflows/ghagga.yml`                           |
+| **Actions**       | Write          | Dispatch the injected workflow via `workflow_dispatch`                                          |
+| **Issues**        | Read and write | Issue-triage (`/ghagga triage`): read the issue + its comments, post the approved draft comment |
+| **Metadata**      | Read-only      | List repositories (auto-selected by GitHub)                                                     |
 
 > **Note**: GHAGGA does **not** request the `Secrets` permission. LLM API keys are encrypted with AES-256-GCM and stored inside GHAGGA's own database, not in GitHub repository secrets. The per-dispatch callback secret travels via `workflow_dispatch` inputs, not via repo secrets.
 
@@ -43,7 +42,6 @@ Go from zero to your first AI code review in under 5 minutes. This guide walks y
 ## Step 2: Open the Dashboard
 
 **[Open the GHAGGA Dashboard](https://ghagga.javierzader.com/app/)**
-
 1. Click **"Login"** on the Dashboard
 2. You'll be redirected to GitHub's **OAuth Web Flow** consent screen
 3. Approve the GHAGGA OAuth app
@@ -61,11 +59,11 @@ Navigate to **Dashboard** > **Settings** (or **Global Settings** for installatio
 
 ### Choose a provider
 
-| Mode | What you configure | API key |
-|------|--------------------|---------|
-| `gateway` | mcp-llm-bridge URL and the model the bridge should call | Gateway credential |
-| `cli-bridge` | A local CLI (Claude, Codex, OpenCode, Gemini, Copilot) | Only if that CLI asks for one |
-| `ollama` | A local Ollama model | No |
+| Mode         | What you configure                                      | API key                       |
+| ------------ | ------------------------------------------------------- | ----------------------------- |
+| `gateway`    | mcp-llm-bridge URL and the model the bridge should call | Gateway credential            |
+| `cli-bridge` | A local CLI (Claude, Codex, OpenCode, Gemini, Copilot)  | Only if that CLI asks for one |
+| `ollama`     | A local Ollama model                                    | No                            |
 
 Dashboard login does not select a model. Add a provider chain before a review calls an LLM. Legacy provider names are normalized to `gateway`.
 
@@ -97,9 +95,9 @@ There is nothing to enable manually — when GHAGGA dispatches a review, it inje
 
 **What you get**:
 
-| Component | Behavior |
-|-----------|---------|
-| AI review (LLM analysis) | Always runs once a provider is configured |
+| Component                         | Behavior                                       |
+| --------------------------------- | ---------------------------------------------- |
+| AI review (LLM analysis)          | Always runs once a provider is configured      |
 | Static analysis (16 runner tools) | Runs on every dispatch via the inline workflow |
 
 The inline workflow runs the 16 runner-bundled tools: Semgrep, Trivy, CPD, Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, Hadolint, and zizmor. The full plugin registry is 17; SonarQube is MCP-only and stays inert unless an MCP server is configured. Tools are automatically selected based on the detected tech stack in your PR.
@@ -118,7 +116,6 @@ The workflow uses **GitHub Actions free minutes** on public repos (unlimited; 7G
 ### What to expect
 
 GHAGGA posts a **review comment** on your PR with:
-
 - **Status**: `PASSED`, `FAILED`, `NEEDS_HUMAN_REVIEW`, or `SKIPPED`
 - **Summary**: A brief overview of the changes
 - **Findings**: Individual issues with severity (Critical, High, Medium, Low, Info), description, file location, and suggested fix
@@ -166,11 +163,11 @@ sequenceDiagram
 
 ## What Happens Without Configuration
 
-| State | What you get |
-|-------|-------------|
-| App installed, **no LLM provider configured** | No review comment posted — the server has no AI provider to analyze the diff |
+| State                                                      | What you get                                                                                                                           |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| App installed, **no LLM provider configured**              | No review comment posted — the server has no AI provider to analyze the diff                                                           |
 | App installed, **LLM configured, inline workflow blocked** | AI-only review — branch protection or missing `Contents: write` prevents workflow injection; review still runs without static analysis |
-| App installed, **LLM configured, normal setup** | Full review — static analysis findings + AI review + project memory |
+| App installed, **LLM configured, normal setup**            | Full review — static analysis findings + AI review + project memory                                                                    |
 
 ---
 
@@ -199,12 +196,12 @@ sequenceDiagram
 
 ## Cost Summary
 
-| Component | Cost |
-|-----------|------|
-| **GHAGGA** | Free and open source (MIT license) |
-| **Hosted SaaS** | Free to use |
-| **gateway / cli-bridge** | You pay whoever serves that model |
-| **Ollama** | Local. No API key |
+| Component                                 | Cost                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------- |
+| **GHAGGA**                                | Free and open source (MIT license)                                              |
+| **Hosted SaaS**                           | Free to use                                                                     |
+| **gateway / cli-bridge**                  | You pay whoever serves that model                                               |
+| **Ollama**                                | Local. No API key                                                               |
 | **Static analysis** (Semgrep, Trivy, CPD) | Free — runs on GitHub Actions runners (unlimited free minutes for public repos) |
 
 ---

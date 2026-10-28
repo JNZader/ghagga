@@ -5,12 +5,14 @@
 Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest) a una infraestructura 100% self-hosted usando Coolify en Hetzner CX21.
 
 ### Motivación
+
 1. **Seguridad**: Todos los secretos fueron expuestos públicamente en chat (DATABASE_URL, GITHUB_PRIVATE_KEY, ENCRYPTION_KEY, INNGEST keys, etc.)
 2. **Control**: Eliminar vendor lock-in y dependencias externas
 3. **Costo**: Reducir de ~$30-50/mes a ~$7.55/mes fijos
 4. **Rendimiento**: 0ms latency a DB/Queue (local network vs SaaS)
 
 ### Estado actual problemático
+
 - Render: Límites de minutos, bloqueos frecuentes
 - Northflank: Errores OpenSSL persistentes, complejidad innecesaria
 - Neon: Base de datos externa con latencia y costo
@@ -19,6 +21,7 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 ## Scope
 
 ### In Scope
+
 - [ ] Crear VPS Hetzner CX21 (2vCPU, 4GB RAM, 40GB SSD)
 - [ ] Instalar Coolify v4 con SSL (Let's Encrypt)
 - [ ] Configurar DNS en Cloudflare (coolify.tudominio.com, api.tudominio.com)
@@ -38,6 +41,7 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 - [ ] Eliminar cuentas viejas: Neon, Inngest, Render, Northflank
 
 ### Out of Scope
+
 - Migración de datos históricos de Neon (empezar fresh)
 - Configuración de backups automatizados a S3 (fase 2)
 - Monitoreo avanzado (Uptime Kuma, etc.)
@@ -47,21 +51,25 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 ## Approach
 
 ### Fase 1: Infraestructura (30 min)
+
 1. Crear VPS Hetzner CX21
 2. Configurar DNS A records en Cloudflare
 3. Instalar Coolify vía SSH
 4. Configurar dominio y SSL
 
 ### Fase 2: GitHub Integration (10 min)
+
 1. Conectar GitHub App a Coolify
 2. Seleccionar repositorio ghagga
 
 ### Fase 3: Base de Datos (15 min)
+
 1. Crear PostgreSQL service en Coolify
 2. Crear Redis service en Coolify
 3. Anotar connection strings
 
 ### Fase 4: Código (45 min)
+
 1. Remover Inngest (`pnpm remove inngest`)
 2. Instalar BullMQ (`pnpm add bullmq ioredis`)
 3. Crear `apps/server/src/lib/redis.ts`
@@ -74,22 +82,26 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 10. Update `.env.example`
 
 ### Fase 5: Deploy (20 min)
+
 1. Push código a GitHub
 2. Configurar variables de entorno en Coolify
 3. Deploy aplicación
 4. Verificar /health endpoint
 
 ### Fase 6: GitHub App Update (10 min)
+
 1. Cambiar Webhook URL a api.tudominio.com
 2. Actualizar Homepage URL
 3. Verificar nuevos secrets
 
 ### Fase 7: Testing (15 min)
+
 1. Probar "ghagga review" en PR
 2. Verificar cola BullMQ procesa
 3. Verificar comentario se postea
 
 ### Fase 8: Cleanup (10 min)
+
 1. Archivar/eliminar Neon
 2. Archivar/eliminar Inngest (ya hecho)
 3. Cancelar Render
@@ -97,51 +109,55 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
+| Area                                | Impact   | Description                                       |
+| ----------------------------------- | -------- | ------------------------------------------------- |
 | `apps/server/src/routes/webhook.ts` | Modified | Cambiar Inngest.send() por BullMQ enqueueReview() |
-| `apps/server/src/lib/` | New | redis.ts - conexión a Redis |
-| `apps/server/src/queues/` | New | review.ts - definición de cola BullMQ |
-| `apps/server/src/workers/` | New | review.ts - worker processor |
-| `apps/server/Dockerfile` | New | Multi-stage build para server/worker |
-| `apps/server/start.sh` | New | Script para iniciar server o worker |
-| `docker-compose.yml` | New | Stack completo con 5 servicios |
-| `package.json` | Modified | Remover inngest, agregar bullmq ioredis |
-| `.env.example` | Modified | Nuevas variables REDIS_*, sin INNGEST_* |
-| `.github/` | None | No cambios |
+| `apps/server/src/lib/`              | New      | redis.ts - conexión a Redis                       |
+| `apps/server/src/queues/`           | New      | review.ts - definición de cola BullMQ             |
+| `apps/server/src/workers/`          | New      | review.ts - worker processor                      |
+| `apps/server/Dockerfile`            | New      | Multi-stage build para server/worker              |
+| `apps/server/start.sh`              | New      | Script para iniciar server o worker               |
+| `docker-compose.yml`                | New      | Stack completo con 5 servicios                    |
+| `package.json`                      | Modified | Remover inngest, agregar bullmq ioredis           |
+| `.env.example`                      | Modified | Nuevas variables REDIS_*, sin INNGEST_*           |
+| `.github/`                          | None     | No cambios                                        |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Downtime durante migración | High | Medium | Hacer en horario bajo; DNS TTL bajo (5 min) |
-| BullMQ no procesa jobs | Medium | High | Testing exhaustivo local; tener rollback listo |
-| GitHub webhook format issues | Medium | Medium | Verificar formato exacto; logs en tiempo real |
-| PostgreSQL connection issues | Low | High | Usar hostname de servicio Coolify; health checks |
-| Data loss (si hay datos importantes) | Low | High | Exportar backup antes de eliminar Neon |
-| SSL/TLS cert issues | Low | Medium | Let's Encrypt automático; Cloudflare fallback |
-| Private key format en Coolify | Medium | High | Probar formato multilinea; usar textarea en UI |
+| Risk                                 | Likelihood | Impact | Mitigation                                       |
+| ------------------------------------ | ---------- | ------ | ------------------------------------------------ |
+| Downtime durante migración           | High       | Medium | Hacer en horario bajo; DNS TTL bajo (5 min)      |
+| BullMQ no procesa jobs               | Medium     | High   | Testing exhaustivo local; tener rollback listo   |
+| GitHub webhook format issues         | Medium     | Medium | Verificar formato exacto; logs en tiempo real    |
+| PostgreSQL connection issues         | Low        | High   | Usar hostname de servicio Coolify; health checks |
+| Data loss (si hay datos importantes) | Low        | High   | Exportar backup antes de eliminar Neon           |
+| SSL/TLS cert issues                  | Low        | Medium | Let's Encrypt automático; Cloudflare fallback    |
+| Private key format en Coolify        | Medium     | High   | Probar formato multilinea; usar textarea en UI   |
 
 ## Rollback Plan
 
 ### Si falla el deploy:
+
 1. Mantener GitHub App webhook URL vieja activa
 2. No eliminar Neon hasta verificar funciona todo
 3. Coolify permite rollback a versión anterior (1 click)
 4. Revertir código: git revert del commit de migración
 
 ### Si BullMQ no funciona:
+
 1. Volver a Inngest temporalmente (revertir cambios)
 2. Actualizar webhook URL en GitHub App
 3. Debug local con BullMQ
 
 ### Rollback DNS:
+
 1. Cambiar DNS A record de `api.tudominio.com` a IP vieja (Render/Northflank)
 2. TTL de 5 min permite rollback rápido
 
 ## Dependencies
 
 ### Blockers
+
 - ✅ GitHub App secrets rotados (completado)
 - ✅ Inngest archivado (completado)
 - ⏳ Terminal SSH disponible
@@ -149,6 +165,7 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 - ⏳ Dominio en Cloudflare
 
 ### External Services
+
 - Hetzner Cloud (VPS)
 - Cloudflare (DNS)
 - GitHub (repositorio y App)
@@ -157,6 +174,7 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 ## Success Criteria
 
 ### Funcionales
+
 - [ ] VPS Hetzner CX21 creado y accesible por SSH
 - [ ] Coolify instalado y accesible en https://coolify.tudominio.com
 - [ ] PostgreSQL corriendo localmente en Coolify
@@ -169,6 +187,7 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 - [ ] Bull Dashboard accesible (monitoreo de colas)
 
 ### Seguridad
+
 - [ ] Cuenta Neon eliminada
 - [ ] Cuenta Inngest archivada/eliminada
 - [ ] Servicio Render cancelado
@@ -176,25 +195,27 @@ Migrar GHAGGA de servicios SaaS comprometidos (Render, Northflank, Neon, Inngest
 - [ ] Ningún secret expuesto sigue en uso
 
 ### Performance
+
 - [ ] Latencia a DB < 1ms (vs 20-50ms en Neon)
 - [ ] Jobs procesados en < 30s (vs variable en Inngest)
 - [ ] Zero costo variable (solo VPS fijo)
 
 ### Costo
+
 - [ ] Costo mensual <= $7.55 (VPS + dominio)
 
 ## Timeline Estimado
 
-| Fase | Duración | Acumulado |
-|------|----------|-----------|
-| Infraestructura | 30 min | 30 min |
-| GitHub Integration | 10 min | 40 min |
-| Base de Datos | 15 min | 55 min |
-| Código | 45 min | 1h 40min |
-| Deploy | 20 min | 2h |
-| GitHub App Update | 10 min | 2h 10min |
-| Testing | 15 min | 2h 25min |
-| Cleanup | 10 min | 2h 35min |
+| Fase               | Duración | Acumulado |
+| ------------------ | -------- | --------- |
+| Infraestructura    | 30 min   | 30 min    |
+| GitHub Integration | 10 min   | 40 min    |
+| Base de Datos      | 15 min   | 55 min    |
+| Código             | 45 min   | 1h 40min  |
+| Deploy             | 20 min   | 2h        |
+| GitHub App Update  | 10 min   | 2h 10min  |
+| Testing            | 15 min   | 2h 25min  |
+| Cleanup            | 10 min   | 2h 35min  |
 
 **Total estimado**: ~2.5 horas
 

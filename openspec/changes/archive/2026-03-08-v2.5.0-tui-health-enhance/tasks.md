@@ -95,8 +95,7 @@
       - `message.text` = finding message
       - `level` mapping: critical/high → `"error"`, medium → `"warning"`, low/info → `"note"`
       - `locations[0].physicalLocation.artifactLocation.uri` = relative file path
-      - `locations[0].physicalLocation.region.startLine` = line number (omit region if no line)
-    - Handle zero findings → empty `results[]`, valid document
+      - `locations[0].physicalLocation.region.startLine` = line number (omit region if no line) - Handle zero findings → empty `results[]`, valid document
   - Create barrel export `packages/core/src/sarif/index.ts`
   - **Files**: `packages/core/src/sarif/builder.ts` (new), `packages/core/src/sarif/index.ts` (new)
   - **Verify**: `npx tsc --noEmit` in `packages/core`
@@ -126,6 +125,7 @@
   - Add `outputFormat?: 'json' | 'sarif' | 'markdown'` to `ReviewOptions` interface
   - Import `buildSarif` from `ghagga-core`
   - After pipeline completes (Step 6 area), replace existing format conditional with switch:
+
     ```
     switch (options.outputFormat) {
       case 'json':     console.log(JSON.stringify(result, null, 2)); break;
@@ -293,8 +293,7 @@
     - If `input.enhance === true` and static findings exist:
       - Call `enhanceFindings({ findings: staticFindings, provider, model, apiKey })`
       - If successful, merge via `mergeEnhanceResult()`, set `result.enhanced = true`, attach `result.enhanceMetadata`
-      - If failed, set `result.enhanced = false`, emit progress warning "AI enhance failed: {reason}"
-    - If `input.enhance !== true`, skip (no AI call)
+      - If failed, set `result.enhanced = false`, emit progress warning "AI enhance failed: {reason}" - If `input.enhance !== true`, skip (no AI call)
   - **Files**: `packages/core/src/pipeline.ts`
   - **Verify**: `npx tsc --noEmit` in `packages/core`
   - **Post**: `pnpm lint:fix`
@@ -424,6 +423,7 @@
 - [x] 5.6 Register health command in `apps/cli/src/index.ts` (~20 lines added)
   - Import `healthCommand` from `./commands/health.js`
   - Add command registration after the review command:
+
     ```
     program
       .command('health')
@@ -527,8 +527,7 @@
         5. Call `ensureLabel()` with `ghagga-review` label (ignore errors)
         6. If `--issue new`: call `createIssue()`, print URL
         7. If `--issue <number>`: call `createComment()`, print comment URL
-        8. Print URL to stderr if `--output` is set (stdout reserved for format), else print to stdout via `tui.log.success()`
-      - On failure: warn but don't block exit (review still succeeds)
+        8. Print URL to stderr if `--output` is set (stdout reserved for format), else print to stdout via `tui.log.success()` - On failure: warn but don't block exit (review still succeeds)
   - Update `ReviewCommandOptions` in `index.ts` to include `issue?: string`
   - **Files**: `apps/cli/src/index.ts`, `apps/cli/src/commands/review.ts`
   - **Verify**: `npx tsc --noEmit` in `apps/cli`
@@ -542,20 +541,16 @@
       - SSH URL → correct owner/repo
       - SSH protocol URL → correct owner/repo
       - URL without `.git` → correct owner/repo
-      - Non-GitHub URL → throws
-    - `createIssue()`:
+      - Non-GitHub URL → throws - `createIssue()`:
       - Mock 201 response → returns `{ url, number }`
       - Mock 401 → throws auth error
       - Mock 410 → throws "issues disabled" error
-      - Mock 429 → throws rate limit error
-    - `createComment()`:
+      - Mock 429 → throws rate limit error - `createComment()`:
       - Mock 201 response → returns `{ url }`
-      - Mock 404 → throws "issue not found" error
-    - `ensureLabel()`:
+      - Mock 404 → throws "issue not found" error - `ensureLabel()`:
       - Mock 201 → label created
       - Mock 422 → silently ignored (already exists)
-      - Mock 403 → silently ignored (insufficient permissions)
-    - `formatIssueBody()`:
+      - Mock 403 → silently ignored (insufficient permissions) - `formatIssueBody()`:
       - Contains `<details>` tag
       - Contains status and finding counts
       - Contains GHAGGA version
@@ -619,31 +614,32 @@
 
 ## Summary
 
-| Phase | Tasks | Description |
-|-------|-------|-------------|
-| 1. TUI Foundation | 5 | chalk adapter, tui.ts extensions, theme, format helpers, unit tests |
-| 2. Output Formats | 8 | SARIF types/builder, --output flag, format routing, deprecate --format, tests |
-| 3. TUI Polish | 5 | step progress, section dividers, colored severity, box summary, tests |
-| 4. AI Enhance | 8 | enhance types/prompt/function, pipeline integration, CLI flags, tests |
-| 5. Health Command | 9 | score/trends/recommendations modules, CLI command, registration, tests, line budget |
-| 6. Issue Flag | 3 | GitHub API client, --issue wiring, tests |
-| 7. Verification | 8 | full tests, typecheck, ncc build, encapsulation checks, lint, smoke tests |
-| **Total** | **46** | |
+| Phase             | Tasks  | Description                                                                         |
+| ----------------- | ------ | ----------------------------------------------------------------------------------- |
+| 1. TUI Foundation | 5      | chalk adapter, tui.ts extensions, theme, format helpers, unit tests                 |
+| 2. Output Formats | 8      | SARIF types/builder, --output flag, format routing, deprecate --format, tests       |
+| 3. TUI Polish     | 5      | step progress, section dividers, colored severity, box summary, tests               |
+| 4. AI Enhance     | 8      | enhance types/prompt/function, pipeline integration, CLI flags, tests               |
+| 5. Health Command | 9      | score/trends/recommendations modules, CLI command, registration, tests, line budget |
+| 6. Issue Flag     | 3      | GitHub API client, --issue wiring, tests                                            |
+| 7. Verification   | 8      | full tests, typecheck, ncc build, encapsulation checks, lint, smoke tests           |
+| **Total**         | **46** |                                                                                     |
 
 ### Estimated New Code (excluding tests)
 
-| Feature | ~Lines |
-|---------|--------|
-| TUI Foundation (chalk.ts + tui.ts + theme.ts) | ~135 |
-| Output Formats (SARIF builder + types + routing) | ~350 |
-| AI Enhance (types + prompt + enhance + pipeline) | ~400 |
-| Health (scoring + trends + recommendations + command) | ~950 |
-| Issue (github-api.ts + review.ts wiring) | ~200 |
-| Wiring (index.ts changes) | ~100 |
-| **Total new code** | **~2,135** |
-| **Test code** | **~870** |
+| Feature                                               | ~Lines     |
+| ----------------------------------------------------- | ---------- |
+| TUI Foundation (chalk.ts + tui.ts + theme.ts)         | ~135       |
+| Output Formats (SARIF builder + types + routing)      | ~350       |
+| AI Enhance (types + prompt + enhance + pipeline)      | ~400       |
+| Health (scoring + trends + recommendations + command) | ~950       |
+| Issue (github-api.ts + review.ts wiring)              | ~200       |
+| Wiring (index.ts changes)                             | ~100       |
+| **Total new code**                                    | **~2,135** |
+| **Test code**                                         | **~870**   |
 
 ### Key Constraints Reminder
+
 - Sub-agents don't run Biome → `pnpm lint:fix` needed after each implementation task
 - Health total must stay ≤ 1,500 lines (target: ~950)
 - All tests use vitest

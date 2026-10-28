@@ -3,7 +3,6 @@
 ## Intent
 
 La autenticación del Dashboard tiene dos problemas que degradan la experiencia del usuario:
-
 1. **Reinstalación fantasma de la GitHub App**: Cuando un usuario inicia sesión desde un dispositivo/navegador nuevo, el Dashboard puede redirigirlo a reinstalar la GitHub App aunque ya esté instalada. Esto ocurre porque la tabla `github_user_mappings` tiene un constraint UNIQUE en `github_user_id`, y cuando la App se reinstala (nuevo `installation_id`), los mappings antiguos no se limpian. El auto-discovery en `authMiddleware` solo se ejecuta cuando NO existen mappings — si hay mappings obsoletos apuntando a una instalación muerta, no re-descubre. Además, en un dispositivo nuevo sin sesión en localStorage, el flujo no distingue entre "necesitas loguearte" y "necesitas instalar la App", enviando al usuario por el flujo completo de instalación.
 
 2. **Device Flow OAuth es engorroso**: El login actual usa OAuth Device Flow (código + github.com/login/device + pegar código). Se eligió porque el Dashboard es una SPA estática en GitHub Pages sin backend propio. Pero el servidor en Render ya existe y puede servir como endpoint de callback OAuth.
@@ -88,32 +87,32 @@ Evaluar si el UNIQUE constraint en `github_user_id` de `github_user_mappings` de
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `apps/server/src/routes/oauth.ts` | Modified | Nuevos endpoints Web Flow (`/auth/login`, `/auth/callback`). Mantener endpoints Device Flow existentes. |
-| `apps/server/src/middleware/auth.ts` | Modified | Validación de instalaciones activas, limpieza de mappings obsoletos, re-discovery. |
-| `apps/server/src/routes/webhook.ts` | Modified | Handler para evento `installation.deleted` que limpia mappings. |
-| `apps/dashboard/src/pages/Login.tsx` | Modified | Reemplazar UI Device Flow por botón redirect + fallback PAT. |
-| `apps/dashboard/src/pages/AuthCallback.tsx` | New | Componente que extrae token del fragment y completa el login. |
-| `apps/dashboard/src/lib/auth.tsx` | Modified | Integrar nueva ruta de callback, separar lógica login vs install. |
-| `apps/dashboard/src/lib/oauth.ts` | Modified | Eliminar lógica Device Flow del frontend. Mantener `fetchGitHubUser` y `CLIENT_ID`. |
-| `apps/dashboard/src/App.tsx` (o router) | Modified | Agregar ruta `#/auth/callback` al HashRouter. |
-| `packages/db/src/schema.ts` | Modified | Cambiar UNIQUE constraint de `github_user_id` a `(github_user_id, installation_id)`. |
-| `packages/db/src/queries.ts` | Modified | Agregar `deleteStaleUserMappings`, `deleteMappingsByInstallation`. Ajustar `upsertUserMapping`. |
-| Render Environment | Config | Agregar variable de entorno `CLIENT_SECRET`. |
-| GitHub OAuth App Settings | Config | Configurar callback URL: `https://ghagga.onrender.com/auth/callback`. |
+| Area                                        | Impact   | Description                                                                                             |
+| ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| `apps/server/src/routes/oauth.ts`           | Modified | Nuevos endpoints Web Flow (`/auth/login`, `/auth/callback`). Mantener endpoints Device Flow existentes. |
+| `apps/server/src/middleware/auth.ts`        | Modified | Validación de instalaciones activas, limpieza de mappings obsoletos, re-discovery.                      |
+| `apps/server/src/routes/webhook.ts`         | Modified | Handler para evento `installation.deleted` que limpia mappings.                                         |
+| `apps/dashboard/src/pages/Login.tsx`        | Modified | Reemplazar UI Device Flow por botón redirect + fallback PAT.                                            |
+| `apps/dashboard/src/pages/AuthCallback.tsx` | New      | Componente que extrae token del fragment y completa el login.                                           |
+| `apps/dashboard/src/lib/auth.tsx`           | Modified | Integrar nueva ruta de callback, separar lógica login vs install.                                       |
+| `apps/dashboard/src/lib/oauth.ts`           | Modified | Eliminar lógica Device Flow del frontend. Mantener `fetchGitHubUser` y `CLIENT_ID`.                     |
+| `apps/dashboard/src/App.tsx` (o router)     | Modified | Agregar ruta `#/auth/callback` al HashRouter.                                                           |
+| `packages/db/src/schema.ts`                 | Modified | Cambiar UNIQUE constraint de `github_user_id` a `(github_user_id, installation_id)`.                    |
+| `packages/db/src/queries.ts`                | Modified | Agregar `deleteStaleUserMappings`, `deleteMappingsByInstallation`. Ajustar `upsertUserMapping`.         |
+| Render Environment                          | Config   | Agregar variable de entorno `CLIENT_SECRET`.                                                            |
+| GitHub OAuth App Settings                   | Config   | Configurar callback URL: `https://ghagga.onrender.com/auth/callback`.                                   |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| `CLIENT_SECRET` se filtra en logs o código | Low | NUNCA commitearlo. Solo como env var en Render. Revisar que no se loguee en ningún middleware. El secret no viaja al frontend. |
-| Redirect cross-domain falla por CORS/CSP | Low | No es un fetch cross-origin, es un redirect HTTP 302. Los redirects no están sujetos a CORS. Verificar que GitHub Pages no tenga CSP headers que bloqueen navigación. |
-| Token en URL fragment visible en historial del browser | Medium | Los fragments (#) no se envían en requests HTTP, pero sí aparecen en el historial local. `AuthCallback` debe limpiar la URL (con `history.replaceState`) inmediatamente después de extraer el token. |
-| State parameter storage en servidor stateless | Medium | Si Render tiene múltiples instancias, el state guardado en memoria de una instancia no estará en otra. Opciones: (a) Render free tier es una sola instancia, (b) usar state firmado (HMAC) que no requiere server-side storage. Preferir (b) para robustez. |
-| GitHub API rate limit al validar instalaciones en auth middleware | Low | Cachear el resultado de validación de instalaciones por un tiempo razonable (ej. 5 min). No validar en cada request. |
-| Migración del constraint UNIQUE rompe datos existentes | Low | La migración debe limpiar duplicados antes de crear el nuevo constraint. Verificar con query de duplicados primero. |
-| Render cold start causa timeout en el redirect flow | Medium | Render free tier apaga la instancia tras inactividad. Un cold start puede tardar 30-60s. Mitigación: el botón de login puede mostrar un spinner o mensaje "Conectando con el servidor..." mientras espera. Alternativa: mantener Device Flow como fallback visible si el servidor no responde rápido. |
+| Risk                                                              | Likelihood | Mitigation                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLIENT_SECRET` se filtra en logs o código                        | Low        | NUNCA commitearlo. Solo como env var en Render. Revisar que no se loguee en ningún middleware. El secret no viaja al frontend.                                                                                                                                                                        |
+| Redirect cross-domain falla por CORS/CSP                          | Low        | No es un fetch cross-origin, es un redirect HTTP 302. Los redirects no están sujetos a CORS. Verificar que GitHub Pages no tenga CSP headers que bloqueen navigación.                                                                                                                                 |
+| Token en URL fragment visible en historial del browser            | Medium     | Los fragments (#) no se envían en requests HTTP, pero sí aparecen en el historial local. `AuthCallback` debe limpiar la URL (con `history.replaceState`) inmediatamente después de extraer el token.                                                                                                  |
+| State parameter storage en servidor stateless                     | Medium     | Si Render tiene múltiples instancias, el state guardado en memoria de una instancia no estará en otra. Opciones: (a) Render free tier es una sola instancia, (b) usar state firmado (HMAC) que no requiere server-side storage. Preferir (b) para robustez.                                           |
+| GitHub API rate limit al validar instalaciones en auth middleware | Low        | Cachear el resultado de validación de instalaciones por un tiempo razonable (ej. 5 min). No validar en cada request.                                                                                                                                                                                  |
+| Migración del constraint UNIQUE rompe datos existentes            | Low        | La migración debe limpiar duplicados antes de crear el nuevo constraint. Verificar con query de duplicados primero.                                                                                                                                                                                   |
+| Render cold start causa timeout en el redirect flow               | Medium     | Render free tier apaga la instancia tras inactividad. Un cold start puede tardar 30-60s. Mitigación: el botón de login puede mostrar un spinner o mensaje "Conectando con el servidor..." mientras espera. Alternativa: mantener Device Flow como fallback visible si el servidor no responde rápido. |
 
 ## Rollback Plan
 
@@ -130,12 +129,12 @@ Evaluar si el UNIQUE constraint en `github_user_id` de `github_user_mappings` de
 
 ## Considerations for Distribution Modes
 
-| Mode | Impact |
-|------|--------|
-| **SaaS (Dashboard)** | Principal beneficiario. Login simplificado, stale mapping cleanup. |
-| **GitHub Action** | Sin impacto. No usa OAuth — se autentica con el GITHUB_TOKEN del workflow. |
-| **CLI** | Sin impacto directo. Sigue usando Device Flow. Se beneficia de la limpieza de stale mappings en el servidor. |
-| **1-Click Deploy** | Sin impacto si usa self-hosted. Si comparte el servidor Render, se beneficia de ambos fixes. |
+| Mode                 | Impact                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **SaaS (Dashboard)** | Principal beneficiario. Login simplificado, stale mapping cleanup.                                           |
+| **GitHub Action**    | Sin impacto. No usa OAuth — se autentica con el GITHUB_TOKEN del workflow.                                   |
+| **CLI**              | Sin impacto directo. Sigue usando Device Flow. Se beneficia de la limpieza de stale mappings en el servidor. |
+| **1-Click Deploy**   | Sin impacto si usa self-hosted. Si comparte el servidor Render, se beneficia de ambos fixes.                 |
 
 ## Success Criteria
 

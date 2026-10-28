@@ -9,6 +9,7 @@ This change redesigns Settings around a **validated provider chain** and a clear
 ## Scope
 
 ### In Scope
+
 - **Provider chain with priority ordering**: Users configure 1+ LLM providers in order. Each has its own API key + model. If #1 fails (rate limit, 5xx, timeout), it falls back to #2, etc.
 - **Validate API key flow**: When the user enters a key for a provider, a "Validate" button tests it against the provider API. Only on success does the model dropdown populate with available models.
 - **Dynamic model listing**: After validating a key, fetch available models from the provider's API (or use a curated list for providers without a models endpoint).
@@ -21,6 +22,7 @@ This change redesigns Settings around a **validated provider chain** and a clear
 - **Core pipeline adaptation**: `reviewPipeline` and `inngest/review.ts` use the provider chain via `generateWithFallback`.
 
 ### Out of Scope
+
 - **Drag & drop reordering** — v1 uses simple up/down arrows or numbered list. Drag & drop is a future polish.
 - **Per-file or per-language provider overrides** — future feature.
 - **Ollama in SaaS** — explicitly excluded per user decision.
@@ -35,8 +37,8 @@ Replace the flat columns with a JSONB provider chain:
 ```typescript
 // New JSONB shape for repositories.provider_chain
 interface ProviderChainEntry {
-  provider: LLMProvider;      // 'github' | 'anthropic' | 'openai' | 'google'
-  model: string;              // 'gpt-4o-mini', 'claude-sonnet-4-20250514', etc.
+  provider: LLMProvider; // 'github' | 'anthropic' | 'openai' | 'google'
+  model: string; // 'gpt-4o-mini', 'claude-sonnet-4-20250514', etc.
   // API key stored encrypted in a separate column per provider,
   // or we can store encrypted keys per-entry in the JSONB.
   // Decision: store per-entry in JSONB for simplicity (already encrypted).
@@ -82,29 +84,29 @@ For providers without a models endpoint (Anthropic), return a curated static lis
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/db/src/schema.ts` | Modified | Add `provider_chain` JSONB + `ai_review_enabled` boolean. Remove `llm_provider`, `llm_model`, `encrypted_api_key` columns. |
-| `packages/db/src/queries.ts` | Modified | Update `updateRepoSettings` to handle new columns. Add migration helpers. |
-| `packages/db/drizzle/` | New | Migration to alter `repositories` table. |
-| `packages/core/src/types.ts` | Modified | Add `ProviderChainEntry` type. Update `ReviewInput` to accept chain. Remove `LLMProvider` from SaaS-only types (keep for CLI/Action). |
-| `packages/core/src/pipeline.ts` | Modified | Support `ai_review_enabled=false` (skip agent, return static-only result). Accept provider chain for fallback. |
-| `apps/server/src/routes/api.ts` | Modified | Add `GET/PUT /api/settings`, `POST /api/providers/validate`, `GET /api/providers/:provider/models`. Refactor existing settings routes. |
-| `apps/server/src/routes/webhook.ts` | Modified | Read `provider_chain` instead of flat fields when dispatching to Inngest. |
-| `apps/server/src/inngest/review.ts` | Modified | Build `FallbackProvider[]` from chain. Handle `ai_review_enabled=false`. |
-| `apps/dashboard/src/pages/Settings.tsx` | Modified | Complete rewrite — provider chain UI, validate flow, model dropdown, AI toggle. |
-| `apps/dashboard/src/lib/types.ts` | Modified | New types for provider chain, validation response. |
-| `apps/dashboard/src/lib/api.ts` | Modified | New hooks: `useValidateProvider`, `useProviderModels`. Update settings hooks for new shape. |
+| Area                                    | Impact   | Description                                                                                                                            |
+| --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/db/src/schema.ts`             | Modified | Add `provider_chain` JSONB + `ai_review_enabled` boolean. Remove `llm_provider`, `llm_model`, `encrypted_api_key` columns.             |
+| `packages/db/src/queries.ts`            | Modified | Update `updateRepoSettings` to handle new columns. Add migration helpers.                                                              |
+| `packages/db/drizzle/`                  | New      | Migration to alter `repositories` table.                                                                                               |
+| `packages/core/src/types.ts`            | Modified | Add `ProviderChainEntry` type. Update `ReviewInput` to accept chain. Remove `LLMProvider` from SaaS-only types (keep for CLI/Action).  |
+| `packages/core/src/pipeline.ts`         | Modified | Support `ai_review_enabled=false` (skip agent, return static-only result). Accept provider chain for fallback.                         |
+| `apps/server/src/routes/api.ts`         | Modified | Add `GET/PUT /api/settings`, `POST /api/providers/validate`, `GET /api/providers/:provider/models`. Refactor existing settings routes. |
+| `apps/server/src/routes/webhook.ts`     | Modified | Read `provider_chain` instead of flat fields when dispatching to Inngest.                                                              |
+| `apps/server/src/inngest/review.ts`     | Modified | Build `FallbackProvider[]` from chain. Handle `ai_review_enabled=false`.                                                               |
+| `apps/dashboard/src/pages/Settings.tsx` | Modified | Complete rewrite — provider chain UI, validate flow, model dropdown, AI toggle.                                                        |
+| `apps/dashboard/src/lib/types.ts`       | Modified | New types for provider chain, validation response.                                                                                     |
+| `apps/dashboard/src/lib/api.ts`         | Modified | New hooks: `useValidateProvider`, `useProviderModels`. Update settings hooks for new shape.                                            |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| DB migration breaks existing repos | Medium | Migration must set `provider_chain` from existing `llm_provider` + `llm_model` + `encrypted_api_key` values. Default `ai_review_enabled = true`. |
-| Provider model listing APIs differ widely | Medium | Curated static lists as fallback for providers without `/models` endpoint (Anthropic, Google). Dynamic for OpenAI and GitHub Models. |
-| Encrypted API keys in JSONB vs separate column | Low | Keys are already encrypted with AES-256-GCM. Storing in JSONB means multiple keys per repo. Encryption/decryption logic already exists. |
-| Settings page complexity increases | Medium | Clean component extraction: `ProviderChainEditor`, `ProviderEntry`, `ModelSelector` as separate components. |
-| Backward compatibility with CLI/Action | Low | CLI/Action still accept flat `--provider`/`--model`/`--api-key` flags. They don't use the DB provider chain. No change needed. |
+| Risk                                           | Likelihood | Mitigation                                                                                                                                       |
+| ---------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DB migration breaks existing repos             | Medium     | Migration must set `provider_chain` from existing `llm_provider` + `llm_model` + `encrypted_api_key` values. Default `ai_review_enabled = true`. |
+| Provider model listing APIs differ widely      | Medium     | Curated static lists as fallback for providers without `/models` endpoint (Anthropic, Google). Dynamic for OpenAI and GitHub Models.             |
+| Encrypted API keys in JSONB vs separate column | Low        | Keys are already encrypted with AES-256-GCM. Storing in JSONB means multiple keys per repo. Encryption/decryption logic already exists.          |
+| Settings page complexity increases             | Medium     | Clean component extraction: `ProviderChainEditor`, `ProviderEntry`, `ModelSelector` as separate components.                                      |
+| Backward compatibility with CLI/Action         | Low        | CLI/Action still accept flat `--provider`/`--model`/`--api-key` flags. They don't use the DB provider chain. No change needed.                   |
 
 ## Rollback Plan
 

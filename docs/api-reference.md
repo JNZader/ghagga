@@ -41,13 +41,13 @@ The `pagination` field is only present on paginated endpoints. Non-paginated GET
 { "error": "Human-readable error message" }
 ```
 
-| Status | Meaning |
-|--------|---------|
-| `400` | Bad request — missing/invalid parameters or body |
-| `401` | Unauthorized — missing, invalid, or expired token |
-| `403` | Forbidden — user doesn't have access to this installation/repo |
-| `404` | Not found — repository or resource doesn't exist |
-| `500` | Internal server error — includes `errorId` for support correlation |
+| Status | Meaning                                                            |
+| ------ | ------------------------------------------------------------------ |
+| `400`  | Bad request — missing/invalid parameters or body                   |
+| `401`  | Unauthorized — missing, invalid, or expired token                  |
+| `403`  | Forbidden — user doesn't have access to this installation/repo     |
+| `404`  | Not found — repository or resource doesn't exist                   |
+| `500`  | Internal server error — includes `errorId` for support correlation |
 
 All `500` responses include an `errorId` (8-char UUID) that is also logged server-side, enabling support ticket correlation:
 
@@ -86,19 +86,19 @@ Receives GitHub webhook events. No bearer auth — validated via HMAC-SHA256 sig
 
 **Required Headers**:
 
-| Header | Description |
-|--------|-------------|
-| `X-Hub-Signature-256` | HMAC-SHA256 signature of the raw body using the webhook secret |
-| `X-GitHub-Event` | Event type: `pull_request`, `installation`, `installation_repositories` |
+| Header                | Description                                                             |
+| --------------------- | ----------------------------------------------------------------------- |
+| `X-Hub-Signature-256` | HMAC-SHA256 signature of the raw body using the webhook secret          |
+| `X-GitHub-Event`      | Event type: `pull_request`, `installation`, `installation_repositories` |
 
 **Handled Events**:
 
-| Event | Actions | Behavior |
-|-------|---------|----------|
-| `pull_request` | `opened`, `synchronize`, `reopened` | Enqueues an AI review job via BullMQ |
-| `installation` | `created` | Tracks the installation and its repositories |
-| `installation` | `deleted` | Deactivates the installation |
-| `installation_repositories` | `added`, `removed` | Updates tracked repositories |
+| Event                       | Actions                             | Behavior                                     |
+| --------------------------- | ----------------------------------- | -------------------------------------------- |
+| `pull_request`              | `opened`, `synchronize`, `reopened` | Enqueues an AI review job via BullMQ         |
+| `installation`              | `created`                           | Tracks the installation and its repositories |
+| `installation`              | `deleted`                           | Deactivates the installation                 |
+| `installation_repositories` | `added`, `removed`                  | Updates tracked repositories                 |
 
 **Response** (pull_request) `202`:
 
@@ -125,10 +125,10 @@ Receives static analysis results from the inline GitHub Actions workflow injecte
 
 **Required Headers**:
 
-| Header | Description |
-|--------|-------------|
+| Header               | Description                                                                 |
+| -------------------- | --------------------------------------------------------------------------- |
 | `X-Ghagga-Signature` | `sha256=<hex>` — HMAC of the raw body using the per-dispatch derived secret |
-| `Content-Type` | `application/json` |
+| `Content-Type`       | `application/json`                                                          |
 
 **Body** (`StaticAnalysisCallbackPayload`):
 
@@ -140,19 +140,19 @@ Receives static analysis results from the inline GitHub Actions workflow injecte
   "headSha": "abc123…",
   "staticAnalysis": {
     "semgrep": { "status": "success", "findings": [], "executionTimeMs": 5421 },
-    "trivy":   { "status": "success", "findings": [], "executionTimeMs": 8190 },
-    "cpd":     { "status": "skipped", "findings": [], "executionTimeMs": 0 }
+    "trivy": { "status": "success", "findings": [], "executionTimeMs": 8190 },
+    "cpd": { "status": "skipped", "findings": [], "executionTimeMs": 0 }
   }
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `callbackId` | `string` | `{uuid}.{timestamp_base36}` — used for HMAC re-derivation and TTL enforcement |
-| `repoFullName` | `string` | Target repository (`owner/repo`) |
-| `prNumber` | `number` | Pull request number |
-| `headSha` | `string` | Head commit SHA the workflow analyzed |
-| `staticAnalysis` | `object` | Per-tool result map (`StaticAnalysisResult`) |
+| Field            | Type     | Description                                                                   |
+| ---------------- | -------- | ----------------------------------------------------------------------------- |
+| `callbackId`     | `string` | `{uuid}.{timestamp_base36}` — used for HMAC re-derivation and TTL enforcement |
+| `repoFullName`   | `string` | Target repository (`owner/repo`)                                              |
+| `prNumber`       | `number` | Pull request number                                                           |
+| `headSha`        | `string` | Head commit SHA the workflow analyzed                                         |
+| `staticAnalysis` | `object` | Per-tool result map (`StaticAnalysisResult`)                                  |
 
 **Response** `200` (success):
 
@@ -324,11 +324,11 @@ Returns review history for a repository, paginated.
 
 **Query Parameters**:
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `repo` | Yes | — | Full repository name (`owner/repo`) |
-| `page` | No | `1` | Page number (1-indexed) |
-| `limit` | No | `50` | Items per page (max `100`) |
+| Parameter | Required | Default | Description                         |
+| --------- | -------- | ------- | ----------------------------------- |
+| `repo`    | Yes      | —       | Full repository name (`owner/repo`) |
+| `page`    | No       | `1`     | Page number (1-indexed)             |
+| `limit`   | No       | `50`    | Items per page (max `100`)          |
 
 **Response** `200`:
 
@@ -361,9 +361,9 @@ Returns aggregate review statistics for a repository.
 
 **Query Parameters**:
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `repo` | Yes | Full repository name (`owner/repo`) |
+| Parameter | Required | Description                         |
+| --------- | -------- | ----------------------------------- |
+| `repo`    | Yes      | Full repository name (`owner/repo`) |
 
 **Response** `200`:
 
@@ -391,9 +391,9 @@ Returns the settings for a specific repository, including its resolved global se
 
 **Query Parameters**:
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `repo` | Yes | Full repository name (`owner/repo`) |
+| Parameter | Required | Description                         |
+| --------- | -------- | ----------------------------------- |
+| `repo`    | Yes      | Full repository name (`owner/repo`) |
 
 **Response** `200`:
 
@@ -419,7 +419,23 @@ Returns the settings for a specific repository, including its resolved global se
     "enableMemory": true,
     "enabledTools": ["semgrep", "trivy", "cpd", "gitleaks", "shellcheck"],
     "disabledTools": ["psalm"],
-    "registeredTools": ["semgrep", "trivy", "cpd", "gitleaks", "shellcheck", "markdownlint", "lizard", "ruff", "bandit", "golangci-lint", "biome", "pmd", "psalm", "clippy", "hadolint"],
+    "registeredTools": [
+      "semgrep",
+      "trivy",
+      "cpd",
+      "gitleaks",
+      "shellcheck",
+      "markdownlint",
+      "lizard",
+      "ruff",
+      "bandit",
+      "golangci-lint",
+      "biome",
+      "pmd",
+      "psalm",
+      "clippy",
+      "hadolint"
+    ],
     "customRules": "rule1\nrule2",
     "ignorePatterns": ["*.test.ts", "docs/**"],
     "globalSettings": {
@@ -482,22 +498,22 @@ Updates configuration for a repository. Supports partial updates — only includ
 
 **Body Fields**:
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `repoFullName` | `string` | Yes | Full repository name (`owner/repo`) |
-| `useGlobalSettings` | `boolean` | No | Use installation-level settings instead of per-repo |
-| `aiReviewEnabled` | `boolean` | No | Enable/disable AI review |
-| `reviewMode` | `string` | No | Review mode: `simple`, `workflow`, `consensus` |
-| `providerChain` | `array` | No | Ordered list of LLM providers (see below) |
-| `enableSemgrep` | `boolean` | No | **Deprecated.** Enable Semgrep static analysis. Use `enabledTools`/`disabledTools` instead |
-| `enableTrivy` | `boolean` | No | **Deprecated.** Enable Trivy vulnerability scanning. Use `enabledTools`/`disabledTools` instead |
-| `enableCpd` | `boolean` | No | **Deprecated.** Enable copy-paste detection. Use `enabledTools`/`disabledTools` instead |
-| `enableMemory` | `boolean` | No | Enable project memory |
-| `enabledTools` | `string[]` | No | Tools to force-enable (e.g., `["semgrep", "gitleaks"]`). Overrides registry defaults |
-| `disabledTools` | `string[]` | No | Tools to force-disable (e.g., `["cpd", "psalm"]`). Overrides registry defaults |
-| `customRules` | `string` | No | Custom review rules (newline-separated) |
-| `ignorePatterns` | `string[]` | No | Glob patterns for files to skip |
-| `reviewLevel` | `string` | No | Review thoroughness level |
+| Field               | Type       | Required | Description                                                                                     |
+| ------------------- | ---------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `repoFullName`      | `string`   | Yes      | Full repository name (`owner/repo`)                                                             |
+| `useGlobalSettings` | `boolean`  | No       | Use installation-level settings instead of per-repo                                             |
+| `aiReviewEnabled`   | `boolean`  | No       | Enable/disable AI review                                                                        |
+| `reviewMode`        | `string`   | No       | Review mode: `simple`, `workflow`, `consensus`                                                  |
+| `providerChain`     | `array`    | No       | Ordered list of LLM providers (see below)                                                       |
+| `enableSemgrep`     | `boolean`  | No       | **Deprecated.** Enable Semgrep static analysis. Use `enabledTools`/`disabledTools` instead      |
+| `enableTrivy`       | `boolean`  | No       | **Deprecated.** Enable Trivy vulnerability scanning. Use `enabledTools`/`disabledTools` instead |
+| `enableCpd`         | `boolean`  | No       | **Deprecated.** Enable copy-paste detection. Use `enabledTools`/`disabledTools` instead         |
+| `enableMemory`      | `boolean`  | No       | Enable project memory                                                                           |
+| `enabledTools`      | `string[]` | No       | Tools to force-enable (e.g., `["semgrep", "gitleaks"]`). Overrides registry defaults            |
+| `disabledTools`     | `string[]` | No       | Tools to force-disable (e.g., `["cpd", "psalm"]`). Overrides registry defaults                  |
+| `customRules`       | `string`   | No       | Custom review rules (newline-separated)                                                         |
+| `ignorePatterns`    | `string[]` | No       | Glob patterns for files to skip                                                                 |
+| `reviewLevel`       | `string`   | No       | Review thoroughness level                                                                       |
 
 **Provider Chain Entries**:
 
@@ -505,11 +521,11 @@ Updates configuration for a repository. Supports partial updates — only includ
 { "provider": "gateway", "model": "claude-sonnet-4-20250514", "apiKey": "sk-gateway-..." }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `gateway`, `cli-bridge`, `ollama` |
-| `model` | `string` | Yes | Model identifier (e.g., `auto`, `claude-sonnet-4-20250514`). Use `auto` to let the provider select the best available model |
-| `apiKey` | `string` | No | API key (omit to keep existing key; `cli-bridge` and `ollama` do not require one) |
+| Field      | Type     | Required | Description                                                                                                                 |
+| ---------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `provider` | `string` | Yes      | One of: `gateway`, `cli-bridge`, `ollama`                                                                                   |
+| `model`    | `string` | Yes      | Model identifier (e.g., `auto`, `claude-sonnet-4-20250514`). Use `auto` to let the provider select the best available model |
+| `apiKey`   | `string` | No       | API key (omit to keep existing key; `cli-bridge` and `ollama` do not require one)                                           |
 
 > **API Key Behavior**: When you send a `providerChain` entry without an `apiKey`, the server preserves the previously stored encrypted key for that provider. Send a new `apiKey` to rotate it. The `cli-bridge` and `ollama` providers do not require an API key.
 
@@ -531,9 +547,9 @@ Returns the global (installation-level) settings that apply as defaults to all r
 
 **Query Parameters**:
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `installation_id` | Yes | Numeric installation ID |
+| Parameter         | Required | Description             |
+| ----------------- | -------- | ----------------------- |
+| `installation_id` | Yes      | Numeric installation ID |
 
 **Response** `200`:
 
@@ -557,7 +573,23 @@ Returns the global (installation-level) settings that apply as defaults to all r
     "enableMemory": true,
     "enabledTools": [],
     "disabledTools": [],
-    "registeredTools": ["semgrep", "trivy", "cpd", "gitleaks", "shellcheck", "markdownlint", "lizard", "ruff", "bandit", "golangci-lint", "biome", "pmd", "psalm", "clippy", "hadolint"],
+    "registeredTools": [
+      "semgrep",
+      "trivy",
+      "cpd",
+      "gitleaks",
+      "shellcheck",
+      "markdownlint",
+      "lizard",
+      "ruff",
+      "bandit",
+      "golangci-lint",
+      "biome",
+      "pmd",
+      "psalm",
+      "clippy",
+      "hadolint"
+    ],
     "customRules": "",
     "ignorePatterns": []
   }
@@ -577,9 +609,7 @@ Updates the global settings for an installation. These settings apply to all rep
 ```json
 {
   "installationId": 123,
-  "providerChain": [
-    { "provider": "cli-bridge", "model": "auto" }
-  ],
+  "providerChain": [{ "provider": "cli-bridge", "model": "auto" }],
   "aiReviewEnabled": true,
   "reviewMode": "simple",
   "enableSemgrep": true,
@@ -612,9 +642,9 @@ Returns memory sessions (one per review) for a project.
 
 **Query Parameters**:
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `project` | Yes | Full repository name (`owner/repo`) |
+| Parameter | Required | Description                         |
+| --------- | -------- | ----------------------------------- |
+| `project` | Yes      | Full repository name (`owner/repo`) |
 
 **Response** `200`:
 
@@ -641,9 +671,9 @@ Returns all observations (learned facts) from a specific memory session.
 
 **Path Parameters**:
 
-| Parameter | Description |
-|-----------|-------------|
-| `id` | Numeric session ID |
+| Parameter | Description        |
+| --------- | ------------------ |
+| `id`      | Numeric session ID |
 
 **Response** `200`:
 
@@ -672,9 +702,9 @@ Deletes a single observation by ID.
 
 **Path Parameters**:
 
-| Parameter | Description |
-|-----------|-------------|
-| `id` | Numeric observation ID |
+| Parameter | Description            |
+| --------- | ---------------------- |
+| `id`      | Numeric observation ID |
 
 **Response** `200`:
 
@@ -698,8 +728,8 @@ Deletes all observations for a specific project.
 
 **Path Parameters**:
 
-| Parameter | Description |
-|-----------|-------------|
+| Parameter | Description                       |
+| --------- | --------------------------------- |
 | `project` | Project identifier (`owner/repo`) |
 
 **Response** `200`:
@@ -732,9 +762,9 @@ Deletes a single memory session by ID.
 
 **Path Parameters**:
 
-| Parameter | Description |
-|-----------|-------------|
-| `id` | Numeric session ID |
+| Parameter | Description        |
+| --------- | ------------------ |
+| `id`      | Numeric session ID |
 
 **Response** `200`:
 
@@ -775,7 +805,6 @@ POST /api/providers/validate
 Validates a SaaS dashboard provider configuration. Returns the list of available models when the configuration is reachable.
 
 The dashboard only supports two runtime targets:
-
 - `gateway` — a self-hosted LLM gateway. Validation pings `${gatewayUrl}/health`.
 - `cli-bridge` — local CLI tools (Claude Code, OpenCode, etc.) running on the user's machine. Validation enumerates available CLIs; no API key is required.
 
@@ -790,11 +819,11 @@ The `ollama` provider is intentionally rejected by this endpoint — it is only 
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `provider` | `string` | Yes | One of: `gateway`, `cli-bridge` |
+| Field        | Type     | Required    | Description                                                                                                                                                       |
+| ------------ | -------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`   | `string` | Yes         | One of: `gateway`, `cli-bridge`                                                                                                                                   |
 | `gatewayUrl` | `string` | Conditional | Required for `gateway` to perform a `/health` probe. If omitted, the response is `valid: true` with `models: ["auto"]` so the dashboard can defer the URL prompt. |
-| `apiKey` | `string` | No | Accepted in the body for forward compatibility but ignored by both runtime targets (gateway uses the URL, cli-bridge uses local CLIs). |
+| `apiKey`     | `string` | No          | Accepted in the body for forward compatibility but ignored by both runtime targets (gateway uses the URL, cli-bridge uses local CLIs).                            |
 
 **Response** `200` (valid configuration):
 
@@ -830,28 +859,28 @@ Returned when `provider` is missing, equals `ollama`, or is not one of `gateway`
 
 ## Endpoint Summary
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/health` | No | Health check |
-| `POST` | `/webhook` | HMAC | GitHub webhook receiver |
-| `POST` | `/runner/callback` | HMAC | Runner static analysis results |
-| `GET` | `/auth/login` | No | Dashboard OAuth Web Flow -- redirect to GitHub |
-| `GET` | `/auth/callback` | No | Dashboard OAuth Web Flow -- exchange code and redirect back |
-| `POST` | `/auth/device/code` | No | OAuth Device Flow -- request codes |
-| `POST` | `/auth/device/token` | No | OAuth Device Flow -- poll for token |
-| `GET` | `/api/repositories` | Bearer | List user's repositories |
-| `GET` | `/api/installations` | Bearer | List user's installations |
-| `GET` | `/api/reviews` | Bearer | List reviews (paginated) |
-| `GET` | `/api/stats` | Bearer | Review statistics |
-| `GET` | `/api/settings` | Bearer | Get repository settings |
-| `PUT` | `/api/settings` | Bearer | Update repository settings |
-| `GET` | `/api/installation-settings` | Bearer | Get global installation settings |
-| `PUT` | `/api/installation-settings` | Bearer | Update global installation settings |
-| `POST` | `/api/providers/validate` | Bearer | Validate provider API key |
-| `GET` | `/api/memory/sessions` | Bearer | List memory sessions |
-| `GET` | `/api/memory/sessions/:id/observations` | Bearer | List session observations |
-| `DELETE` | `/api/memory/observations/:id` | Bearer | Delete a single observation |
-| `DELETE` | `/api/memory/projects/:project/observations` | Bearer | Clear all observations for a project |
-| `DELETE` | `/api/memory/observations` | Bearer | Purge all observations for the installation |
-| `DELETE` | `/api/memory/sessions/:id` | Bearer | Delete a single session |
-| `DELETE` | `/api/memory/sessions/empty` | Bearer | Clean up empty sessions |
+| Method   | Path                                         | Auth   | Description                                                 |
+| -------- | -------------------------------------------- | ------ | ----------------------------------------------------------- |
+| `GET`    | `/health`                                    | No     | Health check                                                |
+| `POST`   | `/webhook`                                   | HMAC   | GitHub webhook receiver                                     |
+| `POST`   | `/runner/callback`                           | HMAC   | Runner static analysis results                              |
+| `GET`    | `/auth/login`                                | No     | Dashboard OAuth Web Flow -- redirect to GitHub              |
+| `GET`    | `/auth/callback`                             | No     | Dashboard OAuth Web Flow -- exchange code and redirect back |
+| `POST`   | `/auth/device/code`                          | No     | OAuth Device Flow -- request codes                          |
+| `POST`   | `/auth/device/token`                         | No     | OAuth Device Flow -- poll for token                         |
+| `GET`    | `/api/repositories`                          | Bearer | List user's repositories                                    |
+| `GET`    | `/api/installations`                         | Bearer | List user's installations                                   |
+| `GET`    | `/api/reviews`                               | Bearer | List reviews (paginated)                                    |
+| `GET`    | `/api/stats`                                 | Bearer | Review statistics                                           |
+| `GET`    | `/api/settings`                              | Bearer | Get repository settings                                     |
+| `PUT`    | `/api/settings`                              | Bearer | Update repository settings                                  |
+| `GET`    | `/api/installation-settings`                 | Bearer | Get global installation settings                            |
+| `PUT`    | `/api/installation-settings`                 | Bearer | Update global installation settings                         |
+| `POST`   | `/api/providers/validate`                    | Bearer | Validate provider API key                                   |
+| `GET`    | `/api/memory/sessions`                       | Bearer | List memory sessions                                        |
+| `GET`    | `/api/memory/sessions/:id/observations`      | Bearer | List session observations                                   |
+| `DELETE` | `/api/memory/observations/:id`               | Bearer | Delete a single observation                                 |
+| `DELETE` | `/api/memory/projects/:project/observations` | Bearer | Clear all observations for a project                        |
+| `DELETE` | `/api/memory/observations`                   | Bearer | Purge all observations for the installation                 |
+| `DELETE` | `/api/memory/sessions/:id`                   | Bearer | Delete a single session                                     |
+| `DELETE` | `/api/memory/sessions/empty`                 | Bearer | Clean up empty sessions                                     |

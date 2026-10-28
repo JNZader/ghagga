@@ -3,11 +3,10 @@
 ## Intent
 
 The function `formatReviewComment` and its helper constants (`STATUS_EMOJI`, `SEVERITY_EMOJI`, `SOURCE_LABELS`, `renderOrder`) are duplicated byte-for-byte in two places:
-
 1. `apps/server/src/inngest/review.ts` (lines 33-118) -- used when the SaaS server posts the PR review comment
 2. `apps/action/src/index.ts` (lines 202-291) -- used when the GitHub Action posts the PR review comment
 
-The action copy even has a comment: *"Mirrors the server's formatReviewComment for consistency"*, confirming this is intentional duplication that should be a shared module.
+The action copy even has a comment: _"Mirrors the server's formatReviewComment for consistency"_, confirming this is intentional duplication that should be a shared module.
 
 Both implementations are pure functions: `(result: ReviewResult) => string`. They take a type already defined in `ghagga-core` and produce a GitHub-flavored Markdown string. The function belongs in `packages/core` alongside the other formatting and utility exports.
 
@@ -45,8 +44,12 @@ Move the constants and function verbatim from `apps/server/src/inngest/review.ts
 // packages/core/src/format.ts
 import type { ReviewResult, ReviewStatus } from './types.js';
 
-export const STATUS_EMOJI: Record<ReviewStatus, string> = { /* ... */ };
-export const SEVERITY_EMOJI: Record<string, string> = { /* ... */ };
+export const STATUS_EMOJI: Record<ReviewStatus, string> = {
+  /* ... */
+};
+export const SEVERITY_EMOJI: Record<string, string> = {
+  /* ... */
+};
 
 export function formatReviewComment(result: ReviewResult): string {
   // Exact same implementation — no changes
@@ -80,23 +83,23 @@ The existing tests in `review.test.ts` exercise `formatReviewComment` indirectly
 
 ## Affected Areas
 
-| File | Change | Lines Affected |
-|------|--------|----------------|
-| `packages/core/src/format.ts` | New file: extracted function + constants | ~90 lines (new) |
-| `packages/core/src/format.test.ts` | New file: direct unit tests | ~100 lines (new) |
-| `packages/core/src/index.ts` | Add formatting exports | +3 lines |
-| `apps/server/src/inngest/review.ts` | Remove local function + constants, add import | Delete lines 31-118 (~88 lines), add 1 import |
-| `apps/action/src/index.ts` | Remove local function + constants, add import | Delete lines 200-291 (~92 lines), add 1 import |
-| `apps/server/src/inngest/review.test.ts` | No changes | Existing integration tests remain valid |
+| File                                     | Change                                        | Lines Affected                                 |
+| ---------------------------------------- | --------------------------------------------- | ---------------------------------------------- |
+| `packages/core/src/format.ts`            | New file: extracted function + constants      | ~90 lines (new)                                |
+| `packages/core/src/format.test.ts`       | New file: direct unit tests                   | ~100 lines (new)                               |
+| `packages/core/src/index.ts`             | Add formatting exports                        | +3 lines                                       |
+| `apps/server/src/inngest/review.ts`      | Remove local function + constants, add import | Delete lines 31-118 (~88 lines), add 1 import  |
+| `apps/action/src/index.ts`               | Remove local function + constants, add import | Delete lines 200-291 (~92 lines), add 1 import |
+| `apps/server/src/inngest/review.test.ts` | No changes                                    | Existing integration tests remain valid        |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| **Import resolution failure** | Low | Medium | Both `apps/server` and `apps/action` already import from `ghagga-core` (e.g., `reviewPipeline`, `DEFAULT_SETTINGS`). The workspace dependency is already configured. |
-| **Subtle difference between copies** | Very Low | Low | Verified by reading both implementations -- they are byte-for-byte identical in logic. The only difference is the JSDoc comment on the action copy. |
-| **Build order in turborepo** | Very Low | Low | `packages/core` is already a dependency of both apps in the turbo pipeline. Adding an export does not change the build graph. |
-| **Type import mismatch** | Very Low | Low | `ReviewResult` and `ReviewStatus` are already exported from `ghagga-core` and already imported by the action. The server imports them too (line 27). |
+| Risk                                 | Likelihood | Impact | Mitigation                                                                                                                                                           |
+| ------------------------------------ | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Import resolution failure**        | Low        | Medium | Both `apps/server` and `apps/action` already import from `ghagga-core` (e.g., `reviewPipeline`, `DEFAULT_SETTINGS`). The workspace dependency is already configured. |
+| **Subtle difference between copies** | Very Low   | Low    | Verified by reading both implementations -- they are byte-for-byte identical in logic. The only difference is the JSDoc comment on the action copy.                  |
+| **Build order in turborepo**         | Very Low   | Low    | `packages/core` is already a dependency of both apps in the turbo pipeline. Adding an export does not change the build graph.                                        |
+| **Type import mismatch**             | Very Low   | Low    | `ReviewResult` and `ReviewStatus` are already exported from `ghagga-core` and already imported by the action. The server imports them too (line 27).                 |
 
 ## Rollback Plan
 
@@ -123,9 +126,9 @@ Revert the commit. The local copies are restored, and both apps work independent
 
 ## Distribution Mode Impact
 
-| Mode | Impact | Notes |
-|------|--------|-------|
-| **SaaS** (webhook) | No behavioral change | Imports from `ghagga-core` instead of local definition |
+| Mode                     | Impact               | Notes                                                  |
+| ------------------------ | -------------------- | ------------------------------------------------------ |
+| **SaaS** (webhook)       | No behavioral change | Imports from `ghagga-core` instead of local definition |
 | **Action** (self-hosted) | No behavioral change | Imports from `ghagga-core` instead of local definition |
-| **CLI** | No change | Uses its own `formatMarkdownResult` (terminal output) |
-| **Dashboard** | No change | No formatting logic |
+| **CLI**                  | No change            | Uses its own `formatMarkdownResult` (terminal output)  |
+| **Dashboard**            | No change            | No formatting logic                                    |

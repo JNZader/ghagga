@@ -8,7 +8,6 @@
 ### Task 1.1: Create `packages/core/src/format.ts`
 
 Copy `formatReviewComment` and its constants verbatim from `apps/server/src/inngest/review.ts:31-118` into a new module at `packages/core/src/format.ts`.
-
 - [x] Copy `STATUS_EMOJI` constant (lines 33-38) — export it
 - [x] Copy `SEVERITY_EMOJI` constant (lines 40-46) — export it
 - [x] Copy `formatReviewComment` function (lines 48-118) — export it
@@ -21,8 +20,8 @@ Copy `formatReviewComment` and its constants verbatim from `apps/server/src/inng
 ### Task 1.2: Export from `packages/core/src/index.ts`
 
 Add the formatting exports to the barrel file at `packages/core/src/index.ts`.
-
 - [x] Add section after the Memory block (after line 72):
+
   ```typescript
   // ─── Formatting ─────────────────────────────────────────────────
   export { formatReviewComment, STATUS_EMOJI, SEVERITY_EMOJI } from './format.js';
@@ -58,7 +57,6 @@ Add the formatting exports to the barrel file at `packages/core/src/index.ts`.
 ### Task 3.1: Create `packages/core/src/format.test.ts`
 
 Write direct unit tests for `formatReviewComment` covering all spec scenarios.
-
 - [x] **S1**: Happy path — findings from all 4 sources, verify grouping order and table format
 - [x] **S2**: Empty findings — no `### Findings` header, no table
 - [x] **S3**: All 4 status variants map to correct emoji+text
@@ -97,10 +95,10 @@ Write direct unit tests for `formatReviewComment` covering all spec scenarios.
 
 ## Summary
 
-| Phase | Tasks | Estimated effort |
-|-------|-------|-----------------|
-| 1. Extract to core | 2 | ~10 min |
-| 2. Migrate consumers | 2 | ~10 min |
-| 3. Tests | 2 | ~15 min |
-| 4. Cleanup | 1 | ~5 min |
-| **Total** | **7** | **~40 min** |
+| Phase                | Tasks | Estimated effort |
+| -------------------- | ----- | ---------------- |
+| 1. Extract to core   | 2     | ~10 min          |
+| 2. Migrate consumers | 2     | ~10 min          |
+| 3. Tests             | 2     | ~15 min          |
+| 4. Cleanup           | 1     | ~5 min           |
+| **Total**            | **7** | **~40 min**      |

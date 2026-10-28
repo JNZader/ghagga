@@ -153,6 +153,7 @@ The `.ghagga.json` config file MUST support the new tool fields.
 #### Scenario: Config file with new fields
 
 - GIVEN a `.ghagga.json` with:
+
   ```json
   {
     "disabledTools": ["cpd", "markdownlint"],
@@ -179,6 +180,7 @@ In `--verbose` mode, the CLI MUST log which tools are activated and why.
 - GIVEN the user runs `ghagga review --verbose` on a Python project
 - WHEN the verbose progress handler runs
 - THEN it MUST log lines like:
+
   ```
   [tools] Activated: semgrep (always-on), trivy (always-on), cpd (always-on),
           gitleaks (always-on), shellcheck (always-on), markdownlint (always-on),

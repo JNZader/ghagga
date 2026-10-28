@@ -25,10 +25,9 @@ constructor(private db: Database, private installationId: number) {}
 ```
 
 **Alternatives considered**:
+1. _Pass installationId per-method call_: Would break the `MemoryStorage` interface, which is shared between `SqliteMemoryStorage` (CLI/Action) and `PostgresMemoryStorage` (SaaS). The interface defines `deleteObservation(id: number): Promise<boolean>` — there's no room for an extra parameter without a breaking change.
 
-1. *Pass installationId per-method call*: Would break the `MemoryStorage` interface, which is shared between `SqliteMemoryStorage` (CLI/Action) and `PostgresMemoryStorage` (SaaS). The interface defines `deleteObservation(id: number): Promise<boolean>` — there's no room for an extra parameter without a breaking change.
-
-2. *Use request-scoped middleware/context*: Would add unnecessary indirection. The adapter is already created per-request context in the API routes, so passing the value at construction time is the simplest approach.
+2. _Use request-scoped middleware/context_: Would add unnecessary indirection. The adapter is already created per-request context in the API routes, so passing the value at construction time is the simplest approach.
 
 **Rationale**: The `MemoryStorage` interface is a contract shared across distribution modes. Extending the constructor keeps the interface stable while providing the PostgreSQL adapter with the authorization scope it needs. The SQLite adapter doesn't need `installationId` because it operates on a user-local database file.
 
@@ -39,10 +38,9 @@ constructor(private db: Database, private installationId: number) {}
 **Choice**: The `DELETE /api/memory/observations` (purge-all) route iterates over `user.installationIds` and calls `clearAllMemoryObservations(db, installationId)` directly for each, summing the results. It does NOT use `PostgresMemoryStorage.clearObservations()`.
 
 **Alternatives considered**:
+1. _Create multiple adapter instances (one per installationId)_: Overly complex for a single API call. Would require creating N adapters and calling `clearObservations()` on each.
 
-1. *Create multiple adapter instances (one per installationId)*: Overly complex for a single API call. Would require creating N adapters and calling `clearObservations()` on each.
-
-2. *Extend the adapter to accept an array of installationIds*: The `MemoryStorage` interface only has `clearObservations(options?: { project?: string })` — no room for `installationIds[]` without breaking the interface.
+2. _Extend the adapter to accept an array of installationIds_: The `MemoryStorage` interface only has `clearObservations(options?: { project?: string })` — no room for `installationIds[]` without breaking the interface.
 
 **Rationale**: A user can belong to multiple GitHub installations (personal + organizations). The adapter's single `installationId` covers one installation. The purge-all route needs to clear all of them. Calling the DB query directly is the simplest correct solution and keeps the adapter focused on single-installation operations.
 
@@ -53,8 +51,7 @@ constructor(private db: Database, private installationId: number) {}
 **Choice**: Register `DELETE /api/memory/observations` (purge-all, no params) BEFORE `DELETE /api/memory/observations/:id` (single delete) in the router.
 
 **Alternatives considered**:
-
-1. *Rely on Hono's automatic path matching*: Hono treats `/api/memory/observations` and `/api/memory/observations/:id` as distinct paths because one has an additional segment. They would not conflict regardless of order. However, registering the exact-match route first makes the intent explicit and avoids any ambiguity in code review.
+1. _Rely on Hono's automatic path matching_: Hono treats `/api/memory/observations` and `/api/memory/observations/:id` as distinct paths because one has an additional segment. They would not conflict regardless of order. However, registering the exact-match route first makes the intent explicit and avoids any ambiguity in code review.
 
 **Rationale**: Defensive clarity. While Hono's tree-based router handles this correctly either way, the explicit ordering documents the developer's intent and prevents future confusion when someone reads the route file.
 
@@ -65,10 +62,9 @@ constructor(private db: Database, private installationId: number) {}
 **Choice**: Create one `ConfirmDialog` component in `apps/dashboard/src/components/ConfirmDialog.tsx` that handles all three confirmation tiers via props. The component renders different UI based on the presence of optional props (`confirmText`, `countdownSeconds`).
 
 **Alternatives considered**:
+1. _Three separate modal components (DeleteModal, ClearModal, PurgeModal)_: 80% of the logic is shared (portal rendering, backdrop, centering, escape handling, loading states, cancel behavior). Three components would mean significant duplication.
 
-1. *Three separate modal components (DeleteModal, ClearModal, PurgeModal)*: 80% of the logic is shared (portal rendering, backdrop, centering, escape handling, loading states, cancel behavior). Three components would mean significant duplication.
-
-2. *A base modal + tier-specific wrappers*: Adds unnecessary indirection. The prop-based approach is simpler and equally readable.
+2. _A base modal + tier-specific wrappers_: Adds unnecessary indirection. The prop-based approach is simpler and equally readable.
 
 **Rationale**: A single component with optional props is the most maintainable approach. The rendering logic branches naturally: no `confirmText` → Tier 1, `confirmText` set → Tier 2, `confirmText` + `countdownSeconds` → Tier 3. This also makes it easy to reuse in future features that need destructive confirmations.
 
@@ -79,12 +75,11 @@ constructor(private db: Database, private installationId: number) {}
 **Choice**: Build a lightweight toast notification system using React Context + Portal. Create `ToastProvider` (context), `useToast()` hook, and `ToastContainer` (portal renderer) in `apps/dashboard/src/components/Toast.tsx`.
 
 **Alternatives considered**:
+1. _react-hot-toast or sonner_: Both are excellent libraries, but the spec explicitly requires "No new npm dependencies" (CC5). Adding either would violate this constraint.
 
-1. *react-hot-toast or sonner*: Both are excellent libraries, but the spec explicitly requires "No new npm dependencies" (CC5). Adding either would violate this constraint.
+2. _Browser `alert()` or `console.log`_: Not a real alternative — poor UX for a production dashboard.
 
-2. *Browser `alert()` or `console.log`*: Not a real alternative — poor UX for a production dashboard.
-
-3. *Inline success messages within the modals*: The modals close on success (spec requirement), so there's no visible surface for an inline message. Toasts solve this by persisting outside the modal lifecycle.
+3. _Inline success messages within the modals_: The modals close on success (spec requirement), so there's no visible surface for an inline message. Toasts solve this by persisting outside the modal lifecycle.
 
 **Rationale**: The toast system needs to be minimal (render text, auto-dismiss, stack) because it only serves 3 use cases. A full-featured library would be overkill even if dependencies were allowed. The implementation is ~80 lines of code.
 
@@ -100,21 +95,21 @@ db.delete(memoryObservations).where(
     eq(memoryObservations.id, observationId),
     inArray(
       memoryObservations.project,
-      db.select({ fullName: repositories.fullName })
+      db
+        .select({ fullName: repositories.fullName })
         .from(repositories)
-        .where(eq(repositories.installationId, installationId))
-    )
-  )
-)
+        .where(eq(repositories.installationId, installationId)),
+    ),
+  ),
+);
 ```
 
 **Alternatives considered**:
+1. _Two queries (SELECT to verify, then DELETE)_: Introduces a TOCTOU (time-of-check-to-time-of-use) race condition. Between the SELECT and DELETE, the observation could be deleted by another request.
 
-1. *Two queries (SELECT to verify, then DELETE)*: Introduces a TOCTOU (time-of-check-to-time-of-use) race condition. Between the SELECT and DELETE, the observation could be deleted by another request.
+2. _SQL JOIN in DELETE_: Drizzle ORM doesn't support `DELETE ... USING` syntax cleanly. The subquery approach uses standard Drizzle API.
 
-2. *SQL JOIN in DELETE*: Drizzle ORM doesn't support `DELETE ... USING` syntax cleanly. The subquery approach uses standard Drizzle API.
-
-3. *Raw SQL*: The codebase uses Drizzle consistently (see `queries.ts` with 24 exported functions, all using Drizzle). Breaking this pattern would be inconsistent.
+3. _Raw SQL_: The codebase uses Drizzle consistently (see `queries.ts` with 24 exported functions, all using Drizzle). Breaking this pattern would be inconsistent.
 
 **Rationale**: The subquery pattern produces a single atomic SQL statement, is consistent with the existing Drizzle-based query patterns in the codebase, and correctly prevents IDOR by verifying installation ownership at the database level.
 
@@ -127,8 +122,7 @@ db.delete(memoryObservations).where(
 The `PostgresMemoryStorage` adapter exists for the webhook/review pipeline (which receives a `MemoryStorage` instance via dependency injection). The Dashboard API routes are a separate code path that talks to the DB directly.
 
 **Alternatives considered**:
-
-1. *Create a PostgresMemoryStorage instance in each route handler*: Would add an unnecessary abstraction layer. The existing pattern in `api.ts` is to call `ghagga-db` functions directly — all 20+ existing routes do this.
+1. _Create a PostgresMemoryStorage instance in each route handler_: Would add an unnecessary abstraction layer. The existing pattern in `api.ts` is to call `ghagga-db` functions directly — all 20+ existing routes do this.
 
 **Rationale**: Following the existing pattern is the correct choice. The adapter is updated to be functional (no more stubs), but the API routes use the same direct-query pattern as every other route in the file.
 
@@ -227,22 +221,22 @@ User clicks "Purge All Memory" → ConfirmDialog (Tier 3: type "DELETE ALL" + 5s
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/db/src/queries.ts` | Modify | Add 5 new exported functions: `deleteMemoryObservation`, `clearMemoryObservationsByProject`, `clearAllMemoryObservations`, `listMemoryObservations`, `getMemoryStats` |
-| `apps/server/src/routes/api.ts` | Modify | Add 3 DELETE routes under the existing `createApiRouter` function; add new imports from `ghagga-db` |
-| `apps/server/src/memory/postgres.ts` | Modify | Replace 5 stub methods with real implementations; extend constructor to accept `installationId`; add new imports from `ghagga-db` |
-| `apps/dashboard/src/lib/api.ts` | Modify | Add 3 mutation hooks: `useDeleteObservation`, `useClearRepoMemory`, `usePurgeAllMemory` |
-| `apps/dashboard/src/pages/Memory.tsx` | Modify | Add trash icon on `ObservationCard`, "Clear Memory" button, "Purge All Memory" button; integrate `ConfirmDialog` and `useToast`; add empty states after deletion |
-| `apps/dashboard/src/components/ConfirmDialog.tsx` | Create | Reusable confirmation dialog with 3-tier support (simple, text-match, text-match + countdown) |
-| `apps/dashboard/src/components/Toast.tsx` | Create | Toast notification system: `ToastProvider`, `useToast()` hook, `ToastContainer` portal |
-| `packages/db/src/queries.test.ts` | Modify | Add test suites for all 5 new query functions |
-| `apps/server/src/routes/api.test.ts` | Modify | Add test suites for 3 DELETE routes (auth, 400/403/404, success, edge cases) |
-| `apps/server/src/memory/postgres.test.ts` | Modify | Replace 7 stub-throws tests with delegation tests for real implementations |
-| `apps/dashboard/src/lib/api.test.ts` | Modify | Add tests for 3 mutation hooks |
-| `apps/dashboard/src/pages/Memory.test.tsx` | Modify | Add tests for delete buttons, modal triggers, confirmation flows |
-| `apps/dashboard/src/components/ConfirmDialog.test.tsx` | Create | Tests for all 3 tiers, text matching, countdown timer, escape, backdrop click |
-| `apps/dashboard/src/components/Toast.test.tsx` | Create | Tests for toast rendering, auto-dismiss, stacking |
+| File                                                   | Action | Description                                                                                                                                                           |
+| ------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/db/src/queries.ts`                           | Modify | Add 5 new exported functions: `deleteMemoryObservation`, `clearMemoryObservationsByProject`, `clearAllMemoryObservations`, `listMemoryObservations`, `getMemoryStats` |
+| `apps/server/src/routes/api.ts`                        | Modify | Add 3 DELETE routes under the existing `createApiRouter` function; add new imports from `ghagga-db`                                                                   |
+| `apps/server/src/memory/postgres.ts`                   | Modify | Replace 5 stub methods with real implementations; extend constructor to accept `installationId`; add new imports from `ghagga-db`                                     |
+| `apps/dashboard/src/lib/api.ts`                        | Modify | Add 3 mutation hooks: `useDeleteObservation`, `useClearRepoMemory`, `usePurgeAllMemory`                                                                               |
+| `apps/dashboard/src/pages/Memory.tsx`                  | Modify | Add trash icon on `ObservationCard`, "Clear Memory" button, "Purge All Memory" button; integrate `ConfirmDialog` and `useToast`; add empty states after deletion      |
+| `apps/dashboard/src/components/ConfirmDialog.tsx`      | Create | Reusable confirmation dialog with 3-tier support (simple, text-match, text-match + countdown)                                                                         |
+| `apps/dashboard/src/components/Toast.tsx`              | Create | Toast notification system: `ToastProvider`, `useToast()` hook, `ToastContainer` portal                                                                                |
+| `packages/db/src/queries.test.ts`                      | Modify | Add test suites for all 5 new query functions                                                                                                                         |
+| `apps/server/src/routes/api.test.ts`                   | Modify | Add test suites for 3 DELETE routes (auth, 400/403/404, success, edge cases)                                                                                          |
+| `apps/server/src/memory/postgres.test.ts`              | Modify | Replace 7 stub-throws tests with delegation tests for real implementations                                                                                            |
+| `apps/dashboard/src/lib/api.test.ts`                   | Modify | Add tests for 3 mutation hooks                                                                                                                                        |
+| `apps/dashboard/src/pages/Memory.test.tsx`             | Modify | Add tests for delete buttons, modal triggers, confirmation flows                                                                                                      |
+| `apps/dashboard/src/components/ConfirmDialog.test.tsx` | Create | Tests for all 3 tiers, text matching, countdown timer, escape, backdrop click                                                                                         |
+| `apps/dashboard/src/components/Toast.test.tsx`         | Create | Tests for toast rendering, auto-dismiss, stacking                                                                                                                     |
 
 ---
 
@@ -260,7 +254,7 @@ export async function deleteMemoryObservation(
   db: Database,
   installationId: number,
   observationId: number,
-): Promise<boolean>
+): Promise<boolean>;
 
 /**
  * Clear all observations for a specific project, scoped to installation.
@@ -270,7 +264,7 @@ export async function clearMemoryObservationsByProject(
   db: Database,
   installationId: number,
   project: string,
-): Promise<number>
+): Promise<number>;
 
 /**
  * Clear all observations for all repos belonging to an installation.
@@ -279,7 +273,7 @@ export async function clearMemoryObservationsByProject(
 export async function clearAllMemoryObservations(
   db: Database,
   installationId: number,
-): Promise<number>
+): Promise<number>;
 
 /**
  * List observations with optional filtering, scoped to installation.
@@ -289,16 +283,13 @@ export async function listMemoryObservations(
   db: Database,
   installationId: number,
   options?: ListObservationsOptions,
-): Promise<MemoryObservationDetail[]>
+): Promise<MemoryObservationDetail[]>;
 
 /**
  * Get aggregate memory statistics for an installation.
  * Returns total count, breakdown by type and project, oldest/newest dates.
  */
-export async function getMemoryStats(
-  db: Database,
-  installationId: number,
-): Promise<MemoryStats>
+export async function getMemoryStats(db: Database, installationId: number): Promise<MemoryStats>;
 ```
 
 ### Updated PostgresMemoryStorage (`apps/server/src/memory/postgres.ts`)
@@ -384,9 +375,7 @@ router.delete('/api/memory/projects/:project/observations', async (c) => {
   if (!user.installationIds.includes(repo.installationId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
-  const cleared = await clearMemoryObservationsByProject(
-    db, repo.installationId, project
-  );
+  const cleared = await clearMemoryObservationsByProject(db, repo.installationId, project);
   return c.json({ data: { cleared } });
 });
 ```
@@ -446,16 +435,16 @@ interface ConfirmDialogProps {
   onCancel: () => void;
   title: string;
   description: string;
-  confirmLabel: string;          // "Delete", "Clear Memory", "Purge All"
-  confirmVariant?: 'danger';     // Destructive styling (red)
-  isLoading?: boolean;           // Shows spinner, disables button
+  confirmLabel: string; // "Delete", "Clear Memory", "Purge All"
+  confirmVariant?: 'danger'; // Destructive styling (red)
+  isLoading?: boolean; // Shows spinner, disables button
 
   // Tier 2+: Text confirmation
-  confirmText?: string;          // If set, user must type this to enable confirm
-  confirmPlaceholder?: string;   // e.g., 'Type "acme/widgets" to confirm'
+  confirmText?: string; // If set, user must type this to enable confirm
+  confirmPlaceholder?: string; // e.g., 'Type "acme/widgets" to confirm'
 
   // Tier 3: Countdown timer
-  countdownSeconds?: number;     // If set, button disabled for N seconds after open
+  countdownSeconds?: number; // If set, button disabled for N seconds after open
 }
 ```
 
@@ -476,7 +465,7 @@ interface Toast {
   id: string;
   message: string;
   type: 'success' | 'error' | 'info';
-  duration?: number;  // ms, default 4000
+  duration?: number; // ms, default 4000
 }
 
 interface ToastContextValue {
@@ -494,22 +483,22 @@ The `ToastProvider` wraps the app (placed in the root layout). `ToastContainer` 
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| DB Queries | `deleteMemoryObservation`: success (S1), not found (S2), IDOR (S3) | Vitest with mocked Drizzle `db` object; verify correct SQL builder calls |
-| DB Queries | `clearMemoryObservationsByProject`: success (S4), empty (S5), IDOR (S6) | Same mock approach |
-| DB Queries | `clearAllMemoryObservations`: multi-repo (S7), empty (S8) | Same mock approach |
-| DB Queries | `listMemoryObservations`, `getMemoryStats`: correct filtering, aggregation | Same mock approach |
-| API Routes | `DELETE /api/memory/observations/:id`: 200, 400, 404, 401 (S9-S12) | Hono `app.request()` with mock user context (existing pattern in api.test.ts) |
-| API Routes | `DELETE /api/memory/projects/:project/observations`: 200, 401, 403, 404 (S13-S17) | Same Hono test pattern; verify URL decoding of `%2F` |
-| API Routes | `DELETE /api/memory/observations`: 200, 401, multi-install (S18-S21) | Same Hono test pattern |
-| Adapter | `PostgresMemoryStorage` methods: delegation, return values (S22-S28) | Vitest mocking `ghagga-db` (existing pattern in postgres.test.ts) |
-| Hooks | `useDeleteObservation`, `useClearRepoMemory`, `usePurgeAllMemory` | Vitest mocking `fetchApi`/`fetchData`; verify correct paths, methods, cache invalidation keys |
-| Component | `ConfirmDialog` Tier 1: open/close, confirm, cancel, escape, backdrop (S29-S31) | @testing-library/react; `fireEvent.click`, `fireEvent.keyDown` |
-| Component | `ConfirmDialog` Tier 2: text matching, case sensitivity, enable/disable (S32-S34) | @testing-library/react; `fireEvent.change` on input |
-| Component | `ConfirmDialog` Tier 3: countdown timer, dual conditions, reset on close (S35-S40) | @testing-library/react with `vi.useFakeTimers()` for countdown |
-| Component | `Memory.tsx` integration: delete button visibility, modal trigger, success flow (S29, S32, S35) | @testing-library/react with mocked hooks |
-| Component | `Toast`: rendering, auto-dismiss, type variants | @testing-library/react with `vi.useFakeTimers()` |
+| Layer      | What to Test                                                                                    | Approach                                                                                      |
+| ---------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| DB Queries | `deleteMemoryObservation`: success (S1), not found (S2), IDOR (S3)                              | Vitest with mocked Drizzle `db` object; verify correct SQL builder calls                      |
+| DB Queries | `clearMemoryObservationsByProject`: success (S4), empty (S5), IDOR (S6)                         | Same mock approach                                                                            |
+| DB Queries | `clearAllMemoryObservations`: multi-repo (S7), empty (S8)                                       | Same mock approach                                                                            |
+| DB Queries | `listMemoryObservations`, `getMemoryStats`: correct filtering, aggregation                      | Same mock approach                                                                            |
+| API Routes | `DELETE /api/memory/observations/:id`: 200, 400, 404, 401 (S9-S12)                              | Hono `app.request()` with mock user context (existing pattern in api.test.ts)                 |
+| API Routes | `DELETE /api/memory/projects/:project/observations`: 200, 401, 403, 404 (S13-S17)               | Same Hono test pattern; verify URL decoding of `%2F`                                          |
+| API Routes | `DELETE /api/memory/observations`: 200, 401, multi-install (S18-S21)                            | Same Hono test pattern                                                                        |
+| Adapter    | `PostgresMemoryStorage` methods: delegation, return values (S22-S28)                            | Vitest mocking `ghagga-db` (existing pattern in postgres.test.ts)                             |
+| Hooks      | `useDeleteObservation`, `useClearRepoMemory`, `usePurgeAllMemory`                               | Vitest mocking `fetchApi`/`fetchData`; verify correct paths, methods, cache invalidation keys |
+| Component  | `ConfirmDialog` Tier 1: open/close, confirm, cancel, escape, backdrop (S29-S31)                 | @testing-library/react; `fireEvent.click`, `fireEvent.keyDown`                                |
+| Component  | `ConfirmDialog` Tier 2: text matching, case sensitivity, enable/disable (S32-S34)               | @testing-library/react; `fireEvent.change` on input                                           |
+| Component  | `ConfirmDialog` Tier 3: countdown timer, dual conditions, reset on close (S35-S40)              | @testing-library/react with `vi.useFakeTimers()` for countdown                                |
+| Component  | `Memory.tsx` integration: delete button visibility, modal trigger, success flow (S29, S32, S35) | @testing-library/react with mocked hooks                                                      |
+| Component  | `Toast`: rendering, auto-dismiss, type variants                                                 | @testing-library/react with `vi.useFakeTimers()`                                              |
 
 ---
 

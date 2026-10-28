@@ -7,7 +7,6 @@ All tasks are documentation-only (markdown edits). No code changes. Tasks are gr
 ## Phase 1: Memory Sweep (HIGH — 8 files)
 
 Fixes the most widespread issue: incorrect memory availability statements across 8 files + adds SQLite memory documentation.
-
 - [ ] 1.1 Fix memory availability in `README.md` — change memory feature table/section from "No"/"Coming soon" to "Yes (SQLite)" for CLI and Action modes; add storage backend per mode (PostgreSQL for Server, SQLite via `sql.js` for CLI at `~/.config/ghagga/memory.db`, SQLite via `sql.js` + `@actions/cache` for Action)
 - [ ] 1.2 Fix memory availability in `docs/cli.md` — update memory section to state CLI uses SQLite via `sql.js` at `~/.config/ghagga/memory.db`; remove any "not available" / "coming soon" / "server-only" language
 - [ ] 1.3 Fix memory availability in `docs/github-action.md` — update memory section to state Action uses SQLite via `sql.js` persisted with `@actions/cache`; remove any "not available" / "coming soon" language
@@ -26,7 +25,6 @@ Fixes the most widespread issue: incorrect memory availability statements across
 ## Phase 2: CLI Commands Sweep (HIGH — 4 files)
 
 Documents the `ghagga memory` subcommands and missing CLI flags across all CLI reference files.
-
 - [ ] 2.1 Document `ghagga memory` subcommands in `docs/cli.md` — add `memory` as a top-level command (making 5 total: `login`, `logout`, `status`, `review [path]`, `memory`); document all 6 subcommands with syntax and description: `memory list`, `memory search <query>`, `memory show <id>`, `memory delete <id>`, `memory stats`, `memory clear`; note that memory is stored at `~/.config/ghagga/memory.db`
 - [ ] 2.2 Document `ghagga memory` subcommands in `apps/cli/README.md` — add `memory` to the commands list alongside `login`, `logout`, `status`, `review`; list all 6 subcommands with usage syntax
 - [ ] 2.3 Document `ghagga memory` subcommands in `docs/quick-start.md` — add memory commands to any CLI command reference or quick-start examples
@@ -45,7 +43,6 @@ Documents the `ghagga memory` subcommands and missing CLI flags across all CLI r
 ## Phase 3: Metrics & Permissions Sweep (HIGH — 6 files)
 
 Corrects test counts and GitHub App permissions across all affected files.
-
 - [ ] 3.1 Fix test count in `README.md` — update total to 1,728 with per-package breakdown: `packages/db` (118), `packages/core` (526), `apps/cli` (209), `apps/server` (413), `apps/action` (195), `apps/dashboard` (267)
 - [ ] 3.2 Fix test count in `docs/tech-stack.md` — update total and per-package breakdown to match 1,728
 - [ ] 3.3 Fix test count in `docs/v1-vs-v2.md` — update total and any breakdown to match 1,728
@@ -63,7 +60,6 @@ Corrects test counts and GitHub App permissions across all affected files.
 ## Phase 4: API, Schema & Tech Stack (HIGH/MEDIUM — 3 files)
 
 Adds missing API endpoints, schema columns, and tech stack entries.
-
 - [ ] 4.1 Add 5 DELETE endpoints to `docs/api-reference.md` — document each with HTTP method, path, description, path parameters, and response status codes:
   - `DELETE /api/memory/observations/:id` — Delete a specific observation
   - `DELETE /api/memory/projects/:project/observations` — Delete all observations for a project
@@ -83,7 +79,6 @@ Adds missing API endpoints, schema columns, and tech stack entries.
 ## Phase 5: Dashboard & Architecture (MEDIUM — 3 files)
 
 Documents dashboard memory management features and updates architecture docs.
-
 - [ ] 5.1 Document dashboard memory management features in `docs/memory-system.md` — add section describing: 3-tier delete operations (Tier 1: individual observation delete with confirm dialog; Tier 2: clear all observations for a repo with repo-name-typing confirmation; Tier 3: purge all observations with "DELETE ALL" typing + 5-second countdown); session management (delete individual sessions, clean up empty sessions)
 - [ ] 5.2 Document dashboard memory UI features in `README.md` — update dashboard features section to mention: severity badges on observations, StatsBar component, ObservationDetailModal, severity and sort filters, memory management pages
 - [ ] 5.3 Add `enable-memory` Action input documentation to `README.md` — if not already added in task 3.8, add to the Action section
@@ -99,7 +94,6 @@ Documents dashboard memory management features and updates architecture docs.
 ## Phase 6: Version & Final Verification (LOW — cross-cutting)
 
 Bumps version references and performs final cross-file consistency checks.
-
 - [ ] 6.1 Update version references in `README.md` — change `2.0.1` to `2.1.0` in version badges, inline mentions, and any current-version contexts (preserve `2.0.1` in changelogs/historical references)
 - [ ] 6.2 Update version references in `docs/v1-vs-v2.md` — change `2.0.1` to `2.1.0` where it refers to the current version
 - [ ] 6.3 Grep all docs for remaining `2.0.1` references — search `docs/` and root `README.md` for `2.0.1` in current-version contexts; fix any remaining instances

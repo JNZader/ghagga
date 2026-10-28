@@ -3,7 +3,6 @@
 ## Technical Approach
 
 Add git hook management and hook-oriented review flags to the GHAGGA CLI. The design follows two parallel tracks:
-
 1. **`hooks` command group** — new `install`, `uninstall`, and `status` subcommands under `ghagga hooks`, following the exact pattern established by `apps/cli/src/commands/memory/index.ts`.
 2. **Review command extensions** — four new flags (`--staged`, `--commit-msg`, `--exit-on-issues`, `--quick`) added to the existing `review` command. These flags compose with existing flags and are the mechanism the hook scripts invoke.
 
@@ -164,18 +163,18 @@ ghagga hooks install [--quick] [--no-commit-msg] [--no-pre-commit] [--force]
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/cli/src/commands/hooks/index.ts` | Create | Command group barrel — creates `Command('hooks')`, registers `install`, `uninstall`, `status` subcommands. Follows `memory/index.ts` pattern exactly. |
-| `apps/cli/src/commands/hooks/install.ts` | Create | `registerInstallCommand(parent)` — generates hook scripts from templates, writes to `.git/hooks/`, handles backup of existing hooks, detects `core.hooksPath`. |
-| `apps/cli/src/commands/hooks/uninstall.ts` | Create | `registerUninstallCommand(parent)` — removes GHAGGA hooks (by marker detection), restores `.ghagga-backup` files if they exist. |
-| `apps/cli/src/commands/hooks/status.ts` | Create | `registerStatusCommand(parent)` — reads `.git/hooks/pre-commit` and `commit-msg`, reports installed/not-installed/foreign status. |
-| `apps/cli/src/commands/hooks/templates.ts` | Create | Pure functions that return hook script strings. `generatePreCommitHook(opts)` and `generateCommitMsgHook(opts)`. No side effects, trivially testable. |
-| `apps/cli/src/commands/hooks/git-utils.ts` | Create | Shared helpers: `findGitRoot(cwd)`, `getHooksDir(gitRoot)`, `hasGhaggaMarker(filePath)`, `getCoreHooksPath(gitRoot)`. Pure fs/git operations, isolated for testing. |
-| `apps/cli/src/commands/review.ts` | Modify | (1) Add `--staged`, `--commit-msg <file>`, `--exit-on-issues`, `--quick` options. (2) Extract `getGitDiff` to accept a `staged` boolean. (3) Add `--commit-msg` early-return path that calls `reviewCommitMessage()`. (4) Add `--exit-on-issues` severity check after pipeline returns. (5) Pass `aiReviewEnabled: false` to pipeline when `--quick`. |
-| `apps/cli/src/commands/review-commit-msg.ts` | Create | `reviewCommitMessage({ message, provider, model, apiKey })` — lightweight function that validates commit message format and calls a single LLM prompt. Returns a `ReviewResult`-compatible object. |
-| `apps/cli/src/index.ts` | Modify | Import and register `hooksCommand` from `./commands/hooks/index.js`. Add new options to the `review` command definition (`.option('--staged', ...)` etc.). |
-| `apps/cli/src/lib/git.ts` | Modify | Add `getStagedDiff(repoPath)` and `getStagedFileList(repoPath)` helper functions. |
+| File                                         | Action | Description                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/cli/src/commands/hooks/index.ts`       | Create | Command group barrel — creates `Command('hooks')`, registers `install`, `uninstall`, `status` subcommands. Follows `memory/index.ts` pattern exactly.                                                                                                                                                                                                 |
+| `apps/cli/src/commands/hooks/install.ts`     | Create | `registerInstallCommand(parent)` — generates hook scripts from templates, writes to `.git/hooks/`, handles backup of existing hooks, detects `core.hooksPath`.                                                                                                                                                                                        |
+| `apps/cli/src/commands/hooks/uninstall.ts`   | Create | `registerUninstallCommand(parent)` — removes GHAGGA hooks (by marker detection), restores `.ghagga-backup` files if they exist.                                                                                                                                                                                                                       |
+| `apps/cli/src/commands/hooks/status.ts`      | Create | `registerStatusCommand(parent)` — reads `.git/hooks/pre-commit` and `commit-msg`, reports installed/not-installed/foreign status.                                                                                                                                                                                                                     |
+| `apps/cli/src/commands/hooks/templates.ts`   | Create | Pure functions that return hook script strings. `generatePreCommitHook(opts)` and `generateCommitMsgHook(opts)`. No side effects, trivially testable.                                                                                                                                                                                                 |
+| `apps/cli/src/commands/hooks/git-utils.ts`   | Create | Shared helpers: `findGitRoot(cwd)`, `getHooksDir(gitRoot)`, `hasGhaggaMarker(filePath)`, `getCoreHooksPath(gitRoot)`. Pure fs/git operations, isolated for testing.                                                                                                                                                                                   |
+| `apps/cli/src/commands/review.ts`            | Modify | (1) Add `--staged`, `--commit-msg <file>`, `--exit-on-issues`, `--quick` options. (2) Extract `getGitDiff` to accept a `staged` boolean. (3) Add `--commit-msg` early-return path that calls `reviewCommitMessage()`. (4) Add `--exit-on-issues` severity check after pipeline returns. (5) Pass `aiReviewEnabled: false` to pipeline when `--quick`. |
+| `apps/cli/src/commands/review-commit-msg.ts` | Create | `reviewCommitMessage({ message, provider, model, apiKey })` — lightweight function that validates commit message format and calls a single LLM prompt. Returns a `ReviewResult`-compatible object.                                                                                                                                                    |
+| `apps/cli/src/index.ts`                      | Modify | Import and register `hooksCommand` from `./commands/hooks/index.js`. Add new options to the `review` command definition (`.option('--staged', ...)` etc.).                                                                                                                                                                                            |
+| `apps/cli/src/lib/git.ts`                    | Modify | Add `getStagedDiff(repoPath)` and `getStagedFileList(repoPath)` helper functions.                                                                                                                                                                                                                                                                     |
 
 ## Interfaces / Contracts
 
@@ -206,10 +205,10 @@ export interface ReviewOptions {
   config?: string;
   verbose: boolean;
   // New fields:
-  staged: boolean;          // --staged flag
-  commitMsg?: string;       // --commit-msg <file> path
-  exitOnIssues: boolean;    // --exit-on-issues flag
-  quick: boolean;           // --quick flag
+  staged: boolean; // --staged flag
+  commitMsg?: string; // --commit-msg <file> path
+  exitOnIssues: boolean; // --exit-on-issues flag
+  quick: boolean; // --quick flag
 }
 ```
 
@@ -291,9 +290,7 @@ export interface CommitMsgReviewOptions {
  * Validate a commit message using basic heuristics + optional LLM review.
  * Returns a ReviewResult for consistent exit-code handling.
  */
-export async function reviewCommitMessage(
-  opts: CommitMsgReviewOptions,
-): Promise<ReviewResult>;
+export async function reviewCommitMessage(opts: CommitMsgReviewOptions): Promise<ReviewResult>;
 ```
 
 ### Exit Code Logic (Modified in `review.ts`)
@@ -301,10 +298,7 @@ export async function reviewCommitMessage(
 ```typescript
 // After pipeline returns in reviewCommand():
 
-function resolveExitCode(
-  result: ReviewResult,
-  exitOnIssues: boolean,
-): number {
+function resolveExitCode(result: ReviewResult, exitOnIssues: boolean): number {
   if (exitOnIssues) {
     const hasBlockingIssues = result.findings.some(
       (f) => f.severity === 'critical' || f.severity === 'high',
@@ -318,16 +312,16 @@ function resolveExitCode(
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | `templates.ts` — hook script generation | Assert output strings contain expected flags, marker, shebang. Test `--quick` variant. Pure functions, no mocks. |
-| Unit | `git-utils.ts` — git root detection, marker detection | Mock `execSync` and `readFileSync`. Test edge cases: no .git dir, core.hooksPath set, empty hook file. |
-| Unit | `review-commit-msg.ts` — commit message validation | Mock the LLM provider. Test empty message, short message, good message, conventional commit format. |
-| Unit | `install.ts` — hook installation logic | Mock `fs.writeFileSync`, `fs.chmodSync`, `fs.existsSync`, `fs.renameSync`, `git-utils`. Test: fresh install, overwrite GHAGGA hook, backup non-GHAGGA hook, skip hooks with `--no-pre-commit`, `core.hooksPath` warning. |
-| Unit | `uninstall.ts` — hook removal logic | Mock fs operations. Test: remove GHAGGA hook, restore backup, no-op when no GHAGGA hook exists. |
-| Unit | `status.ts` — status reporting | Mock fs reads. Test: both hooks installed, one installed, none, foreign hooks detected. |
-| Unit | `review.ts` — new flag handling | Extend existing `review.test.ts`. Test: `--staged` uses staged diff, `--quick` passes `aiReviewEnabled: false`, `--exit-on-issues` exits 1 on critical findings, `--commit-msg` calls `reviewCommitMessage()`. |
-| Integration | End-to-end hook lifecycle | Create a temp git repo, run `install`, verify hook files exist with correct content, run `status`, run `uninstall`, verify hooks removed and backup restored. Uses `execSync` on the actual CLI binary. |
+| Layer       | What to Test                                          | Approach                                                                                                                                                                                                                 |
+| ----------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit        | `templates.ts` — hook script generation               | Assert output strings contain expected flags, marker, shebang. Test `--quick` variant. Pure functions, no mocks.                                                                                                         |
+| Unit        | `git-utils.ts` — git root detection, marker detection | Mock `execSync` and `readFileSync`. Test edge cases: no .git dir, core.hooksPath set, empty hook file.                                                                                                                   |
+| Unit        | `review-commit-msg.ts` — commit message validation    | Mock the LLM provider. Test empty message, short message, good message, conventional commit format.                                                                                                                      |
+| Unit        | `install.ts` — hook installation logic                | Mock `fs.writeFileSync`, `fs.chmodSync`, `fs.existsSync`, `fs.renameSync`, `git-utils`. Test: fresh install, overwrite GHAGGA hook, backup non-GHAGGA hook, skip hooks with `--no-pre-commit`, `core.hooksPath` warning. |
+| Unit        | `uninstall.ts` — hook removal logic                   | Mock fs operations. Test: remove GHAGGA hook, restore backup, no-op when no GHAGGA hook exists.                                                                                                                          |
+| Unit        | `status.ts` — status reporting                        | Mock fs reads. Test: both hooks installed, one installed, none, foreign hooks detected.                                                                                                                                  |
+| Unit        | `review.ts` — new flag handling                       | Extend existing `review.test.ts`. Test: `--staged` uses staged diff, `--quick` passes `aiReviewEnabled: false`, `--exit-on-issues` exits 1 on critical findings, `--commit-msg` calls `reviewCommitMessage()`.           |
+| Integration | End-to-end hook lifecycle                             | Create a temp git repo, run `install`, verify hook files exist with correct content, run `status`, run `uninstall`, verify hooks removed and backup restored. Uses `execSync` on the actual CLI binary.                  |
 
 All tests follow the existing pattern: Vitest with `vi.mock()`, `vi.hoisted()`, `ProcessExitError` sentinel for `process.exit` mocking, Commander `parseAsync` for subcommand tests. See `apps/cli/src/commands/memory/clear.test.ts` for the canonical pattern.
 

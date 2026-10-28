@@ -2,7 +2,7 @@
 
 **Status**: draft  
 **Author**: javier  
-**Date**: 2026-03-16  
+**Date**: 2026-03-16
 
 ## Intent
 
@@ -12,20 +12,20 @@ Reduce token consumption and request rate in GHAGGA's workflow (5-specialist) an
 
 GHAGGA's multi-agent modes fire all LLM calls simultaneously via `Promise.allSettled`, which causes:
 
-| Problem | Impact | Affected Providers |
-|---------|--------|--------------------|
-| Peak TPM spike (5x diff duplication) | 413 "Request too large" errors | Groq (8K-12K TPM) |
-| RPM burst (6 requests at once) | Rate limit exhaustion | Gemini (20 RPM), Groq |
-| No fallback wiring | 413 treated as fatal, not retried | All free-tier providers |
-| Shared context duplicated 5x | ~4K tokens wasted per workflow review | All providers |
+| Problem                              | Impact                                | Affected Providers      |
+| ------------------------------------ | ------------------------------------- | ----------------------- |
+| Peak TPM spike (5x diff duplication) | 413 "Request too large" errors        | Groq (8K-12K TPM)       |
+| RPM burst (6 requests at once)       | Rate limit exhaustion                 | Gemini (20 RPM), Groq   |
+| No fallback wiring                   | 413 treated as fatal, not retried     | All free-tier providers |
+| Shared context duplicated 5x         | ~4K tokens wasted per workflow review | All providers           |
 
 ### Token Math Per Review (2K token diff)
 
-| Mode | Calls | Diff duplicated | Total input tokens |
-|------|-------|-----------------|--------------------|
-| Simple | 1 | 1x | ~3K |
-| Consensus | 3 parallel | 3x | ~9K |
-| Workflow | 5+1 | 5x + synthesis | ~18-20K |
+| Mode      | Calls      | Diff duplicated | Total input tokens |
+| --------- | ---------- | --------------- | ------------------ |
+| Simple    | 1          | 1x              | ~3K                |
+| Consensus | 3 parallel | 3x              | ~9K                |
+| Workflow  | 5+1        | 5x + synthesis  | ~18-20K            |
 
 A workflow review is currently **unusable** with Groq free tier and burns 3x the rate limit budget with Gemini.
 
@@ -58,7 +58,7 @@ Replace `Promise.allSettled(allSpecialists)` with a concurrency-limited executor
 // Instead of: Promise.allSettled(specialists.map(fn))
 // Use: pLimit-style batching
 const limit = pLimit(concurrency); // default: 2
-const results = await Promise.allSettled(specialists.map(s => limit(() => runSpecialist(s))));
+const results = await Promise.allSettled(specialists.map((s) => limit(() => runSpecialist(s))));
 ```
 
 - **Workflow default**: `concurrency: 2` (2 specialists at a time, 3 batches → 60% less peak TPM)
@@ -111,33 +111,33 @@ if (message.includes('413') || message.includes('too large') || message.includes
 
 ## Affected Modules
 
-| Package | Files | Change Type |
-|---------|-------|-------------|
-| `packages/core` | `agents/workflow.ts` | Sequential batching, fallback wiring, compact prompts |
-| `packages/core` | `agents/consensus.ts` | Sequential batching, fallback wiring |
-| `packages/core` | `agents/prompts.ts` | Compact prompt builder function |
-| `packages/core` | `providers/fallback.ts` | 413 retryable, export for agent use |
-| `packages/core` | `types.ts` | Add `reviewConcurrency`, `reviewDelayMs` to `ReviewSettings` |
-| `packages/core` | `pipeline.ts` | Pass concurrency config through to agents |
-| `packages/core` | `utils/concurrency.ts` | New utility: p-limit-style concurrency limiter |
+| Package         | Files                   | Change Type                                                  |
+| --------------- | ----------------------- | ------------------------------------------------------------ |
+| `packages/core` | `agents/workflow.ts`    | Sequential batching, fallback wiring, compact prompts        |
+| `packages/core` | `agents/consensus.ts`   | Sequential batching, fallback wiring                         |
+| `packages/core` | `agents/prompts.ts`     | Compact prompt builder function                              |
+| `packages/core` | `providers/fallback.ts` | 413 retryable, export for agent use                          |
+| `packages/core` | `types.ts`              | Add `reviewConcurrency`, `reviewDelayMs` to `ReviewSettings` |
+| `packages/core` | `pipeline.ts`           | Pass concurrency config through to agents                    |
+| `packages/core` | `utils/concurrency.ts`  | New utility: p-limit-style concurrency limiter               |
 
 ## Distribution Mode Impact
 
-| Mode | Impact |
-|------|--------|
-| **SaaS** | Full support — config stored in repo settings |
-| **CLI** | Full support — `--concurrency 1 --delay 1000` flags |
-| **GitHub Action** | Full support — action inputs map to config |
-| **1-click deploy** | Full support — env vars follow existing pattern |
+| Mode               | Impact                                              |
+| ------------------ | --------------------------------------------------- |
+| **SaaS**           | Full support — config stored in repo settings       |
+| **CLI**            | Full support — `--concurrency 1 --delay 1000` flags |
+| **GitHub Action**  | Full support — action inputs map to config          |
+| **1-click deploy** | Full support — env vars follow existing pattern     |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Compact prompts degrade quality | Medium | Medium | First specialist always gets full context; synthesis still gets all findings |
-| Sequential mode slower | Certain | Low | Default concurrency: 2 (not fully sequential). Speed is a trade-off for free-tier compat |
-| p-limit adds a dependency | Low | Low | Implement minimal concurrency limiter inline (~20 lines) instead of importing p-limit |
-| Fallback in workflow changes provider mid-review | Low | Low | Acceptable — each specialist call is independent; synthesis merges all outputs |
+| Risk                                             | Likelihood | Impact | Mitigation                                                                               |
+| ------------------------------------------------ | ---------- | ------ | ---------------------------------------------------------------------------------------- |
+| Compact prompts degrade quality                  | Medium     | Medium | First specialist always gets full context; synthesis still gets all findings             |
+| Sequential mode slower                           | Certain    | Low    | Default concurrency: 2 (not fully sequential). Speed is a trade-off for free-tier compat |
+| p-limit adds a dependency                        | Low        | Low    | Implement minimal concurrency limiter inline (~20 lines) instead of importing p-limit    |
+| Fallback in workflow changes provider mid-review | Low        | Low    | Acceptable — each specialist call is independent; synthesis merges all outputs           |
 
 ## Rollback Plan
 

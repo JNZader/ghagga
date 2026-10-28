@@ -16,7 +16,6 @@ The CLI currently outputs all text via raw `console.log`/`console.error` with sc
 ### R1: TUI Mode Auto-Detection
 
 The system MUST determine the output mode automatically at process startup using a three-signal check:
-
 1. If `--plain` flag is passed, mode MUST be `plain`
 2. If `process.stdout.isTTY` is `false` or `undefined`, mode MUST be `plain`
 3. If `process.env.CI` is set (any truthy value), mode MUST be `plain`
@@ -89,7 +88,6 @@ The TUI mode MUST be determined once during process initialization and MUST NOT 
 ### R3: --plain Global Flag
 
 The CLI MUST accept a `--plain` global flag on the root command. This flag MUST:
-
 1. Be visible in `ghagga --help` output
 2. Apply to ALL subcommands without per-command configuration
 3. Force plain mode when present, regardless of terminal capabilities
@@ -267,7 +265,6 @@ In **plain mode**:
 ### R8: Plain Mode Log Delegation
 
 In plain mode, ALL `tui.log.*` calls MUST delegate to the corresponding console method:
-
 - `tui.log.info(msg)` -> `console.log(msg)`
 - `tui.log.success(msg)` -> `console.log(msg)`
 - `tui.log.warn(msg)` -> `console.log(msg)`
@@ -331,7 +328,6 @@ This ensures piped or CI output contains no spinner artifacts (partial lines, cu
 ### R10: No ANSI Escape Sequences in Plain Mode
 
 In plain mode, ALL output produced through the TUI facade (log methods, intro, outro, spinner stop) MUST be free of ANSI escape sequences. This includes:
-
 - Color codes (`\x1b[31m`, `\x1b[0m`, etc.)
 - Cursor movement sequences (`\x1b[A`, `\r`, etc.)
 - Box-drawing characters that depend on terminal capability MAY still be used (they are Unicode, not ANSI escapes)
@@ -633,7 +629,6 @@ All pre-existing CLI flags and options MUST continue to work identically after t
 #### Scenario: S20.3 — review --help shows new hook-related flags
 
 > Added by change: cli-git-hooks
-
 - GIVEN the user runs `ghagga review --help`
 - WHEN the help text is displayed
 - THEN the output MUST document `--staged`, `--commit-msg <file>`, `--exit-on-issues`, and `--quick` alongside the existing flags
@@ -642,7 +637,6 @@ All pre-existing CLI flags and options MUST continue to work identically after t
 #### Scenario: S20.4 — Existing flags still appear in review --help
 
 > Added by change: cli-git-hooks
-
 - GIVEN the user runs `ghagga review --help`
 - WHEN the help text is displayed
 - THEN all pre-existing flags (`--no-memory`, `--no-semgrep`, `--no-trivy`, `--no-cpd`, `-v`, `-m`, `-p`, `--model`, `--api-key`, `-f`, `-c`) MUST still be listed
@@ -991,6 +985,7 @@ The `.ghagga.json` config file MUST support the new tool fields.
 #### Scenario: Config file with new fields
 
 - GIVEN a `.ghagga.json` with:
+
   ```json
   {
     "disabledTools": ["cpd", "markdownlint"],
@@ -1017,6 +1012,7 @@ In `--verbose` mode, the CLI MUST log which tools are activated and why.
 - GIVEN the user runs `ghagga review --verbose` on a Python project
 - WHEN the verbose progress handler runs
 - THEN it MUST log lines like:
+
   ```
   [tools] Activated: semgrep (always-on), trivy (always-on), cpd (always-on),
           gitleaks (always-on), shellcheck (always-on), markdownlint (always-on),

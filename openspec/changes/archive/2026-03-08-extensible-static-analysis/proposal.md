@@ -47,14 +47,14 @@ packages/core/src/tools/budget.ts      ← Time-budget allocator
 Each tool implements:
 ```typescript
 interface ToolDefinition {
-  name: ToolName;                              // e.g., 'gitleaks'
-  displayName: string;                         // e.g., 'Gitleaks'
+  name: ToolName; // e.g., 'gitleaks'
+  displayName: string; // e.g., 'Gitleaks'
   tier: 'always-on' | 'auto-detect';
-  detect?: (files: string[]) => boolean;       // for auto-detect tier
+  detect?: (files: string[]) => boolean; // for auto-detect tier
   install: (cacheDir: string) => Promise<void>;
   run: (repoDir: string, timeout: number) => Promise<RawToolOutput>;
   parse: (raw: RawToolOutput) => ReviewFinding[];
-  version: string;                             // pinned version
+  version: string; // pinned version
   outputFormat: 'json' | 'sarif' | 'xml' | 'text';
 }
 ```
@@ -75,59 +75,59 @@ interface ToolDefinition {
 
 ### Tool Tiers
 
-| Tier | Activation | Tools |
-|------|-----------|-------|
-| Always-on | Every PR | Semgrep, Trivy (+license), CPD, Gitleaks, ShellCheck, markdownlint-cli2, Lizard |
-| Auto-detect | File presence | Ruff+Bandit (*.py), golangci-lint (go.mod), Biome (*.ts/js/jsx/tsx), PMD (*.java), Psalm (*.php), clippy (Cargo.toml), Hadolint (Dockerfile) |
+| Tier        | Activation    | Tools                                                                                                                                        |
+| ----------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Always-on   | Every PR      | Semgrep, Trivy (+license), CPD, Gitleaks, ShellCheck, markdownlint-cli2, Lizard                                                              |
+| Auto-detect | File presence | Ruff+Bandit (_.py), golangci-lint (go.mod), Biome (_.ts/js/jsx/tsx), PMD (_.java), Psalm (_.php), clippy (Cargo.toml), Hadolint (Dockerfile) |
 
 ### Distribution Mode Impact
 
-| Mode | Impact |
-|------|--------|
-| **SaaS (server)** | Receives extended `StaticAnalysisResult` from runner callback; settings API exposes tool grid |
-| **GitHub Action** | Runner installs + executes tools via registry; orchestrator uses registry loop instead of hardcoded calls |
-| **CLI** | Uses `packages/core` runner with registry; `--disable-tool` / `--enable-tool` flags |
-| **1-click deploy** | Runner template updated with auto-detect workflow |
+| Mode               | Impact                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| **SaaS (server)**  | Receives extended `StaticAnalysisResult` from runner callback; settings API exposes tool grid             |
+| **GitHub Action**  | Runner installs + executes tools via registry; orchestrator uses registry loop instead of hardcoded calls |
+| **CLI**            | Uses `packages/core` runner with registry; `--disable-tool` / `--enable-tool` flags                       |
+| **1-click deploy** | Runner template updated with auto-detect workflow                                                         |
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/core/src/types.ts` | Modified | `StaticAnalysisResult` → `Record<ToolName, ToolResult>`, `ReviewSettings` tool fields |
-| `packages/core/src/tools/` | Modified + New | Add `registry.ts`, `detect.ts`, `budget.ts`, `plugins/` directory with 15 tool files |
-| `packages/core/src/tools/runner.ts` | Modified | Replace hardcoded tool calls with registry-driven loop |
-| `packages/core/src/pipeline.ts` | Modified | Update `createStaticOnlyResult` and `formatStaticAnalysisContext` to iterate over dynamic keys |
-| `packages/core/src/index.ts` | Modified | Export new types and registry |
-| `apps/action/src/tools/` | Modified | Orchestrator uses registry; individual tool files become plugin implementations |
-| `apps/action/src/tools/types.ts` | Modified | `ToolName` becomes union from registry, not hardcoded literal |
-| `apps/action/src/tools/orchestrator.ts` | Modified | Loop over registry instead of hardcoded `executeSemgrep`/`executeTrivy`/`executeCpd` |
-| `apps/server/src/routes/runner-callback.ts` | Modified | Accept `Record<string, ToolResult>` payload |
-| `apps/server/src/routes/api/settings.ts` | Modified | `enabledTools`/`disabledTools` instead of per-tool booleans |
-| `apps/server/src/routes/api/installations.ts` | Modified | Settings shape change |
-| `apps/server/src/inngest/review.ts` | Modified | Tool-enable check uses `enabledTools` array |
-| `apps/server/src/inngest/client.ts` | Modified | Event data type update |
-| `apps/cli/src/index.ts` | Modified | Replace `--no-semgrep`/`--no-trivy` with `--disable-tool`/`--enable-tool` |
-| `apps/cli/src/commands/review.ts` | Modified | Settings construction from new flags |
-| `apps/cli/src/ui/theme.ts` | Modified | `SOURCE_LABELS` generated from registry |
-| `apps/cli/src/ui/format.ts` | Modified | Dynamic tool rendering |
-| `apps/dashboard/` | Modified | Settings page shows tool grid |
-| `packages/db/src/schema.ts` | Modified | Add `enabled_tools` JSONB, deprecate boolean columns |
-| `packages/db/src/queries.ts` | Modified | Migration + new column read/write |
-| `templates/` (runner template) | Modified | Auto-detect workflow, on-demand install |
-| `action.yml` | Modified | New inputs for tool configuration |
+| Area                                          | Impact         | Description                                                                                    |
+| --------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| `packages/core/src/types.ts`                  | Modified       | `StaticAnalysisResult` → `Record<ToolName, ToolResult>`, `ReviewSettings` tool fields          |
+| `packages/core/src/tools/`                    | Modified + New | Add `registry.ts`, `detect.ts`, `budget.ts`, `plugins/` directory with 15 tool files           |
+| `packages/core/src/tools/runner.ts`           | Modified       | Replace hardcoded tool calls with registry-driven loop                                         |
+| `packages/core/src/pipeline.ts`               | Modified       | Update `createStaticOnlyResult` and `formatStaticAnalysisContext` to iterate over dynamic keys |
+| `packages/core/src/index.ts`                  | Modified       | Export new types and registry                                                                  |
+| `apps/action/src/tools/`                      | Modified       | Orchestrator uses registry; individual tool files become plugin implementations                |
+| `apps/action/src/tools/types.ts`              | Modified       | `ToolName` becomes union from registry, not hardcoded literal                                  |
+| `apps/action/src/tools/orchestrator.ts`       | Modified       | Loop over registry instead of hardcoded `executeSemgrep`/`executeTrivy`/`executeCpd`           |
+| `apps/server/src/routes/runner-callback.ts`   | Modified       | Accept `Record<string, ToolResult>` payload                                                    |
+| `apps/server/src/routes/api/settings.ts`      | Modified       | `enabledTools`/`disabledTools` instead of per-tool booleans                                    |
+| `apps/server/src/routes/api/installations.ts` | Modified       | Settings shape change                                                                          |
+| `apps/server/src/inngest/review.ts`           | Modified       | Tool-enable check uses `enabledTools` array                                                    |
+| `apps/server/src/inngest/client.ts`           | Modified       | Event data type update                                                                         |
+| `apps/cli/src/index.ts`                       | Modified       | Replace `--no-semgrep`/`--no-trivy` with `--disable-tool`/`--enable-tool`                      |
+| `apps/cli/src/commands/review.ts`             | Modified       | Settings construction from new flags                                                           |
+| `apps/cli/src/ui/theme.ts`                    | Modified       | `SOURCE_LABELS` generated from registry                                                        |
+| `apps/cli/src/ui/format.ts`                   | Modified       | Dynamic tool rendering                                                                         |
+| `apps/dashboard/`                             | Modified       | Settings page shows tool grid                                                                  |
+| `packages/db/src/schema.ts`                   | Modified       | Add `enabled_tools` JSONB, deprecate boolean columns                                           |
+| `packages/db/src/queries.ts`                  | Modified       | Migration + new column read/write                                                              |
+| `templates/` (runner template)                | Modified       | Auto-detect workflow, on-demand install                                                        |
+| `action.yml`                                  | Modified       | New inputs for tool configuration                                                              |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| **10-min budget exceeded** with 15 tools | Medium | Time-budget manager with per-tool caps; always-on tools get priority; auto-detect tools skipped on timeout |
-| **Memory pressure** from 15 sequential tools | Low | Sequential execution (existing pattern); Semgrep (Python) + CPD/PMD (JVM) are heaviest, never run simultaneously; 7GB runner is generous |
-| **Install failures** for new tools on runner | Medium | Each tool install is wrapped in try/catch; failure → `status: 'error'`; review continues with remaining tools |
-| **Breaking change** for existing `StaticAnalysisResult` consumers | Medium | Type preserves `semgrep`/`trivy`/`cpd` keys as required; old boolean settings remain as deprecated aliases; DB migration is additive |
-| **Noisy findings** from 15 tools overwhelming LLM context | Medium | `formatStaticAnalysisContext` already deduplicates by file:line; add finding-count cap (e.g., 200 max) with severity-priority sorting |
-| **ShellCheck/markdownlint false positives** on non-project files | Low | Tools scoped to PR changed files only (not full repo scan) |
-| **golangci-lint / clippy long compile times** | Medium | These tools may need warm-up; budget allocator gives them larger time shares; detect function verifies build toolchain exists |
-| **DB migration on existing deployments** | Low | Additive migration (new column with default); old columns kept for backward compat; one-time backfill script |
+| Risk                                                              | Likelihood | Mitigation                                                                                                                               |
+| ----------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **10-min budget exceeded** with 15 tools                          | Medium     | Time-budget manager with per-tool caps; always-on tools get priority; auto-detect tools skipped on timeout                               |
+| **Memory pressure** from 15 sequential tools                      | Low        | Sequential execution (existing pattern); Semgrep (Python) + CPD/PMD (JVM) are heaviest, never run simultaneously; 7GB runner is generous |
+| **Install failures** for new tools on runner                      | Medium     | Each tool install is wrapped in try/catch; failure → `status: 'error'`; review continues with remaining tools                            |
+| **Breaking change** for existing `StaticAnalysisResult` consumers | Medium     | Type preserves `semgrep`/`trivy`/`cpd` keys as required; old boolean settings remain as deprecated aliases; DB migration is additive     |
+| **Noisy findings** from 15 tools overwhelming LLM context         | Medium     | `formatStaticAnalysisContext` already deduplicates by file:line; add finding-count cap (e.g., 200 max) with severity-priority sorting    |
+| **ShellCheck/markdownlint false positives** on non-project files  | Low        | Tools scoped to PR changed files only (not full repo scan)                                                                               |
+| **golangci-lint / clippy long compile times**                     | Medium     | These tools may need warm-up; budget allocator gives them larger time shares; detect function verifies build toolchain exists            |
+| **DB migration on existing deployments**                          | Low        | Additive migration (new column with default); old columns kept for backward compat; one-time backfill script                             |
 
 ## Rollback Plan
 

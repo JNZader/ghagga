@@ -301,21 +301,21 @@ The project documentation MUST be updated to reflect the new runner creation flo
 
 ## Acceptance Criteria Summary
 
-| ID | Requirement | Criteria | Priority |
-|----|------------|----------|----------|
-| ARC-01 | OAuth Scope Upgrade | Device Flow requests `public_repo` scope; tokens grant repo creation ability | P0 |
-| ARC-02 | Runner Create Endpoint | `POST /api/runner/create` creates repo from template, sets secret, returns 201 | P0 |
-| ARC-03 | Runner Status Endpoint | `GET /api/runner/status` returns `{ exists, repoFullName?, isPrivate? }` | P0 |
-| ARC-04 | Secret Auto-Configuration | `setRunnerSecret()` called after creation; partial failure handled gracefully | P0 |
-| ARC-05 | Dashboard Runner UI | Five states rendered correctly: not-configured, creating, enabled, needs-re-auth, error | P0 |
-| ARC-06 | Scope Mismatch Detection | 403 from template API → `insufficient_scope` error → re-auth prompt | P0 |
-| ARC-07 | Existing Repo Handling | 409 returned when repo exists; Dashboard treats as success | P1 |
-| ARC-08 | Repo Must Be Public | `private: false` in template generate call; warning if org forces private | P0 |
-| ARC-09 | Idempotent Create | Concurrent clicks produce at most one repo; no errors shown to user | P1 |
-| ARC-10 | Template Unavailable | 404 from template → 502 to client with clear message; critical log | P1 |
-| ARC-11 | Rate Limit Handling | Distinguish rate limit from scope error; return 429 with retry-after | P2 |
-| ARC-12 | Private Repo Warning | Status endpoint reports `isPrivate: true` with billing warning | P2 |
-| ARC-13 | GitHub App Permission Reduction | Remove Admin R&W and Contents R&W; documented manual step | P1 |
-| ARC-14 | Documentation Updates | security.md, quick-start.md, self-hosted.md, runner-architecture.md updated | P1 |
-| ARC-15 | Secret Refresh | Separate endpoint or action to reconfigure secret on existing repo | P2 |
-| ARC-16 | Org Repo Creation | Works for org owners; clear error for users without org repo-create permission | P2 |
+| ID     | Requirement                     | Criteria                                                                                | Priority |
+| ------ | ------------------------------- | --------------------------------------------------------------------------------------- | -------- |
+| ARC-01 | OAuth Scope Upgrade             | Device Flow requests `public_repo` scope; tokens grant repo creation ability            | P0       |
+| ARC-02 | Runner Create Endpoint          | `POST /api/runner/create` creates repo from template, sets secret, returns 201          | P0       |
+| ARC-03 | Runner Status Endpoint          | `GET /api/runner/status` returns `{ exists, repoFullName?, isPrivate? }`                | P0       |
+| ARC-04 | Secret Auto-Configuration       | `setRunnerSecret()` called after creation; partial failure handled gracefully           | P0       |
+| ARC-05 | Dashboard Runner UI             | Five states rendered correctly: not-configured, creating, enabled, needs-re-auth, error | P0       |
+| ARC-06 | Scope Mismatch Detection        | 403 from template API → `insufficient_scope` error → re-auth prompt                     | P0       |
+| ARC-07 | Existing Repo Handling          | 409 returned when repo exists; Dashboard treats as success                              | P1       |
+| ARC-08 | Repo Must Be Public             | `private: false` in template generate call; warning if org forces private               | P0       |
+| ARC-09 | Idempotent Create               | Concurrent clicks produce at most one repo; no errors shown to user                     | P1       |
+| ARC-10 | Template Unavailable            | 404 from template → 502 to client with clear message; critical log                      | P1       |
+| ARC-11 | Rate Limit Handling             | Distinguish rate limit from scope error; return 429 with retry-after                    | P2       |
+| ARC-12 | Private Repo Warning            | Status endpoint reports `isPrivate: true` with billing warning                          | P2       |
+| ARC-13 | GitHub App Permission Reduction | Remove Admin R&W and Contents R&W; documented manual step                               | P1       |
+| ARC-14 | Documentation Updates           | security.md, quick-start.md, self-hosted.md, runner-architecture.md updated             | P1       |
+| ARC-15 | Secret Refresh                  | Separate endpoint or action to reconfigure secret on existing repo                      | P2       |
+| ARC-16 | Org Repo Creation               | Works for org owners; clear error for users without org repo-create permission          | P2       |

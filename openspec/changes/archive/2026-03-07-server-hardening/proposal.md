@@ -35,7 +35,6 @@ Harden the Hono server against common web security vulnerabilities identified in
 All changes are confined to `apps/server/` — no modifications to `ghagga-core`, `ghagga-db`, `ghagga-cli`, the GitHub Action, or the dashboard.
 
 **Middleware stack order** in `apps/server/src/index.ts` (top to bottom):
-
 1. Global error handler (`app.onError`) — already exists
 2. Request logging middleware — already exists
 3. `secureHeaders()` — **new** (Hono built-in)
@@ -56,30 +55,29 @@ All changes are confined to `apps/server/` — no modifications to `ghagga-core`
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `apps/server/src/index.ts` | Modified | Add `secureHeaders`, `bodyLimit`, modify `cors()` config, wire rate limiters |
-| `apps/server/src/routes/api.ts` | Modified | Add rate limiting middleware (100 req/min) |
-| `apps/server/src/routes/oauth.ts` | Modified | Add rate limiting middleware (10 req/min) |
-| `apps/server/src/routes/webhook.ts` | Modified | Add rate limiting middleware (200 req/min), override body limit to 5 MB |
-| `apps/server/package.json` | Modified | Add `hono-rate-limiter` dependency |
-| `apps/server/src/__tests__/` | New | Tests for CORS, rate limiting, security headers, body limit |
-| `.env.example` | Modified | Document `ALLOWED_ORIGINS` env var |
+| Area                                | Impact   | Description                                                                  |
+| ----------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| `apps/server/src/index.ts`          | Modified | Add `secureHeaders`, `bodyLimit`, modify `cors()` config, wire rate limiters |
+| `apps/server/src/routes/api.ts`     | Modified | Add rate limiting middleware (100 req/min)                                   |
+| `apps/server/src/routes/oauth.ts`   | Modified | Add rate limiting middleware (10 req/min)                                    |
+| `apps/server/src/routes/webhook.ts` | Modified | Add rate limiting middleware (200 req/min), override body limit to 5 MB      |
+| `apps/server/package.json`          | Modified | Add `hono-rate-limiter` dependency                                           |
+| `apps/server/src/__tests__/`        | New      | Tests for CORS, rate limiting, security headers, body limit                  |
+| `.env.example`                      | Modified | Document `ALLOWED_ORIGINS` env var                                           |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| In-memory rate limit store resets on Render deploy/restart | High | Acceptable for current scale. Attacker window is brief (cold start). Document Redis upgrade path for future. |
-| Webhook rate limit too aggressive blocks legitimate GitHub bursts | Medium | Use generous limit (200/min). GitHub webhook delivery retries on failure. Monitor after deploy. |
-| CORS restriction breaks dashboard if URL changes | Low | `ALLOWED_ORIGINS` env var allows runtime override without code change. |
-| `bodyLimit` rejects legitimate large webhook payloads | Low | 5 MB limit for `/webhook` is generous. GitHub's max payload is ~25 MB but typical PR payloads are well under 5 MB. Can increase if needed. |
-| `secureHeaders` CSP breaks Inngest dashboard UI | Low | Inngest serves its own UI — its endpoint at `/api/inngest` returns JSON, not HTML. CSP only affects browser rendering. |
+| Risk                                                              | Likelihood | Mitigation                                                                                                                                 |
+| ----------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| In-memory rate limit store resets on Render deploy/restart        | High       | Acceptable for current scale. Attacker window is brief (cold start). Document Redis upgrade path for future.                               |
+| Webhook rate limit too aggressive blocks legitimate GitHub bursts | Medium     | Use generous limit (200/min). GitHub webhook delivery retries on failure. Monitor after deploy.                                            |
+| CORS restriction breaks dashboard if URL changes                  | Low        | `ALLOWED_ORIGINS` env var allows runtime override without code change.                                                                     |
+| `bodyLimit` rejects legitimate large webhook payloads             | Low        | 5 MB limit for `/webhook` is generous. GitHub's max payload is ~25 MB but typical PR payloads are well under 5 MB. Can increase if needed. |
+| `secureHeaders` CSP breaks Inngest dashboard UI                   | Low        | Inngest serves its own UI — its endpoint at `/api/inngest` returns JSON, not HTML. CSP only affects browser rendering.                     |
 
 ## Rollback Plan
 
 All changes are additive middleware in `apps/server/`. To rollback:
-
 1. Revert `apps/server/src/index.ts` to restore `app.use('*', cors())` and remove `secureHeaders`/`bodyLimit` imports
 2. Revert route files to remove rate limiting middleware
 3. Remove `hono-rate-limiter` from `apps/server/package.json`

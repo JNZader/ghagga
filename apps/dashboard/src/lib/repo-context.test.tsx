@@ -37,10 +37,8 @@ afterEach(() => {
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-function createRepoWrapper() {
-  return function Wrapper({ children }: { children: ReactNode }) {
-    return <RepoProvider>{children}</RepoProvider>;
-  };
+function RepoTestWrapper({ children }: { children: ReactNode }) {
+  return <RepoProvider>{children}</RepoProvider>;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -52,7 +50,7 @@ describe('RepoProvider', () => {
     mockLocalStorage.ghagga_selected_repo = 'acme/app';
 
     const { result } = renderHook(() => useSelectedRepo(), {
-      wrapper: createRepoWrapper(),
+      wrapper: RepoTestWrapper,
     });
 
     expect(result.current.selectedRepo).toBe('acme/app');
@@ -61,7 +59,7 @@ describe('RepoProvider', () => {
 
   it('defaults to empty string when localStorage has no value', () => {
     const { result } = renderHook(() => useSelectedRepo(), {
-      wrapper: createRepoWrapper(),
+      wrapper: RepoTestWrapper,
     });
 
     expect(result.current.selectedRepo).toBe('');
@@ -73,7 +71,7 @@ describe('RepoProvider', () => {
     });
 
     const { result } = renderHook(() => useSelectedRepo(), {
-      wrapper: createRepoWrapper(),
+      wrapper: RepoTestWrapper,
     });
 
     expect(result.current.selectedRepo).toBe('');
@@ -87,7 +85,7 @@ describe('RepoProvider', () => {
 describe('useSelectedRepo', () => {
   it('setSelectedRepo updates state and persists to localStorage', () => {
     const { result } = renderHook(() => useSelectedRepo(), {
-      wrapper: createRepoWrapper(),
+      wrapper: RepoTestWrapper,
     });
 
     act(() => {
@@ -102,7 +100,7 @@ describe('useSelectedRepo', () => {
     mockLocalStorage.ghagga_selected_repo = 'acme/app';
 
     const { result } = renderHook(() => useSelectedRepo(), {
-      wrapper: createRepoWrapper(),
+      wrapper: RepoTestWrapper,
     });
 
     act(() => {

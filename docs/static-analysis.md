@@ -6,25 +6,25 @@ Layer 0 analysis runs **before** any LLM call. Zero tokens consumed. Known issue
 
 GHAGGA registers 17 static analysis tools across 5 categories, in two tiers. SonarQube is the MCP entry and stays inert unless an MCP server exposes `sonarqube_issues`.
 
-| Tool | Category | Tier | Languages |
-|------|----------|------|-----------|
-| **Semgrep** | security | always-on | 20+ languages (custom rules) |
-| **Trivy** | sca | always-on | All ecosystems with lockfiles + license scanning |
-| **CPD** | duplication | always-on | 15+ languages via PMD |
-| **Gitleaks** | security | always-on | All (secret detection in git history) |
-| **ShellCheck** | lint | always-on | Bash/Shell |
-| **markdownlint** | lint | always-on | Markdown |
-| **Lizard** | complexity | always-on | 20+ languages (cyclomatic complexity) |
-| **Ruff** | lint | auto-detect | Python (`*.py`) |
-| **Bandit** | security | auto-detect | Python (`*.py`) |
-| **golangci-lint** | lint | auto-detect | Go (`*.go`) |
-| **Biome** | lint | auto-detect | JS/TS (`*.js`, `*.ts`, `*.jsx`, `*.tsx`) |
-| **PMD** | lint | auto-detect | Java (`*.java`) |
-| **Psalm** | security | auto-detect | PHP (`*.php`) |
-| **clippy** | lint | auto-detect | Rust (`*.rs`) |
-| **Hadolint** | lint | auto-detect | Docker (`Dockerfile*`) |
-| **zizmor** | security | auto-detect | GitHub Actions (`.github/workflows/*.yml\|yaml`) |
-| **SonarQube** | security | auto-detect | Files under review, via MCP (`sonarqube_issues`). Inert when MCP is not configured |
+| Tool              | Category    | Tier        | Languages                                                                          |
+| ----------------- | ----------- | ----------- | ---------------------------------------------------------------------------------- |
+| **Semgrep**       | security    | always-on   | 20+ languages (custom rules)                                                       |
+| **Trivy**         | sca         | always-on   | All ecosystems with lockfiles + license scanning                                   |
+| **CPD**           | duplication | always-on   | 15+ languages via PMD                                                              |
+| **Gitleaks**      | security    | always-on   | All (secret detection in git history)                                              |
+| **ShellCheck**    | lint        | always-on   | Bash/Shell                                                                         |
+| **markdownlint**  | lint        | always-on   | Markdown                                                                           |
+| **Lizard**        | complexity  | always-on   | 20+ languages (cyclomatic complexity)                                              |
+| **Ruff**          | lint        | auto-detect | Python (`*.py`)                                                                    |
+| **Bandit**        | security    | auto-detect | Python (`*.py`)                                                                    |
+| **golangci-lint** | lint        | auto-detect | Go (`*.go`)                                                                        |
+| **Biome**         | lint        | auto-detect | JS/TS (`*.js`, `*.ts`, `*.jsx`, `*.tsx`)                                           |
+| **PMD**           | lint        | auto-detect | Java (`*.java`)                                                                    |
+| **Psalm**         | security    | auto-detect | PHP (`*.php`)                                                                      |
+| **clippy**        | lint        | auto-detect | Rust (`*.rs`)                                                                      |
+| **Hadolint**      | lint        | auto-detect | Docker (`Dockerfile*`)                                                             |
+| **zizmor**        | security    | auto-detect | GitHub Actions (`.github/workflows/*.yml\|yaml`)                                   |
+| **SonarQube**     | security    | auto-detect | Files under review, via MCP (`sonarqube_issues`). Inert when MCP is not configured |
 
 ## Tool Tiers
 
@@ -39,7 +39,6 @@ These 10 tools activate only when matching files are detected in the diff, or, f
 ### Tool Resolution Order
 
 The final set of tools for each review is determined by this resolution order:
-
 1. **always-on** — all 7 always-on tools are included
 2. **auto-detect(files)** — tools whose file patterns match files in the diff are added
 3. **+enabledTools** — tools listed in `enabledTools` (settings, config, or CLI flag) are force-added
@@ -86,8 +85,8 @@ ghagga review --list-tools
 ```yaml
 - uses: JNZader/ghagga@v3.4.0
   with:
-    enabled-tools: 'ruff,bandit'
-    disabled-tools: 'markdownlint'
+    enabled-tools: "ruff,bandit"
+    disabled-tools: "markdownlint"
 ```
 
 > The legacy inputs `enable-semgrep`, `enable-trivy`, `enable-cpd` still work but are deprecated. Use `enabled-tools`/`disabled-tools` instead.
@@ -111,13 +110,13 @@ The Settings page includes a **ToolGrid** component with category grouping. Togg
 
 Tools are optional. If a binary isn't installed or fails to run, it's silently skipped. The review continues with whatever tools are available. Check your deployment's tool status at `/health/tools`.
 
-| Distribution | Always-on tools | Auto-detect tools | How |
-|-------------|-----------------|-------------------|-----|
-| **SaaS (workflow injection succeeded)** | Yes | Yes | Inline workflow `.github/workflows/ghagga.yml` dispatched on the target repo |
-| **SaaS (injection blocked)** | No | No | Falls back to LLM-only review |
-| **GitHub Action (node20)** | Yes | Yes | Auto-installed + cached on runner |
-| **Docker (action/server)** | Yes | Yes | Pre-installed in Docker image |
-| **CLI** | If installed | If installed | Uses locally installed binaries |
+| Distribution                            | Always-on tools | Auto-detect tools | How                                                                          |
+| --------------------------------------- | --------------- | ----------------- | ---------------------------------------------------------------------------- |
+| **SaaS (workflow injection succeeded)** | Yes             | Yes               | Inline workflow `.github/workflows/ghagga.yml` dispatched on the target repo |
+| **SaaS (injection blocked)**            | No              | No                | Falls back to LLM-only review                                                |
+| **GitHub Action (node20)**              | Yes             | Yes               | Auto-installed + cached on runner                                            |
+| **Docker (action/server)**              | Yes             | Yes               | Pre-installed in Docker image                                                |
+| **CLI**                                 | If installed    | If installed      | Uses locally installed binaries                                              |
 
 > In SaaS mode the server injects `.github/workflows/ghagga.yml` (built from `templates/ghagga-inline.yml`) into the target repo and triggers it via `workflow_dispatch`. If injection is blocked (branch protection, missing `Contents: write`, Actions disabled), the review continues with AI only — no static-analysis findings.
 
@@ -128,7 +127,6 @@ Tools are optional. If a binary isn't installed or fails to run, it's silently s
 ### Built-in Rules
 
 GHAGGA ships with 20 custom security rules in `packages/core/src/tools/semgrep-rules.yml` covering:
-
 - **Injection**: SQL injection, command injection, SSRF
 - **XSS**: Unescaped output, dangerous innerHTML
 - **Secrets**: Hardcoded API keys, passwords, tokens

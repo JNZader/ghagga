@@ -36,12 +36,12 @@ Navigate to: **[github.com/settings/apps/new](https://github.com/settings/apps/n
 
 ### 1.2 Fill in basic info
 
-| Field | Value |
-|-------|-------|
-| **GitHub App name** | `GHAGGA` (or any unique name) |
-| **Homepage URL** | `https://github.com/JNZader/ghagga` |
-| **Webhook URL** | `https://your-domain.com/webhook` (you'll update this later) |
-| **Webhook secret** | Generate one now — run this in your terminal: |
+| Field               | Value                                                        |
+| ------------------- | ------------------------------------------------------------ |
+| **GitHub App name** | `GHAGGA` (or any unique name)                                |
+| **Homepage URL**    | `https://github.com/JNZader/ghagga`                          |
+| **Webhook URL**     | `https://your-domain.com/webhook` (you'll update this later) |
+| **Webhook secret**  | Generate one now — run this in your terminal:                |
 
 ```bash
 openssl rand -hex 20
@@ -53,13 +53,13 @@ Copy the output (e.g., `a1b2c3d4e5f6...`). You'll need it for `GITHUB_WEBHOOK_SE
 
 Under **Repository permissions**:
 
-| Permission | Access | Why |
-|-----------|--------|-----|
-| **Pull requests** | Read and write | Fetch PR diffs and post review comments |
-| **Contents** | Read and write | Inject the static-analysis workflow file at `.github/workflows/ghagga.yml` |
-| **Actions** | Write | Dispatch the injected workflow via `workflow_dispatch` |
-| **Issues** | Read and write | Issue-triage (`/ghagga triage`): read the issue + its comments, post the approved draft comment |
-| **Metadata** | Read-only (auto-selected) | List repositories and installations |
+| Permission        | Access                    | Why                                                                                             |
+| ----------------- | ------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Pull requests** | Read and write            | Fetch PR diffs and post review comments                                                         |
+| **Contents**      | Read and write            | Inject the static-analysis workflow file at `.github/workflows/ghagga.yml`                      |
+| **Actions**       | Write                     | Dispatch the injected workflow via `workflow_dispatch`                                          |
+| **Issues**        | Read and write            | Issue-triage (`/ghagga triage`): read the issue + its comments, post the approved draft comment |
+| **Metadata**      | Read-only (auto-selected) | List repositories and installations                                                             |
 
 Under **Account permissions**: Leave everything as "No access".
 
@@ -68,7 +68,6 @@ Under **Account permissions**: Leave everything as "No access".
 ### 1.4 Subscribe to events
 
 Check the following under **Subscribe to events**:
-
 - [x] **Pull request**
 - [x] **Issue comment** — enables on-demand review via `ghagga review` comments
 
@@ -157,15 +156,15 @@ Save this as `STATE_SECRET`.
 
 By now you should have all of these:
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `GITHUB_APP_ID` | Step 1.7 | `123456` |
-| `GITHUB_PRIVATE_KEY` | Step 1.8 | `LS0tLS1CRUdJTi...` (base64) |
-| `GITHUB_WEBHOOK_SECRET` | Step 1.2 | `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2` |
-| `ENCRYPTION_KEY` | Step 2.1 | `a1b2c3d4...` (64 hex chars) |
-| `GITHUB_CLIENT_ID` | Step 1.8b | `Ov23li...` |
-| `GITHUB_CLIENT_SECRET` | Step 1.8b | `abcdef...` (keep secret!) |
-| `STATE_SECRET` | Step 2.2 | `a1b2c3d4...` (64 hex chars) |
+| Variable                | Source    | Example                                    |
+| ----------------------- | --------- | ------------------------------------------ |
+| `GITHUB_APP_ID`         | Step 1.7  | `123456`                                   |
+| `GITHUB_PRIVATE_KEY`    | Step 1.8  | `LS0tLS1CRUdJTi...` (base64)               |
+| `GITHUB_WEBHOOK_SECRET` | Step 1.2  | `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2` |
+| `ENCRYPTION_KEY`        | Step 2.1  | `a1b2c3d4...` (64 hex chars)               |
+| `GITHUB_CLIENT_ID`      | Step 1.8b | `Ov23li...`                                |
+| `GITHUB_CLIENT_SECRET`  | Step 1.8b | `abcdef...` (keep secret!)                 |
+| `STATE_SECRET`          | Step 2.2  | `a1b2c3d4...` (64 hex chars)               |
 
 ---
 
@@ -215,7 +214,6 @@ This installs Coolify and all dependencies (Docker, Docker Compose, Traefik). Th
 ### 4.3 Access Coolify dashboard
 
 Open `http://YOUR_SERVER_IP:8000` in your browser and complete the initial setup:
-
 1. Create your admin account
 2. Configure your server (localhost is auto-detected)
 
@@ -233,12 +231,12 @@ In the Coolify dashboard:
 
 GHAGGA's `docker-compose.yml` defines four services:
 
-| Service | Role | Description |
-|---------|------|-------------|
-| **server** | API | Hono HTTP server — receives webhooks, serves dashboard API |
-| **worker** | Queue processor | BullMQ worker — processes review jobs from the Redis queue |
-| **postgres** | Database | PostgreSQL 16 with persistent volume |
-| **redis** | Queue backend | Redis 7 for BullMQ job queues |
+| Service      | Role            | Description                                                |
+| ------------ | --------------- | ---------------------------------------------------------- |
+| **server**   | API             | Hono HTTP server — receives webhooks, serves dashboard API |
+| **worker**   | Queue processor | BullMQ worker — processes review jobs from the Redis queue |
+| **postgres** | Database        | PostgreSQL 16 with persistent volume                       |
+| **redis**    | Queue backend   | Redis 7 for BullMQ job queues                              |
 
 In Coolify:
 1. Add a new resource → **Docker Compose**
@@ -342,13 +340,12 @@ curl https://api.yourdomain.com/health
 Expected response:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
 ### 7.2 Test the webhook
 
 Create a test Pull Request on a repository where you installed the GitHub App. You should see:
-
 1. **In GHAGGA server logs**: A webhook event received
 2. **In worker logs**: A review job processed from the BullMQ queue
 3. **On the PR**: A review comment posted by GHAGGA
@@ -364,7 +361,6 @@ Log in with your GitHub account (OAuth) or a Personal Access Token. OAuth login 
 ## Step 8: Configure Repositories
 
 Once deployed, configure your LLM providers:
-
 1. Open the GHAGGA dashboard
 2. Go to **Global Settings** to set installation-wide defaults
 3. Configure a **provider chain** of `gateway`, `cli-bridge`, or `ollama`

@@ -33,14 +33,14 @@ Adding a lightweight TUI layer will give GHAGGA a professional, branded terminal
 
 After evaluating both candidates:
 
-| Criterion | Ink (React for CLI) | @clack/prompts |
-|-----------|-------------------|----------------|
-| **ncc bundling** | Problematic — Ink depends on React, Yoga (native C++ layout engine via N-API), and react-reconciler. ncc struggles with native bindings and React's complex module graph. Known issues with `yoga-wasm-web` fallback. | Clean — pure JS/TS, zero native deps, no framework runtime. Bundles trivially with ncc, webpack, esbuild. |
-| **Bundle size** | Heavy — Ink + React + Yoga + ink-spinner + ink-table adds ~800KB+ to the bundle | Minimal — `@clack/prompts` + `@clack/core` + `picocolors` adds ~25KB |
-| **Integration effort** | High — requires rewriting every command as React components, new rendering paradigm, JSX transform setup | Low — drop-in replacement for `console.log` calls. Each command swaps `console.log(...)` for `p.log.info(...)`, `s.start(...)`, `p.outro(...)` |
-| **CI/non-interactive** | Requires custom logic to disable React rendering in non-TTY | Built-in: spinners degrade to static dots, `isCancel()` for Ctrl+C |
-| **Learning curve** | React mental model for CLI (components, hooks, state, effects) | Imperative API — `spinner()`, `log.info()`, `intro()`, `outro()` |
-| **Maintenance** | Ongoing React version coupling, reconciler updates | Stable, minimal API surface |
+| Criterion              | Ink (React for CLI)                                                                                                                                                                                                   | @clack/prompts                                                                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ncc bundling**       | Problematic — Ink depends on React, Yoga (native C++ layout engine via N-API), and react-reconciler. ncc struggles with native bindings and React's complex module graph. Known issues with `yoga-wasm-web` fallback. | Clean — pure JS/TS, zero native deps, no framework runtime. Bundles trivially with ncc, webpack, esbuild.                                      |
+| **Bundle size**        | Heavy — Ink + React + Yoga + ink-spinner + ink-table adds ~800KB+ to the bundle                                                                                                                                       | Minimal — `@clack/prompts` + `@clack/core` + `picocolors` adds ~25KB                                                                           |
+| **Integration effort** | High — requires rewriting every command as React components, new rendering paradigm, JSX transform setup                                                                                                              | Low — drop-in replacement for `console.log` calls. Each command swaps `console.log(...)` for `p.log.info(...)`, `s.start(...)`, `p.outro(...)` |
+| **CI/non-interactive** | Requires custom logic to disable React rendering in non-TTY                                                                                                                                                           | Built-in: spinners degrade to static dots, `isCancel()` for Ctrl+C                                                                             |
+| **Learning curve**     | React mental model for CLI (components, hooks, state, effects)                                                                                                                                                        | Imperative API — `spinner()`, `log.info()`, `intro()`, `outro()`                                                                               |
+| **Maintenance**        | Ongoing React version coupling, reconciler updates                                                                                                                                                                    | Stable, minimal API surface                                                                                                                    |
 
 **Decision: `@clack/prompts`** — it's the right tool for this job. GHAGGA's CLI is imperative (run command, show output, exit). Ink's component model is designed for persistent, interactive TUI apps (dashboards, long-running processes). Clack aligns perfectly with GHAGGA's execute-and-print pattern while adding polish.
 
@@ -59,39 +59,41 @@ After evaluating both candidates:
    - `memory/*.ts`: Styled tables via `log.info()`, formatted stats
 
 3. **CI detection** in `tui.ts`:
+
    ```
    isInteractive = process.stdout.isTTY && !process.env.CI && !opts.plain
    ```
+
    When non-interactive: all `tui.*` calls fall back to plain `console.log` — same output as today.
 
 4. **Preserve exit codes and output contracts**: `--format json` bypasses TUI entirely. Exit codes unchanged. All existing flags work identically.
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `apps/cli/src/ui/` (new) | New | TUI facade, formatting, theme constants |
-| `apps/cli/src/commands/login.ts` | Modified | Replace `console.log` with TUI calls; add spinner for OAuth polling |
-| `apps/cli/src/commands/logout.ts` | Modified | Replace `console.log` with TUI calls |
-| `apps/cli/src/commands/status.ts` | Modified | Replace `console.log` with styled key-value output |
-| `apps/cli/src/commands/review.ts` | Modified | Replace `console.log` with TUI calls; wire spinner to progress callback; extract formatting to `ui/format.ts` |
-| `apps/cli/src/commands/memory/*.ts` | Modified | Replace `console.log` with TUI calls; use improved table formatting |
+| Area                                    | Impact   | Description                                                                                                          |
+| --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| `apps/cli/src/ui/` (new)                | New      | TUI facade, formatting, theme constants                                                                              |
+| `apps/cli/src/commands/login.ts`        | Modified | Replace `console.log` with TUI calls; add spinner for OAuth polling                                                  |
+| `apps/cli/src/commands/logout.ts`       | Modified | Replace `console.log` with TUI calls                                                                                 |
+| `apps/cli/src/commands/status.ts`       | Modified | Replace `console.log` with styled key-value output                                                                   |
+| `apps/cli/src/commands/review.ts`       | Modified | Replace `console.log` with TUI calls; wire spinner to progress callback; extract formatting to `ui/format.ts`        |
+| `apps/cli/src/commands/memory/*.ts`     | Modified | Replace `console.log` with TUI calls; use improved table formatting                                                  |
 | `apps/cli/src/commands/memory/utils.ts` | Modified | Move `formatTable`, `formatSize`, `truncate` to `ui/format.ts`; keep `openMemoryOrExit` and `confirmOrExit` in place |
-| `apps/cli/src/index.ts` | Modified | Add `--plain` global option; pass to command context |
-| `apps/cli/package.json` | Modified | Add `@clack/prompts` dependency |
-| Existing tests (124) | None | Tests don't exercise `console.log` output directly; no test changes needed |
-| ncc bundle (`dist/index.js`) | Modified | Bundle will include `@clack/prompts` (~25KB increase) |
+| `apps/cli/src/index.ts`                 | Modified | Add `--plain` global option; pass to command context                                                                 |
+| `apps/cli/package.json`                 | Modified | Add `@clack/prompts` dependency                                                                                      |
+| Existing tests (124)                    | None     | Tests don't exercise `console.log` output directly; no test changes needed                                           |
+| ncc bundle (`dist/index.js`)            | Modified | Bundle will include `@clack/prompts` (~25KB increase)                                                                |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| ncc fails to bundle `@clack/prompts` | Low | clack is pure JS with no native deps; pre-validate with `ncc build` before committing. If it fails, vendor the ~25KB source directly. |
-| Spinner output corrupts piped stdout | Medium | Detect `!process.stdout.isTTY` and disable spinners entirely. Test with `ghagga review . \| cat` and `ghagga review . > file.txt`. |
-| ANSI colors in redirected output | Medium | Use `picocolors` (auto-detects NO_COLOR, non-TTY). Also respect `--plain` flag and `NO_COLOR` env var per [no-color.org](https://no-color.org) standard. |
-| Verbose mode (`-v`) conflicts with spinner | Low | When `--verbose` is active, disable spinner and use `log.step()` for each progress event instead (current behavior but styled). |
-| Breaking existing CI integrations | Medium | Non-TTY output must be character-identical to current output (or strictly a superset with no ANSI). Integration test: compare `CI=true ghagga status` output before/after. |
-| Bundle size regression | Low | @clack/prompts is ~25KB. Set a CI budget check: `dist/index.js` size delta must be < 50KB. |
+| Risk                                       | Likelihood | Mitigation                                                                                                                                                                 |
+| ------------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ncc fails to bundle `@clack/prompts`       | Low        | clack is pure JS with no native deps; pre-validate with `ncc build` before committing. If it fails, vendor the ~25KB source directly.                                      |
+| Spinner output corrupts piped stdout       | Medium     | Detect `!process.stdout.isTTY` and disable spinners entirely. Test with `ghagga review . \| cat` and `ghagga review . > file.txt`.                                         |
+| ANSI colors in redirected output           | Medium     | Use `picocolors` (auto-detects NO_COLOR, non-TTY). Also respect `--plain` flag and `NO_COLOR` env var per [no-color.org](https://no-color.org) standard.                   |
+| Verbose mode (`-v`) conflicts with spinner | Low        | When `--verbose` is active, disable spinner and use `log.step()` for each progress event instead (current behavior but styled).                                            |
+| Breaking existing CI integrations          | Medium     | Non-TTY output must be character-identical to current output (or strictly a superset with no ANSI). Integration test: compare `CI=true ghagga status` output before/after. |
+| Bundle size regression                     | Low        | @clack/prompts is ~25KB. Set a CI budget check: `dist/index.js` size delta must be < 50KB.                                                                                 |
 
 ## Rollback Plan
 

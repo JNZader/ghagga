@@ -37,18 +37,24 @@ Add three new query functions to `packages/db/src/queries.ts`:
 ```typescript
 // Delete a single review by ID, scoped to installation via repository ownership
 export async function deleteReviewById(
-  db: Database, installationId: number, reviewId: number
-): Promise<boolean>
+  db: Database,
+  installationId: number,
+  reviewId: number,
+): Promise<boolean>;
 
 // Delete multiple reviews by IDs, scoped to installation
 export async function deleteReviewsByIds(
-  db: Database, installationId: number, reviewIds: number[]
-): Promise<number>
+  db: Database,
+  installationId: number,
+  reviewIds: number[],
+): Promise<number>;
 
 // Delete multiple memory observations by IDs, scoped to installation
 export async function deleteMemoryObservationsByIds(
-  db: Database, installationId: number, observationIds: number[]
-): Promise<number>
+  db: Database,
+  installationId: number,
+  observationIds: number[],
+): Promise<number>;
 ```
 
 Authorization scoping follows the existing pattern: join through `repositories` to verify the review's/observation's project belongs to the user's installation. This is identical to how `deleteMemoryObservation` already works in `queries.ts:570-592`.
@@ -59,11 +65,11 @@ For batch operations, use Drizzle's `inArray` with the provided IDs AND the inst
 
 Add three routes to `apps/server/src/routes/api/reviews.ts` and `apps/server/src/routes/api/memory.ts`:
 
-| Endpoint | Method | Body | Response | File |
-|----------|--------|------|----------|------|
-| `/api/reviews/:reviewId` | DELETE | -- | `{ data: { deleted: true } }` or 404 | `reviews.ts` |
-| `/api/reviews/batch` | DELETE | `{ ids: number[] }` | `{ data: { deletedCount: number } }` | `reviews.ts` |
-| `/api/memory/observations/batch` | DELETE | `{ ids: number[] }` | `{ data: { deletedCount: number } }` | `memory.ts` |
+| Endpoint                         | Method | Body                | Response                             | File         |
+| -------------------------------- | ------ | ------------------- | ------------------------------------ | ------------ |
+| `/api/reviews/:reviewId`         | DELETE | --                  | `{ data: { deleted: true } }` or 404 | `reviews.ts` |
+| `/api/reviews/batch`             | DELETE | `{ ids: number[] }` | `{ data: { deletedCount: number } }` | `reviews.ts` |
+| `/api/memory/observations/batch` | DELETE | `{ ids: number[] }` | `{ data: { deletedCount: number } }` | `memory.ts`  |
 
 **Route ordering consideration**: The batch route `DELETE /api/reviews/batch` must be registered BEFORE the parameterized route `DELETE /api/reviews/:reviewId` (or use `DELETE /api/reviews/:repoFullName` disambiguation). Currently, `DELETE /api/reviews/:repoFullName` exists. Since `repoFullName` is a string like `owner/repo` and `reviewId` is a numeric ID, Hono can disambiguate:
 - Register `DELETE /api/reviews/batch` first (literal match wins over param)
@@ -112,7 +118,6 @@ The existing `ConfirmDialog` component supports this exact pattern -- it already
 ### 4. Dashboard: Reviews Page Changes
 
 In `apps/dashboard/src/pages/Reviews.tsx`:
-
 - Add a checkbox column as the first column in the table
 - Header row: select-all checkbox (checks/unchecks all filtered reviews on current page)
 - Each review row: checkbox with the review's ID
@@ -123,7 +128,6 @@ In `apps/dashboard/src/pages/Reviews.tsx`:
 ### 5. Dashboard: Memory Page Changes
 
 In `apps/dashboard/src/pages/Memory.tsx`:
-
 - Add checkboxes to `ObservationCard` components (left side, before the type badge)
 - Above the observation list (in the `StatsBar` area or a new bar): select-all checkbox + "Delete Selected (N)" button when items are selected
 - Wire to `useBatchDeleteObservations` mutation
@@ -135,9 +139,9 @@ In `apps/dashboard/src/pages/Memory.tsx`:
 Add to `apps/dashboard/src/lib/api.ts`:
 
 ```typescript
-export function useDeleteReview()           // DELETE /api/reviews/:reviewId
-export function useBatchDeleteReviews()      // DELETE /api/reviews/batch
-export function useBatchDeleteObservations() // DELETE /api/memory/observations/batch
+export function useDeleteReview(); // DELETE /api/reviews/:reviewId
+export function useBatchDeleteReviews(); // DELETE /api/reviews/batch
+export function useBatchDeleteObservations(); // DELETE /api/memory/observations/batch
 ```
 
 Each mutation hook:
@@ -147,24 +151,24 @@ Each mutation hook:
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/db/src/queries.ts` | Modified | Add `deleteReviewById`, `deleteReviewsByIds`, `deleteMemoryObservationsByIds` |
-| `apps/server/src/routes/api/reviews.ts` | Modified | Add `DELETE /api/reviews/batch` and `DELETE /api/reviews/:reviewId` routes |
-| `apps/server/src/routes/api/memory.ts` | Modified | Add `DELETE /api/memory/observations/batch` route |
-| `apps/dashboard/src/pages/Reviews.tsx` | Modified | Add checkbox column, select-all, "Delete Selected" button, confirmation dialog |
-| `apps/dashboard/src/pages/Memory.tsx` | Modified | Add checkboxes to observation cards, select-all, "Delete Selected" button, confirmation dialog |
-| `apps/dashboard/src/lib/api.ts` | Modified | Add `useDeleteReview`, `useBatchDeleteReviews`, `useBatchDeleteObservations` hooks |
+| Area                                    | Impact   | Description                                                                                    |
+| --------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `packages/db/src/queries.ts`            | Modified | Add `deleteReviewById`, `deleteReviewsByIds`, `deleteMemoryObservationsByIds`                  |
+| `apps/server/src/routes/api/reviews.ts` | Modified | Add `DELETE /api/reviews/batch` and `DELETE /api/reviews/:reviewId` routes                     |
+| `apps/server/src/routes/api/memory.ts`  | Modified | Add `DELETE /api/memory/observations/batch` route                                              |
+| `apps/dashboard/src/pages/Reviews.tsx`  | Modified | Add checkbox column, select-all, "Delete Selected" button, confirmation dialog                 |
+| `apps/dashboard/src/pages/Memory.tsx`   | Modified | Add checkboxes to observation cards, select-all, "Delete Selected" button, confirmation dialog |
+| `apps/dashboard/src/lib/api.ts`         | Modified | Add `useDeleteReview`, `useBatchDeleteReviews`, `useBatchDeleteObservations` hooks             |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Route conflict between `DELETE /api/reviews/:repoFullName` and `DELETE /api/reviews/:reviewId` | Medium | Register `/api/reviews/batch` before the param route. For single delete, validate `:reviewId` is numeric and return 400 if not, falling through to `:repoFullName` behavior. Alternatively, use path `/api/reviews/by-id/:reviewId` to avoid ambiguity entirely. |
-| User accidentally batch-deletes items they want to keep | Low | Tier 1 confirmation dialog showing exact count ("Delete 15 reviews?"). Selection requires explicit checkbox interaction -- no drag-select or keyboard shortcuts that could cause accidental selection. |
-| Batch delete of large ID arrays causes slow query | Low | Cap `ids` array at 100 items. PostgreSQL handles `WHERE id IN (...)` efficiently against primary key indexes. Dashboard pagination already limits visible items to 50 reviews per page. |
-| `VirtualizedObservationList` checkbox state out of sync with virtualized rows | Medium | Store selection state in a `Set<number>` in the parent component, not in the virtualized row. Each row reads from the set on render. The virtualizer only controls DOM recycling, not state. |
-| Stats become stale after deleting reviews | Low | Invalidate `['stats']` query key on successful review delete. TanStack Query handles automatic refetch. |
+| Risk                                                                                           | Likelihood | Mitigation                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Route conflict between `DELETE /api/reviews/:repoFullName` and `DELETE /api/reviews/:reviewId` | Medium     | Register `/api/reviews/batch` before the param route. For single delete, validate `:reviewId` is numeric and return 400 if not, falling through to `:repoFullName` behavior. Alternatively, use path `/api/reviews/by-id/:reviewId` to avoid ambiguity entirely. |
+| User accidentally batch-deletes items they want to keep                                        | Low        | Tier 1 confirmation dialog showing exact count ("Delete 15 reviews?"). Selection requires explicit checkbox interaction -- no drag-select or keyboard shortcuts that could cause accidental selection.                                                           |
+| Batch delete of large ID arrays causes slow query                                              | Low        | Cap `ids` array at 100 items. PostgreSQL handles `WHERE id IN (...)` efficiently against primary key indexes. Dashboard pagination already limits visible items to 50 reviews per page.                                                                          |
+| `VirtualizedObservationList` checkbox state out of sync with virtualized rows                  | Medium     | Store selection state in a `Set<number>` in the parent component, not in the virtualized row. Each row reads from the set on render. The virtualizer only controls DOM recycling, not state.                                                                     |
+| Stats become stale after deleting reviews                                                      | Low        | Invalidate `['stats']` query key on successful review delete. TanStack Query handles automatic refetch.                                                                                                                                                          |
 
 ## Rollback Plan
 

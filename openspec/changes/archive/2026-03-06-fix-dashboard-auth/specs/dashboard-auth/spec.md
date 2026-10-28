@@ -13,7 +13,6 @@ Todos los requisitos son cambios de código en servidor, dashboard y base de dat
 ### R1 (P0): Server — Endpoints OAuth Web Flow
 
 El servidor Hono MUST implementar dos nuevos endpoints públicos (sin auth middleware) para el OAuth Web Flow:
-
 1. **`GET /auth/login`** — MUST redirigir al usuario a `https://github.com/login/oauth/authorize` con los parámetros:
    - `client_id`: El Client ID de la OAuth App de GHAGGA (`Ov23liyYpSgDqOLUFa5k`)
    - `redirect_uri`: La URL de callback del servidor (`https://ghagga.onrender.com/auth/callback`)
@@ -69,7 +68,6 @@ Los endpoints MUST NOT requerir autenticación previa (son usados ANTES del logi
 El parámetro `state` del flujo OAuth MUST ser stateless y basado en HMAC para prevenir ataques CSRF. El servidor MUST NOT almacenar state en memoria, sesión, ni base de datos (MUST sobrevivir deploys y restarts en Render).
 
 La implementación MUST cumplir:
-
 1. **Generación**: El state MUST ser un string que contenga un timestamp y una firma HMAC-SHA256 calculada con un `STATE_SECRET` (variable de entorno). Formato sugerido: `{timestamp}.{hmac_signature}`.
 2. **Expiración**: El state MUST incluir un timestamp que permita validar expiración. El state MUST expirar tras 5 minutos.
 3. **Validación**: En `/auth/callback`, el servidor MUST verificar que: (a) la firma HMAC es válida, (b) el timestamp no ha expirado (≤5 minutos).
@@ -122,7 +120,6 @@ La implementación MUST cumplir:
 ### R3 (P0): Dashboard — Login con Web Flow
 
 `Login.tsx` MUST reemplazar el flujo de Device Flow por un redirect al endpoint `/auth/login` del servidor cuando el servidor está disponible.
-
 1. Cuando `serverOnline === true`, el botón principal "Sign in with GitHub" MUST redirigir a `{API_URL}/auth/login` via `window.location.href` (no `fetch`, no popup).
 2. Login.tsx MUST NOT mostrar la UI de Device Flow (código de usuario, polling, instrucciones de github.com/login/device).
 3. Login.tsx MUST conservar el enlace secundario "Or enter a Personal Access Token" como fallback.
@@ -156,7 +153,6 @@ La implementación MUST cumplir:
 ### R4 (P0): Dashboard — Callback Route y Extracción de Token
 
 El Dashboard MUST implementar una nueva ruta `#/auth/callback` que procese el token recibido del servidor.
-
 1. El HashRouter del Dashboard MUST incluir la ruta `/auth/callback`.
 2. Un componente `AuthCallback` MUST extraer los query params del URL fragment (después del `#`).
 3. Si existe un parámetro `token`, el componente MUST:
@@ -213,7 +209,6 @@ El Dashboard MUST implementar una nueva ruta `#/auth/callback` que procese el to
 ### R5 (P0): Limpieza de URL Post-Autenticación
 
 Tras extraer el token del URL fragment, el Dashboard MUST eliminar el token de la barra de direcciones del navegador de forma inmediata.
-
 1. `AuthCallback` MUST llamar a `window.history.replaceState()` para reemplazar la URL actual por `#/auth/callback` (sin query params) o directamente por la URL de destino.
 2. La eliminación MUST ocurrir ANTES de cualquier redirección y lo antes posible tras extraer el token.
 3. El token MUST NOT permanecer visible en la barra de direcciones por más de un frame de renderizado.
@@ -236,7 +231,6 @@ Tras extraer el token del URL fragment, el Dashboard MUST eliminar el token de l
 ### R6 (P0): Preservación de Device Flow para CLI
 
 El servidor MUST mantener los endpoints existentes de Device Flow funcionales e inalterados:
-
 1. `POST /auth/device/code` MUST seguir funcionando tal como está implementado actualmente.
 2. `POST /auth/device/token` MUST seguir funcionando tal como está implementado actualmente.
 3. Los nuevos endpoints Web Flow (`/auth/login`, `/auth/callback`) MUST ser aditivos y NO MUST afectar los endpoints de Device Flow.
@@ -261,7 +255,6 @@ El servidor MUST mantener los endpoints existentes de Device Flow funcionales e 
 ### R7 (P0): PAT Fallback cuando el Servidor está Offline
 
 El Dashboard MUST mantener el fallback de Personal Access Token (PAT) para cuando el servidor no responde.
-
 1. Cuando `isServerAvailable()` retorna `false`, Login.tsx MUST mostrar el formulario de PAT directamente (no el botón de Web Flow).
 2. El formulario de PAT MUST funcionar sin depender del servidor (valida el token directamente contra `api.github.com/user`).
 3. Cuando el servidor está online, el enlace "Or enter a Personal Access Token" MUST seguir disponible como opción secundaria.
@@ -288,7 +281,6 @@ El Dashboard MUST mantener el fallback de Personal Access Token (PAT) para cuand
 ### R8 (P0): CLIENT_SECRET — Configuración Segura
 
 El `CLIENT_SECRET` de la GitHub OAuth App MUST ser configurado exclusivamente como variable de entorno en Render.
-
 1. `CLIENT_SECRET` MUST NOT aparecer en ningún archivo del repositorio (código fuente, `.env`, `.env.example`, documentación con valores reales).
 2. El servidor MUST leer `CLIENT_SECRET` de `process.env.CLIENT_SECRET` (o `process.env.GITHUB_CLIENT_SECRET`).
 3. Si `CLIENT_SECRET` no está definido, el endpoint `/auth/callback` MUST responder con HTTP 500 cuando intenta intercambiar el code.
@@ -321,7 +313,6 @@ El `CLIENT_SECRET` de la GitHub OAuth App MUST ser configurado exclusivamente co
 ### R9 (P0): Auth Middleware — Validación de Instalaciones y Limpieza de Mappings Obsoletos
 
 El auth middleware (`apps/server/src/middleware/auth.ts`) MUST validar que las instalaciones asociadas a los mappings del usuario todavía existen y están activas. Si algún mapping apunta a una instalación inactiva o inexistente, MUST limpiar los mappings obsoletos y re-ejecutar auto-discovery.
-
 1. Tras obtener los mappings del usuario via `getInstallationsByUserId()`, el middleware MUST verificar que cada instalación referenciada existe en la tabla `installations` y tiene `is_active = true`.
 2. Si algún mapping apunta a una instalación inactiva o inexistente, el middleware MUST eliminar esos mappings de `github_user_mappings`.
 3. Tras eliminar mappings obsoletos, si NO quedan mappings válidos, el middleware MUST ejecutar `discoverAndMapInstallations()` para re-descubrir instalaciones.
@@ -378,7 +369,6 @@ El auth middleware (`apps/server/src/middleware/auth.ts`) MUST validar que las i
 ### R10 (P0): Webhook — Limpieza de Mappings en Uninstall
 
 Cuando el servidor recibe un evento webhook `installation.deleted`, MUST eliminar todos los registros de `github_user_mappings` donde `installation_id` corresponde a la instalación eliminada.
-
 1. El handler de `installation.deleted` en `webhook.ts` MUST, además de desactivar la instalación (comportamiento actual), eliminar los mappings de usuario asociados.
 2. La limpieza MUST usar el `installation.id` interno de la tabla `installations` (no el `github_installation_id` directamente), tras buscar la instalación en la BD.
 3. Si no hay mappings asociados, la operación MUST ser un no-op (no error).
@@ -416,7 +406,6 @@ Cuando el servidor recibe un evento webhook `installation.deleted`, MUST elimina
 ### R11 (P0): Cambio de Constraint UNIQUE en github_user_mappings
 
 El constraint UNIQUE de la tabla `github_user_mappings` MUST cambiar de `UNIQUE(github_user_id)` a `UNIQUE(github_user_id, installation_id)` para soportar usuarios con múltiples instalaciones.
-
 1. La migración MUST eliminar el constraint `UNIQUE(github_user_id)` existente.
 2. La migración MUST crear un nuevo constraint `UNIQUE(github_user_id, installation_id)`.
 3. La migración MUST manejar datos existentes que podrían violar el nuevo constraint (limpiar duplicados si existen).
@@ -458,7 +447,6 @@ El constraint UNIQUE de la tabla `github_user_mappings` MUST cambiar de `UNIQUE(
 ### R12 (P0): Re-Discovery Resiliente
 
 El auto-discovery MUST ejecutarse no solo cuando no existen mappings, sino también cuando TODOS los mappings existentes apuntan a instalaciones no existentes o inactivas.
-
 1. Tras la validación de instalaciones en el auth middleware (R9), si la lista de instalaciones válidas queda vacía (todos los mappings eran obsoletos), MUST ejecutar auto-discovery.
 2. Este comportamiento MUST reemplazar la condición actual `if (userInstallations.length === 0)` por una lógica que contemple tanto "sin mappings" como "todos los mappings son obsoletos tras limpieza".
 
@@ -489,7 +477,6 @@ El auto-discovery MUST ejecutarse no solo cuando no existen mappings, sino tambi
 El access_token MUST viajar exclusivamente en el URL fragment (después de `#`), NEVER en query params (después de `?`).
 
 Los fragments HTTP (`#`) no se envían al servidor en requests HTTP, por lo que GitHub Pages no los verá en sus logs de acceso.
-
 1. El servidor MUST redirigir con `#/auth/callback?token=...` (fragment), no `?token=...` (query param).
 2. El Dashboard MUST extraer el token del fragment, no de `window.location.search`.
 3. Tras la extracción, el token MUST ser eliminado de la URL inmediatamente (R5).
@@ -511,7 +498,6 @@ Los fragments HTTP (`#`) no se envían al servidor en requests HTTP, por lo que 
 ### CC2: Error Handling — Errores en el Flujo de Autenticación
 
 Todos los errores en el flujo OAuth MUST resultar en una experiencia de usuario comprensible, no en pantallas en blanco ni errores técnicos crípticos.
-
 1. **State inválido/expirado**: Redirigir a Dashboard con error descriptivo y opción de reintentar.
 2. **GitHub auth denegada**: Mostrar mensaje "Autenticación cancelada" con botón de reintentar.
 3. **Server error en callback**: Mostrar error con opción de PAT fallback.
@@ -544,7 +530,6 @@ Todos los errores en el flujo OAuth MUST resultar en una experiencia de usuario 
 ### CC3: UX — Flujo de Login en Un Click
 
 El flujo completo de login desde el Dashboard MUST completarse en un máximo de 3 interacciones del usuario y SHOULD completarse en menos de 5 segundos (en conexión rápida, sin cold start de Render).
-
 1. **Interacción 1**: Click en "Sign in with GitHub" en Login.tsx
 2. **Interacción 2**: Click en "Authorize" en la página de GitHub (omitido si el usuario ya autorizó la App)
 3. **Interacción 3**: (Automática) Redirect de vuelta al Dashboard — no requiere acción del usuario
@@ -576,7 +561,6 @@ El usuario MUST NOT necesitar copiar códigos, cambiar de pestaña, ni realizar 
 ### CC4: Backward Compatibility
 
 Los cambios MUST NOT romper el funcionamiento existente para usuarios ya autenticados ni para otros modos de distribución.
-
 1. Tokens existentes en `localStorage` (`ghagga_token`, `ghagga_user`) MUST seguir siendo válidos tras el deploy.
 2. Usuarios ya logueados MUST NOT necesitar re-autenticarse solo por este cambio.
 3. El Device Flow del CLI MUST seguir funcionando sin cambios.
@@ -729,21 +713,21 @@ Los cambios MUST NOT romper el funcionamiento existente para usuarios ya autenti
 
 ## Acceptance Criteria Summary
 
-| ID | Priority | Requirement | Acceptance Criteria |
-|----|----------|-------------|---------------------|
-| R1 | P0 | Server — Web Flow Endpoints | `GET /auth/login` redirige a GitHub; `GET /auth/callback` intercambia code por token y redirige al Dashboard con token en fragment |
-| R2 | P0 | State HMAC Security | State es stateless (HMAC-signed), expira en 5 min, sobrevive restarts, previene CSRF |
-| R3 | P0 | Dashboard — Web Flow Login | Login.tsx redirige a `/auth/login` en vez de Device Flow; no muestra código ni polling |
-| R4 | P0 | Dashboard — Callback Route | `#/auth/callback` extrae token, valida via GitHub API, guarda en localStorage, maneja errores |
-| R5 | P0 | Clean URL After Auth | Token eliminado de la URL inmediatamente tras extracción via `history.replaceState()` |
-| R6 | P0 | Device Flow Preservation | Endpoints `/auth/device/code` y `/auth/device/token` siguen funcionando sin cambios |
-| R7 | P0 | PAT Fallback | Servidor offline → Login.tsx muestra PAT form; PAT funciona sin servidor |
-| R8 | P0 | CLIENT_SECRET Config | Solo env var en Render; nunca en código/logs/commits |
-| R9 | P0 | Auth Middleware — Stale Mapping Cleanup | Valida instalaciones activas; limpia mappings obsoletos; re-descubre si necesario |
-| R10 | P0 | Webhook — Uninstall Cleanup | `installation.deleted` elimina mappings asociados de `github_user_mappings` |
-| R11 | P0 | DB Constraint Change | UNIQUE cambia de `(github_user_id)` a `(github_user_id, installation_id)` |
-| R12 | P0 | Re-Discovery Resiliente | Auto-discovery se ejecuta cuando todos los mappings son obsoletos, no solo cuando no existen |
-| CC1 | — | Token en Fragment Only | Token viaja en `#`, nunca en `?`; no se envía a GitHub Pages |
-| CC2 | — | Error Handling | Todos los errores resultan en UX comprensible con opciones de retry/fallback |
-| CC3 | — | UX — Un Click Login | Login completo en ≤3 interacciones, <5s en conexión rápida |
-| CC4 | — | Backward Compatibility | Tokens existentes válidos; Device Flow CLI sin cambios; no re-login forzado |
+| ID  | Priority | Requirement                             | Acceptance Criteria                                                                                                                |
+| --- | -------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | P0       | Server — Web Flow Endpoints             | `GET /auth/login` redirige a GitHub; `GET /auth/callback` intercambia code por token y redirige al Dashboard con token en fragment |
+| R2  | P0       | State HMAC Security                     | State es stateless (HMAC-signed), expira en 5 min, sobrevive restarts, previene CSRF                                               |
+| R3  | P0       | Dashboard — Web Flow Login              | Login.tsx redirige a `/auth/login` en vez de Device Flow; no muestra código ni polling                                             |
+| R4  | P0       | Dashboard — Callback Route              | `#/auth/callback` extrae token, valida via GitHub API, guarda en localStorage, maneja errores                                      |
+| R5  | P0       | Clean URL After Auth                    | Token eliminado de la URL inmediatamente tras extracción via `history.replaceState()`                                              |
+| R6  | P0       | Device Flow Preservation                | Endpoints `/auth/device/code` y `/auth/device/token` siguen funcionando sin cambios                                                |
+| R7  | P0       | PAT Fallback                            | Servidor offline → Login.tsx muestra PAT form; PAT funciona sin servidor                                                           |
+| R8  | P0       | CLIENT_SECRET Config                    | Solo env var en Render; nunca en código/logs/commits                                                                               |
+| R9  | P0       | Auth Middleware — Stale Mapping Cleanup | Valida instalaciones activas; limpia mappings obsoletos; re-descubre si necesario                                                  |
+| R10 | P0       | Webhook — Uninstall Cleanup             | `installation.deleted` elimina mappings asociados de `github_user_mappings`                                                        |
+| R11 | P0       | DB Constraint Change                    | UNIQUE cambia de `(github_user_id)` a `(github_user_id, installation_id)`                                                          |
+| R12 | P0       | Re-Discovery Resiliente                 | Auto-discovery se ejecuta cuando todos los mappings son obsoletos, no solo cuando no existen                                       |
+| CC1 | —        | Token en Fragment Only                  | Token viaja en `#`, nunca en `?`; no se envía a GitHub Pages                                                                       |
+| CC2 | —        | Error Handling                          | Todos los errores resultan en UX comprensible con opciones de retry/fallback                                                       |
+| CC3 | —        | UX — Un Click Login                     | Login completo en ≤3 interacciones, <5s en conexión rápida                                                                         |
+| CC4 | —        | Backward Compatibility                  | Tokens existentes válidos; Device Flow CLI sin cambios; no re-login forzado                                                        |

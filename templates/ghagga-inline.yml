@@ -18,50 +18,50 @@ on:
   workflow_dispatch:
     inputs:
       callbackId:
-        description: 'Unique correlation ID (UUID v4)'
+        description: "Unique correlation ID (UUID v4)"
         required: true
         type: string
       prNumber:
-        description: 'Pull request number'
+        description: "Pull request number"
         required: true
         type: string
       headSha:
-        description: 'HEAD commit SHA to analyze'
+        description: "HEAD commit SHA to analyze"
         required: true
         type: string
       callbackUrl:
-        description: 'Server URL to POST results to'
+        description: "Server URL to POST results to"
         required: true
         type: string
       callbackSecret:
-        description: 'HMAC secret for computing callback signatures'
+        description: "HMAC secret for computing callback signatures"
         required: true
         type: string
       enableSemgrep:
-        description: 'Run Semgrep static analysis'
+        description: "Run Semgrep static analysis"
         required: false
         type: string
-        default: 'true'
+        default: "true"
       enableTrivy:
-        description: 'Run Trivy vulnerability scanner'
+        description: "Run Trivy vulnerability scanner"
         required: false
         type: string
-        default: 'true'
+        default: "true"
       enableCpd:
-        description: 'Run PMD/CPD copy-paste detector'
+        description: "Run PMD/CPD copy-paste detector"
         required: false
         type: string
-        default: 'true'
+        default: "true"
       enabledTools:
         description: 'JSON array of tool names to force-enable (e.g., ["ruff","bandit"])'
         required: false
         type: string
-        default: '[]'
+        default: "[]"
       disabledTools:
         description: 'JSON array of tool names to force-disable (e.g., ["semgrep","cpd"])'
         required: false
         type: string
-        default: '[]'
+        default: "[]"
 
 # Cancel in-progress runs for the same callback (safety net)
 concurrency:

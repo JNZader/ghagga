@@ -115,7 +115,6 @@ The server MUST reject callbacks older than the configured TTL based on the time
 ### R4 (P0): HMAC Verification on Callback
 
 The server MUST export a `verifyCallbackSignature(callbackId: string, payload: string, signatureHeader: string): boolean` function (see `apps/server/src/github/runner.ts`) that verifies the runner's callback signature. The verification MUST follow this exact sequence:
-
 1. **Extract timestamp**: Parse the timestamp from the `callbackId` (everything after the last `.`). If no `.` exists, return `false`.
 2. **Check TTL**: If `Date.now() - timestamp >= getCallbackTtlMs()`, return `false`.
 3. **Derive secret**: Compute `deriveCallbackSecret(callbackId)`.
@@ -179,7 +178,6 @@ The function MUST use timing-safe comparison to prevent timing attacks and MUST 
 ### R5 (P0): Callback Endpoint Contract — POST /runner/callback
 
 The server MUST expose `POST /runner/callback` (see `apps/server/src/routes/runner-callback.ts`). The handler MUST:
-
 1. Read the request body as text (preserved for HMAC verification of the exact bytes).
 2. Parse the body as JSON. Malformed JSON MUST return HTTP 400 `{ "error": "Invalid JSON body" }`.
 3. Validate the payload shape against `StaticAnalysisCallbackPayload`:
@@ -283,7 +281,6 @@ The system MUST NOT use any in-memory `Map`, `Set`, or similar data structure fo
 ### CC1: Reuse of STATE_SECRET Environment Variable
 
 The system MUST reuse the existing `STATE_SECRET` environment variable (already provisioned for the OAuth web flow). No new environment variables related to callback authentication are introduced.
-
 1. `deriveCallbackSecret()` MUST read `process.env.STATE_SECRET` as its HMAC key.
 2. The `STATE_SECRET` variable is shared with `generateState()` / `validateState()` in `apps/server/src/routes/oauth.ts`.
 3. If `STATE_SECRET` is not defined, `deriveCallbackSecret()` MUST throw an error rather than silently producing an insecure derivation.
@@ -336,13 +333,13 @@ The system MUST reuse the existing `STATE_SECRET` environment variable (already 
 
 ## Acceptance Criteria Summary
 
-| ID  | Priority | Requirement | Acceptance Criteria |
-|-----|----------|-------------|---------------------|
-| R1  | P0 | Stateless Secret Derivation | `deriveCallbackSecret` computes `HMAC-SHA256(STATE_SECRET, callbackId)` deterministically; 64-char hex output |
-| R2  | P0 | CallbackId with Embedded Timestamp | Format `{uuid}.{timestamp_base36}`; dispatch generates this format |
-| R3  | P0 | TTL Enforcement | Callbacks older than `getCallbackTtlMs()` rejected; boundary at exactly TTL rejects |
-| R4  | P0 | HMAC Verification on Callback | `verifyCallbackSignature` re-derives, validates `sha256=` prefix, uses `timingSafeEqual`; never throws on malformed input |
-| R5  | P0 | Callback Endpoint Contract | `POST /runner/callback` validates JSON + required fields + signature; persists to Redis; standard HTTP responses |
-| R6  | P0 | Replay Safety | Replays within TTL idempotent at HTTP layer; replays after TTL return 401 |
-| R7  | P0 | No In-Memory State | No `Map`/`setInterval` for callback state; pure derivation; survives restarts and scales horizontally |
-| CC1 | P0 | Reuse STATE_SECRET | No new env vars; throws when `STATE_SECRET` is undefined |
+| ID  | Priority | Requirement                        | Acceptance Criteria                                                                                                       |
+| --- | -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| R1  | P0       | Stateless Secret Derivation        | `deriveCallbackSecret` computes `HMAC-SHA256(STATE_SECRET, callbackId)` deterministically; 64-char hex output             |
+| R2  | P0       | CallbackId with Embedded Timestamp | Format `{uuid}.{timestamp_base36}`; dispatch generates this format                                                        |
+| R3  | P0       | TTL Enforcement                    | Callbacks older than `getCallbackTtlMs()` rejected; boundary at exactly TTL rejects                                       |
+| R4  | P0       | HMAC Verification on Callback      | `verifyCallbackSignature` re-derives, validates `sha256=` prefix, uses `timingSafeEqual`; never throws on malformed input |
+| R5  | P0       | Callback Endpoint Contract         | `POST /runner/callback` validates JSON + required fields + signature; persists to Redis; standard HTTP responses          |
+| R6  | P0       | Replay Safety                      | Replays within TTL idempotent at HTTP layer; replays after TTL return 401                                                 |
+| R7  | P0       | No In-Memory State                 | No `Map`/`setInterval` for callback state; pure derivation; survives restarts and scales horizontally                     |
+| CC1 | P0       | Reuse STATE_SECRET                 | No new env vars; throws when `STATE_SECRET` is undefined                                                                  |

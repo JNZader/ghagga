@@ -5,10 +5,10 @@
 
 ## Delta Specs Written
 
-| Domain | File | Type | Requirements | Scenarios |
-|--------|------|------|-------------|-----------|
-| Server | `specs/server/spec.md` | Delta | 4 added, 0 modified, 0 removed | 28 |
-| Dashboard UI | `specs/dashboard-ui/spec.md` | Delta | 6 added, 2 modified, 0 removed | 28 |
+| Domain       | File                         | Type  | Requirements                   | Scenarios |
+| ------------ | ---------------------------- | ----- | ------------------------------ | --------- |
+| Server       | `specs/server/spec.md`       | Delta | 4 added, 0 modified, 0 removed | 28        |
+| Dashboard UI | `specs/dashboard-ui/spec.md` | Delta | 6 added, 2 modified, 0 removed | 28        |
 
 **Totals**: 10 added requirements, 2 modified requirements, 0 removed — **56 scenarios**
 
