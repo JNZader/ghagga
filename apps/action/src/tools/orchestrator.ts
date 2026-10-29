@@ -25,6 +25,10 @@ export async function runLocalAnalysis(options: {
   enabledTools?: string[];
   disabledTools?: string[];
   repoDir: string;
+  /** Changed paths from the PR diff. Empty means a whole-repo scan. */
+  files?: string[];
+  /** Unified PR diff. Gitleaks reports only added lines when this is set. */
+  diff?: string;
 }): Promise<StaticAnalysisResult> {
   return runLocalAnalysisWithRegistry(options);
 }
@@ -41,20 +45,23 @@ async function runLocalAnalysisWithRegistry(options: {
   enabledTools?: string[];
   disabledTools?: string[];
   repoDir: string;
+  files?: string[];
+  diff?: string;
 }): Promise<StaticAnalysisResult> {
   core.info('[ghagga:tools] Running static analysis with registry-driven orchestrator');
 
   // Ensure plugins are registered
   initializeDefaultTools();
 
-  // List changed files from the repo dir (for auto-detect resolution)
-  // In the Action, we don't have the file list here — pass empty and rely on always-on + settings
-  const fileList: string[] = [];
+  // Auto-detect stays opt-in (enabled-tools). Passing the diff file list into
+  // the resolver would install biome/ruff/… on every matching PR. The file
+  // list is the scan scope for tools that already run (gitleaks, shellcheck, …).
+  const fileList = options.files ?? [];
 
   // Resolve which tools should run
   const activatedTools = resolveActivatedTools({
     registry: toolRegistry,
-    files: fileList,
+    files: [],
     enabledTools: options.enabledTools,
     disabledTools: options.disabledTools,
     enableSemgrep: options.enableSemgrep,
@@ -68,7 +75,14 @@ async function runLocalAnalysisWithRegistry(options: {
 
   // Run tools with Actions execution context
   const ctx = createActionsExecutionContext();
-  const results = await runTools(ctx, activatedTools, options.repoDir, fileList);
+  const results = await runTools(
+    ctx,
+    activatedTools,
+    options.repoDir,
+    fileList,
+    600_000,
+    options.diff !== undefined ? { diff: options.diff } : undefined,
+  );
 
   return results as StaticAnalysisResult;
 }

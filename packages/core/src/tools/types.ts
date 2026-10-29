@@ -101,6 +101,20 @@ export interface ExecutionContext {
   mcpCall?(toolName: string, args: Record<string, unknown>): Promise<unknown>;
 }
 
+// ─── Scan scope ─────────────────────────────────────────────────
+
+/**
+ * Optional review scope passed to tools that can limit themselves to a change.
+ * Absent for whole-repo commands (health, audit).
+ */
+export interface ToolScanScope {
+  /**
+   * Unified diff of the change under review. When set, secret scanning reports
+   * only lines this diff adds.
+   */
+  diff?: string;
+}
+
 // ─── Tool Definition ────────────────────────────────────────────
 
 export interface ToolDefinition {
@@ -128,6 +142,7 @@ export interface ToolDefinition {
     repoDir: string,
     files: string[],
     timeout: number,
+    scope?: ToolScanScope,
   ) => Promise<RawToolOutput>;
 
   /** Parse raw output into normalized findings. */

@@ -1,0 +1,47 @@
+# =============================================================================
+# Repository Gitleaks configuration
+# =============================================================================
+# The GHAGGA gitleaks plugin loads this file when it is present (it wins over
+# the bundled config) and also passes `--gitleaks-ignore-path` at the repo
+# root so a `.gitleaksignore` fingerprint list is honored.
+#
+# Pinned gitleaks is 8.21.2 (< 8.25.0): use the singular `[allowlist]` table.
+# Do NOT switch to `[[allowlists]]` unless that pin moves to >= 8.25.0.
+#
+# Paths below are intentional fakes: test fixtures, `.env.example`, and
+# documentation samples. A real secret in production source is still reported.
+# =============================================================================
+
+title = "GHAGGA repository Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures, env examples, and documentation samples"
+paths = [
+  '''.*\.test\.[tj]sx?$''',
+  '''.*\.spec\.[tj]sx?$''',
+  '''.*_test\.(py|go)$''',
+  '''.*test_.*\.py$''',
+  '''.*/__tests__/.*''',
+  '''.*/tests?/.*''',
+  '''.*/fixtures?/.*''',
+  '''.*/testdata/.*''',
+  # Generated Action bundle. Inlines third-party samples, not authored secrets.
+  '''apps/action/dist/.*''',
+  '''(?:^|/)\.env\.example$''',
+  '''(?:^|/)\.gitleaks\.toml$''',
+  '''(?:^|/)\.gitleaksignore$''',
+  '''(?:^|/)docs/.*\.md$''',
+  '''(?:^|/)CONTRIBUTING\.md$''',
+  '''(?:^|/)openspec/.*\.md$''',
+]
+
+# Placeholder values that also show up outside the path allowlist (CI workflow).
+regexes = [
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  '''(?:a1b2c3d4e5f6)+(?:\.\.\.)?''',
+  '''(?:LS0tLS1CRUdJTi|Ov23li|MIIEpAIBAAKCAQEA)\.\.\.''',
+  '''los_64_caracteres_hex_aqui''',
+]

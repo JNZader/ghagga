@@ -411,7 +411,12 @@ describe('run() — integration', () => {
   it('happy path: calls reviewPipeline, posts comment, sets outputs', async () => {
     await run();
 
-    expect(mockRunLocalAnalysis).toHaveBeenCalled();
+    expect(mockRunLocalAnalysis).toHaveBeenCalledWith(
+      expect.objectContaining({
+        files: ['file.ts'],
+        diff: expect.stringContaining('diff --git'),
+      }),
+    );
     // The action remaps the legacy 'github' input via resolveActionProvider() → 'gateway'.
     expect(mockReviewPipeline).toHaveBeenCalledWith(
       expect.objectContaining({

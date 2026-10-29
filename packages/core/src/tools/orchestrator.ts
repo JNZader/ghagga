@@ -11,7 +11,7 @@
 import type { ToolResult } from '../types.js';
 import { allocateTimeBudget, getEffectiveBudget } from './budget.js';
 import type { ActivatedTool } from './resolve.js';
-import type { ExecutionContext, RawToolOutput, ToolDefinition } from './types.js';
+import type { ExecutionContext, RawToolOutput, ToolDefinition, ToolScanScope } from './types.js';
 
 /** Skipped result for tools that didn't run */
 const SKIPPED_RESULT: ToolResult = {
@@ -40,6 +40,7 @@ export async function runTools(
   targetDir: string,
   files: string[],
   totalBudgetMs: number = 600_000,
+  scope?: ToolScanScope,
 ): Promise<Record<string, ToolResult>> {
   const results: Record<string, ToolResult> = {};
   const budget = allocateTimeBudget(activatedTools, totalBudgetMs);
@@ -71,7 +72,7 @@ export async function runTools(
       await tool.install(ctx);
 
       // Run
-      const raw = await tool.run(ctx, targetDir, files, effectiveBudget);
+      const raw = await tool.run(ctx, targetDir, files, effectiveBudget, scope);
 
       // Check for timeout
       if (raw.timedOut) {

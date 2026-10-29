@@ -272,6 +272,7 @@ export type {
   ToolCategory,
   ToolDefinition,
   ToolName,
+  ToolScanScope,
   ToolTier,
 } from './tools/index.js';
 

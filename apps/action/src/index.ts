@@ -41,6 +41,7 @@ import {
   DEFAULT_MODELS,
   DEFAULT_SETTINGS,
   formatReviewComment,
+  parseDiffFiles,
   REVIEW_COMMENT_MARKER,
   resolveEmbeddingConfig,
   reviewPipeline,
@@ -287,17 +288,21 @@ async function run(): Promise<void> {
 
     // The diff comes back as a string when requesting diff format
     const diff = diffResponse.data as unknown as string;
+    const diffText = typeof diff === 'string' ? diff : String(diff);
 
-    if (!diff || (typeof diff === 'string' && diff.trim().length === 0)) {
+    if (!diffText.trim()) {
       core.info('⏭️  PR has no diff content. Skipping review.');
       core.setOutput('status', 'SKIPPED');
       core.setOutput('findings-count', 0);
       return;
     }
 
-    // Step 5.5: Run local static analysis
+    // Step 5.5: Run local static analysis on the PR diff, not the whole checkout.
     core.info('Running static analysis tools...');
     const repoDir = process.env.GITHUB_WORKSPACE ?? '.';
+    const changedFiles = parseDiffFiles(diffText)
+      .map((file) => file.path)
+      .filter((path) => path.length > 0);
     const staticAnalysis = await runLocalAnalysis({
       enableSemgrep,
       enableTrivy,
@@ -305,6 +310,8 @@ async function run(): Promise<void> {
       enabledTools,
       disabledTools,
       repoDir,
+      files: changedFiles,
+      diff: diffText,
     });
 
     // Log a summary of static analysis results (dynamic — all tools)
@@ -432,7 +439,7 @@ async function run(): Promise<void> {
     try {
       // Step 6: Run the review pipeline
       result = await reviewPipeline({
-        diff: typeof diff === 'string' ? diff : String(diff),
+        diff: diffText,
         mode,
         provider,
         model,
