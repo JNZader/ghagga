@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.6.0
+      - uses: JNZader/ghagga@v3.6.1
 ```
 
 See [GitHub Action](github-action.md) for all inputs and outputs.

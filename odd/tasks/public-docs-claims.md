@@ -36,7 +36,7 @@ Commit `c21a208` landed T1–T3 on `docs/align-public-claims` (unpushed). T4–T
 ## Checks
 
 - No public doc, npm description, CLI `--help`, or dashboard login footer tells a new user that GitHub Models is the default or that `ghagga login` grants free model access.
-- Action examples use `JNZader/ghagga@v3.6.0`. No `ghcr.io/jnzader/ghagga-action`.
+- Action examples use `JNZader/ghagga@v3.6.1`. No `ghcr.io/jnzader/ghagga-action`.
 - Review modes listed as the six values in `packages/core/src/types.ts` where the full engine is described; SaaS UI stays 3 radios (honest, not expanded).
 - Tool count 17, with SonarQube called out as MCP and inert unless an MCP server is configured.
 - Privacy stripping is 24 patterns, matching `packages/core/src/memory/privacy.ts`.
