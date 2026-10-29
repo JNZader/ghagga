@@ -30,7 +30,6 @@ Read this in: [English](README.md) · [Español](README.es.md)
 GHAGGA es un sistema de code review con IA listo para producción — no un wrapper de prompts. Un solo motor de review, cuatro superficies de entrega: una **GitHub App** hosteada, una **GitHub Action**, una **CLI** para review local antes del push y un despliegue **self-hosted** completo con Docker.
 
 Lo que lo hace distinto:
-
 - **El análisis estático corre primero.** 17 herramientas deterministas (Semgrep, Trivy, Gitleaks, Ruff, clippy, …) detectan problemas conocidos antes de gastar un solo token de LLM. Los hallazgos se inyectan en el prompt del review para que el modelo dedique su atención a la lógica y la arquitectura, no al lint.
 - **Recuerda.** Decisiones, bugfixes y patrones del pasado persisten entre reviews (PostgreSQL, SQLite o [Engram](https://github.com/Gentleman-Programming/engram)) y se realimentan hacia los siguientes — con búsqueda full-text, decaimiento de fuerza (strength decay) y limpieza de datos sensibles.
 - **Seis estrategias de orquestación.** Desde una única pasada rápida hasta fan-out multi-agente y `hybrid-4r`, elegida por review según el tradeoff costo/confianza que quieras.
@@ -40,14 +39,14 @@ Lo que lo hace distinto:
 
 ## En números
 
-| | |
-|---|---|
-| **Código de producción** | ~62.000 líneas de TypeScript estricto en 8 workspaces |
-| **Código de tests** | ~73.000 líneas — *más código de tests que de producción* |
-| **Suite de tests** | 4.500+ casos de test en 231 archivos (Vitest), más mutation testing con Stryker |
-| **Análisis estático** | 17 herramientas — 7 siempre activas, 10 autodetectadas por stack |
-| **Modos de review** | 6 estrategias de orquestación (`simple` hasta `hybrid-4r`) |
-| **Distribución** | GitHub App (SaaS) · GitHub Action · CLI de npm · self-hosted con Docker |
+|                          |                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| **Código de producción** | ~62.000 líneas de TypeScript estricto en 8 workspaces                           |
+| **Código de tests**      | ~73.000 líneas — _más código de tests que de producción_                        |
+| **Suite de tests**       | 4.500+ casos de test en 231 archivos (Vitest), más mutation testing con Stryker |
+| **Análisis estático**    | 17 herramientas — 7 siempre activas, 10 autodetectadas por stack                |
+| **Modos de review**      | 6 estrategias de orquestación (`simple` hasta `hybrid-4r`)                      |
+| **Distribución**         | GitHub App (SaaS) · GitHub Action · CLI de npm · self-hosted con Docker         |
 
 ## Arquitectura
 
@@ -164,14 +163,14 @@ Guías completas de setup: [Quick Start](https://ghagga.javierzader.com/docs/qui
 
 Seis estrategias con tradeoffs de costo/confianza explícitos:
 
-| Modo | Cómo funciona | Costo en tokens | Ideal para |
-|------|---------------|:---:|------------|
-| `simple` | Una sola pasada de LLM | ~1x | PRs chicos, feedback rápido |
-| `consensus` | 3 posturas (advocate / critic / observer) + voto algorítmico | ~3x | Decisiones de aprobación de alta confianza |
-| `fan-out` | 5 lentes independientes (seguridad, tipado, performance, a11y, manejo de errores) fusionadas por severidad | ~5x | Cobertura amplia por categoría, lentes propias |
-| `workflow` | 5 especialistas en paralelo + paso de síntesis | ~6x | Reviews minuciosos multi-ángulo |
-| `diagnostic` | Análisis por hipótesis, con pasos de verificación para cada una | varía | Escarbar en cambios sospechosos |
-| `hybrid-4r` | Fan-out con `pinLensesToFirst` forzado. Contrarians, refuters y `--anchor` siguen siendo opt-in. `metadata.mode` queda en `fan-out` | ~5x | Un motor para todos los lentes y otras familias en voces sin lente |
+| Modo         | Cómo funciona                                                                                                                       | Costo en tokens | Ideal para                                                         |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | :-------------: | ------------------------------------------------------------------ |
+| `simple`     | Una sola pasada de LLM                                                                                                              |       ~1x       | PRs chicos, feedback rápido                                        |
+| `consensus`  | 3 posturas (advocate / critic / observer) + voto algorítmico                                                                        |       ~3x       | Decisiones de aprobación de alta confianza                         |
+| `fan-out`    | 5 lentes independientes (seguridad, tipado, performance, a11y, manejo de errores) fusionadas por severidad                          |       ~5x       | Cobertura amplia por categoría, lentes propias                     |
+| `workflow`   | 5 especialistas en paralelo + paso de síntesis                                                                                      |       ~6x       | Reviews minuciosos multi-ángulo                                    |
+| `diagnostic` | Análisis por hipótesis, con pasos de verificación para cada una                                                                     |      varía      | Escarbar en cambios sospechosos                                    |
+| `hybrid-4r`  | Fan-out con `pinLensesToFirst` forzado. Contrarians, refuters y `--anchor` siguen siendo opt-in. `metadata.mode` queda en `fan-out` |       ~5x       | Un motor para todos los lentes y otras familias en voces sin lente |
 
 `fan-out` es el caballo de batalla multi-agente: lentes independientes revisan el mismo diff en paralelo y después los hallazgos se fusionan por severidad en un único resultado. Podés aportar lentes propias con `--lenses` y `--lens-dir`.
 
@@ -194,7 +193,6 @@ flowchart TD
 ## Análisis estático — Capa 0
 
 Los chequeos deterministas corren antes de la capa estocástica cara. Todas las herramientas son opcionales y se omiten con elegancia cuando faltan.
-
 - **Siempre activas (7):** Semgrep, Trivy, Gitleaks, ShellCheck, CPD, markdownlint, Lizard
 - **Autodetectadas por stack (10):** Ruff + Bandit (Python), golangci-lint (Go), Biome (JS/TS), clippy (Rust), PMD (Java), Psalm (PHP), Hadolint (Docker), zizmor (GitHub Actions), SonarQube (vía MCP)
 
@@ -205,7 +203,6 @@ En modo server, esta capa corre como un **workflow inline inyectado en el repo o
 ## Memoria de proyecto
 
 La parte que hace que los reviews se acumulen con el tiempo:
-
 - **Buscar antes del review** — las observaciones pasadas relevantes se inyectan como contexto en los prompts.
 - **Persistir después del review** — los hallazgos significativos se guardan como observaciones tipadas (`decision`, `pattern`, `bugfix`, `architecture`, …) con deduplicación.
 - **Decaimiento de fuerza** — las observaciones viejas se desvanecen del contexto en vez de contaminarlo para siempre.
@@ -216,17 +213,17 @@ Backends: PostgreSQL (`tsvector` + `ts_rank`) para modo server, SQLite (FTS5 + B
 
 ## Seguridad
 
-| Control | Implementación |
-|---------|----------------|
-| API keys de proveedores | Cifrado AES-256-GCM en reposo, claves por instalación |
-| Webhooks de GitHub | HMAC-SHA256 con comparación de tiempo constante |
-| Callbacks del runner | Secrets HMAC derivados por despacho + TTL con timestamp embebido |
-| Escrituras de memoria | Limpieza de datos sensibles (24 patrones de redacción) |
-| URLs de gateway salientes | Guarda anti-SSRF — validación de rango de IP + DNS al persistir, revalidada en ejecución |
-| Prompts de LLM | Frontera de confianza — contenido del repo, memoria y hallazgos previos enmarcados y saneados como entrada no confiable |
-| Cola de jobs | Las credenciales nunca entran a los payloads de Redis — los workers re-obtienen las claves cifradas desde PostgreSQL |
-| Workflow inyectado | `permissions: contents: read`, enmascarado de secrets, normalización de salidas |
-| Cobertura de tests | Suite de seguridad dedicada: detección de manipulación en el cifrado, correctitud de HMAC, no-logging de secrets, no-eval, chequeos de prototype pollution |
+| Control                   | Implementación                                                                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API keys de proveedores   | Cifrado AES-256-GCM en reposo, claves por instalación                                                                                                      |
+| Webhooks de GitHub        | HMAC-SHA256 con comparación de tiempo constante                                                                                                            |
+| Callbacks del runner      | Secrets HMAC derivados por despacho + TTL con timestamp embebido                                                                                           |
+| Escrituras de memoria     | Limpieza de datos sensibles (24 patrones de redacción)                                                                                                     |
+| URLs de gateway salientes | Guarda anti-SSRF — validación de rango de IP + DNS al persistir, revalidada en ejecución                                                                   |
+| Prompts de LLM            | Frontera de confianza — contenido del repo, memoria y hallazgos previos enmarcados y saneados como entrada no confiable                                    |
+| Cola de jobs              | Las credenciales nunca entran a los payloads de Redis — los workers re-obtienen las claves cifradas desde PostgreSQL                                       |
+| Workflow inyectado        | `permissions: contents: read`, enmascarado de secrets, normalización de salidas                                                                            |
+| Cobertura de tests        | Suite de seguridad dedicada: detección de manipulación en el cifrado, correctitud de HMAC, no-logging de secrets, no-eval, chequeos de prototype pollution |
 
 Reportes de vulnerabilidades: ver [SECURITY.md](SECURITY.md).
 
@@ -258,7 +255,6 @@ Paquetes publicados: `ghagga` (CLI), `ghagga-core`, `ghagga-db`, `ghagga-forge` 
 ## Notas de ingeniería
 
 Algunas decisiones que vale la pena mencionar:
-
 - **División núcleo/adaptador.** El motor de review es agnóstico al transporte y al forge; server, Action y CLI son traductores finos de IO. Agregar una superficie de entrega no toca el pipeline.
 - **Los tests pesan más que el código de producción** (~73k vs ~62k LOC), con mutation testing (Stryker) protegiendo core, server y Action de tests sin aserciones.
 - **v2 fue una reescritura real**, no un parche: la dispersión Deno + Node + Python de v1 colapsó en un monorepo de un solo runtime en Node, con orquestación asincrónica (BullMQ), un registro de 17 herramientas (antes solo Semgrep) y un sistema de memoria realmente usado.

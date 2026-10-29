@@ -2,7 +2,7 @@
 
 **Status**: draft-v2  
 **Author**: javier  
-**Date**: 2026-03-18  
+**Date**: 2026-03-18
 
 ## Intent
 
@@ -11,7 +11,6 @@ Transform the CLI Bridge from a "server-managed, zero-config" integration into a
 ### Why Now
 
 The current CLI Bridge works but has two critical limitations:
-
 1. **Shared credentials**: API keys are set as Docker/Coolify env vars on the server. Every installation uses the same keys, meaning the server operator pays for all reviews. Users can't bring their own keys for CLI mode — only for API providers.
 2. **No model choice**: The CLI Bridge always uses "auto" (first available CLI). Users who want `anthropic/claude-sonnet-4` via CLI instead of via API have no way to specify that.
 
@@ -46,19 +45,21 @@ OpenCode solves the model problem: it's a single CLI that speaks to 67+ models v
 ### Phase 1: OpenCode Adapter + Credential Plumbing (Backend)
 
 **Goal**: OpenCode works as a CLI adapter with injected credentials, without any dashboard changes.
-
 1. Add `opencode` adapter to `cli-bridge.ts`:
+
    ```
    opencode run --model <provider/model> --format json "prompt"
    # For large prompts, stdin pipe:
    echo "${prompt}" | opencode run --model <provider/model> --format json
    ```
+
    - `--format json` produces newline-delimited JSON events that the adapter can parse programmatically
    - Pass prompt via stdin (same pattern as Claude/Gemini) to avoid ARG_MAX
    - Set provider-specific env var (`ANTHROPIC_API_KEY`, etc.) in `execSync` options
    - Parse `cliModel` field to determine which env var to set (e.g., `anthropic/*` → `ANTHROPIC_API_KEY`)
 
 2. Extend `generateViaCLI()` signature to accept credentials and model:
+
    ```typescript
    generateViaCLI(prompt, systemPrompt, {
      preferredCLI?: string,      // 'opencode' | 'gemini' | 'copilot'
@@ -78,8 +79,8 @@ OpenCode solves the model problem: it's a single CLI that speaks to 67+ models v
 ### Phase 2: Schema + API (Data Layer)
 
 **Goal**: Database and API support per-installation CLI credentials and model selection.
-
 1. Add `cliModel?: string` to `DbProviderChainEntry` interface (backward-compatible, JSONB):
+
    ```typescript
    interface DbProviderChainEntry {
      provider: SaaSProvider;
@@ -88,6 +89,7 @@ OpenCode solves the model problem: it's a single CLI that speaks to 67+ models v
       cliModel?: string;          // NEW: 'anthropic/claude-sonnet-4-5' (OpenCode provider/model)
    }
    ```
+
    No database migration needed — JSONB is schemaless; new field is optional.
 
 2. Update `PUT /api/settings` and `PUT /api/installation-settings`:
@@ -106,7 +108,6 @@ OpenCode solves the model problem: it's a single CLI that speaks to 67+ models v
 ### Phase 3: Dashboard UI (Frontend)
 
 **Goal**: Users can configure CLI Bridge with credentials and model selection from the dashboard.
-
 1. Redesign the CLI Bridge section in `ProviderEntry.tsx`:
    - **CLI Tool selector**: dropdown with OpenCode (recommended), Gemini CLI, Copilot CLI
    - **Model input** (OpenCode only): text input with datalist for `provider/model` suggestions (e.g., `anthropic/claude-sonnet-4-5`, `openai/gpt-4o`, `google/gemini-2.5-flash`)
@@ -114,6 +115,7 @@ OpenCode solves the model problem: it's a single CLI that speaks to 67+ models v
    - **Help text**: per-CLI instructions on which key is needed and how to get it
 
 2. Update `KNOWN_MODELS['cli-bridge']` to include OpenCode model catalog:
+
    ```typescript
    'cli-bridge': {
       opencode: ['anthropic/claude-sonnet-4-5', 'openai/gpt-4o', 'google/gemini-2.5-flash', ...],
@@ -128,49 +130,48 @@ OpenCode solves the model problem: it's a single CLI that speaks to 67+ models v
 
 ### Credential-to-Env-Var Mapping
 
-| CLI Tool | `cliModel` prefix | Env var injected | Example key |
-|----------|-------------------|------------------|-------------|
-| OpenCode | `anthropic/*` | `ANTHROPIC_API_KEY` | `sk-ant-...` |
-| OpenCode | `openai/*` | `OPENAI_API_KEY` | `sk-...` |
-| OpenCode | `google/*` | `GEMINI_API_KEY` | `AIza...` |
-| OpenCode | `github-copilot/*` | `GITHUB_TOKEN` | `ghp_...` |
-| OpenCode | `groq/*` | `GROQ_API_KEY` | `gsk_...` |
-| OpenCode | `openrouter/*` | `OPENROUTER_API_KEY` | `sk-or-...` |
-| Gemini CLI | — | `GEMINI_API_KEY` | `AIza...` |
-| Copilot CLI | — | `COPILOT_GITHUB_TOKEN` | `ghp_...` |
+| CLI Tool    | `cliModel` prefix  | Env var injected       | Example key  |
+| ----------- | ------------------ | ---------------------- | ------------ |
+| OpenCode    | `anthropic/*`      | `ANTHROPIC_API_KEY`    | `sk-ant-...` |
+| OpenCode    | `openai/*`         | `OPENAI_API_KEY`       | `sk-...`     |
+| OpenCode    | `google/*`         | `GEMINI_API_KEY`       | `AIza...`    |
+| OpenCode    | `github-copilot/*` | `GITHUB_TOKEN`         | `ghp_...`    |
+| OpenCode    | `groq/*`           | `GROQ_API_KEY`         | `gsk_...`    |
+| OpenCode    | `openrouter/*`     | `OPENROUTER_API_KEY`   | `sk-or-...`  |
+| Gemini CLI  | —                  | `GEMINI_API_KEY`       | `AIza...`    |
+| Copilot CLI | —                  | `COPILOT_GITHUB_TOKEN` | `ghp_...`    |
 
 ## Affected Modules
 
-| Package | Files | Change Type |
-|---------|-------|-------------|
-| `packages/core` | `src/providers/cli-bridge.ts` | MODIFY — add OpenCode adapter, remove codex, accept credentials |
-| `packages/core` | `src/pipeline.ts` | MODIFY — pass credentials to `generateViaCLI()` |
-| `packages/core` | `src/types.ts` | MODIFY — update `DEFAULT_MODELS['cli-bridge']` |
-| `packages/db` | `src/schema.ts` | MODIFY — add `cliModel` to `DbProviderChainEntry` |
-| `apps/server` | `src/routes/api/settings.ts` | MODIFY — handle `cliModel` in chain, update validate endpoint |
-| `apps/server` | `src/routes/api/installations.ts` | MODIFY — handle `cliModel` in chain |
-| `apps/server` | `src/routes/api/utils.ts` | MODIFY — include `cliModel` in `buildProviderChainView()` |
-| `apps/dashboard` | `src/components/settings/ProviderEntry.tsx` | MODIFY — CLI tool selector, model input, credential UI |
-| `apps/dashboard` | `src/lib/types.ts` | MODIFY — add `cliModel` to frontend types |
+| Package          | Files                                       | Change Type                                                     |
+| ---------------- | ------------------------------------------- | --------------------------------------------------------------- |
+| `packages/core`  | `src/providers/cli-bridge.ts`               | MODIFY — add OpenCode adapter, remove codex, accept credentials |
+| `packages/core`  | `src/pipeline.ts`                           | MODIFY — pass credentials to `generateViaCLI()`                 |
+| `packages/core`  | `src/types.ts`                              | MODIFY — update `DEFAULT_MODELS['cli-bridge']`                  |
+| `packages/db`    | `src/schema.ts`                             | MODIFY — add `cliModel` to `DbProviderChainEntry`               |
+| `apps/server`    | `src/routes/api/settings.ts`                | MODIFY — handle `cliModel` in chain, update validate endpoint   |
+| `apps/server`    | `src/routes/api/installations.ts`           | MODIFY — handle `cliModel` in chain                             |
+| `apps/server`    | `src/routes/api/utils.ts`                   | MODIFY — include `cliModel` in `buildProviderChainView()`       |
+| `apps/dashboard` | `src/components/settings/ProviderEntry.tsx` | MODIFY — CLI tool selector, model input, credential UI          |
+| `apps/dashboard` | `src/lib/types.ts`                          | MODIFY — add `cliModel` to frontend types                       |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| OpenCode binary not installed on server | High (new dependency) | High (feature unusable) | Detect at startup, warn in logs; validate endpoint reports availability; document Dockerfile addition |
-| OpenCode `run` command API changes | Low | Medium | Pin `opencode-ai` version in Dockerfile; adapter wraps invocation so changes are localized |
-| Credential env var leaks in error messages | Medium | High (security) | Already truncating stderr in `cli-bridge.ts` (line 169); extend to sanitize known env var patterns |
-| `cliModel` format mismatch (user types wrong format) | Medium | Low | Validate format `provider/model` in API; provide datalist suggestions in UI |
-| Subprocess inherits all server env vars | Low | Medium (security) | Use `env` option in `execSync` to set a clean environment with only required vars |
-| Large prompt exceeds CLI stdin buffer | Low | Low | Already handled by existing adapters (stdin approach); OpenCode supports stdin natively |
-| Backward compatibility: existing `model: 'auto'` entries | Low | Low | `cliModel` is optional; when absent, current auto-detect behavior is preserved |
-| Existing `model: 'claude'` entries in JSONB break after adapter removal | Medium | High | Treat `claude` as a runtime alias for `opencode` — when `model === 'claude'`, map to `opencode` with `cliModel: 'anthropic/claude-sonnet-4-5'` as default. Existing entries continue working without requiring manual reconfiguration. |
-| User enters wrong credential type for selected model | Medium | Low | Map `cliModel` prefix to expected key type; show clear error if validation fails |
+| Risk                                                                    | Likelihood            | Impact                  | Mitigation                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------- | --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenCode binary not installed on server                                 | High (new dependency) | High (feature unusable) | Detect at startup, warn in logs; validate endpoint reports availability; document Dockerfile addition                                                                                                                                  |
+| OpenCode`run` command API changes                                       | Low                   | Medium                  | Pin `opencode-ai` version in Dockerfile; adapter wraps invocation so changes are localized                                                                                                                                             |
+| Credential env var leaks in error messages                              | Medium                | High (security)         | Already truncating stderr in `cli-bridge.ts` (line 169); extend to sanitize known env var patterns                                                                                                                                     |
+| `cliModel` format mismatch (user types wrong format)                    | Medium                | Low                     | Validate format `provider/model` in API; provide datalist suggestions in UI                                                                                                                                                            |
+| Subprocess inherits all server env vars                                 | Low                   | Medium (security)       | Use `env` option in `execSync` to set a clean environment with only required vars                                                                                                                                                      |
+| Large prompt exceeds CLI stdin buffer                                   | Low                   | Low                     | Already handled by existing adapters (stdin approach); OpenCode supports stdin natively                                                                                                                                                |
+| Backward compatibility: existing `model: 'auto'` entries                | Low                   | Low                     | `cliModel` is optional; when absent, current auto-detect behavior is preserved                                                                                                                                                         |
+| Existing `model: 'claude'` entries in JSONB break after adapter removal | Medium                | High                    | Treat `claude` as a runtime alias for `opencode` — when `model === 'claude'`, map to `opencode` with `cliModel: 'anthropic/claude-sonnet-4-5'` as default. Existing entries continue working without requiring manual reconfiguration. |
+| User enters wrong credential type for selected model                    | Medium                | Low                     | Map `cliModel` prefix to expected key type; show clear error if validation fails                                                                                                                                                       |
 
 ## Rollback Plan
 
 Fully reversible:
-
 - `cliModel` is optional in JSONB — old entries without it continue working with current auto-detect behavior
 - OpenCode adapter is additive — removing it leaves Gemini/Copilot adapters intact
 - Dashboard changes are behind the CLI Bridge radio button — API provider UI is unchanged
@@ -194,12 +195,12 @@ Fully reversible:
 
 ## Effort Estimate
 
-| Phase | Estimated Effort |
-|-------|-----------------|
-| Phase 1: OpenCode adapter + credential plumbing | 3-4 hours |
-| Phase 2: Schema + API changes | 2-3 hours |
-| Phase 3: Dashboard UI | 3-4 hours |
-| Testing + integration verification | 2 hours |
-| **Total** | **10-13 hours** |
+| Phase                                           | Estimated Effort |
+| ----------------------------------------------- | ---------------- |
+| Phase 1: OpenCode adapter + credential plumbing | 3-4 hours        |
+| Phase 2: Schema + API changes                   | 2-3 hours        |
+| Phase 3: Dashboard UI                           | 3-4 hours        |
+| Testing + integration verification              | 2 hours          |
+| **Total**                                       | **10-13 hours**  |
 
 Phases are independent enough to be done in separate sessions. Phase 1 can be tested via CLI without dashboard changes.

@@ -11,6 +11,7 @@ This also cleans up the abandoned Cloud Run infrastructure (GCP service, Artifac
 ## Scope
 
 ### In Scope
+
 - **Runner repo lifecycle**: Auto-create `{user}/ghagga-runner` on GitHub App installation with workflow template
 - **Dispatch mechanism**: Server sends `repository_dispatch` to runner repo with review context
 - **Callback endpoint**: New `POST /api/runner-callback` receives structured `StaticAnalysisResult` JSON from Actions
@@ -23,6 +24,7 @@ This also cleans up the abandoned Cloud Run infrastructure (GCP service, Artifac
 - **Graceful degradation**: If runner fails/times out (10 min), deliver LLM-only review without static analysis
 
 ### Out of Scope
+
 - **`apps/action/` changes**: The existing self-hosted GitHub Action stays unchanged (it runs tools locally in the user's own workflow)
 - **CLI mode**: CLI already runs tools locally, no changes needed
 - **1-click deploy mode**: Uses its own Docker image with tools, unaffected
@@ -76,56 +78,55 @@ PR opened → Webhook → Render Server
 
 ### Security Layers (private code in public runner)
 
-| Layer | Mechanism |
-|-------|-----------|
-| 1. Silent execution | All tool stdout/stderr → `/dev/null`; only structured JSON extracted |
-| 2. Error containment | Wrapper catches tool crashes, emits only generic "tool failed" messages |
-| 3. GitHub masking | `::add-mask::` for repo names, file paths, and any content fragments |
-| 4. Log deletion | Workflow run logs deleted via GitHub API after results are POSTed |
-| 5. Retention policy | Repository log retention set to minimum (1 day) as safety net |
-| 6. Integrity check | Workflow file SHA verified before every dispatch — rejects tampered workflows |
+| Layer                | Mechanism                                                                     |
+| -------------------- | ----------------------------------------------------------------------------- |
+| 1. Silent execution  | All tool stdout/stderr → `/dev/null`; only structured JSON extracted          |
+| 2. Error containment | Wrapper catches tool crashes, emits only generic "tool failed" messages       |
+| 3. GitHub masking    | `::add-mask::` for repo names, file paths, and any content fragments          |
+| 4. Log deletion      | Workflow run logs deleted via GitHub API after results are POSTed             |
+| 5. Retention policy  | Repository log retention set to minimum (1 day) as safety net                 |
+| 6. Integrity check   | Workflow file SHA verified before every dispatch — rejects tampered workflows |
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `apps/server/src/github/client.ts` | Modified | Add functions: `createRunnerRepo`, `setRepoSecret`, `dispatchRunner`, `verifyWorkflowIntegrity`, `deleteWorkflowLogs`, `getRepoContent` |
-| `apps/server/src/github/runner.ts` | **New** | Runner repo management module: create repo, commit workflow, set secrets, dispatch, verify |
-| `apps/server/src/routes/runner-callback.ts` | **New** | `POST /api/runner-callback` — HMAC verification, Inngest event emission |
-| `apps/server/src/routes/webhook.ts` | Modified | Add runner repo creation on `installation.created` event |
-| `apps/server/src/inngest/review.ts` | Modified | Split into: dispatch static analysis → `waitForEvent` → resume with results → LLM review |
-| `apps/server/src/inngest/client.ts` | Modified | Add `ghagga/runner.completed` event schema |
-| `packages/core/src/pipeline.ts` | Modified | Accept optional pre-computed `StaticAnalysisResult`; skip local `runStaticAnalysis` when provided |
-| `packages/core/src/types.ts` | Modified | Add `precomputedStaticAnalysis?: StaticAnalysisResult` to `ReviewInput` |
-| `templates/runner-workflow.yml` | **New** | GitHub Actions workflow template for runner repos |
-| `apps/server/Dockerfile` | Modified | Remove Python, JVM, Semgrep, Trivy, PMD installation (~700MB saved) |
-| `apps/server/src/routes/api.ts` | Modified | Mount runner callback route |
-| `render.yaml` | Possibly modified | May switch from `docker` to `node` runtime if Dockerfile becomes trivial |
-| `cloudbuild.yaml` | **Removed** | No longer needed |
-| `scripts/deploy-cloudrun.sh` | **Removed** | No longer needed |
-| `CLOUD-RUN-MIGRATION.md` | **Removed** | No longer needed |
-| `Dockerfile` (root) | **Removed** | Cloud Run Dockerfile, superseded |
-| `apps/action/` | **Unchanged** | Self-hosted action continues running tools locally |
-| `packages/core/src/tools/runner.ts` | **Unchanged** | Still used by CLI, Action, and 1-click deploy modes |
+| Area                                        | Impact            | Description                                                                                                                             |
+| ------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/server/src/github/client.ts`          | Modified          | Add functions: `createRunnerRepo`, `setRepoSecret`, `dispatchRunner`, `verifyWorkflowIntegrity`, `deleteWorkflowLogs`, `getRepoContent` |
+| `apps/server/src/github/runner.ts`          | **New**           | Runner repo management module: create repo, commit workflow, set secrets, dispatch, verify                                              |
+| `apps/server/src/routes/runner-callback.ts` | **New**           | `POST /api/runner-callback` — HMAC verification, Inngest event emission                                                                 |
+| `apps/server/src/routes/webhook.ts`         | Modified          | Add runner repo creation on `installation.created` event                                                                                |
+| `apps/server/src/inngest/review.ts`         | Modified          | Split into: dispatch static analysis → `waitForEvent` → resume with results → LLM review                                                |
+| `apps/server/src/inngest/client.ts`         | Modified          | Add `ghagga/runner.completed` event schema                                                                                              |
+| `packages/core/src/pipeline.ts`             | Modified          | Accept optional pre-computed `StaticAnalysisResult`; skip local `runStaticAnalysis` when provided                                       |
+| `packages/core/src/types.ts`                | Modified          | Add `precomputedStaticAnalysis?: StaticAnalysisResult` to `ReviewInput`                                                                 |
+| `templates/runner-workflow.yml`             | **New**           | GitHub Actions workflow template for runner repos                                                                                       |
+| `apps/server/Dockerfile`                    | Modified          | Remove Python, JVM, Semgrep, Trivy, PMD installation (~700MB saved)                                                                     |
+| `apps/server/src/routes/api.ts`             | Modified          | Mount runner callback route                                                                                                             |
+| `render.yaml`                               | Possibly modified | May switch from `docker` to `node` runtime if Dockerfile becomes trivial                                                                |
+| `cloudbuild.yaml`                           | **Removed**       | No longer needed                                                                                                                        |
+| `scripts/deploy-cloudrun.sh`                | **Removed**       | No longer needed                                                                                                                        |
+| `CLOUD-RUN-MIGRATION.md`                    | **Removed**       | No longer needed                                                                                                                        |
+| `Dockerfile` (root)                         | **Removed**       | Cloud Run Dockerfile, superseded                                                                                                        |
+| `apps/action/`                              | **Unchanged**     | Self-hosted action continues running tools locally                                                                                      |
+| `packages/core/src/tools/runner.ts`         | **Unchanged**     | Still used by CLI, Action, and 1-click deploy modes                                                                                     |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| **Private code leaks in public logs** | Low | Critical | 4 security layers (silence, mask, delete, retention) + workflow integrity check |
-| **GitHub ToS violation** (compute abuse) | Very Low | High | Same pattern used by CodeQL, Snyk, SonarCloud; runner does legitimate CI work |
-| **Latency increase** (+1-4 min Actions cold start) | High | Low | Acceptable for async code review; tool caching reduces subsequent runs |
-| **Workflow tampering** (user modifies runner YAML) | Medium | High | SHA verification before every dispatch; reject tampered workflows |
-| **Installation token expiry** (1h lifetime) | Low | Medium | Generate fresh token immediately before dispatch; runner clone happens within seconds |
-| **Runner repo deletion by user** | Medium | Low | Check repo exists before dispatch; re-create if missing |
-| **Inngest waitForEvent timeout** (Actions slow/stuck) | Medium | Low | 10 min timeout → fallback to LLM-only review (still useful) |
-| **GitHub API rate limits** (many dispatches) | Low | Medium | Installation tokens have 5000 req/h; typical usage is far below |
-| **Callback replay attacks** | Low | Medium | HMAC with per-dispatch unique secret; callback ID used only once |
+| Risk                                                  | Likelihood | Impact   | Mitigation                                                                            |
+| ----------------------------------------------------- | ---------- | -------- | ------------------------------------------------------------------------------------- |
+| **Private code leaks in public logs**                 | Low        | Critical | 4 security layers (silence, mask, delete, retention) + workflow integrity check       |
+| **GitHub ToS violation** (compute abuse)              | Very Low   | High     | Same pattern used by CodeQL, Snyk, SonarCloud; runner does legitimate CI work         |
+| **Latency increase** (+1-4 min Actions cold start)    | High       | Low      | Acceptable for async code review; tool caching reduces subsequent runs                |
+| **Workflow tampering** (user modifies runner YAML)    | Medium     | High     | SHA verification before every dispatch; reject tampered workflows                     |
+| **Installation token expiry** (1h lifetime)           | Low        | Medium   | Generate fresh token immediately before dispatch; runner clone happens within seconds |
+| **Runner repo deletion by user**                      | Medium     | Low      | Check repo exists before dispatch; re-create if missing                               |
+| **Inngest waitForEvent timeout** (Actions slow/stuck) | Medium     | Low      | 10 min timeout → fallback to LLM-only review (still useful)                           |
+| **GitHub API rate limits** (many dispatches)          | Low        | Medium   | Installation tokens have 5000 req/h; typical usage is far below                       |
+| **Callback replay attacks**                           | Low        | Medium   | HMAC with per-dispatch unique secret; callback ID used only once                      |
 
 ## Rollback Plan
 
 This change is highly reversible because the static analysis tools remain in `packages/core/` and are still used by `apps/action/` and CLI:
-
 1. **Revert Dockerfile**: Re-add Semgrep/Trivy/PMD installation to `apps/server/Dockerfile` (the old version is in git history)
 2. **Revert pipeline**: Remove `precomputedStaticAnalysis` from `ReviewInput`; pipeline reverts to local execution
 3. **Revert Inngest function**: Remove the `waitForEvent` split; go back to single-step `run-review`
@@ -164,9 +165,9 @@ This change is highly reversible because the static analysis tools remain in `pa
 
 ## Distribution Mode Impact
 
-| Mode | Impact | Notes |
-|------|--------|-------|
-| **SaaS** (webhook) | Major change | Static analysis moves to runner repos |
-| **Action** (self-hosted) | No change | Continues running tools in user's own workflow |
-| **CLI** | No change | Continues running tools locally |
-| **1-click deploy** | No change | Uses own Docker image with tools installed |
+| Mode                     | Impact       | Notes                                          |
+| ------------------------ | ------------ | ---------------------------------------------- |
+| **SaaS** (webhook)       | Major change | Static analysis moves to runner repos          |
+| **Action** (self-hosted) | No change    | Continues running tools in user's own workflow |
+| **CLI**                  | No change    | Continues running tools locally                |
+| **1-click deploy**       | No change    | Uses own Docker image with tools installed     |

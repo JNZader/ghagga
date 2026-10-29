@@ -61,10 +61,10 @@ jobs:
   call-openhands-resolver:
     uses: OpenHands/OpenHands/.github/workflows/openhands-resolver.yml@main
     with:
-      macro: '@openhands-agent'
+      macro: "@openhands-agent"
       max_iterations: 30
-      LLM_MODEL: 'deepseek/deepseek-chat'
-      pr_type: 'draft'
+      LLM_MODEL: "deepseek/deepseek-chat"
+      pr_type: "draft"
     secrets:
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       PAT_USERNAME: ${{ secrets.PAT_USERNAME }}
@@ -74,6 +74,7 @@ jobs:
 ## Self-Hosted Option
 
 ### Requirements
+
 - Docker (socket passthrough, NOT Docker-in-Docker)
 - 4GB RAM minimum, 8GB recommended
 - 2+ CPU cores
@@ -83,6 +84,7 @@ jobs:
 - GitHub PAT for repo access
 
 ### Our Hetzner CX33 (2 vCPU, 4GB RAM, 40GB disk)
+
 - Technically meets minimum requirements
 - Only supports 1 concurrent task
 - RAM will be tight (main container + sandbox = ~2-3GB)
@@ -91,6 +93,7 @@ jobs:
 ## LLM Provider Options
 
 ### Recommended: DeepSeek
+
 - ~$0.01-0.05 per fix
 - No practical rate limits
 - No output token cap
@@ -98,6 +101,7 @@ jobs:
 - Config: `LLM_MODEL: 'deepseek/deepseek-chat'`
 
 ### GitHub Models: NOT viable
+
 - Endpoint: `https://models.github.ai/inference`
 - Free tier limits are too restrictive:
   - High models (GPT-4o): 50 requests/day, 4K output tokens/request
@@ -107,6 +111,7 @@ jobs:
 - Verdict: incompatible with agent-style workloads
 
 ### Other free/cheap options
+
 - Groq free tier (Llama 3.3 70B): better limits than GitHub Models but still constrained
 - OpenRouter: some free models (Devstral), pay-per-token for others
 - Gemini free tier: 15 RPM, usable for simple fixes
@@ -114,9 +119,11 @@ jobs:
 ## Integration Architecture with ghagga
 
 ### Concept
+
 ghagga detects issues → formats findings as structured prompt → triggers OpenHands via PR comment → OpenHands fixes and opens draft PR
 
 ### Trigger pattern
+
 After ghagga posts review findings, it posts a follow-up comment:
 
 ```
@@ -130,46 +137,52 @@ After fixing, run `npm test` to verify.
 
 ### Proposed command set
 
-| Command | What ghagga triggers | OpenHands action |
-|---------|---------------------|-----------------|
-| `/ghagga fix` | Post findings as fix prompt | Fix code issues from review |
-| `/ghagga docs` | Post code-doc validation results | Update outdated documentation |
-| `/ghagga tests` | Post uncovered functions list | Generate missing unit tests |
-| `/ghagga patch` | Post CVE exploitability findings | Update vulnerable dependencies |
-| `/ghagga refactor` | Post duplication/complexity findings | Extract functions, simplify code |
-| `/ghagga changelog` | Post commit summary | Generate/update CHANGELOG |
-| `/ghagga types` | Post untyped function list | Add missing type annotations |
-| `/ghagga api-docs` | Post API endpoint changes | Update OpenAPI spec |
+| Command             | What ghagga triggers                 | OpenHands action                 |
+| ------------------- | ------------------------------------ | -------------------------------- |
+| `/ghagga fix`       | Post findings as fix prompt          | Fix code issues from review      |
+| `/ghagga docs`      | Post code-doc validation results     | Update outdated documentation    |
+| `/ghagga tests`     | Post uncovered functions list        | Generate missing unit tests      |
+| `/ghagga patch`     | Post CVE exploitability findings     | Update vulnerable dependencies   |
+| `/ghagga refactor`  | Post duplication/complexity findings | Extract functions, simplify code |
+| `/ghagga changelog` | Post commit summary                  | Generate/update CHANGELOG        |
+| `/ghagga types`     | Post untyped function list           | Add missing type annotations     |
+| `/ghagga api-docs`  | Post API endpoint changes            | Update OpenAPI spec              |
 
 ### Key insight
+
 Each command is just a different prompt template. ghagga already has all the data (findings, files, lines, suggestions). The integration is a formatting layer — convert ReviewFinding[] to natural language prompts per command type.
 
 ## Alternatives Considered
 
 ### Google Jules
+
 - API is alpha with unknown pricing
 - Requires manual repo pre-registration per repo
 - 15 tasks/day free tier
 - Verdict: too unstable and friction-heavy
 
 ### GitHub Copilot Coding Agent
+
 - Requires paid Copilot plan ($10+/mo)
 - REST API available (March 2026)
 - No free tier
 - Verdict: cost prohibitive for open source
 
 ### Devin (Cognition)
+
 - API only on Teams plan ($500/mo)
 - No free tier
 - Verdict: way too expensive
 
 ### Aider (DIY)
+
 - Open source, bring your own LLM key
 - No native PR creation (needs shell glue)
 - Python API with headless mode
 - Verdict: viable fallback if OpenHands V1 doesn't materialize
 
 ### Open-SWE (LangChain)
+
 - Open source, LangGraph ecosystem
 - Full PR automation
 - Requires sandbox infrastructure (Modal, Daytona)

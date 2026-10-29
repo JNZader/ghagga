@@ -9,6 +9,7 @@
 ## Phase 1: Foundation — GenerateTextFn Abstraction
 
 ### Task 1: Create `providers/generate-fn.ts`
+
 - [ ] Define `GenerateResult` interface: `{ text, tokensUsed, provider, model }`
 - [ ] Define `GenerateTextFn` type: `(system: string, prompt: string) => Promise<GenerateResult>`
 - [ ] Implement `createAISDKGenerateFn(provider, model, apiKey)`:
@@ -33,6 +34,7 @@
 ## Phase 2: Refactor Agents
 
 ### Task 2: Refactor `agents/simple.ts`
+
 - [ ] Add `generateFn?: GenerateTextFn` to `SimpleReviewInput` interface
 - [ ] When `generateFn` is provided, use it instead of `createModel` + `generateTextWithTimeout`
 - [ ] When `generateFn` is NOT provided, create one internally from `provider/model/apiKey` (backward compat)
@@ -43,6 +45,7 @@
 **Commit**: `refactor(core): simple agent accepts GenerateTextFn`
 
 ### Task 3: Refactor `agents/workflow.ts`
+
 - [ ] Add `generateFns?: GenerateTextFn[]` to `WorkflowReviewInput` interface
 - [ ] When `generateFns` is provided:
   - Each specialist uses `generateFns[index % generateFns.length]`
@@ -59,6 +62,7 @@
 **Commit**: `refactor(core): workflow agent accepts GenerateTextFn[] for backend-agnostic calls`
 
 ### Task 4: Refactor `agents/consensus.ts`
+
 - [ ] Add `generateFns?: GenerateTextFn[]` to `ConsensusReviewInput` interface
 - [ ] When `generateFns` is provided:
   - Each stance uses `generateFns[index % generateFns.length]`
@@ -77,6 +81,7 @@
 ## Phase 3: Pipeline Unification
 
 ### Task 5: Add `resolveGenerateTextFns` to pipeline.ts
+
 - [ ] Import `createAISDKGenerateFn`, `createCLIBridgeGenerateFn`, `createGatewayGenerateFn` from `providers/generate-fn.ts`
 - [ ] Create function `resolveGenerateTextFns(input: ReviewInput): GenerateTextFn[]`:
   - If `isCliBridge`: return `[createCLIBridgeGenerateFn({ preferredCLI, cliModel, credentials })]`
@@ -90,6 +95,7 @@
 **Commit**: `feat(core): add resolveGenerateTextFns for unified backend dispatch`
 
 ### Task 6: Unify pipeline dispatch
+
 - [ ] Remove `runCLIBridgeReview` function and its `CLIBridgeReviewInput` interface
 - [ ] Remove `runGatewayReview` function and its `GatewayReviewInput` interface
 - [ ] Replace the three-way branch (`isCliBridge` / `isGateway` / else) with unified flow:
@@ -111,6 +117,7 @@
 ## Phase 4: Testing & Verification
 
 ### Task 7: Unit tests for `generate-fn.ts`
+
 - [x] Test `createAISDKGenerateFn`: mock `generateTextWithTimeout`, verify it's called with correct params
 - [x] Test `createCLIBridgeGenerateFn`: mock `generateViaCLI`, verify prompt/system are passed correctly
 - [x] Test `createGatewayGenerateFn`: mock `generateViaGateway`, verify options are forwarded
@@ -120,6 +127,7 @@
 **Commit**: `test(core): add unit tests for GenerateTextFn factories`
 
 ### Task 8: Integration smoke test
+
 - [x] Run `pnpm test` to verify all existing tests pass (1739/1739 passed)
 - [x] Run `pnpm biome check --write` across modified files (no issues)
 - [x] Run `pnpm build` to verify TypeScript compilation (`tsc --noEmit` clean)
@@ -133,6 +141,7 @@
 ## Phase 5: Cleanup
 
 ### Task 9: Remove dead code and debug logging
+
 - [x] Remove the `console.log('[ghagga] Gateway debug:' ...)` from pipeline.ts — already removed in Task 6
 - [x] Clean up any unused imports from pipeline.ts after removing `runCLIBridgeReview`/`runGatewayReview` — verified clean
 - [x] Verify no unused imports in agents after removing `createModel` direct usage — verified clean
@@ -144,14 +153,14 @@
 
 ## Summary
 
-| Phase | Tasks | Estimated |
-|-------|-------|-----------|
-| 1. Foundation | Task 1 | 15 min |
-| 2. Agent Refactoring | Tasks 2-4 | 45 min |
-| 3. Pipeline Unification | Tasks 5-6 | 30 min |
-| 4. Testing | Tasks 7-8 | 20 min |
-| 5. Cleanup | Task 9 | 10 min |
-| **Total** | **9 tasks** | **~2 hours** |
+| Phase                   | Tasks       | Estimated    |
+| ----------------------- | ----------- | ------------ |
+| 1. Foundation           | Task 1      | 15 min       |
+| 2. Agent Refactoring    | Tasks 2-4   | 45 min       |
+| 3. Pipeline Unification | Tasks 5-6   | 30 min       |
+| 4. Testing              | Tasks 7-8   | 20 min       |
+| 5. Cleanup              | Task 9      | 10 min       |
+| **Total**               | **9 tasks** | **~2 hours** |
 
 ## Dependencies
 

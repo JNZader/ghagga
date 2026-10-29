@@ -60,6 +60,7 @@ Commands MUST use `tui.severity()` for all severity-colored output; direct `chal
 - AND no error SHALL be thrown
 
 #### Edge Cases:
+
 - Empty string input: MUST return empty string (no prefix in plain mode if text is empty)
 - `NO_COLOR` set: MUST strip ANSI codes but MAY still use `[LEVEL]` prefix format if in otherwise-styled mode
 
@@ -114,6 +115,7 @@ content line 2
 - OR the long line MAY be truncated with an ellipsis at a reasonable terminal width
 
 #### Edge Cases:
+
 - Content containing box-drawing characters: MUST render correctly without visual corruption
 - Content with ANSI codes in styled mode: box width calculation MUST use visible character length, not raw string length
 
@@ -158,6 +160,7 @@ In plain mode:
 - THEN a divider with the tool name MUST appear between each tool's finding group
 
 #### Edge Cases:
+
 - Very long label (>50 chars): MUST truncate or wrap gracefully without breaking the divider format
 
 ---
@@ -205,6 +208,7 @@ The step count MUST be derived from the tool registry's active tool count plus f
 - AND no division-by-zero or rendering error SHALL occur
 
 #### Edge Cases:
+
 - `current > total`: MUST render without error (e.g., `[8/7]` if an unexpected extra step occurs)
 - Negative values: MUST clamp to 0 or render without error
 
@@ -213,7 +217,6 @@ The step count MUST be derived from the tool registry's active tool count plus f
 ### R5: Plain Mode Detection and Fallback
 
 Plain mode MUST be activated when ANY of the following conditions is true:
-
 1. `--plain` flag is passed
 2. `process.stdout.isTTY` is `false` or `undefined`
 3. `process.env.CI` is set (any truthy value)
@@ -336,6 +339,7 @@ The `--format` flag MUST remain as a deprecated alias for `--output`. When `--fo
 - AND no TUI artifacts SHALL corrupt the JSON stream
 
 #### Edge Cases:
+
 - `--output json --plain`: MUST work without conflict (both suppress TUI)
 - `--output markdown` in TTY: MUST suppress TUI decorations even though TTY is available
 - `--output` with `--verbose`: verbose diagnostics MUST go to stderr, formatted output to stdout
@@ -413,6 +417,7 @@ The SARIF builder MUST be a pure function in `packages/core/` (or `apps/cli/src/
 - AND `$.runs[0].results` MUST be an empty array `[]`
 
 #### Edge Cases:
+
 - Findings with Unicode characters in messages: MUST be properly JSON-escaped
 - Findings with very long messages (>1000 chars): MUST be included in full (no truncation in SARIF)
 - Multiple runs from different tools: MUST be consolidated into a single SARIF run with `tool.driver.name: "ghagga"`
@@ -424,7 +429,6 @@ The SARIF builder MUST be a pure function in `packages/core/` (or `apps/cli/src/
 The CLI MUST support an `--enhance` flag (alias: `--ai`) that triggers an AI-powered post-analysis pass after static analysis completes but before final result assembly.
 
 The enhance module MUST:
-
 1. **Group** related findings across tools — findings about the same root cause or code location MUST be assigned a shared `groupId`
 2. **Prioritize** findings by estimated real-world impact — each finding MUST receive an `aiPriority` score (1-10, where 10 is highest impact)
 3. **Generate fix suggestions** — the top findings MUST include concrete code snippets or actionable fix descriptions
@@ -507,6 +511,7 @@ The model MUST be `gpt-4o-mini` (free via GitHub Models). Token budget: input ca
 - AND a clear warning MUST indicate that authentication is needed for AI enhance
 
 #### Edge Cases:
+
 - Zero findings with `--enhance`: MUST skip the AI call entirely (no point enhancing empty results) and set `enhanced: false`
 - `--enhance --output json`: enhanced metadata MUST be included in the JSON output
 - `--enhance --output sarif`: AI-enhanced fields (groupId, aiPriority) are NOT part of SARIF schema — SARIF output MUST be valid regardless of enhance state
@@ -520,7 +525,6 @@ The CLI MUST provide a `ghagga health [path]` command that runs a subset of stat
 Default `path` is the current working directory (`.`).
 
 The health command MUST:
-
 1. Run a subset of static analysis tools: at minimum Semgrep, Trivy, Gitleaks, ShellCheck, and Lizard (always-on tools from the registry)
 2. Compute a health score from 0-100
 3. Display the score with color coding: green (80-100), yellow (50-79), red (0-49)
@@ -575,6 +579,7 @@ The health command MUST NOT require authentication — it runs entirely locally.
 - GIVEN the user runs `ghagga health --output json`
 - WHEN the health check completes
 - THEN stdout MUST contain valid JSON with the schema:
+
   ```json
   {
     "score": 85,
@@ -604,6 +609,7 @@ The health command MUST NOT require authentication — it runs entirely locally.
 - AND all local static analysis tools MUST run
 
 #### Edge Cases:
+
 - Empty directory with no source files: MUST produce score 100 with a note "No source files found"
 - Tools not installed (e.g., Semgrep not in PATH): MUST skip unavailable tools with a warning and score based on available tools only
 - `ghagga health --output sarif`: MUST work (SARIF of health findings) or produce a clear error if health-specific SARIF is not supported
@@ -668,6 +674,7 @@ Display:
 - AND `/home/user/projectB` history MUST NOT be affected
 
 #### Edge Cases:
+
 - History file does not exist: MUST be created on first run
 - History directory does not exist (`~/.config/ghagga/`): MUST create the directory
 - Permission denied writing history: MUST warn but not fail the health check
@@ -704,6 +711,7 @@ Recommendations MUST:
 - THEN `recommendations` MUST be an array of objects with `{ category, action, impact, findingCount }`
 
 #### Edge Cases:
+
 - All findings in one category: MUST still produce meaningful recommendations (not just "fix security issues" repeated)
 - Categories with only `info` findings: MAY be omitted from recommendations
 
@@ -829,6 +837,7 @@ Requirements:
 - AND the exit code MUST be non-zero
 
 #### Edge Cases:
+
 - `--issue 0` or `--issue -1`: MUST produce a validation error
 - `--issue new` on a repository with thousands of issues: MUST still create successfully (no list queries needed)
 - `--issue 999999` on a non-existent issue: MUST display "Issue #999999 not found" error from the API
@@ -866,6 +875,7 @@ Requirements:
 - AND the bundle size increase MUST be < 30KB
 
 #### Edge Cases:
+
 - chalk v5 ESM-only: the project build must handle ESM imports correctly
 - If chalk bundling fails with ncc: fallback plan is to vendor chalk's core color functions (~50 lines) directly
 
@@ -874,7 +884,6 @@ Requirements:
 ### R15: Review Output Integration
 
 The `review` command output MUST integrate all new TUI features:
-
 1. Step progress `[1/7] Running Semgrep...` during the pipeline
 2. Section dividers between tool finding groups using `tui.divider(toolName)`
 3. Colored severity for each finding using `tui.severity()`
@@ -910,6 +919,7 @@ The `review` command output MUST integrate all new TUI features:
 - AND the issue URL MUST be printed
 
 #### Edge Cases:
+
 - Review with zero findings: summary box MUST still appear with "0 findings" and PASSED status
 - Review with only one tool producing findings: dividers MUST NOT appear for tools with zero findings (or appear with "0 findings" note)
 

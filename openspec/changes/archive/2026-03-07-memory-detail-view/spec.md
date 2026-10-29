@@ -9,7 +9,6 @@
 ## Overview
 
 This specification defines two areas of change:
-
 1. **Backend**: Expand the memory significance filter to include `medium` severity findings, add a `severity` column to the observation data model (both PostgreSQL and SQLite), and propagate severity through the persistence and query pipeline.
 
 2. **Dashboard**: Enhance the Memory page with severity badges, PR links, an observation detail modal, stats bar, severity filter, and sort options — transforming the page from a basic observation browser into a comprehensive memory management interface.
@@ -278,7 +277,6 @@ Each `SessionItem` MUST display a PR link (e.g., "PR #42") linking to `https://g
 ### R9: Dashboard — Enhanced ObservationCard Display
 
 Each `ObservationCard` MUST be enhanced with the following display improvements:
-
 1. **Revision count badge**: When `revisionCount > 1`, display a badge like "3 revisions"
 2. **File path chips**: Display file paths as styled chips/tags (not plain text)
 3. **Content styling**: Observation content MUST use `font-mono` for code-like formatting with `whitespace-pre-wrap`
@@ -480,7 +478,6 @@ The sort MUST be applied client-side after filtering.
 ### R14: Dashboard — SessionItem Enhancements
 
 Each `SessionItem` in the Memory page MUST be enhanced with:
-
 1. **PR link**: Clickable link to the GitHub PR (R8)
 2. **Severity summary**: Small colored dots or count text showing the distribution of severities in that session (e.g., "2● 3● 1●" with critical=red, high=orange, medium=yellow dots)
 

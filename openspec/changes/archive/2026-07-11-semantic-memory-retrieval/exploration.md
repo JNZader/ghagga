@@ -17,7 +17,6 @@ set, (2) if an `EmbeddingProvider` is present, candidates are re-ranked with
 `finalScore = 0.7*cosineSim + 0.3*normalizedKeywordScore`. Step 1 is a hard
 filter — a lexically-disjoint but semantically-close observation never becomes a
 candidate.
-
 - **SQLite** (`packages/core/src/memory/sqlite.ts:257-515`): `searchObservations`
   branches on `embeddingProvider`; set → `_hybridSearch` (FTS5 `MATCH`, fetch
   `limit*5` by `bm25()`, decay filter, normalize BM25 to [0,1], cosine from
@@ -32,7 +31,7 @@ candidate.
 - Adapter `apps/server/src/memory/postgres.ts:56-98` re-applies the same
   `computeStrength`/`minStrength` decay filter (duplicated logic).
 - `packages/core/src/embed.ts`: `EmbeddingProvider` interface + `cosineSimilarity`
-  + float32 (de)serialization. **No concrete implementation ships anywhere.**
+  - float32 (de)serialization. **No concrete implementation ships anywhere.**
 
 ## PIVOTAL FINDING — the feature is DORMANT
 

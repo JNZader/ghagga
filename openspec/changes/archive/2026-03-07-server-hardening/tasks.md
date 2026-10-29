@@ -178,15 +178,15 @@ All work is in `apps/server/`. Tests are co-located (`*.test.ts` beside source f
 
 ## Summary
 
-| Phase | Tasks | Focus | Spec Requirements |
-|-------|-------|-------|-------------------|
-| Phase 1 | 1 | Dependencies & Setup | R2 (prerequisite) |
-| Phase 2 | 2 | Security Headers | R3 |
-| Phase 3 | 2 | Body Size Limit | R4 |
-| Phase 4 | 2 | CORS Restriction | R1 |
-| Phase 5 | 2 | Rate Limiting | R2 |
-| Phase 6 | 3 | Integration & Verification | R5, all |
-| **Total** | **12** | | |
+| Phase     | Tasks  | Focus                      | Spec Requirements |
+| --------- | ------ | -------------------------- | ----------------- |
+| Phase 1   | 1      | Dependencies & Setup       | R2 (prerequisite) |
+| Phase 2   | 2      | Security Headers           | R3                |
+| Phase 3   | 2      | Body Size Limit            | R4                |
+| Phase 4   | 2      | CORS Restriction           | R1                |
+| Phase 5   | 2      | Rate Limiting              | R2                |
+| Phase 6   | 3      | Integration & Verification | R5, all           |
+| **Total** | **12** |                            |                   |
 
 ## Dependency Graph
 

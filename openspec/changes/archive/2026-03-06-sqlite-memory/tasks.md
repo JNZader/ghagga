@@ -118,20 +118,20 @@
     - If `options.memory` is `true`:
       1. Resolve `dbPath = join(getConfigDir(), 'memory.db')`
       2. Create `memoryStorage = await SqliteMemoryStorage.create(dbPath)` wrapped in try/catch (log warning on failure, set `memoryStorage = undefined`)
-      3. Resolve `repoFullName = resolveProjectId(repoPath)` (replace hardcoded `'local/review'` at line 95)
-    - If `options.memory` is `false`: set `memoryStorage = undefined`, keep `repoFullName = resolveProjectId(repoPath)`
+      3. Resolve `repoFullName = resolveProjectId(repoPath)` (replace hardcoded `'local/review'` at line 95) - If `options.memory` is `false`: set `memoryStorage = undefined`, keep `repoFullName = resolveProjectId(repoPath)`
   - Update the `reviewPipeline` call:
     - Replace `db: undefined` (line 100) with `memoryStorage,`
-     - Set `enableMemory: options.memory` in `settings` (currently not set, so it uses `DEFAULT_SETTINGS.enableMemory` which is `false` — override to `true` when memory is enabled)
-     - Replace `repoFullName: 'local/review'` (line 95) with the resolved value
-   - Update `mergeSettings()` (line 199): change `enableMemory: false` to `enableMemory: options.memory ?? true` — this function currently hardcodes `false` and would override the pipeline call's setting
-   - After the pipeline completes (before formatting/exit), call `await memoryStorage?.close()` to persist to disk
-   - **Verify**: `npx tsc --noEmit` in `apps/cli`
+      - Set `enableMemory: options.memory` in `settings` (currently not set, so it uses `DEFAULT_SETTINGS.enableMemory` which is `false` — override to `true` when memory is enabled)
+      - Replace `repoFullName: 'local/review'` (line 95) with the resolved value
+  - Update `mergeSettings()` (line 199): change `enableMemory: false` to `enableMemory: options.memory ?? true` — this function currently hardcodes `false` and would override the pipeline call's setting
+  - After the pipeline completes (before formatting/exit), call `await memoryStorage?.close()` to persist to disk
+  - **Verify**: `npx tsc --noEmit` in `apps/cli`
 
 ## Phase 5: Action Integration — SQLite Memory + @actions/cache
 
 - [x] 5.1 Add `enable-memory` input to `action.yml` (root) and `apps/action/action.yml`
   - In `/action.yml` (root, line 64 area), add:
+
     ```yaml
     enable-memory:
       description: >-
@@ -156,8 +156,7 @@
   - Before the pipeline call (after Step 5.5, around line 134):
     - If `enableMemory`:
       1. Try `cache.restoreCache([MEMORY_DB_PATH], cacheKey, [cacheKey])` — log hit/miss, ignore errors
-      2. Create `memoryStorage = await SqliteMemoryStorage.create(MEMORY_DB_PATH)` wrapped in try/catch
-    - Else: `memoryStorage = undefined`
+      2. Create `memoryStorage = await SqliteMemoryStorage.create(MEMORY_DB_PATH)` wrapped in try/catch - Else: `memoryStorage = undefined`
   - Update the `reviewPipeline` call (lines 147–168):
     - Replace `enableMemory: false` (line 158) with `enableMemory,`
     - Replace `db: undefined` (line 166) with `memoryStorage,`

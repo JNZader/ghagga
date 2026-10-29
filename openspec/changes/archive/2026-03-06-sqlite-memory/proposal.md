@@ -42,11 +42,11 @@ apps/server/src/memory/postgres.ts → PostgresMemoryStorage (wraps ghagga-db)
 
 The core pipeline depends only on the `MemoryStorage` interface. Each distribution mode provides the appropriate adapter:
 
-| Mode   | Adapter               | Storage                                | Persistence              |
-|--------|-----------------------|----------------------------------------|--------------------------|
-| SaaS   | `PostgresMemoryStorage` | PostgreSQL (existing schema, unchanged) | Always available         |
-| CLI    | `SqliteMemoryStorage`   | `~/.config/ghagga/memory.db`           | Local filesystem         |
-| Action | `SqliteMemoryStorage`   | `/tmp/ghagga-memory.db`                | `@actions/cache` between runs |
+| Mode   | Adapter                 | Storage                                 | Persistence                   |
+| ------ | ----------------------- | --------------------------------------- | ----------------------------- |
+| SaaS   | `PostgresMemoryStorage` | PostgreSQL (existing schema, unchanged) | Always available              |
+| CLI    | `SqliteMemoryStorage`   | `~/.config/ghagga/memory.db`            | Local filesystem              |
+| Action | `SqliteMemoryStorage`   | `/tmp/ghagga-memory.db`                 | `@actions/cache` between runs |
 
 ### MemoryStorage Interface
 
@@ -68,10 +68,7 @@ export interface MemoryStorage {
     filePaths?: string[];
   }): Promise<MemoryObservationRow>;
 
-  createSession(data: {
-    project: string;
-    prNumber?: number;
-  }): Promise<{ id: number }>;
+  createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }>;
 
   endSession(sessionId: number, summary: string): Promise<void>;
 
@@ -147,29 +144,29 @@ END;
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/core/src/types.ts` | Modified | Add `MemoryStorage` interface, `MemoryObservationRow` type. Replace `db?: unknown` with `memoryStorage?: MemoryStorage` on `ReviewInput`. |
-| `packages/core/src/memory/search.ts` | Modified | Replace `import { searchObservations } from 'ghagga-db'` with `MemoryStorage.searchObservations()`. Change `db: unknown` parameter to `storage: MemoryStorage`. |
-| `packages/core/src/memory/persist.ts` | Modified | Replace `import { saveObservation, createMemorySession, endMemorySession } from 'ghagga-db'` with `MemoryStorage` method calls. Change `db: unknown` to `storage: MemoryStorage`. |
-| `packages/core/src/memory/sqlite.ts` | New | `SqliteMemoryStorage` class using sql.js. Schema init, FTS5, dedup, topic-key upsert. |
-| `packages/core/src/pipeline.ts` | Modified | Replace `input.db` references with `input.memoryStorage`. Update `searchMemorySafe` and persist call. |
-| `packages/core/package.json` | Modified | Remove `"ghagga-db": "workspace:^"` dependency. Add `"sql.js": "^1.11.0"`. |
-| `apps/server/src/memory/postgres.ts` | New | `PostgresMemoryStorage` adapter wrapping existing `ghagga-db` functions. |
-| `apps/server/` (webhook, inngest, api) | Modified | Replace `db: dbInstance` with `memoryStorage: new PostgresMemoryStorage(db)` when calling the pipeline. |
-| `apps/cli/src/commands/review.ts` | Modified | Create `SqliteMemoryStorage` at `~/.config/ghagga/memory.db`, set `enableMemory: true`, derive `repoFullName` from git remote. |
-| `apps/action/src/index.ts` | Modified | Create `SqliteMemoryStorage` at `/tmp/ghagga-memory.db`, use `@actions/cache` for persistence, set `enableMemory: true`. |
-| `apps/action/package.json` | Modified | Add `"sql.js": "^1.11.0"` dependency (already has `@actions/cache`). |
+| Area                                   | Impact   | Description                                                                                                                                                                       |
+| -------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/types.ts`           | Modified | Add `MemoryStorage` interface, `MemoryObservationRow` type. Replace `db?: unknown` with `memoryStorage?: MemoryStorage` on `ReviewInput`.                                         |
+| `packages/core/src/memory/search.ts`   | Modified | Replace `import { searchObservations } from 'ghagga-db'` with `MemoryStorage.searchObservations()`. Change `db: unknown` parameter to `storage: MemoryStorage`.                   |
+| `packages/core/src/memory/persist.ts`  | Modified | Replace `import { saveObservation, createMemorySession, endMemorySession } from 'ghagga-db'` with `MemoryStorage` method calls. Change `db: unknown` to `storage: MemoryStorage`. |
+| `packages/core/src/memory/sqlite.ts`   | New      | `SqliteMemoryStorage` class using sql.js. Schema init, FTS5, dedup, topic-key upsert.                                                                                             |
+| `packages/core/src/pipeline.ts`        | Modified | Replace `input.db` references with `input.memoryStorage`. Update `searchMemorySafe` and persist call.                                                                             |
+| `packages/core/package.json`           | Modified | Remove `"ghagga-db": "workspace:^"` dependency. Add `"sql.js": "^1.11.0"`.                                                                                                        |
+| `apps/server/src/memory/postgres.ts`   | New      | `PostgresMemoryStorage` adapter wrapping existing `ghagga-db` functions.                                                                                                          |
+| `apps/server/` (webhook, inngest, api) | Modified | Replace `db: dbInstance` with `memoryStorage: new PostgresMemoryStorage(db)` when calling the pipeline.                                                                           |
+| `apps/cli/src/commands/review.ts`      | Modified | Create `SqliteMemoryStorage` at `~/.config/ghagga/memory.db`, set `enableMemory: true`, derive `repoFullName` from git remote.                                                    |
+| `apps/action/src/index.ts`             | Modified | Create `SqliteMemoryStorage` at `/tmp/ghagga-memory.db`, use `@actions/cache` for persistence, set `enableMemory: true`.                                                          |
+| `apps/action/package.json`             | Modified | Add `"sql.js": "^1.11.0"` dependency (already has `@actions/cache`).                                                                                                              |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| sql.js WASM bundling with ncc | Medium | High | The Action uses `@vercel/ncc` to bundle. sql.js WASM binary (~1MB) must be included as an asset. Test ncc build early in implementation. If ncc can't bundle the WASM, load it from a sibling file via `locateFile` option. |
-| FTS5 search quality parity with PostgreSQL tsvector | Low | Medium | PostgreSQL `english` dictionary does stemming (e.g., "running" matches "run"). FTS5 default tokenizer does not. For code review observation keywords, this is acceptable. If needed later, FTS5 supports the `porter` tokenizer as an opt-in. |
-| Action cache race conditions on concurrent PRs | Medium | Low | `@actions/cache` keys are immutable — first writer wins. Subsequent concurrent PRs within the same cache window read a slightly stale snapshot. This is acceptable: at worst, a few observations from one PR won't be visible to a concurrent PR until the next run. No data corruption. |
-| Breaking change to `ReviewInput` (db → memoryStorage) | Low | Medium | The `apps/server` is the only consumer that passes `db`. The change is a coordinated rename across the monorepo. No external consumers — `ghagga-core` is published but `db` field was typed `unknown` and documented as internal. |
-| sql.js memory usage on large memory DBs | Very Low | Low | At ~500KB/year per repo, even a very active repo won't exceed a few MB. sql.js loads the entire DB into memory, which is fine for this scale. |
+| Risk                                                  | Likelihood | Impact | Mitigation                                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------- | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| sql.js WASM bundling with ncc                         | Medium     | High   | The Action uses `@vercel/ncc` to bundle. sql.js WASM binary (~1MB) must be included as an asset. Test ncc build early in implementation. If ncc can't bundle the WASM, load it from a sibling file via `locateFile` option.                                                              |
+| FTS5 search quality parity with PostgreSQL tsvector   | Low        | Medium | PostgreSQL `english` dictionary does stemming (e.g., "running" matches "run"). FTS5 default tokenizer does not. For code review observation keywords, this is acceptable. If needed later, FTS5 supports the `porter` tokenizer as an opt-in.                                            |
+| Action cache race conditions on concurrent PRs        | Medium     | Low    | `@actions/cache` keys are immutable — first writer wins. Subsequent concurrent PRs within the same cache window read a slightly stale snapshot. This is acceptable: at worst, a few observations from one PR won't be visible to a concurrent PR until the next run. No data corruption. |
+| Breaking change to `ReviewInput` (db → memoryStorage) | Low        | Medium | The `apps/server` is the only consumer that passes `db`. The change is a coordinated rename across the monorepo. No external consumers — `ghagga-core` is published but `db` field was typed `unknown` and documented as internal.                                                       |
+| sql.js memory usage on large memory DBs               | Very Low   | Low    | At ~500KB/year per repo, even a very active repo won't exceed a few MB. sql.js loads the entire DB into memory, which is fine for this scale.                                                                                                                                            |
 
 ## Rollback Plan
 

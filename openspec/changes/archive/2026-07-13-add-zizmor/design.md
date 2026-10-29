@@ -1,15 +1,19 @@
 # Design: Add zizmor — GitHub Actions Security Analysis
 
 ## Status
+
 Draft
 
 ## Proposal
+
 [proposal.md](./proposal.md)
 
 ## Spec
+
 [spec.md](./spec.md)
 
 ## Date
+
 2026-03-16
 
 ---
@@ -22,14 +26,14 @@ Draft
 
 **Why hadolint, not gitleaks or others**:
 
-| Aspect | hadolint | gitleaks | zizmor (target) |
-|--------|----------|----------|-----------------|
-| Tier | `auto-detect` ✅ | `always-on` ✗ | `auto-detect` |
-| Detection | File-pattern based ✅ | None (always runs) | File-pattern based |
-| Install | Binary download + cache ✅ | Binary download + cache ✅ | Binary download + cache |
-| Run | Passes individual files ✅ | Scans whole repo ✗ | Passes individual files |
-| Parse | Exported function ✅ | Exported function ✅ | Exported function |
-| Category | `quality` ✗ | `secrets` ✗ | `security` |
+| Aspect    | hadolint                   | gitleaks                   | zizmor (target)         |
+| --------- | -------------------------- | -------------------------- | ----------------------- |
+| Tier      | `auto-detect` ✅           | `always-on` ✗              | `auto-detect`           |
+| Detection | File-pattern based ✅      | None (always runs)         | File-pattern based      |
+| Install   | Binary download + cache ✅ | Binary download + cache ✅ | Binary download + cache |
+| Run       | Passes individual files ✅ | Scans whole repo ✗         | Passes individual files |
+| Parse     | Exported function ✅       | Exported function ✅       | Exported function       |
+| Category  | `quality` ✗                | `secrets` ✗                | `security`              |
 
 Hadolint matches on 4 of 5 structural aspects. The only difference is `category` (hadolint is `quality`, zizmor is `security`) and output format (hadolint is JSON, zizmor is SARIF).
 
@@ -108,7 +112,7 @@ const SARIF_SEVERITY_MAP: Record<string, FindingSeverity> = {
 
 ```typescript
 const CRITICAL_RULES: ReadonlySet<string> = new Set([
-  'template-injection',  // Direct code execution via ${{ }} in run: blocks
+  'template-injection', // Direct code execution via ${{ }} in run: blocks
 ]);
 ```
 
@@ -135,12 +139,12 @@ export function mapZizmorSeverity(level: string, ruleId?: string): FindingSeveri
 
 **Platform matrix**:
 
-| Platform | Architecture | Asset Name | Status |
-|----------|-------------|------------|--------|
-| Linux | x86_64 | `zizmor-x86_64-unknown-linux-gnu` | ✅ Supported |
-| Linux | aarch64 | `zizmor-aarch64-unknown-linux-gnu` | ❌ Future |
-| macOS | x86_64 | `zizmor-x86_64-apple-darwin` | ❌ Future |
-| macOS | aarch64 | `zizmor-aarch64-apple-darwin` | ❌ Future |
+| Platform | Architecture | Asset Name                         | Status       |
+| -------- | ------------ | ---------------------------------- | ------------ |
+| Linux    | x86_64       | `zizmor-x86_64-unknown-linux-gnu`  | ✅ Supported |
+| Linux    | aarch64      | `zizmor-aarch64-unknown-linux-gnu` | ❌ Future    |
+| macOS    | x86_64       | `zizmor-x86_64-apple-darwin`       | ❌ Future    |
+| macOS    | aarch64      | `zizmor-aarch64-apple-darwin`      | ❌ Future    |
 
 **Download URL template**:
 ```
@@ -222,9 +226,7 @@ const SARIF_SEVERITY_MAP: Record<string, FindingSeverity> = {
  * Rules that indicate direct code execution risk.
  * Findings from these rules are elevated to 'critical' regardless of SARIF level.
  */
-const CRITICAL_RULES: ReadonlySet<string> = new Set([
-  'template-injection',
-]);
+const CRITICAL_RULES: ReadonlySet<string> = new Set(['template-injection']);
 
 /**
  * Map zizmor SARIF severity level to GHAGGA FindingSeverity.
@@ -465,13 +467,13 @@ function makeRaw(stdout: string, exitCode = 0, timedOut = false): RawToolOutput 
 
 **Test groups**:
 
-| Group | Tests | What It Validates |
-|-------|-------|-------------------|
-| `zizmorPlugin metadata` | 6 tests | `name: 'zizmor'`, `displayName: 'Zizmor'`, `category: 'security'`, `tier: 'auto-detect'`, `version: '1.23.1'`, `outputFormat: 'sarif'` |
-| `zizmorPlugin detect` | 7 tests | ✅ `.github/workflows/ci.yml`, ✅ `.github/workflows/deploy.yaml`, ✅ `apps/web/.github/workflows/test.yml` (monorepo), ✗ `.github/dependabot.yml`, ✗ `.github/actions/my-action/action.yml`, ✗ `docker-compose.yml`, ✗ `[]` |
-| `mapZizmorSeverity` | 7 tests | `error→high`, `warning→medium`, `note→info`, `none→low`, `unknown→low`, `template-injection + error → critical`, `unpinned-uses + warning → medium` (non-critical stays at base) |
+| Group                            | Tests   | What It Validates                                                                                                                                                                                                                                                |
+| -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zizmorPlugin metadata`          | 6 tests | `name: 'zizmor'`, `displayName: 'Zizmor'`, `category: 'security'`, `tier: 'auto-detect'`, `version: '1.23.1'`, `outputFormat: 'sarif'`                                                                                                                           |
+| `zizmorPlugin detect`            | 7 tests | ✅ `.github/workflows/ci.yml`, ✅ `.github/workflows/deploy.yaml`, ✅ `apps/web/.github/workflows/test.yml` (monorepo), ✗ `.github/dependabot.yml`, ✗ `.github/actions/my-action/action.yml`, ✗ `docker-compose.yml`, ✗ `[]`                                     |
+| `mapZizmorSeverity`              | 7 tests | `error→high`, `warning→medium`, `note→info`, `none→low`, `unknown→low`, `template-injection + error → critical`, `unpinned-uses + warning → medium` (non-critical stays at base)                                                                                 |
 | `parseZizmorOutput` (happy path) | 8 tests | Finding count (4 from fixture), critical severity for template-injection, medium for unpinned-uses, `category: 'security'` for all, `source: 'zizmor'` for all, file path stripping (`/workspace/` removed), line numbers present, message format `ruleId: text` |
-| `parseZizmorOutput` (edge cases) | 6 tests | Empty SARIF `'{}'`, empty `results: []`, missing `locations`, malformed JSON, timeout (`timedOut: true`), empty stdout `''` |
+| `parseZizmorOutput` (edge cases) | 6 tests | Empty SARIF `'{}'`, empty `results: []`, missing `locations`, malformed JSON, timeout (`timedOut: true`), empty stdout `''`                                                                                                                                      |
 
 **Total: ~34 tests** (vs hadolint's 23 and gitleaks's 16 — more tests due to SARIF complexity and critical elevation).
 
@@ -630,30 +632,30 @@ A representative SARIF v2.1.0 fixture covering the key rule types:
 
 ### Code Touched
 
-| File | Change Type | Lines Changed | Risk |
-|------|------------|---------------|------|
-| `packages/core/src/tools/types.ts` | Add union member | +1 line (`\| 'zizmor'` at line 30) | None — additive type change |
-| `packages/core/src/tools/plugins/index.ts` | Import + register + export + comment | +4 lines code, +1 comment line | None — additive array entry |
+| File                                       | Change Type                          | Lines Changed                      | Risk                        |
+| ------------------------------------------ | ------------------------------------ | ---------------------------------- | --------------------------- |
+| `packages/core/src/tools/types.ts`         | Add union member                     | +1 line (`\| 'zizmor'` at line 30) | None — additive type change |
+| `packages/core/src/tools/plugins/index.ts` | Import + register + export + comment | +4 lines code, +1 comment line     | None — additive array entry |
 
 ### New Files Created
 
-| File | Description | Size Estimate |
-|------|-------------|---------------|
-| `packages/core/src/tools/plugins/zizmor.ts` | Plugin implementation | ~140 lines |
-| `packages/core/src/tools/plugins/__tests__/zizmor.test.ts` | Unit tests | ~200 lines |
-| `packages/core/src/tools/plugins/__tests__/fixtures/zizmor-output.json` | SARIF fixture | ~55 lines |
+| File                                                                    | Description           | Size Estimate |
+| ----------------------------------------------------------------------- | --------------------- | ------------- |
+| `packages/core/src/tools/plugins/zizmor.ts`                             | Plugin implementation | ~140 lines    |
+| `packages/core/src/tools/plugins/__tests__/zizmor.test.ts`              | Unit tests            | ~200 lines    |
+| `packages/core/src/tools/plugins/__tests__/fixtures/zizmor-output.json` | SARIF fixture         | ~55 lines     |
 
 ### Code NOT Touched
 
 These files require **zero modifications** — the plugin integrates via existing extension points:
 
-| File | Why No Change |
-|------|---------------|
-| `packages/core/src/tools/resolve.ts` | Auto-detect loop at line 50-55 automatically discovers registered plugins with `detect()` — no plugin-specific code |
-| `packages/core/src/tools/orchestrator.ts` | Per-tool `install → run → parse` loop at line 69-120 handles any `ToolDefinition` generically |
-| `packages/core/src/tools/registry.ts` | `register()` accepts any `ToolDefinition` — no plugin-specific code |
-| `packages/core/src/tools/budget.ts` | `TimeBudget` allocates per-tool budgets dynamically based on activated tool count |
-| `packages/core/src/types.ts` | `FindingSeverity`, `ReviewFinding`, `StaticAnalysisResult` — all already generic enough |
+| File                                                         | Why No Change                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/tools/resolve.ts`                         | Auto-detect loop at line 50-55 automatically discovers registered plugins with `detect()` — no plugin-specific code                                                                                                                                  |
+| `packages/core/src/tools/orchestrator.ts`                    | Per-tool `install → run → parse` loop at line 69-120 handles any `ToolDefinition` generically                                                                                                                                                        |
+| `packages/core/src/tools/registry.ts`                        | `register()` accepts any `ToolDefinition` — no plugin-specific code                                                                                                                                                                                  |
+| `packages/core/src/tools/budget.ts`                          | `TimeBudget` allocates per-tool budgets dynamically based on activated tool count                                                                                                                                                                    |
+| `packages/core/src/types.ts`                                 | `FindingSeverity`, `ReviewFinding`, `StaticAnalysisResult` — all already generic enough                                                                                                                                                              |
 | `packages/core/src/tools/plugins/__tests__/registry.test.ts` | Tests only register 3 Phase-2 plugins explicitly (semgrep, trivy, cpd) in a fresh `ToolRegistry` instance (registry.test.ts:41-46). The assertions (`registry.size === 3`) are about those specific plugins, not the global count. No update needed. |
 
 **This confirms the plugin architecture's extensibility**: adding a new tool is entirely additive — 1 new plugin file + 2 small modifications to existing files.

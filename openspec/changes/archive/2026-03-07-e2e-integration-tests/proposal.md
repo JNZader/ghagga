@@ -20,7 +20,6 @@ These boundaries are where production bugs hide.
 ## Approach
 
 Create **3 integration test suites** that test multi-component flows with mocked external services (GitHub API, AI providers). No real network calls — all external HTTP is mocked.
-
 1. **Webhook -> Review Dispatch**: Full HTTP request through webhook handler, validating signature verification, event routing, and Inngest event dispatch.
 2. **API Endpoints with Auth**: HTTP requests through API routes with simulated auth middleware, testing the auth-gated data flow.
 3. **Core Review Pipeline**: Pipeline orchestrator with mocked AI providers and tools, testing the full parse -> analyze -> review -> memory flow.

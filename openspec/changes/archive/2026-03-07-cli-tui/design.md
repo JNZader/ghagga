@@ -5,7 +5,6 @@
 Replace all raw `console.log` / `console.error` / `process.stderr.write` calls across the CLI with a thin TUI facade (`apps/cli/src/ui/tui.ts`) backed by `@clack/prompts`. The facade auto-detects whether the terminal supports rich output (TTY + not CI + no `--plain` flag) and routes every output call through either the styled path (clack spinners, colored text, branded headers) or the plain path (identical to current `console.log` behavior).
 
 This is a **presentation-only** change. No command logic, exit codes, argument parsing, or core pipeline invocations change. The approach:
-
 1. Create a `ui/` module with three files: `tui.ts` (facade), `format.ts` (formatters), `theme.ts` (constants)
 2. Add `--plain` as a global Commander option in `index.ts`
 3. Initialize the TUI mode once at startup, before any command runs
@@ -67,7 +66,6 @@ When `isPlain === true`: all `tui.*` calls delegate to `console.log` / `console.
 ### AD5: Spinner Integration with Review Progress Callback
 
 **Choice**: In `review.ts`, create the spinner before calling `reviewPipeline()` (line 108). The existing `onProgress` callback (lines 257-276) gets two behaviors depending on mode:
-
 - **Normal mode (no `--verbose`)**: Start the spinner with `"Analyzing..."`. The `onProgress` callback updates `spinner.message` with each step's message. The spinner keeps spinning while the message changes. After `reviewPipeline()` resolves, stop the spinner.
 - **Verbose mode (`--verbose`)**: No spinner. Instead, `onProgress` calls `tui.log.step()` for each event (same semantic content as today's `console.log` in `createProgressHandler()` at line 257, but styled).
 
@@ -193,24 +191,24 @@ Note: When `format === 'json'`, the intro/outro and spinner still appear (they g
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/cli/src/ui/tui.ts` | **Create** | TUI facade. Exports `init()`, `intro()`, `outro()`, `log.*` (info, success, warn, error, step, message), `spinner()`, `isPlain()`. Internally branches between `@clack/prompts` and plain `console.*` based on mode. ~100 lines. |
-| `apps/cli/src/ui/format.ts` | **Create** | Pure formatting functions. Receives `formatTable()`, `formatSize()`, `formatId()`, `truncate()` (from `memory/utils.ts` lines 83-128), and `formatMarkdownResult()`, `STATUS_EMOJI`, `SEVERITY_EMOJI` (from `review.ts` lines 280-384). Also new: `formatKeyValue()` for status-style output. ~160 lines. |
-| `apps/cli/src/ui/theme.ts` | **Create** | Constants: `STEP_ICON` map (from `review.ts` lines 236-250), `SOURCE_LABELS` map (from `review.ts` lines 330-335), brand colors for intro/outro, severity colors. ~40 lines. |
-| `apps/cli/src/index.ts` | **Modify** | Add `.option('--plain', 'Disable styled terminal output')` on root program (after line 46). Add `hook('preAction')` to call `tui.init()`. Import `tui` module. ~10 lines added. |
-| `apps/cli/src/commands/login.ts` | **Modify** | Replace `console.log` (lines 43-44, 48, 55-58, 62, 65, 86-88) and `console.error` (line 91) with `tui.*` calls. Add spinner during `pollForAccessToken()` (wrapping lines 68-72). Use `tui.intro()` at start, `tui.outro()` at end. Remove raw ANSI escape sequences (`\x1b[1m\x1b[36m` etc. at lines 56, 58, 86). |
-| `apps/cli/src/commands/logout.ts` | **Modify** | Replace `console.log` (lines 9, 18-19) with `tui.log.info()` / `tui.log.success()`. 3 lines changed. |
-| `apps/cli/src/commands/status.ts` | **Modify** | Replace `console.log` (lines 12-13, 16-17, 21-23, 29, 31-33, 37) with `tui.*` calls. Remove raw ANSI escape sequences (`\x1b[31m`, `\x1b[32m`, `\x1b[1m` at lines 16, 21, 29, 31). Use `tui.intro()` / `tui.outro()`. |
-| `apps/cli/src/commands/review.ts` | **Modify** | (1) Replace `console.log` at lines 74, 85-87, 98, 130, 132, 143 with `tui.*` calls. (2) Extract `formatMarkdownResult()` (lines 298-384), `STATUS_EMOJI` (line 280), `SEVERITY_EMOJI` (line 287), `STEP_ICON` (line 236), `SOURCE_LABELS` (line 330) to `ui/format.ts` and `ui/theme.ts`. (3) Rewrite `createProgressHandler()` (lines 257-276) into two functions: `createSpinnerHandler(spinner)` and `createVerboseHandler()`. (4) Add spinner creation before `reviewPipeline()` call when `!verbose`. (5) Add `tui.intro()` / `tui.outro()` framing. Import `tui` and `format` modules. |
-| `apps/cli/src/commands/memory/utils.ts` | **Modify** | Remove `formatTable()`, `formatSize()`, `formatId()`, `truncate()` function bodies (lines 83-128). Replace with re-exports from `../../ui/format.js`. Keep `openMemoryOrExit()` (lines 24-38) and `confirmOrExit()` (lines 49-75) in place. Replace `console.log` in `openMemoryOrExit()` (line 32) and `confirmOrExit()` (lines 56-57, 69) with `tui.*` calls. |
-| `apps/cli/src/commands/memory/list.ts` | **Modify** | Replace `console.log` (lines 37, 52) with `tui.log.info()`. 2 lines changed. |
-| `apps/cli/src/commands/memory/search.ts` | **Modify** | Replace `console.log` (lines 36, 40-41, 44, 46, 48) with `tui.log.*` calls. 5 lines changed. |
-| `apps/cli/src/commands/memory/show.ts` | **Modify** | Replace `console.log` (lines 19, 27, 33-36, 37-46, 52, 54, 57) with `tui.log.*` calls. ~12 lines changed. |
-| `apps/cli/src/commands/memory/delete.ts` | **Modify** | Replace `console.log` (lines 21, 29, 39) with `tui.log.*` calls. 3 lines changed. |
-| `apps/cli/src/commands/memory/stats.ts` | **Modify** | Replace `console.log` (lines 24-29, 33, 38-39, 41, 43, 47, 50, 52, 54, 58) with `tui.log.*` calls. ~12 lines changed. |
-| `apps/cli/src/commands/memory/clear.ts` | **Modify** | Replace `console.log` (lines 33, 46) with `tui.log.*` calls. 2 lines changed. |
-| `apps/cli/package.json` | **Modify** | Add `"@clack/prompts": "^0.9.1"` to `dependencies` (line 51 area). |
+| File                                     | Action     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/cli/src/ui/tui.ts`                 | **Create** | TUI facade. Exports `init()`, `intro()`, `outro()`, `log.*` (info, success, warn, error, step, message), `spinner()`, `isPlain()`. Internally branches between `@clack/prompts` and plain `console.*` based on mode. ~100 lines.                                                                                                                                                                                                                                                                                                                                                             |
+| `apps/cli/src/ui/format.ts`              | **Create** | Pure formatting functions. Receives `formatTable()`, `formatSize()`, `formatId()`, `truncate()` (from `memory/utils.ts` lines 83-128), and `formatMarkdownResult()`, `STATUS_EMOJI`, `SEVERITY_EMOJI` (from `review.ts` lines 280-384). Also new: `formatKeyValue()` for status-style output. ~160 lines.                                                                                                                                                                                                                                                                                    |
+| `apps/cli/src/ui/theme.ts`               | **Create** | Constants: `STEP_ICON` map (from `review.ts` lines 236-250), `SOURCE_LABELS` map (from `review.ts` lines 330-335), brand colors for intro/outro, severity colors. ~40 lines.                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `apps/cli/src/index.ts`                  | **Modify** | Add `.option('--plain', 'Disable styled terminal output')` on root program (after line 46). Add `hook('preAction')` to call `tui.init()`. Import `tui` module. ~10 lines added.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `apps/cli/src/commands/login.ts`         | **Modify** | Replace `console.log` (lines 43-44, 48, 55-58, 62, 65, 86-88) and `console.error` (line 91) with `tui.*` calls. Add spinner during `pollForAccessToken()` (wrapping lines 68-72). Use `tui.intro()` at start, `tui.outro()` at end. Remove raw ANSI escape sequences (`\x1b[1m\x1b[36m` etc. at lines 56, 58, 86).                                                                                                                                                                                                                                                                           |
+| `apps/cli/src/commands/logout.ts`        | **Modify** | Replace `console.log` (lines 9, 18-19) with `tui.log.info()` / `tui.log.success()`. 3 lines changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `apps/cli/src/commands/status.ts`        | **Modify** | Replace `console.log` (lines 12-13, 16-17, 21-23, 29, 31-33, 37) with `tui.*` calls. Remove raw ANSI escape sequences (`\x1b[31m`, `\x1b[32m`, `\x1b[1m` at lines 16, 21, 29, 31). Use `tui.intro()` / `tui.outro()`.                                                                                                                                                                                                                                                                                                                                                                        |
+| `apps/cli/src/commands/review.ts`        | **Modify** | (1) Replace `console.log` at lines 74, 85-87, 98, 130, 132, 143 with `tui.*` calls. (2) Extract `formatMarkdownResult()` (lines 298-384), `STATUS_EMOJI` (line 280), `SEVERITY_EMOJI` (line 287), `STEP_ICON` (line 236), `SOURCE_LABELS` (line 330) to `ui/format.ts` and `ui/theme.ts`. (3) Rewrite `createProgressHandler()` (lines 257-276) into two functions: `createSpinnerHandler(spinner)` and `createVerboseHandler()`. (4) Add spinner creation before `reviewPipeline()` call when `!verbose`. (5) Add `tui.intro()` / `tui.outro()` framing. Import `tui` and `format` modules. |
+| `apps/cli/src/commands/memory/utils.ts`  | **Modify** | Remove `formatTable()`, `formatSize()`, `formatId()`, `truncate()` function bodies (lines 83-128). Replace with re-exports from `../../ui/format.js`. Keep `openMemoryOrExit()` (lines 24-38) and `confirmOrExit()` (lines 49-75) in place. Replace `console.log` in `openMemoryOrExit()` (line 32) and `confirmOrExit()` (lines 56-57, 69) with `tui.*` calls.                                                                                                                                                                                                                              |
+| `apps/cli/src/commands/memory/list.ts`   | **Modify** | Replace `console.log` (lines 37, 52) with `tui.log.info()`. 2 lines changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `apps/cli/src/commands/memory/search.ts` | **Modify** | Replace `console.log` (lines 36, 40-41, 44, 46, 48) with `tui.log.*` calls. 5 lines changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `apps/cli/src/commands/memory/show.ts`   | **Modify** | Replace `console.log` (lines 19, 27, 33-36, 37-46, 52, 54, 57) with `tui.log.*` calls.~12 lines changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `apps/cli/src/commands/memory/delete.ts` | **Modify** | Replace `console.log` (lines 21, 29, 39) with `tui.log.*` calls. 3 lines changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `apps/cli/src/commands/memory/stats.ts`  | **Modify** | Replace `console.log` (lines 24-29, 33, 38-39, 41, 43, 47, 50, 52, 54, 58) with `tui.log.*` calls.~12 lines changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `apps/cli/src/commands/memory/clear.ts`  | **Modify** | Replace `console.log` (lines 33, 46) with `tui.log.*` calls. 2 lines changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `apps/cli/package.json`                  | **Modify** | Add `"@clack/prompts": "^0.9.1"` to `dependencies` (line 51 area).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 **Files NOT changed**:
 - `apps/cli/src/lib/oauth.ts` — No output calls; pure HTTP logic
@@ -306,11 +304,7 @@ import type { ReviewResult, ReviewStatus, FindingSeverity } from 'ghagga-core';
  * Format a plain-text table with headers, separator, and padded columns.
  * Moved from memory/utils.ts — same signature, same behavior.
  */
-export function formatTable(
-  headers: string[],
-  rows: string[][],
-  widths: number[],
-): string;
+export function formatTable(headers: string[], rows: string[][], widths: number[]): string;
 
 /** Format bytes as human-readable size (N bytes / N.N KB / N.N MB). */
 export function formatSize(bytes: number): string;
@@ -365,19 +359,19 @@ export const SEVERITY_EMOJI: Record<FindingSeverity, string> = {
 
 /** Step icons for verbose progress output. */
 export const STEP_ICON: Record<string, string> = {
-  'validate':          '🔍',
-  'parse-diff':        '📄',
-  'detect-stacks':     '🧩',
-  'token-budget':      '📊',
-  'static-analysis':   '🛡️',
-  'static-results':    '📋',
-  'agent-start':       '🤖',
-  'simple-call':       '💬',
-  'simple-done':       '✅',
-  'workflow-start':    '🔄',
+  validate: '🔍',
+  'parse-diff': '📄',
+  'detect-stacks': '🧩',
+  'token-budget': '📊',
+  'static-analysis': '🛡️',
+  'static-results': '📋',
+  'agent-start': '🤖',
+  'simple-call': '💬',
+  'simple-done': '✅',
+  'workflow-start': '🔄',
   'workflow-synthesis': '🧬',
-  'consensus-start':   '🗳️',
-  'consensus-voting':  '🏛️',
+  'consensus-start': '🗳️',
+  'consensus-voting': '🏛️',
 };
 
 /** Source labels for review findings. */
@@ -400,7 +394,6 @@ export function resolveStepIcon(step: string): string;
 ### Existing Tests — Must Pass Unchanged (124 tests)
 
 The existing test suite does NOT need modification because:
-
 1. **Tests run in non-TTY mode** — Vitest runs in a child process without a real TTY. The TUI facade's auto-detection will select plain mode (`process.stdout.isTTY === undefined/false` in test runners). In plain mode, `tui.log.info(msg)` delegates to `console.log(msg)`, which is exactly what tests already spy on (review.test.ts lines 255-256: `vi.spyOn(console, 'log')`).
 
 2. **Format functions keep exact signatures** — `formatTable()`, `formatSize()`, `formatId()`, `truncate()` move to `ui/format.ts` but `memory/utils.ts` re-exports them. Tests like `utils.test.ts` (lines 11, 16-55, 59-78, 82-97, 101-115) import from `./utils.js` and will get the re-exported functions with identical behavior.
@@ -411,30 +404,30 @@ The existing test suite does NOT need modification because:
 
 ### Verification Steps During Implementation
 
-| Check | How |
-|-------|-----|
-| All 124 tests pass | `pnpm test` in `apps/cli/` |
-| TypeScript compiles | `pnpm typecheck` in `apps/cli/` |
-| ncc bundle succeeds | `npx ncc build dist/index.js -o ncc-out` (or project's actual ncc command) |
-| Bundle size delta < 50KB | Compare `ls -la dist/index.js` before/after |
-| Plain mode works | `CI=true npx tsx src/index.ts status` — should look like current output |
-| Styled mode works | `npx tsx src/index.ts status` in a real terminal |
-| Piped output is clean | `npx tsx src/index.ts status | cat` — no ANSI artifacts |
-| JSON format untouched | `npx tsx src/index.ts review . --format json` — raw JSON on stdout |
+| Check                    | How                                                                        |
+| ------------------------ | -------------------------------------------------------------------------- |
+| All 124 tests pass       | `pnpm test` in `apps/cli/`                                                 |
+| TypeScript compiles      | `pnpm typecheck` in `apps/cli/`                                            |
+| ncc bundle succeeds      | `npx ncc build dist/index.js -o ncc-out` (or project's actual ncc command) |
+| Bundle size delta < 50KB | Compare `ls -la dist/index.js` before/after                                |
+| Plain mode works         | `CI=true npx tsx src/index.ts status` — should look like current output    |
+| Styled mode works        | `npx tsx src/index.ts status` in a real terminal                           |
+| Piped output is clean    | `npx tsx src/index.ts status                                               | cat` — no ANSI artifacts |
+| JSON format untouched    | `npx tsx src/index.ts review . --format json` — raw JSON on stdout         |
 
 ### Future Tests (Deferred to `test-coverage-audit`)
 
 When test coverage is expanded, the TUI layer should be tested with:
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | `tui.init()` mode detection | Mock `process.stdout.isTTY`, `process.env.CI`, pass `{ plain: true/false }`. Assert `isPlain()` returns correct value. |
-| Unit | `tui.log.*` plain mode output | Init in plain mode, spy on `console.log`, call `tui.log.info('msg')`, assert `console.log` was called with `'msg'`. |
-| Unit | `tui.spinner()` plain mode | Init in plain mode, create spinner, call `start()` + `message()` + `stop('done')`. Assert only `stop()` produces output. |
-| Unit | `formatMarkdownResult()` | Same assertions as current review.test.ts lines 343-417, but imported from `ui/format.ts`. |
-| Unit | `formatKeyValue()` | Assert label padding and indentation. |
-| Unit | `resolveStepIcon()` | Assert known steps, specialist-* fallback, vote-* fallback, unknown fallback. |
-| Integration | Commands with styled mode | Snapshot test: capture ANSI output of each command in styled mode, assert it matches expected snapshot. Requires TTY simulation (e.g., `script` command or `pseudo-tty`). |
+| Layer       | What to Test                  | Approach                                                                                                                                                                  |
+| ----------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | `tui.init()` mode detection   | Mock `process.stdout.isTTY`, `process.env.CI`, pass `{ plain: true/false }`. Assert `isPlain()` returns correct value.                                                    |
+| Unit        | `tui.log.*` plain mode output | Init in plain mode, spy on `console.log`, call `tui.log.info('msg')`, assert `console.log` was called with `'msg'`.                                                       |
+| Unit        | `tui.spinner()` plain mode    | Init in plain mode, create spinner, call `start()` + `message()` + `stop('done')`. Assert only `stop()` produces output.                                                  |
+| Unit        | `formatMarkdownResult()`      | Same assertions as current review.test.ts lines 343-417, but imported from `ui/format.ts`.                                                                                |
+| Unit        | `formatKeyValue()`            | Assert label padding and indentation.                                                                                                                                     |
+| Unit        | `resolveStepIcon()`           | Assert known steps, specialist-* fallback, vote-* fallback, unknown fallback.                                                                                             |
+| Integration | Commands with styled mode     | Snapshot test: capture ANSI output of each command in styled mode, assert it matches expected snapshot. Requires TTY simulation (e.g., `script` command or `pseudo-tty`). |
 
 ## Migration / Rollout
 
@@ -445,6 +438,7 @@ No data migration is needed. No config file changes. No API changes.
 1. **Before starting**: Run `pnpm test` to confirm baseline (124 tests pass)
 2. **After each command migration**: Run `pnpm test` to catch regressions
 3. **After all changes**: Full verification:
+
    ```bash
    # Type check
    pnpm typecheck

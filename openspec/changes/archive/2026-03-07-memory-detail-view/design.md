@@ -15,10 +15,9 @@ The backend changes are small and surgical: one function tweak (`isSignificantFi
 **Choice**: Store severity as `varchar(10)` (PostgreSQL) / `TEXT` (SQLite), nullable, rather than a PostgreSQL ENUM type.
 
 **Alternatives considered**:
+1. _PostgreSQL ENUM type (`CREATE TYPE severity_level AS ENUM (...)`)_ : Would provide stronger type safety at the database level. However, adding values to ENUMs requires a migration, and SQLite has no ENUM type — the two adapters would diverge. The existing codebase uses varchar for similar categorical columns (e.g., `type varchar(30)` for observation type).
 
-1. *PostgreSQL ENUM type (`CREATE TYPE severity_level AS ENUM (...)`)* : Would provide stronger type safety at the database level. However, adding values to ENUMs requires a migration, and SQLite has no ENUM type — the two adapters would diverge. The existing codebase uses varchar for similar categorical columns (e.g., `type varchar(30)` for observation type).
-
-2. *NOT NULL with default*: Would require backfilling all existing observations. The migration would need to update potentially thousands of rows, adding deployment risk. Nullable with graceful NULL handling is safer.
+2. _NOT NULL with default_: Would require backfilling all existing observations. The migration would need to update potentially thousands of rows, adding deployment risk. Nullable with graceful NULL handling is safer.
 
 **Rationale**: Consistency with existing schema patterns (varchar for categorical fields), compatibility across both PostgreSQL and SQLite, and zero-risk migration (nullable column with no default = instant O(1) ALTER TABLE in both databases).
 
@@ -29,10 +28,9 @@ The backend changes are small and surgical: one function tweak (`isSignificantFi
 **Choice**: Store `severity` on individual `memory_observations` rows, not on `memory_sessions`. Derive session-level severity distribution via query aggregation.
 
 **Alternatives considered**:
+1. _Store severity distribution on sessions (e.g., `severity_counts JSONB`)_ : Would denormalize the data, requiring updates whenever an observation is added or deleted. The delete/clear operations from `dashboard-memory-management` would need to recalculate session severity counts — adding complexity and race conditions.
 
-1. *Store severity distribution on sessions (e.g., `severity_counts JSONB`)* : Would denormalize the data, requiring updates whenever an observation is added or deleted. The delete/clear operations from `dashboard-memory-management` would need to recalculate session severity counts — adding complexity and race conditions.
-
-2. *Store both (on observation + cached on session)* : Over-engineering for the current scale. The observation count per session is typically < 20.
+2. _Store both (on observation + cached on session)_ : Over-engineering for the current scale. The observation count per session is typically < 20.
 
 **Rationale**: Single source of truth. The severity lives on the observation (where it originates from the review finding). Session-level severity distribution is computed by the `getSessionsByProject` query using a GROUP BY + conditional count. This is efficient for typical dataset sizes and avoids cache invalidation complexity.
 
@@ -43,10 +41,9 @@ The backend changes are small and surgical: one function tweak (`isSignificantFi
 **Choice**: Implement severity filtering and sort options as client-side operations on already-loaded observation data, rather than adding new API query parameters.
 
 **Alternatives considered**:
+1. _Server-side filtering via query params (e.g., `GET /api/memory/sessions/:id/observations?severity=high&sort=severity`)_ : Would require changes to the API route and the `getObservationsBySession` query. More correct for large datasets, but observations per session are typically < 20. The extra API complexity is not justified.
 
-1. *Server-side filtering via query params (e.g., `GET /api/memory/sessions/:id/observations?severity=high&sort=severity`)* : Would require changes to the API route and the `getObservationsBySession` query. More correct for large datasets, but observations per session are typically < 20. The extra API complexity is not justified.
-
-2. *Hybrid (server-side pagination + client-side filter)* : The current API already returns all observations for a session without pagination. Adding pagination now would be a larger scope change.
+2. _Hybrid (server-side pagination + client-side filter)_ : The current API already returns all observations for a session without pagination. Adding pagination now would be a larger scope change.
 
 **Rationale**: The current data loading pattern fetches all observations for a session at once (typically 5-15 observations). Client-side filtering and sorting on this small dataset is instantaneous and avoids API changes. If session observation counts grow significantly in the future, server-side filtering can be added as a separate change.
 
@@ -57,12 +54,11 @@ The backend changes are small and surgical: one function tweak (`isSignificantFi
 **Choice**: Implement relative time formatting using the browser's built-in `Intl.RelativeTimeFormat` API, wrapped in a small utility function.
 
 **Alternatives considered**:
+1. _date-fns `formatDistanceToNow()`_ : Excellent API, but adds a new dependency. The spec requires no new dependencies (CC3).
 
-1. *date-fns `formatDistanceToNow()`* : Excellent API, but adds a new dependency. The spec requires no new dependencies (CC3).
+2. _dayjs with relativeTime plugin_ : Same dependency issue.
 
-2. *dayjs with relativeTime plugin* : Same dependency issue.
-
-3. *Custom implementation without Intl* : Would require manually defining time thresholds and format strings for each unit. Error-prone and locale-unfriendly.
+3. _Custom implementation without Intl_ : Would require manually defining time thresholds and format strings for each unit. Error-prone and locale-unfriendly.
 
 **Rationale**: `Intl.RelativeTimeFormat` is supported in all modern browsers (Chrome 71+, Firefox 65+, Safari 14+) and Node.js 12+. The GHAGGA dashboard already targets modern browsers (no IE11 support). A ~20-line utility function wrapping the API handles all time unit selection logic.
 
@@ -91,8 +87,12 @@ export function formatRelativeTime(dateStr: string): string {
       const divisor = i === 0 ? 1000 : units[i - 1][1] / (i <= 1 ? 1000 : 1);
       // Compute proper divisor for each unit
       const divisors: Record<string, number> = {
-        second: 1000, minute: 60_000, hour: 3_600_000,
-        day: 86_400_000, month: 2_592_000_000, year: 31_536_000_000,
+        second: 1000,
+        minute: 60_000,
+        hour: 3_600_000,
+        day: 86_400_000,
+        month: 2_592_000_000,
+        year: 31_536_000_000,
       };
       const value = Math.round(diffMs / divisors[unit]);
       return rtf.format(value, unit);
@@ -109,12 +109,11 @@ export function formatRelativeTime(dateStr: string): string {
 **Choice**: Create a new `ObservationDetailModal` component at `apps/dashboard/src/components/ObservationDetailModal.tsx` rather than embedding the detail view inline in `Memory.tsx`.
 
 **Alternatives considered**:
+1. _Inline expansion within ObservationCard (accordion pattern)_ : Would add significant complexity to the card component and make the already-large Memory.tsx even larger (722 lines). Expandable cards also don't work well for displaying large amounts of content.
 
-1. *Inline expansion within ObservationCard (accordion pattern)* : Would add significant complexity to the card component and make the already-large Memory.tsx even larger (722 lines). Expandable cards also don't work well for displaying large amounts of content.
+2. _Slide-in panel (drawer)_ : A valid UX pattern, but the existing modal pattern (from `ConfirmDialog`) is already established. Using a different pattern would be inconsistent.
 
-2. *Slide-in panel (drawer)* : A valid UX pattern, but the existing modal pattern (from `ConfirmDialog`) is already established. Using a different pattern would be inconsistent.
-
-3. *Navigate to a separate route (`/memory/observations/:id`)* : Breaks the single-page flow of the Memory page. Users expect to quickly peek at details and return to the list.
+3. _Navigate to a separate route (`/memory/observations/:id`)_ : Breaks the single-page flow of the Memory page. Users expect to quickly peek at details and return to the list.
 
 **Rationale**: A modal component is consistent with the existing `ConfirmDialog` pattern, keeps the Memory page focused on list/session management, and allows the detail view to grow in complexity (syntax highlighting, revision history) without polluting the parent component.
 
@@ -150,10 +149,9 @@ mediumCount: sql<number>`cast(count(case when ${memoryObservations.severity} = '
 ```
 
 **Alternatives considered**:
+1. _Separate query for severity distribution per session_ : Would require N+1 queries (one per session). The current query already does a LEFT JOIN + GROUP BY, so adding conditional counts is free.
 
-1. *Separate query for severity distribution per session* : Would require N+1 queries (one per session). The current query already does a LEFT JOIN + GROUP BY, so adding conditional counts is free.
-
-2. *Compute in the frontend from observation data* : Would require loading all observations for all sessions upfront. Currently, observations are loaded lazily when a session is expanded.
+2. _Compute in the frontend from observation data_ : Would require loading all observations for all sessions upfront. Currently, observations are loaded lazily when a session is expanded.
 
 **Rationale**: Adding conditional count columns to the existing GROUP BY query is the most efficient approach — zero additional queries, and the data is available immediately when rendering session items.
 
@@ -175,12 +173,11 @@ try {
 ```
 
 **Alternatives considered**:
+1. _Check schema with `PRAGMA table_info(memory_observations)` first_ : More explicit, but adds a query on every initialization. The try/catch approach is simpler and equally correct.
 
-1. *Check schema with `PRAGMA table_info(memory_observations)` first* : More explicit, but adds a query on every initialization. The try/catch approach is simpler and equally correct.
+2. _Version tracking table_ : Over-engineering for SQLite, which is used in CLI/Action mode where the database is effectively single-user and often ephemeral (recreated per cache cycle in Actions).
 
-2. *Version tracking table* : Over-engineering for SQLite, which is used in CLI/Action mode where the database is effectively single-user and often ephemeral (recreated per cache cycle in Actions).
-
-3. *Drop and recreate the table* : Would lose all existing data. Unacceptable.
+3. _Drop and recreate the table_ : Would lose all existing data. Unacceptable.
 
 **Rationale**: The try/catch approach is the standard SQLite migration pattern for simple column additions. It's idempotent, zero-cost when the column already exists (the error is caught before any work is done), and doesn't require tracking migration state.
 
@@ -289,22 +286,22 @@ filteredObservations[]
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/core/src/memory/persist.ts` | Modify | Add `'medium'` to `isSignificantFinding()`; pass `severity: finding.severity` to `saveObservation()` |
-| `packages/core/src/types.ts` | Modify | Add `severity?: string` to `saveObservation` data param; add `severity: string \| null` to `MemoryObservationRow` and `MemoryObservationDetail` |
-| `packages/core/src/memory/sqlite.ts` | Modify | Add `severity TEXT` to CREATE TABLE; add ALTER TABLE migration; update `saveObservation`, `searchObservations`, `mapToDetail` |
-| `packages/db/src/schema.ts` | Modify | Add `severity: varchar('severity', { length: 10 })` to `memoryObservations` table |
-| `packages/db/drizzle/0006_add_severity_column.sql` | Create | `ALTER TABLE "memory_observations" ADD COLUMN "severity" varchar(10);` |
-| `packages/db/src/queries.ts` | Modify | Update `saveObservation` to include severity; update `getObservationsBySession` to select severity; enhance `getSessionsByProject` with severity counts |
-| `apps/dashboard/src/lib/types.ts` | Modify | Extend `Observation` with `severity`, `topicKey`, `revisionCount`, `updatedAt`; extend `MemorySession` with `severityCounts` |
-| `apps/dashboard/src/pages/Memory.tsx` | Modify | Enhanced ObservationCard/SessionItem, severity filter state, sort state, stats bar, modal trigger |
-| `apps/dashboard/src/components/ObservationDetailModal.tsx` | Create | Full observation detail view modal |
-| `apps/dashboard/src/lib/utils.ts` (or inline) | Create/Modify | `formatRelativeTime()` utility function |
-| `packages/core/src/memory/persist.test.ts` | Modify | Add tests for medium severity and severity persistence |
-| `packages/db/src/queries.test.ts` | Modify | Update tests for severity in saveObservation and query results |
-| `apps/dashboard/src/pages/Memory.test.tsx` | Modify | Tests for severity badge, filter, sort, stats bar, detail modal |
-| `apps/dashboard/src/components/ObservationDetailModal.test.tsx` | Create | Tests for modal rendering, all fields, close behavior |
+| File                                                            | Action        | Description                                                                                                                                             |
+| --------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/memory/persist.ts`                           | Modify        | Add `'medium'` to `isSignificantFinding()`; pass `severity: finding.severity` to `saveObservation()`                                                    |
+| `packages/core/src/types.ts`                                    | Modify        | Add `severity?: string` to `saveObservation` data param; add `severity: string \| null` to `MemoryObservationRow` and `MemoryObservationDetail`         |
+| `packages/core/src/memory/sqlite.ts`                            | Modify        | Add `severity TEXT` to CREATE TABLE; add ALTER TABLE migration; update `saveObservation`, `searchObservations`, `mapToDetail`                           |
+| `packages/db/src/schema.ts`                                     | Modify        | Add `severity: varchar('severity', { length: 10 })` to `memoryObservations` table                                                                       |
+| `packages/db/drizzle/0006_add_severity_column.sql`              | Create        | `ALTER TABLE "memory_observations" ADD COLUMN "severity" varchar(10);`                                                                                  |
+| `packages/db/src/queries.ts`                                    | Modify        | Update `saveObservation` to include severity; update `getObservationsBySession` to select severity; enhance `getSessionsByProject` with severity counts |
+| `apps/dashboard/src/lib/types.ts`                               | Modify        | Extend `Observation` with `severity`, `topicKey`, `revisionCount`, `updatedAt`; extend `MemorySession` with `severityCounts`                            |
+| `apps/dashboard/src/pages/Memory.tsx`                           | Modify        | Enhanced ObservationCard/SessionItem, severity filter state, sort state, stats bar, modal trigger                                                       |
+| `apps/dashboard/src/components/ObservationDetailModal.tsx`      | Create        | Full observation detail view modal                                                                                                                      |
+| `apps/dashboard/src/lib/utils.ts` (or inline)                   | Create/Modify | `formatRelativeTime()` utility function                                                                                                                 |
+| `packages/core/src/memory/persist.test.ts`                      | Modify        | Add tests for medium severity and severity persistence                                                                                                  |
+| `packages/db/src/queries.test.ts`                               | Modify        | Update tests for severity in saveObservation and query results                                                                                          |
+| `apps/dashboard/src/pages/Memory.test.tsx`                      | Modify        | Tests for severity badge, filter, sort, stats bar, detail modal                                                                                         |
+| `apps/dashboard/src/components/ObservationDetailModal.test.tsx` | Create        | Tests for modal rendering, all fields, close behavior                                                                                                   |
 
 ---
 
@@ -334,7 +331,7 @@ export interface MemoryObservationRow {
   title: string;
   content: string;
   filePaths: string[] | null;
-  severity: string | null;  // NEW
+  severity: string | null; // NEW
 }
 ```
 
@@ -352,7 +349,7 @@ export interface MemoryObservationDetail {
   revisionCount: number;
   createdAt: string;
   updatedAt: string;
-  severity: string | null;  // NEW
+  severity: string | null; // NEW
 }
 ```
 
@@ -367,10 +364,10 @@ export interface Observation {
   content: string;
   filePaths: string[];
   createdAt: string;
-  severity: string | null;    // NEW
-  topicKey: string | null;    // NEW
-  revisionCount: number;      // NEW
-  updatedAt: string;          // NEW
+  severity: string | null; // NEW
+  topicKey: string | null; // NEW
+  revisionCount: number; // NEW
+  updatedAt: string; // NEW
 }
 ```
 
@@ -384,9 +381,9 @@ export interface MemorySession {
   summary: string;
   createdAt: string;
   observationCount: number;
-  criticalCount: number;     // NEW
-  highCount: number;         // NEW
-  mediumCount: number;       // NEW
+  criticalCount: number; // NEW
+  highCount: number; // NEW
+  mediumCount: number; // NEW
 }
 ```
 
@@ -394,9 +391,9 @@ export interface MemorySession {
 
 ```typescript
 interface ObservationDetailModalProps {
-  observation: Observation | null;  // null = closed
-  project: string;                  // for PR link construction
-  prNumber?: number;                // for PR link
+  observation: Observation | null; // null = closed
+  project: string; // for PR link construction
+  prNumber?: number; // for PR link
   onClose: () => void;
 }
 ```
@@ -410,34 +407,34 @@ interface ObservationDetailModalProps {
  *
  * @example formatRelativeTime('2026-03-07T10:00:00Z') → "2 hours ago"
  */
-export function formatRelativeTime(dateStr: string): string
+export function formatRelativeTime(dateStr: string): string;
 ```
 
 ---
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Core | `isSignificantFinding()` returns true for medium (S1-S3) | Vitest unit test; import and test the function directly (it's not exported, so test via `persistReviewObservations` with mock storage) |
-| Core | Severity passed to `saveObservation()` (S9-S10) | Vitest; verify mock storage's `saveObservation` receives `severity` field |
-| Core/SQLite | SQLite schema migration (S6-S8) | Vitest; create temp SQLite db, run init twice, verify idempotent |
-| Core/SQLite | `mapToDetail` includes severity (S15-S16) | Vitest; insert row with/without severity, verify mapped output |
-| DB | `saveObservation` persists severity (S4, S9, S11) | Vitest with mocked Drizzle; verify INSERT includes severity column |
-| DB | `getObservationsBySession` returns severity (S13) | Vitest with mocked Drizzle; verify SELECT includes severity |
-| DB | `getSessionsByProject` returns severity counts (S14) | Vitest with mocked Drizzle; verify conditional count columns |
-| DB | Migration file content | Vitest; read file and assert SQL content |
-| Dashboard | `SeverityBadge` rendered on ObservationCard (S17-S18) | @testing-library/react; verify badge present/absent based on severity |
-| Dashboard | PR link on SessionItem (S19-S20) | @testing-library/react; verify link href and presence |
-| Dashboard | Revision count badge (S21-S22) | @testing-library/react; verify badge text and conditional rendering |
-| Dashboard | Relative timestamps (S23) | Vitest unit test for `formatRelativeTime` |
-| Dashboard | Detail modal open/close (S25, S28-S29) | @testing-library/react; click card, verify modal, press Escape |
-| Dashboard | Detail modal all fields (S26-S27) | @testing-library/react; verify all fields rendered with test data |
-| Dashboard | Stats bar (S30-S31) | @testing-library/react; verify counts update with filters |
-| Dashboard | Severity filter (S32-S34) | @testing-library/react; select filter, verify observation list |
-| Dashboard | Sort options (S35-S37) | @testing-library/react; select sort, verify observation order |
-| Dashboard | Session severity summary (S38-S39) | @testing-library/react; verify severity indicators on SessionItem |
-| Dashboard | Edge cases (S42-S45) | @testing-library/react; long content scroll, many files truncation, empty state, all-null severity |
+| Layer       | What to Test                                             | Approach                                                                                                                               |
+| ----------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Core        | `isSignificantFinding()` returns true for medium (S1-S3) | Vitest unit test; import and test the function directly (it's not exported, so test via `persistReviewObservations` with mock storage) |
+| Core        | Severity passed to `saveObservation()` (S9-S10)          | Vitest; verify mock storage's `saveObservation` receives `severity` field                                                              |
+| Core/SQLite | SQLite schema migration (S6-S8)                          | Vitest; create temp SQLite db, run init twice, verify idempotent                                                                       |
+| Core/SQLite | `mapToDetail` includes severity (S15-S16)                | Vitest; insert row with/without severity, verify mapped output                                                                         |
+| DB          | `saveObservation` persists severity (S4, S9, S11)        | Vitest with mocked Drizzle; verify INSERT includes severity column                                                                     |
+| DB          | `getObservationsBySession` returns severity (S13)        | Vitest with mocked Drizzle; verify SELECT includes severity                                                                            |
+| DB          | `getSessionsByProject` returns severity counts (S14)     | Vitest with mocked Drizzle; verify conditional count columns                                                                           |
+| DB          | Migration file content                                   | Vitest; read file and assert SQL content                                                                                               |
+| Dashboard   | `SeverityBadge` rendered on ObservationCard (S17-S18)    | @testing-library/react; verify badge present/absent based on severity                                                                  |
+| Dashboard   | PR link on SessionItem (S19-S20)                         | @testing-library/react; verify link href and presence                                                                                  |
+| Dashboard   | Revision count badge (S21-S22)                           | @testing-library/react; verify badge text and conditional rendering                                                                    |
+| Dashboard   | Relative timestamps (S23)                                | Vitest unit test for `formatRelativeTime`                                                                                              |
+| Dashboard   | Detail modal open/close (S25, S28-S29)                   | @testing-library/react; click card, verify modal, press Escape                                                                         |
+| Dashboard   | Detail modal all fields (S26-S27)                        | @testing-library/react; verify all fields rendered with test data                                                                      |
+| Dashboard   | Stats bar (S30-S31)                                      | @testing-library/react; verify counts update with filters                                                                              |
+| Dashboard   | Severity filter (S32-S34)                                | @testing-library/react; select filter, verify observation list                                                                         |
+| Dashboard   | Sort options (S35-S37)                                   | @testing-library/react; select sort, verify observation order                                                                          |
+| Dashboard   | Session severity summary (S38-S39)                       | @testing-library/react; verify severity indicators on SessionItem                                                                      |
+| Dashboard   | Edge cases (S42-S45)                                     | @testing-library/react; long content scroll, many files truncation, empty state, all-null severity                                     |
 
 ---
 

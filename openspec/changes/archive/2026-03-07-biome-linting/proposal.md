@@ -41,26 +41,26 @@ Add Biome as the unified linter and formatter for the entire GHAGGA monorepo. Th
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `biome.json` | New | Root Biome configuration file |
-| `package.json` (root) | Modified | Add `@biomejs/biome` dev dependency, add `lint`/`lint:fix` scripts |
-| `turbo.json` | Modified | Update `lint` task configuration (already exists but currently has no per-package lint scripts) |
-| `.github/workflows/ci.yml` | Modified | Add lint step to CI pipeline |
-| `apps/server/src/routes/oauth.ts` | Modified | Replace `console.error` with logger (audit #7) |
-| `apps/server/src/**/*.ts` | Modified | Move OAuth Client ID to env var (audit #8) |
-| `apps/dashboard/src/**/*.ts` | Modified | Move OAuth Client ID to env var (audit #8) |
-| `**/*.ts`, `**/*.tsx` | Modified | Auto-fix formatting and lint issues across all packages |
+| Area                              | Impact   | Description                                                                                     |
+| --------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `biome.json`                      | New      | Root Biome configuration file                                                                   |
+| `package.json` (root)             | Modified | Add `@biomejs/biome` dev dependency, add `lint`/`lint:fix` scripts                              |
+| `turbo.json`                      | Modified | Update `lint` task configuration (already exists but currently has no per-package lint scripts) |
+| `.github/workflows/ci.yml`        | Modified | Add lint step to CI pipeline                                                                    |
+| `apps/server/src/routes/oauth.ts` | Modified | Replace `console.error` with logger (audit #7)                                                  |
+| `apps/server/src/**/*.ts`         | Modified | Move OAuth Client ID to env var (audit #8)                                                      |
+| `apps/dashboard/src/**/*.ts`      | Modified | Move OAuth Client ID to env var (audit #8)                                                      |
+| `**/*.ts`, `**/*.tsx`             | Modified | Auto-fix formatting and lint issues across all packages                                         |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Large formatting diff makes git history harder to read | Medium | Accept the one-time churn. After initial commit, all future diffs will be clean. Consider a `.git-blame-ignore-revs` entry for the formatting commit. |
-| Biome rules conflict with existing code patterns | Low | Start with `recommended` rules and set contentious rules to `warn`. Adjust config iteratively. |
-| CI lint step increases CI time | Low | Biome is extremely fast (~100ms for a project this size). Negligible impact. |
-| Audit quick fixes (oauth.ts, env vars) introduce bugs | Low | Both are trivial changes. Existing tests cover OAuth flow. Manual verification of env var fallback. |
-| Dashboard breaks if `VITE_GITHUB_CLIENT_ID` env var is not set | Medium | Use the current hardcoded value as the fallback default, so behavior is unchanged unless explicitly overridden. |
+| Risk                                                           | Likelihood | Mitigation                                                                                                                                            |
+| -------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Large formatting diff makes git history harder to read         | Medium     | Accept the one-time churn. After initial commit, all future diffs will be clean. Consider a `.git-blame-ignore-revs` entry for the formatting commit. |
+| Biome rules conflict with existing code patterns               | Low        | Start with `recommended` rules and set contentious rules to `warn`. Adjust config iteratively.                                                        |
+| CI lint step increases CI time                                 | Low        | Biome is extremely fast (~100ms for a project this size). Negligible impact.                                                                          |
+| Audit quick fixes (oauth.ts, env vars) introduce bugs          | Low        | Both are trivial changes. Existing tests cover OAuth flow. Manual verification of env var fallback.                                                   |
+| Dashboard breaks if `VITE_GITHUB_CLIENT_ID` env var is not set | Medium     | Use the current hardcoded value as the fallback default, so behavior is unchanged unless explicitly overridden.                                       |
 
 ## Rollback Plan
 

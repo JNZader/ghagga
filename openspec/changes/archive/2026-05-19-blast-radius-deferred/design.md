@@ -2,7 +2,7 @@
 
 **Status**: draft  
 **Spec**: [spec.md](./spec.md)  
-**Date**: 2026-03-17  
+**Date**: 2026-03-17
 
 ## Architecture Decisions
 
@@ -34,12 +34,12 @@
 - JSON.parse is fast enough: <5ms for 2MB on modern V8
 
 **Size Estimates**:
-| Repo size | Nodes | Estimated graph.json |
-|-----------|-------|---------------------|
-| Small (50 files) | 50 | ~15KB |
-| Medium (500 files) | 500 | ~150KB |
-| Large (2000 files) | 2000 | ~600KB |
-| Monorepo (5000 files) | 5000 | ~1.5MB |
+| Repo size             | Nodes | Estimated graph.json |
+| --------------------- | ----- | -------------------- |
+| Small (50 files)      | 50    | ~15KB                |
+| Medium (500 files)    | 500   | ~150KB               |
+| Large (2000 files)    | 2000  | ~600KB               |
+| Monorepo (5000 files) | 5000  | ~1.5MB               |
 
 ### AD3: Tree-sitter for Multi-Language Parsing
 
@@ -110,10 +110,10 @@ BFS from changed files:
 interface DependencyGraph {
   /** Schema version for forward compatibility */
   version: 1;
-  
+
   /** Base path for all relative file paths */
   rootDir: string;
-  
+
   /** File nodes keyed by relative path */
   nodes: Record<string, GraphNode>;
 }
@@ -121,19 +121,19 @@ interface DependencyGraph {
 interface GraphNode {
   /** SHA-256 hash of file content (for incremental indexing) */
   hash: string;
-  
+
   /** Detected language */
   language: 'typescript' | 'javascript' | 'python' | 'go' | 'java' | 'rust';
-  
+
   /** Relative paths of files this file imports from */
   imports: string[];
-  
+
   /** Exported symbol names (for cross-reference) */
   exports: string[];
-  
+
   /** Cross-file function/method calls */
   calls: Array<{ target: string; symbol: string }>;
-  
+
   /** True if file matches test patterns */
   isTest: boolean;
 }
@@ -145,19 +145,19 @@ interface GraphNode {
 interface GraphMetadata {
   /** Full SHA of the commit that was last indexed */
   lastIndexedCommit: string;
-  
+
   /** ISO 8601 timestamp */
   lastIndexedAt: string;
-  
+
   /** Must match graph.version */
   schemaVersion: number;
-  
+
   /** Total nodes in the graph */
   fileCount: number;
-  
+
   /** Languages present */
   languages: string[];
-  
+
   /** Indexing duration in milliseconds */
   indexDurationMs: number;
 }
@@ -489,10 +489,10 @@ Each language extractor follows the same pattern:
 interface LanguageExtractor {
   /** Tree-sitter language grammar */
   language: Language;
-  
+
   /** File extensions this extractor handles */
   extensions: string[];
-  
+
   /** Extract imports, exports, and calls from a parsed tree */
   extract(tree: Tree, sourceCode: string, filePath: string): FileAnalysis;
 }
@@ -544,7 +544,7 @@ const IMPORT_QUERY = `
 function resolveImportPath(
   importSpec: string,
   fromFile: string,
-  config?: { tsconfigPaths?: Record<string, string[]> }
+  config?: { tsconfigPaths?: Record<string, string[]> },
 ): string | null {
   // 1. Skip external packages (no leading . or /)
   if (!importSpec.startsWith('.') && !importSpec.startsWith('/')) {
@@ -560,39 +560,38 @@ function resolveImportPath(
     }
     return null; // external package — not in graph
   }
-  
+
   // 2. Resolve relative path
   const dir = path.dirname(fromFile);
   const resolved = path.join(dir, importSpec);
-  
+
   // 3. Try extensions: .ts, .tsx, .js, .jsx, /index.ts, /index.js
   for (const ext of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.js']) {
     const candidate = resolved + ext;
     if (fileExists(candidate)) return candidate;
   }
-  
+
   return null;
 }
 ```
 
 ## Error Handling Strategy
 
-| Error | Location | Handling |
-|-------|----------|----------|
-| GitHub API 404 (no branch) | `GitHubApiGraphLoader.load()` | Return `null` → pipeline uses full diff |
-| GitHub API timeout | `GitHubApiGraphLoader.load()` | Return `null` with warning → pipeline uses full diff |
-| graph.json parse error | `validateGraph()` | Return `null` with error log → pipeline uses full diff |
-| graph.json version mismatch | `validateGraph()` | Return `null` with warning → pipeline uses full diff |
-| Tree-sitter parse error (single file) | `analyzeFile()` | Log error, skip file, continue indexing |
-| Tree-sitter grammar not available | `analyzeFile()` | Skip file (unsupported language) |
-| Graph push fails (runner) | Runner workflow | Retry once, then report failure in callback |
-| SQLite graph corrupt (CLI) | `loadGraphFromSQLite()` | Delete and rebuild from scratch |
-| Blast-radius exceeds cap | `computeBlastRadius()` | Return `exceededCap: true` → pipeline uses full diff |
+| Error                                 | Location                      | Handling                                               |
+| ------------------------------------- | ----------------------------- | ------------------------------------------------------ |
+| GitHub API 404 (no branch)            | `GitHubApiGraphLoader.load()` | Return `null` → pipeline uses full diff                |
+| GitHub API timeout                    | `GitHubApiGraphLoader.load()` | Return `null` with warning → pipeline uses full diff   |
+| graph.json parse error                | `validateGraph()`             | Return `null` with error log → pipeline uses full diff |
+| graph.json version mismatch           | `validateGraph()`             | Return `null` with warning → pipeline uses full diff   |
+| Tree-sitter parse error (single file) | `analyzeFile()`               | Log error, skip file, continue indexing                |
+| Tree-sitter grammar not available     | `analyzeFile()`               | Skip file (unsupported language)                       |
+| Graph push fails (runner)             | Runner workflow               | Retry once, then report failure in callback            |
+| SQLite graph corrupt (CLI)            | `loadGraphFromSQLite()`       | Delete and rebuild from scratch                        |
+| Blast-radius exceeds cap              | `computeBlastRadius()`        | Return `exceededCap: true` → pipeline uses full diff   |
 
 ## No Breaking Changes
 
 This feature is purely additive:
-
 - **New files**: All graph-related code is in `packages/core/src/graph/` (new directory)
 - **Pipeline change**: One new step inserted between existing steps, guarded by `if (graphLoader)`
 - **Type additions**: All new fields are optional (`enableBlastRadius?: boolean`, `graphLoader?: GraphLoader`)

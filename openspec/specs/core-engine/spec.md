@@ -147,7 +147,6 @@ The system MUST manage token consumption to avoid exceeding model context limits
 #### Scenario: Token usage tracking with AI SDK v5
 
 > Added by change: ai-sdk-v5-migration
-
 - GIVEN a single-step `generateText()` call completes successfully
 - WHEN the result usage is accessed
 - THEN `result.usage.inputTokens` MUST contain the prompt token count

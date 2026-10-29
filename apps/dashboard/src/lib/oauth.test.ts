@@ -96,6 +96,11 @@ describe('fetchGitHubUser', () => {
   it('throws "Invalid or expired token" on non-ok response', async () => {
     mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
 
-    await expect(fetchGitHubUser('bad-token')).rejects.toThrow('Invalid or expired token');
+    // Vitest 5 registers the rejects.toThrow(string) wrapper once per installed
+    // copy. This workspace loads two copies, so the matcher inspects the wrapper
+    // function (message "") instead of the Error. Match the message directly.
+    await expect(fetchGitHubUser('bad-token')).rejects.toMatchObject({
+      message: 'Invalid or expired token',
+    });
   });
 });

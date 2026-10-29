@@ -15,7 +15,6 @@ All requirements are documentation-only — no application code, database, or AP
 A new file `docs/saas-getting-started.md` MUST exist as the definitive step-by-step guide for users of the hosted SaaS (GitHub App) distribution mode.
 
 The guide MUST include the following sections in order:
-
 1. **Title and introduction** — one-paragraph summary of what the user will achieve
 2. **Prerequisites** — GitHub account, a repository (public or private), ability to create a PR
 3. **Step 1: Install the GitHub App** — MUST include the actual GitHub App install URL as a clickable link. MUST describe what permissions the App requests and why.
@@ -470,9 +469,7 @@ The `--config` CLI flag expects a **file path**, not an inline JSON string. All 
 **Source code evidence** (`apps/cli/src/commands/review.ts` lines 166-177):
 ```typescript
 function loadConfigFile(repoPath: string, configPath?: string): GhaggaConfig {
-  const filePath = configPath
-    ? resolve(configPath)
-    : join(repoPath, '.ghagga.json');
+  const filePath = configPath ? resolve(configPath) : join(repoPath, '.ghagga.json');
   // ...
   const raw = readFileSync(filePath, 'utf-8');
   return JSON.parse(raw) as GhaggaConfig;
@@ -512,7 +509,7 @@ The consensus mode example in `docs/github-action.md` (lines 74-79) passes `api-
 **Source code evidence** (`apps/action/src/index.ts` lines 66-81):
 ```typescript
 if (provider === 'github') {
-  apiKey = apiKeyInput || githubToken;  // Ignores ANTHROPIC key
+  apiKey = apiKeyInput || githubToken; // Ignores ANTHROPIC key
 } else if (provider === 'ollama') {
   apiKey = apiKeyInput || 'ollama';
 } else {
@@ -623,7 +620,6 @@ The flow MUST include these steps in order:
 The `docs/github-action.md` guide MUST include a Troubleshooting section with at least 5 common issues.
 
 The section MUST cover:
-
 1. **"Resource not accessible by integration"** (token permissions)
    - Cause: `GITHUB_TOKEN` lacks write permission for PR comments
    - Fix: Add `permissions: pull-requests: write` to the workflow job, or check repo Settings → Actions → General → Workflow permissions
@@ -683,7 +679,7 @@ The documentation MUST show the `continue-on-error: true` workaround:
 ```yaml
 - uses: JNZader/ghagga@v2
   id: review
-  continue-on-error: true  # Don't fail CI on review findings
+  continue-on-error: true # Don't fail CI on review findings
 ```
 
 The documentation SHOULD explain the two usage patterns:
@@ -874,7 +870,6 @@ Currently only `review` is detailed. The other 3 commands MUST each have:
 ### R22 (P1): CLI Guide — Troubleshooting Section
 
 The `docs/cli.md` guide MUST include a Troubleshooting section with at least 6 common issues.
-
 1. **"command not found: ghagga"**
    - Cause: npm global bin directory not in PATH, or not installed
    - Fix: use `npx ghagga` instead, or check `npm config get prefix` and add to PATH
@@ -1118,7 +1113,6 @@ All code examples across ALL documentation files MUST be executable without erro
 ### CC5: Structural Quality Standard
 
 Both the `docs/github-action.md` and `docs/cli.md` guides MUST follow the same structural quality standard as `docs/saas-getting-started.md`:
-
 1. Prerequisites section
 2. Numbered step-by-step flow with verification checkpoints
 3. Mermaid flow diagram
@@ -1160,36 +1154,36 @@ All links in modified files MUST be valid. In particular:
 
 ## Acceptance Criteria Summary
 
-| ID | Priority | Requirement | Acceptance Criteria |
-|----|----------|-------------|-------------------|
-| R1 | P0 | SaaS Getting Started Guide | New user follows guide from install to first review without consulting other pages |
-| R2 | P0 | Post-Install Warning | Warning appears in 3 documents (saas guide, quick-start, README) with Dashboard link |
-| R3 | P0 | Dashboard URL Linkification | Zero occurrences of unlinked "Open the Dashboard" in docs |
-| R4 | P1 | Landing Page Install CTA | "Install GitHub App" is the primary (most prominent) CTA button |
-| R5 | P1 | Choose Your Path Matrix | Decision matrix at top of quick-start with SaaS as only "Recommended" mode |
-| R6 | P1 | Sidebar Navigation | SaaS guide appears in first 4 items of sidebar Getting Started section |
-| R7 | P2 | Cost Transparency | Free/paid model clearly stated in SaaS guide, landing page, Action guide, and CLI guide |
-| R8 | P2 | Configuration Callout | SaaS callout with Dashboard link at top of configuration.md |
-| R9 | P2 | README SaaS Option | SaaS listed as first (Option 0) in README Quick Start |
-| R10 | P2 | Docs Landing Orientation | "New here?" section on docs README with guide links |
-| R11 | P0 | Fix `@ghagga/cli` package name | Zero `@ghagga/cli` references in `apps/cli/README.md` |
-| R12 | P0 | Fix `--config` inline JSON | Zero `--config '{"...'` patterns in any doc file |
-| R13 | P0 | Fix consensus missing provider | All Action examples with non-GitHub API keys include `provider` |
-| R14 | P0 | Action prerequisites | Prerequisites section with 3 items at top of guide |
-| R15 | P0 | Action step-by-step flow | 4 numbered steps with verification checkpoints |
-| R16 | P1 | Action troubleshooting | 5+ troubleshooting scenarios with symptom/cause/fix |
-| R17 | P1 | Action FAILED status docs | `core.setFailed()` behavior documented, `continue-on-error` shown |
-| R18 | P1 | Action cost/output/diagram/next | Cost section, Mermaid diagram, expected output, Next Steps |
-| R19 | P0 | CLI prerequisites | Prerequisites with Node.js >=22.22.2, Git, GitHub account |
-| R20 | P0 | CLI step-by-step flow | 4 numbered steps with verification checkpoints |
-| R21 | P1 | CLI all 4 commands | `login`, `logout`, `status`, `review` each documented |
-| R22 | P1 | CLI troubleshooting | 6+ troubleshooting scenarios with symptom/cause/fix |
-| R23 | P1 | CLI config/output/env vars | Config path, `[path]` arg, example output, env var docs |
-| R24 | P1 | CLI cost/diagram/next | Cost section, Mermaid diagram, Next Steps |
-| R25 | P1 | CLI README missing providers | `ollama` and `qwen` in Options section |
-| CC1 | — | Link Integrity | Zero broken links across all modified files |
-| CC1-ext | — | Link Integrity (Action/CLI) | Cross-links between Action and CLI guides valid |
-| CC2 | — | Docsify Compatibility | All new files render correctly in Docsify |
-| CC3 | — | Consistency | Post-install warning and cost info are consistent across all documents |
-| CC4 | — | Bug-Free Code Examples | Zero broken examples across all docs |
-| CC5 | — | Structural Quality | Both Action and CLI guides have all 8 quality elements |
+| ID      | Priority | Requirement                     | Acceptance Criteria                                                                     |
+| ------- | -------- | ------------------------------- | --------------------------------------------------------------------------------------- |
+| R1      | P0       | SaaS Getting Started Guide      | New user follows guide from install to first review without consulting other pages      |
+| R2      | P0       | Post-Install Warning            | Warning appears in 3 documents (saas guide, quick-start, README) with Dashboard link    |
+| R3      | P0       | Dashboard URL Linkification     | Zero occurrences of unlinked "Open the Dashboard" in docs                               |
+| R4      | P1       | Landing Page Install CTA        | "Install GitHub App" is the primary (most prominent) CTA button                         |
+| R5      | P1       | Choose Your Path Matrix         | Decision matrix at top of quick-start with SaaS as only "Recommended" mode              |
+| R6      | P1       | Sidebar Navigation              | SaaS guide appears in first 4 items of sidebar Getting Started section                  |
+| R7      | P2       | Cost Transparency               | Free/paid model clearly stated in SaaS guide, landing page, Action guide, and CLI guide |
+| R8      | P2       | Configuration Callout           | SaaS callout with Dashboard link at top of configuration.md                             |
+| R9      | P2       | README SaaS Option              | SaaS listed as first (Option 0) in README Quick Start                                   |
+| R10     | P2       | Docs Landing Orientation        | "New here?" section on docs README with guide links                                     |
+| R11     | P0       | Fix `@ghagga/cli` package name  | Zero `@ghagga/cli` references in `apps/cli/README.md`                                   |
+| R12     | P0       | Fix `--config` inline JSON      | Zero `--config '{"...'` patterns in any doc file                                        |
+| R13     | P0       | Fix consensus missing provider  | All Action examples with non-GitHub API keys include `provider`                         |
+| R14     | P0       | Action prerequisites            | Prerequisites section with 3 items at top of guide                                      |
+| R15     | P0       | Action step-by-step flow        | 4 numbered steps with verification checkpoints                                          |
+| R16     | P1       | Action troubleshooting          | 5+ troubleshooting scenarios with symptom/cause/fix                                     |
+| R17     | P1       | Action FAILED status docs       | `core.setFailed()` behavior documented, `continue-on-error` shown                       |
+| R18     | P1       | Action cost/output/diagram/next | Cost section, Mermaid diagram, expected output, Next Steps                              |
+| R19     | P0       | CLI prerequisites               | Prerequisites with Node.js >=22.22.2, Git, GitHub account                               |
+| R20     | P0       | CLI step-by-step flow           | 4 numbered steps with verification checkpoints                                          |
+| R21     | P1       | CLI all 4 commands              | `login`, `logout`, `status`, `review` each documented                                   |
+| R22     | P1       | CLI troubleshooting             | 6+ troubleshooting scenarios with symptom/cause/fix                                     |
+| R23     | P1       | CLI config/output/env vars      | Config path, `[path]` arg, example output, env var docs                                 |
+| R24     | P1       | CLI cost/diagram/next           | Cost section, Mermaid diagram, Next Steps                                               |
+| R25     | P1       | CLI README missing providers    | `ollama` and `qwen` in Options section                                                  |
+| CC1     | —        | Link Integrity                  | Zero broken links across all modified files                                             |
+| CC1-ext | —        | Link Integrity (Action/CLI)     | Cross-links between Action and CLI guides valid                                         |
+| CC2     | —        | Docsify Compatibility           | All new files render correctly in Docsify                                               |
+| CC3     | —        | Consistency                     | Post-install warning and cost info are consistent across all documents                  |
+| CC4     | —        | Bug-Free Code Examples          | Zero broken examples across all docs                                                    |
+| CC5     | —        | Structural Quality              | Both Action and CLI guides have all 8 quality elements                                  |

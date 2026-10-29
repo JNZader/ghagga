@@ -105,7 +105,6 @@ The system MUST support local execution via command-line interface, including gi
 #### Scenario: CLI registers hooks command group
 
 > Added by change: cli-git-hooks
-
 - GIVEN the GHAGGA CLI binary is executed
 - WHEN the user runs `ghagga --help`
 - THEN the help output MUST list `hooks` as an available command alongside `review`, `login`, `logout`, `status`, and `memory`
@@ -113,7 +112,6 @@ The system MUST support local execution via command-line interface, including gi
 #### Scenario: CLI review with --staged flag
 
 > Added by change: cli-git-hooks
-
 - GIVEN a user in a git repository with staged changes
 - WHEN the user runs `ghagga review --staged`
 - THEN the CLI MUST compute the diff using `git diff --cached` instead of the full working tree diff
@@ -123,7 +121,6 @@ The system MUST support local execution via command-line interface, including gi
 #### Scenario: CLI review with --quick flag
 
 > Added by change: cli-git-hooks
-
 - GIVEN a user in a git repository with changes
 - WHEN the user runs `ghagga review --quick`
 - THEN the CLI MUST run only static analysis (Semgrep, Trivy, CPD)
@@ -133,7 +130,6 @@ The system MUST support local execution via command-line interface, including gi
 #### Scenario: CLI review with --commit-msg flag
 
 > Added by change: cli-git-hooks
-
 - GIVEN a user with a commit message file at `.git/COMMIT_EDITMSG`
 - WHEN the user runs `ghagga review --commit-msg .git/COMMIT_EDITMSG`
 - THEN the CLI MUST read the commit message from the specified file
@@ -143,7 +139,6 @@ The system MUST support local execution via command-line interface, including gi
 #### Scenario: CLI review with --exit-on-issues flag
 
 > Added by change: cli-git-hooks
-
 - GIVEN a review completes with a critical-severity finding
 - WHEN the `--exit-on-issues` flag is active
 - THEN the CLI process MUST exit with code 1
@@ -152,7 +147,6 @@ The system MUST support local execution via command-line interface, including gi
 #### Scenario: CLI review without new flags retains existing behavior
 
 > Added by change: cli-git-hooks
-
 - GIVEN a user runs `ghagga review .` without any of the new flags
 - WHEN the review pipeline executes
 - THEN the behavior MUST be identical to the pre-change CLI
@@ -161,7 +155,6 @@ The system MUST support local execution via command-line interface, including gi
 #### Scenario: CLI authentication not required for --quick
 
 > Added by change: cli-git-hooks
-
 - GIVEN a user has NOT run `ghagga login`
 - AND no API key is configured
 - WHEN the user runs `ghagga review --quick`

@@ -189,7 +189,6 @@ When a request body exceeds the configured limit, the system MUST respond with H
 ### Requirement: Middleware Execution Order
 
 The middleware stack in `index.ts` MUST execute in the following order to ensure correct security behavior:
-
 1. Global error handler (`app.onError`) — unchanged
 2. Request logging middleware — unchanged
 3. `secureHeaders` — **new** (MUST be first middleware so all responses, including early rejections, include security headers)

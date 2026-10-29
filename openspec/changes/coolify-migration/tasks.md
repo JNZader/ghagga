@@ -5,6 +5,7 @@
 ## Phase 1: Infrastructure Setup
 
 ### Task 1.1: Create Hetzner Account
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 10 min
@@ -23,6 +24,7 @@
 ---
 
 ### Task 1.2: Generate SSH Key (if needed)
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 2 min
@@ -40,6 +42,7 @@
 ---
 
 ### Task 1.3: Create Hetzner Project
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -58,6 +61,7 @@
 ---
 
 ### Task 1.4: Add SSH Key to Hetzner
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -77,6 +81,7 @@
 ---
 
 ### Task 1.5: Create CX21 Server
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -103,6 +108,7 @@
 ---
 
 ### Task 1.6: Test SSH Connection
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 2 min
@@ -120,6 +126,7 @@
 ---
 
 ### Task 1.7: Configure Cloudflare DNS
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -152,6 +159,7 @@
 ## Phase 2: Coolify Installation
 
 ### Task 2.1: Connect to Server
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 2 min
@@ -166,6 +174,7 @@
 ---
 
 ### Task 2.2: Update System
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -182,6 +191,7 @@
 ---
 
 ### Task 2.3: Install Coolify
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -199,6 +209,7 @@
 ---
 
 ### Task 2.4: Initial Coolify Setup
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 10 min
@@ -228,6 +239,7 @@
 ---
 
 ### Task 2.5: Enable HTTPS
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -251,6 +263,7 @@
 ## Phase 3: GitHub Integration
 
 ### Task 3.1: Connect GitHub to Coolify
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -277,6 +290,7 @@
 ## Phase 4: Database Setup
 
 ### Task 4.1: Create PostgreSQL
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -306,6 +320,7 @@
 ---
 
 ### Task 4.2: Create Redis
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -329,6 +344,7 @@
 ## Phase 5: Code Implementation
 
 ### Task 5.1: Remove Inngest Dependencies
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 5 min
@@ -349,6 +365,7 @@
 ---
 
 ### Task 5.2: Create Redis Module
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 5 min
@@ -378,6 +395,7 @@ export default redis;
 ---
 
 ### Task 5.3: Create Review Queue
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 15 min
@@ -400,6 +418,7 @@ export default redis;
 ---
 
 ### Task 5.4: Create Worker Entry Point
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 10 min
@@ -421,6 +440,7 @@ export default redis;
 ---
 
 ### Task 5.5: Modify Webhook Handler
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 15 min
@@ -443,6 +463,7 @@ export default redis;
 ---
 
 ### Task 5.6: Create Dockerfile
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 10 min
@@ -465,6 +486,7 @@ export default redis;
 ---
 
 ### Task 5.7: Create Start Script
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 5 min
@@ -486,6 +508,7 @@ export default redis;
 ---
 
 ### Task 5.8: Create Docker Compose
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 15 min
@@ -516,6 +539,7 @@ export default redis;
 ---
 
 ### Task 5.9: Update .env.example
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 5 min
@@ -536,6 +560,7 @@ export default redis;
 ---
 
 ### Task 5.10: Build and Test Locally
+
 **Status**: completed
 **Assignee**: AI Assistant
 **Estimated**: 10 min
@@ -556,6 +581,7 @@ export default redis;
 ## Phase 6: Deployment
 
 ### Task 6.1: Push Code to GitHub
+
 **Status**: completed
 **Assignee**: User
 **Estimated**: 5 min
@@ -573,6 +599,7 @@ export default redis;
 ---
 
 ### Task 6.2: Create Application in Coolify
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -597,6 +624,7 @@ export default redis;
 ---
 
 ### Task 6.3: Configure Environment Variables
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 10 min
@@ -626,6 +654,7 @@ export default redis;
 ---
 
 ### Task 6.4: Configure Domain
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -645,6 +674,7 @@ export default redis;
 ---
 
 ### Task 6.5: Configure Health Check
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 2 min
@@ -662,6 +692,7 @@ export default redis;
 ---
 
 ### Task 6.6: Deploy Application
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 10 min
@@ -681,6 +712,7 @@ export default redis;
 ---
 
 ### Task 6.7: Verify Health Endpoint
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 2 min
@@ -699,6 +731,7 @@ export default redis;
 ## Phase 7: GitHub App Update
 
 ### Task 7.1: Update Webhook URL
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -718,6 +751,7 @@ export default redis;
 ---
 
 ### Task 7.2: Update App URLs
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 2 min
@@ -739,6 +773,7 @@ export default redis;
 ## Phase 8: End-to-End Testing
 
 ### Task 8.1: Test Webhook
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -762,6 +797,7 @@ export default redis;
 ---
 
 ### Task 8.2: Check Coolify Logs
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -779,6 +815,7 @@ export default redis;
 ---
 
 ### Task 8.3: Check Bull Dashboard
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -798,6 +835,7 @@ export default redis;
 ## Phase 9: Cleanup
 
 ### Task 9.1: Delete Neon Account
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 5 min
@@ -818,6 +856,7 @@ export default redis;
 ---
 
 ### Task 9.2: Verify Inngest Archived
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 2 min
@@ -834,6 +873,7 @@ export default redis;
 ---
 
 ### Task 9.3: Cancel Render Service
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -852,6 +892,7 @@ export default redis;
 ---
 
 ### Task 9.4: Delete Northflank Project
+
 **Status**: pending
 **Assignee**: User
 **Estimated**: 3 min
@@ -872,7 +913,7 @@ export default redis;
 ## Summary
 
 **Total Tasks**: 42  
-**Estimated Time**: ~2.5 hours  
+**Estimated Time**: ~2.5 hours
 **Phases**: 9
 
 **Critical Path**:

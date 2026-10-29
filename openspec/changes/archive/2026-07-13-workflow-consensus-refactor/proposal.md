@@ -40,12 +40,12 @@ This is the simplest approach because:
 
 ## Risks
 
-| Risk | Mitigation |
-|------|------------|
+| Risk                                                                     | Mitigation                                                                                                              |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | CLI bridge is synchronous (execSync) — workflow makes 5 sequential calls | Already acceptable: CLI bridge takes ~30s per call, 5 calls = ~2.5 min. Gateway and even AI SDK free tiers are similar. |
-| Gateway timeout on large diffs with 6 calls | Gateway already has 3-min timeout per call. Workflow/consensus calls use truncated diffs. |
-| Breaking existing simple mode behavior | Full test coverage of existing paths before refactoring. |
-| Token budget explosion with 5-6 calls | Each specialist already gets context-scoped prompts (less tokens per call). Total is same as current workflow mode. |
+| Gateway timeout on large diffs with 6 calls                              | Gateway already has 3-min timeout per call. Workflow/consensus calls use truncated diffs.                               |
+| Breaking existing simple mode behavior                                   | Full test coverage of existing paths before refactoring.                                                                |
+| Token budget explosion with 5-6 calls                                    | Each specialist already gets context-scoped prompts (less tokens per call). Total is same as current workflow mode.     |
 
 ## Acceptance Criteria
 

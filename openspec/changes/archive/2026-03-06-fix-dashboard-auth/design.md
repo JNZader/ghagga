@@ -5,7 +5,6 @@
 Este cambio reemplaza el OAuth Device Flow del Dashboard por un OAuth Web Flow estándar, usando el servidor Hono en Render como intermediario de callback, y corrige el problema de mappings obsoletos en `github_user_mappings` que provocan reinstalaciones fantasma de la GitHub App.
 
 La estrategia técnica tiene dos ejes ortogonales:
-
 1. **Web Flow OAuth**: El servidor Render (ya existente) actúa como callback endpoint de GitHub. Tras recibir el `code`, lo intercambia por un `access_token` usando el `CLIENT_SECRET`, y redirige al Dashboard (GitHub Pages) con el token en el URL fragment (`#`). El Dashboard extrae el token, lo valida, lo guarda en localStorage y limpia la URL.
 
 2. **Stale Mapping Cleanup**: Se refuerza el auth middleware para detectar mappings que apuntan a instalaciones inactivas/inexistentes, limpiarlos, y re-ejecutar auto-discovery. Complementariamente, el webhook `installation.deleted` limpia proactivamente los mappings asociados.
@@ -182,20 +181,20 @@ flowchart TD
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/server/src/routes/oauth.ts` | Modify | Agregar endpoints `GET /auth/login` y `GET /auth/callback` para Web Flow. Mantener endpoints Device Flow existentes. Agregar helper functions para generación/validación de state HMAC. |
-| `apps/server/src/middleware/auth.ts` | Modify | Refactorizar lookup de instalaciones: obtener mappings raw, filtrar contra instalaciones activas, limpiar mappings obsoletos, re-discovery cuando todos son stale. |
-| `apps/server/src/routes/webhook.ts` | Modify | En handler `installation.deleted`, agregar limpieza de `github_user_mappings` asociados a la instalación eliminada. |
-| `apps/dashboard/src/pages/AuthCallback.tsx` | Create | Nuevo componente que extrae token/error del URL fragment, valida, guarda en localStorage, limpia URL, redirige. |
-| `apps/dashboard/src/pages/Login.tsx` | Modify | Reemplazar botón Device Flow por redirect a `/auth/login`. Eliminar UI de código/polling. Mantener PAT fallback. |
-| `apps/dashboard/src/lib/auth.tsx` | Modify | Simplificar: eliminar lógica Device Flow del provider (startLogin, deviceCode, phases). Agregar `loginFromCallback(token)`. Guardar destino original antes del redirect. |
-| `apps/dashboard/src/lib/oauth.ts` | Modify | Exportar `API_URL` (necesario para construir redirect URL). Eliminar `requestDeviceCode` y `pollForAccessToken` del frontend (quedan en servidor para CLI). Mantener `fetchGitHubUser`, `isServerAvailable`, `GITHUB_CLIENT_ID`. |
-| `apps/dashboard/src/App.tsx` | Modify | Agregar ruta `/auth/callback` (pública, lazy-loaded, sin ProtectedRoute). |
-| `packages/db/src/schema.ts` | Modify | Cambiar `.unique()` en `githubUserId` (línea 183) por un constraint UNIQUE compuesto `(github_user_id, installation_id)`. |
-| `packages/db/src/queries.ts` | Modify | (1) `upsertUserMapping`: buscar por `(githubUserId, installationId)` en vez de solo `githubUserId`. (2) Agregar `getRawMappingsByUserId()`: retorna mappings sin filtrar por instalación activa. (3) Agregar `deleteMappingsByInstallationId()`: DELETE WHERE installation_id = X. (4) Agregar `deleteStaleUserMappings()`: DELETE WHERE id IN [...]. |
-| `packages/db/drizzle/0004_fix_user_mapping_constraint.sql` | Create | Migración SQL: DROP constraint UNIQUE en `github_user_id`, ADD constraint UNIQUE en `(github_user_id, installation_id)`. |
-| `render.yaml` | Modify | Agregar `GITHUB_CLIENT_SECRET` y `STATE_SECRET` como env vars (`sync: false`). |
+| File                                                       | Action | Description                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/server/src/routes/oauth.ts`                          | Modify | Agregar endpoints `GET /auth/login` y `GET /auth/callback` para Web Flow. Mantener endpoints Device Flow existentes. Agregar helper functions para generación/validación de state HMAC.                                                                                                                                                               |
+| `apps/server/src/middleware/auth.ts`                       | Modify | Refactorizar lookup de instalaciones: obtener mappings raw, filtrar contra instalaciones activas, limpiar mappings obsoletos, re-discovery cuando todos son stale.                                                                                                                                                                                    |
+| `apps/server/src/routes/webhook.ts`                        | Modify | En handler `installation.deleted`, agregar limpieza de `github_user_mappings` asociados a la instalación eliminada.                                                                                                                                                                                                                                   |
+| `apps/dashboard/src/pages/AuthCallback.tsx`                | Create | Nuevo componente que extrae token/error del URL fragment, valida, guarda en localStorage, limpia URL, redirige.                                                                                                                                                                                                                                       |
+| `apps/dashboard/src/pages/Login.tsx`                       | Modify | Reemplazar botón Device Flow por redirect a `/auth/login`. Eliminar UI de código/polling. Mantener PAT fallback.                                                                                                                                                                                                                                      |
+| `apps/dashboard/src/lib/auth.tsx`                          | Modify | Simplificar: eliminar lógica Device Flow del provider (startLogin, deviceCode, phases). Agregar `loginFromCallback(token)`. Guardar destino original antes del redirect.                                                                                                                                                                              |
+| `apps/dashboard/src/lib/oauth.ts`                          | Modify | Exportar `API_URL` (necesario para construir redirect URL). Eliminar `requestDeviceCode` y `pollForAccessToken` del frontend (quedan en servidor para CLI). Mantener `fetchGitHubUser`, `isServerAvailable`, `GITHUB_CLIENT_ID`.                                                                                                                      |
+| `apps/dashboard/src/App.tsx`                               | Modify | Agregar ruta `/auth/callback` (pública, lazy-loaded, sin ProtectedRoute).                                                                                                                                                                                                                                                                             |
+| `packages/db/src/schema.ts`                                | Modify | Cambiar `.unique()` en `githubUserId` (línea 183) por un constraint UNIQUE compuesto `(github_user_id, installation_id)`.                                                                                                                                                                                                                             |
+| `packages/db/src/queries.ts`                               | Modify | (1) `upsertUserMapping`: buscar por `(githubUserId, installationId)` en vez de solo `githubUserId`. (2) Agregar `getRawMappingsByUserId()`: retorna mappings sin filtrar por instalación activa. (3) Agregar `deleteMappingsByInstallationId()`: DELETE WHERE installation_id = X. (4) Agregar `deleteStaleUserMappings()`: DELETE WHERE id IN [...]. |
+| `packages/db/drizzle/0004_fix_user_mapping_constraint.sql` | Create | Migración SQL: DROP constraint UNIQUE en `github_user_id`, ADD constraint UNIQUE en `(github_user_id, installation_id)`.                                                                                                                                                                                                                              |
+| `render.yaml`                                              | Modify | Agregar `GITHUB_CLIENT_SECRET` y `STATE_SECRET` como env vars (`sync: false`).                                                                                                                                                                                                                                                                        |
 
 ---
 
@@ -249,13 +248,12 @@ function validateState(state: string, secret: string): { valid: boolean; error?:
 export async function getRawMappingsByUserId(
   db: Database,
   githubUserId: number,
-): Promise<Array<{ id: number; githubUserId: number; githubLogin: string; installationId: number }>>;
+): Promise<
+  Array<{ id: number; githubUserId: number; githubLogin: string; installationId: number }>
+>;
 
 /** Elimina mappings específicos por sus IDs */
-export async function deleteStaleUserMappings(
-  db: Database,
-  mappingIds: number[],
-): Promise<void>;
+export async function deleteStaleUserMappings(db: Database, mappingIds: number[]): Promise<void>;
 
 /** Elimina TODOS los mappings de una instalación (para webhook cleanup) */
 export async function deleteMappingsByInstallationId(
@@ -272,9 +270,11 @@ export const githubUserMappings = pgTable(
   'github_user_mappings',
   {
     id: serial('id').primaryKey(),
-    githubUserId: integer('github_user_id').unique().notNull(),   // ← UNIQUE simple
+    githubUserId: integer('github_user_id').unique().notNull(), // ← UNIQUE simple
     githubLogin: varchar('github_login', { length: 255 }).notNull(),
-    installationId: integer('installation_id').references(() => installations.id).notNull(),
+    installationId: integer('installation_id')
+      .references(() => installations.id)
+      .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (t) => [index('idx_user_mappings_github_user').on(t.githubUserId)],
@@ -287,14 +287,16 @@ export const githubUserMappings = pgTable(
   'github_user_mappings',
   {
     id: serial('id').primaryKey(),
-    githubUserId: integer('github_user_id').notNull(),             // ← sin .unique()
+    githubUserId: integer('github_user_id').notNull(), // ← sin .unique()
     githubLogin: varchar('github_login', { length: 255 }).notNull(),
-    installationId: integer('installation_id').references(() => installations.id).notNull(),
+    installationId: integer('installation_id')
+      .references(() => installations.id)
+      .notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (t) => [
     index('idx_user_mappings_github_user').on(t.githubUserId),
-    unique('uq_user_installation').on(t.githubUserId, t.installationId),  // ← UNIQUE compuesto
+    unique('uq_user_installation').on(t.githubUserId, t.installationId), // ← UNIQUE compuesto
   ],
 );
 ```
@@ -360,20 +362,20 @@ interface AuthContextType {
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit (Server) | `generateState()` y `validateState()` — generación, validación correcta, expiración, HMAC inválido | Vitest. Mock `Date.now()` para controlar expiración. Cubre S-R2.1 a S-R2.4. |
-| Unit (Server) | `GET /auth/login` — redirect correcto con params | Vitest + Hono test client (`app.request()`). Verificar Location header, status 302, params. Cubre S-R1.1. |
-| Unit (Server) | `GET /auth/callback` — intercambio de code, redirect con token/error | Vitest + mock de `fetch` a GitHub. Test cases: code válido, code inválido, state expirado, state inválido, code ausente, GitHub down. Cubre S-R1.2 a S-R1.4, S-R2.2, S-R2.3. |
-| Unit (Server) | Auth middleware — stale mapping cleanup + re-discovery | Vitest + mock de DB queries. Test cases: mappings válidos, mappings a instalación inactiva, todos stale → re-discovery, mixto. Cubre S-R9.1 a S-R9.5, S-R12.1, S-R12.2. |
-| Unit (Server) | Webhook `installation.deleted` — limpieza de mappings | Vitest. Verificar que se llama `deleteMappingsByInstallationId` tras `deactivateInstallation`. Cubre S-R10.1, S-R10.2. |
-| Unit (Server) | Device Flow endpoints sin cambios | Vitest. Verificar que `/auth/device/code` y `/auth/device/token` siguen funcionando igual. Cubre S-R6.1, S-R6.2. |
-| Unit (Dashboard) | `AuthCallback` — extracción de token, validación, limpieza URL, redirect | Vitest + Testing Library. Mock `fetchGitHubUser`, `window.history.replaceState`. Test cases: token válido, token inválido, error param, sin params, preservación destino. Cubre S-R4.1 a S-R4.5, S-R5.1, S-R5.2. |
-| Unit (Dashboard) | `Login.tsx` — botón Web Flow, PAT fallback, server check | Vitest + Testing Library. Test cases: server online → botón redirect, server offline → PAT form, checking → spinner. Cubre S-R3.1 a S-R3.3, S-R7.1, S-R7.2. |
-| Unit (DB) | `upsertUserMapping` con composite key | Vitest. Test cases: insert nuevo, upsert mismo (userId, installationId), insert diferente installationId. Cubre S-R11.1 a S-R11.3. |
-| Unit (DB) | `getRawMappingsByUserId`, `deleteStaleUserMappings`, `deleteMappingsByInstallationId` | Vitest + mock DB. Verificar queries correctas. |
-| Migration | `0004_fix_user_mapping_constraint.sql` up | Ejecutar contra DB de test. Verificar que el constraint compuesto existe y permite múltiples mappings por usuario. Cubre S-R11.4, S-MIG3. |
-| Integration | Backward compatibility de tokens existentes | Verificar que tokens obtenidos por Device Flow o PAT siguen funcionando en auth middleware. Cubre S-CC4.1, S-CC4.2, S-MIG1, S-MIG2. |
+| Layer            | What to Test                                                                                       | Approach                                                                                                                                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit (Server)    | `generateState()` y `validateState()` — generación, validación correcta, expiración, HMAC inválido | Vitest. Mock `Date.now()` para controlar expiración. Cubre S-R2.1 a S-R2.4.                                                                                                                                      |
+| Unit (Server)    | `GET /auth/login` — redirect correcto con params                                                   | Vitest + Hono test client (`app.request()`). Verificar Location header, status 302, params. Cubre S-R1.1.                                                                                                        |
+| Unit (Server)    | `GET /auth/callback` — intercambio de code, redirect con token/error                               | Vitest + mock de `fetch` a GitHub. Test cases: code válido, code inválido, state expirado, state inválido, code ausente, GitHub down. Cubre S-R1.2 a S-R1.4, S-R2.2, S-R2.3.                                     |
+| Unit (Server)    | Auth middleware — stale mapping cleanup + re-discovery                                             | Vitest + mock de DB queries. Test cases: mappings válidos, mappings a instalación inactiva, todos stale → re-discovery, mixto. Cubre S-R9.1 a S-R9.5, S-R12.1, S-R12.2.                                          |
+| Unit (Server)    | Webhook `installation.deleted` — limpieza de mappings                                              | Vitest. Verificar que se llama `deleteMappingsByInstallationId` tras `deactivateInstallation`. Cubre S-R10.1, S-R10.2.                                                                                           |
+| Unit (Server)    | Device Flow endpoints sin cambios                                                                  | Vitest. Verificar que `/auth/device/code` y `/auth/device/token` siguen funcionando igual. Cubre S-R6.1, S-R6.2.                                                                                                 |
+| Unit (Dashboard) | `AuthCallback` — extracción de token, validación, limpieza URL, redirect                           | Vitest + Testing Library. Mock `fetchGitHubUser`, `window.history.replaceState`. Test cases: token válido, token inválido, error param, sin params, preservación destino. Cubre S-R4.1 a S-R4.5, S-R5.1, S-R5.2. |
+| Unit (Dashboard) | `Login.tsx` — botón Web Flow, PAT fallback, server check                                           | Vitest + Testing Library. Test cases: server online → botón redirect, server offline → PAT form, checking → spinner. Cubre S-R3.1 a S-R3.3, S-R7.1, S-R7.2.                                                      |
+| Unit (DB)        | `upsertUserMapping` con composite key                                                              | Vitest. Test cases: insert nuevo, upsert mismo (userId, installationId), insert diferente installationId. Cubre S-R11.1 a S-R11.3.                                                                               |
+| Unit (DB)        | `getRawMappingsByUserId`, `deleteStaleUserMappings`, `deleteMappingsByInstallationId`              | Vitest + mock DB. Verificar queries correctas.                                                                                                                                                                   |
+| Migration        | `0004_fix_user_mapping_constraint.sql` up                                                          | Ejecutar contra DB de test. Verificar que el constraint compuesto existe y permite múltiples mappings por usuario. Cubre S-R11.4, S-MIG3.                                                                        |
+| Integration      | Backward compatibility de tokens existentes                                                        | Verificar que tokens obtenidos por Device Flow o PAT siguen funcionando en auth middleware. Cubre S-CC4.1, S-CC4.2, S-MIG1, S-MIG2.                                                                              |
 
 ---
 

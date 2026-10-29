@@ -11,7 +11,6 @@
 Test the full HTTP flow from webhook receipt through Inngest event dispatch.
 
 **Scenarios:**
-
 - **S1.1**: Valid PR webhook (`pull_request.opened`) with valid signature triggers `inngest.send()` with correct event name and data shape (installationId, repoFullName, prNumber, headSha, settings).
 - **S1.2**: Invalid signature returns 401 and does NOT dispatch to Inngest.
 - **S1.3**: Non-PR event types (e.g., `star`, `push`) are acknowledged with 200 but do NOT dispatch.
@@ -28,7 +27,6 @@ Test the full HTTP flow from webhook receipt through Inngest event dispatch.
 Test API routes are properly gated by auth middleware and return correct data.
 
 **Scenarios:**
-
 - **S2.1**: Authenticated request to `GET /api/repositories` returns repo list from user's installations.
 - **S2.2**: Authenticated request to `GET /api/stats?repo=owner/repo` returns mapped stats data.
 - **S2.3**: Request without Authorization header returns 401.
@@ -44,7 +42,6 @@ Test API routes are properly gated by auth middleware and return correct data.
 Test the pipeline orchestrator produces correct output with mocked providers.
 
 **Scenarios:**
-
 - **S3.1**: Pipeline in `simple` mode with mocked AI provider produces a `ReviewResult` with status, summary, findings, and metadata.
 - **S3.2**: Pipeline with memory enabled calls memory search and persist.
 - **S3.3**: Pipeline degrades gracefully when static analysis tool throws — returns result with AI findings and error-state tools.

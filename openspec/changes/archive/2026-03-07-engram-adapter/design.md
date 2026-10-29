@@ -108,13 +108,13 @@ ghagga review . --memory-backend engram
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/core/src/memory/engram.ts` | Create | `EngramMemoryStorage` class: HTTP client, schema mapping, session ID bridging, graceful degradation. ~300 lines. |
-| `packages/core/src/memory/engram.test.ts` | Create | Unit tests for `EngramMemoryStorage`: mocked `fetch()`, schema mapping, degradation, all interface methods. ~400 lines. |
-| `packages/core/src/index.ts` | Modify | Add `export { EngramMemoryStorage } from './memory/engram.js';` to the Memory section (line 78). |
-| `apps/cli/src/commands/review.ts` | Modify | Import `EngramMemoryStorage`. Add `--memory-backend` option. Replace hardcoded `SqliteMemoryStorage.create()` with backend selection logic (lines 155-164). |
-| `apps/cli/src/index.ts` | Modify | Add `.option('--memory-backend <type>', ...)` to the `review` command definition. Pass `memoryBackend` through to `reviewCommand`. |
+| File                                      | Action | Description                                                                                                                                                 |
+| ----------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/memory/engram.ts`      | Create | `EngramMemoryStorage` class: HTTP client, schema mapping, session ID bridging, graceful degradation. ~300 lines.                                            |
+| `packages/core/src/memory/engram.test.ts` | Create | Unit tests for `EngramMemoryStorage`: mocked `fetch()`, schema mapping, degradation, all interface methods. ~400 lines.                                     |
+| `packages/core/src/index.ts`              | Modify | Add `export { EngramMemoryStorage } from './memory/engram.js';` to the Memory section (line 78).                                                            |
+| `apps/cli/src/commands/review.ts`         | Modify | Import `EngramMemoryStorage`. Add `--memory-backend` option. Replace hardcoded `SqliteMemoryStorage.create()` with backend selection logic (lines 155-164). |
+| `apps/cli/src/index.ts`                   | Modify | Add `.option('--memory-backend <type>', ...)` to the `review` command definition. Pass `memoryBackend` through to `reviewCommand`.                          |
 
 ## Interfaces / Contracts
 
@@ -198,7 +198,7 @@ function toEngramPayload(data: {
   filePaths?: string[];
   severity?: string;
 }): {
-  content: string;       // JSON.stringify({ source, title, body, severity, filePaths, project })
+  content: string; // JSON.stringify({ source, title, body, severity, filePaths, project })
   type: string;
   topic_key?: string;
   metadata: Record<string, unknown>;
@@ -216,14 +216,14 @@ function fromEngramObservationDetail(engram: EngramObservation): MemoryObservati
 ```typescript
 /** Shape of an observation returned by Engram's REST API. */
 interface EngramObservation {
-  id: string;             // UUID
-  content: string;        // May be GHAGGA-structured JSON or plain text
+  id: string; // UUID
+  content: string; // May be GHAGGA-structured JSON or plain text
   type?: string;
   topic_key?: string;
   metadata?: Record<string, unknown>;
   revision_count?: number;
-  created_at: string;     // ISO 8601
-  updated_at?: string;    // ISO 8601
+  created_at: string; // ISO 8601
+  updated_at?: string; // ISO 8601
 }
 
 /** Shape of Engram's GET /api/stats response. */
@@ -235,7 +235,7 @@ interface EngramStats {
 
 /** Shape of Engram's POST /api/sessions response. */
 interface EngramSession {
-  id: string;             // UUID
+  id: string; // UUID
   metadata?: Record<string, unknown>;
   created_at: string;
 }
@@ -254,16 +254,16 @@ export interface ReviewOptions {
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | `EngramClient` HTTP methods | Mock `global.fetch` with `vi.fn()`. Verify correct URL construction, headers, timeout handling, error paths. |
-| Unit | Schema mapping (`toEngramPayload`, `fromEngramObservation`) | Pure function tests. Verify JSON encoding/decoding, default handling for missing fields, plain-text content fallback. |
-| Unit | All `MemoryStorage` interface methods | Mock `EngramClient`. Verify each method calls the correct endpoint, maps response correctly, handles errors gracefully. |
-| Unit | Session ID bridging | Verify `createSession` returns synthetic integer ID, `endSession` maps back to Engram UUID. |
-| Unit | Graceful degradation — `create()` | Mock `fetch` to fail. Verify `create()` returns `SqliteMemoryStorage` when `fallbackToSqlite: true`, throws when `false`. |
-| Unit | Graceful degradation — per-method | Mock `fetch` to fail on individual calls. Verify methods return safe defaults (empty arrays, `null`, `false`) and log warnings. |
-| Unit | `clearObservations` throws | Verify the descriptive error message. |
-| Unit | Backend selection in CLI | Test the branching logic in `review.ts` with different `memoryBackend` values. |
+| Layer | What to Test                                                | Approach                                                                                                                        |
+| ----- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Unit  | `EngramClient` HTTP methods                                 | Mock `global.fetch` with `vi.fn()`. Verify correct URL construction, headers, timeout handling, error paths.                    |
+| Unit  | Schema mapping (`toEngramPayload`, `fromEngramObservation`) | Pure function tests. Verify JSON encoding/decoding, default handling for missing fields, plain-text content fallback.           |
+| Unit  | All `MemoryStorage` interface methods                       | Mock `EngramClient`. Verify each method calls the correct endpoint, maps response correctly, handles errors gracefully.         |
+| Unit  | Session ID bridging                                         | Verify `createSession` returns synthetic integer ID, `endSession` maps back to Engram UUID.                                     |
+| Unit  | Graceful degradation — `create()`                           | Mock `fetch` to fail. Verify `create()` returns `SqliteMemoryStorage` when `fallbackToSqlite: true`, throws when `false`.       |
+| Unit  | Graceful degradation — per-method                           | Mock `fetch` to fail on individual calls. Verify methods return safe defaults (empty arrays, `null`, `false`) and log warnings. |
+| Unit  | `clearObservations` throws                                  | Verify the descriptive error message.                                                                                           |
+| Unit  | Backend selection in CLI                                    | Test the branching logic in `review.ts` with different `memoryBackend` values.                                                  |
 
 All tests use Vitest (the project's existing test runner), mocking `global.fetch` via `vi.stubGlobal('fetch', ...)`. No integration tests against a real Engram server — those would be manual verification during development.
 
@@ -272,7 +272,6 @@ The test file follows the exact pattern of `sqlite.test.ts`: `describe` blocks p
 ## Migration / Rollout
 
 No migration required.
-
 - The Engram adapter is additive: new file, new export, new CLI option.
 - Default behavior is unchanged: `--memory-backend sqlite` (or no flag) produces identical behavior to current code.
 - No database migrations, no schema changes, no config file format changes.
@@ -290,5 +289,5 @@ No migration required.
   - Does `POST /api/sessions` accept a `metadata` object?
   - Does `POST /api/sessions/:id/summary` exist?
   - What does the `GET /api/stats` response shape look like?
-  If any endpoint is missing, the corresponding method becomes a no-op with a warning log (per the graceful degradation design). This does NOT block implementation — the adapter is designed to handle missing endpoints.
+    If any endpoint is missing, the corresponding method becomes a no-op with a warning log (per the graceful degradation design). This does NOT block implementation — the adapter is designed to handle missing endpoints.
 - [ ] **Engram observation IDs are UUIDs (strings), but `MemoryStorage` uses `number` IDs**: The session ID bridging is solved (synthetic map), but `getObservation(id: number)` and `deleteObservation(id: number)` also take numeric IDs. Two options: (a) maintain a global `Map<number, string>` for all observation IDs seen (populated on search/list), or (b) store the Engram UUID in the returned `MemoryObservationRow.id` by hashing to a stable integer. Option (a) is chosen for implementation — the map is populated by `searchObservations` and `listObservations`, and `getObservation`/`deleteObservation` look up the real UUID from the map. If the ID isn't in the map, the method returns `null`/`false` with a warning.

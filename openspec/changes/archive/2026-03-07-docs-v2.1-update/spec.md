@@ -11,7 +11,6 @@ Changes are grouped by topic (not by file) to ensure cross-file consistency.
 ### Requirement: Memory Availability Statements (HIGH — 8 files)
 
 All documentation files that describe memory system availability MUST correctly state that review memory is available in **all three** distribution modes:
-
 - **Server (SaaS)**: PostgreSQL with tsvector full-text search
 - **CLI**: SQLite via `sql.js` (WASM), stored at `~/.config/ghagga/memory.db`, uses FTS5
 - **Action**: SQLite via `sql.js` (WASM), persisted via `@actions/cache`
@@ -70,7 +69,6 @@ Each file MUST use consistent language describing the storage backend per mode. 
 ### Requirement: CLI Memory Subcommands Documentation (HIGH — 4 files)
 
 All files that document CLI commands MUST include the `memory` command with its 6 subcommands:
-
 - `ghagga memory list` — List stored observations
 - `ghagga memory search <query>` — Search observations by text
 - `ghagga memory show <id>` — Show a specific observation
@@ -154,7 +152,6 @@ The global options MUST list: `--version` / `-V`, `--plain`, `--help` / `-h`.
 ### Requirement: Review Command Options Documentation (HIGH)
 
 The `docs/cli.md` review command section MUST document the following options that are currently missing:
-
 - `--no-memory` — Disable review memory for this run
 - `--no-semgrep` — Disable Semgrep static analysis
 - `--no-trivy` — Disable Trivy security scanner
@@ -188,14 +185,14 @@ The `docs/cli.md` review command section MUST document the following options tha
 
 All files that display test counts MUST show the correct total of **1,728 tests** with the following per-package breakdown:
 
-| Package | Tests |
-|---------|-------|
-| `packages/db` | 118 |
-| `packages/core` | 526 |
-| `apps/cli` | 209 |
-| `apps/server` | 413 |
-| `apps/action` | 195 |
-| `apps/dashboard` | 267 |
+| Package          | Tests |
+| ---------------- | ----- |
+| `packages/db`    | 118   |
+| `packages/core`  | 526   |
+| `apps/cli`       | 209   |
+| `apps/server`    | 413   |
+| `apps/action`    | 195   |
+| `apps/dashboard` | 267   |
 
 (Previously: Various files showed outdated test counts.)
 
@@ -231,12 +228,12 @@ Files that MUST be updated:
 
 All files that document GitHub App required permissions MUST list the correct current permissions:
 
-| Permission | Access Level |
-|-----------|-------------|
-| Pull requests | Read & Write |
-| Actions | Write |
-| Secrets | Read & Write |
-| Metadata | Read (automatic) |
+| Permission    | Access Level     |
+| ------------- | ---------------- |
+| Pull requests | Read & Write     |
+| Actions       | Write            |
+| Secrets       | Read & Write     |
+| Metadata      | Read (automatic) |
 
 (Previously: Permissions listed were incorrect or outdated.)
 
@@ -299,7 +296,6 @@ Files that MUST be updated:
 ### Requirement: API DELETE Endpoints Documentation (HIGH)
 
 The `docs/api-reference.md` file MUST document the following 5 DELETE endpoints:
-
 1. `DELETE /api/memory/observations/:id` — Delete a specific observation
 2. `DELETE /api/memory/projects/:project/observations` — Delete all observations for a project
 3. `DELETE /api/memory/observations` — Purge all observations
@@ -544,7 +540,6 @@ All modified markdown files MUST render correctly in the Docsify documentation s
 ### CC4: Grep Verification
 
 After implementation, the following grep checks MUST return zero matches (excluding the openspec change folder itself and changelogs):
-
 1. Any file claiming memory is "not available" or "coming soon" for CLI or Action
 2. Any outdated test count (the previous stale total)
 3. Version string `2.0.1` in current-version contexts
@@ -559,24 +554,24 @@ After implementation, the following grep checks MUST return zero matches (exclud
 
 ## Acceptance Criteria Summary
 
-| ID | Priority | Requirement | Key Acceptance Criteria |
-|----|----------|-------------|------------------------|
-| R1 | HIGH | Memory Availability (8 files) | All 8 files state memory is available in Server, CLI, and Action with correct backends |
-| R2 | HIGH | CLI Memory Subcommands (4 files) | `memory` command with 6 subcommands documented in 4 files |
-| R3 | HIGH | `--plain` Flag (4 files) | `--plain` global option documented in 4 files |
-| R4 | HIGH | Review Options | `--no-memory`, `--no-semgrep`, `--no-trivy`, `--no-cpd`, `--verbose` documented |
-| R5 | HIGH | Test Counts (4 files) | 1,728 total with correct per-package breakdown in all 4 files |
-| R6 | HIGH | GitHub App Permissions (2 files) | Correct 4-permission list in both files, consistent |
-| R7 | HIGH | `enable-memory` Input (2 files) | Input documented with type, default, and description |
-| R8 | HIGH | API DELETE Endpoints | 5 DELETE endpoints documented in `docs/api-reference.md` |
-| R9 | HIGH | `severity` Column | Column documented in `docs/database-schema.md` for both DB engines |
-| R10 | MEDIUM | Dashboard Memory Features | 3-tier delete, session mgmt, UI features documented |
-| R11 | MEDIUM | `@clack/prompts` Tech Stack | Listed in `docs/tech-stack.md` with version and purpose |
-| R12 | MEDIUM | SQLite in Architecture | SQLite/sql.js documented as storage component in `docs/architecture.md` |
-| R13 | MEDIUM | Monorepo Tree | `README.md` tree matches actual directory structure |
-| R14 | MEDIUM | Dashboard Pages Table | `README.md` dashboard pages table is current |
-| R15 | LOW | Version Bumps (2.0.1 -> 2.1.0) | Zero stale `2.0.1` references in current-version contexts |
-| CC1 | — | Cross-File Consistency | Same fact stated identically across all files |
-| CC2 | — | No New Inaccuracies | Every modified claim verified against source code |
-| CC3 | — | Docsify Rendering | All modified files render correctly |
-| CC4 | — | Grep Verification | Zero matches for stale patterns |
+| ID  | Priority | Requirement                      | Key Acceptance Criteria                                                                |
+| --- | -------- | -------------------------------- | -------------------------------------------------------------------------------------- |
+| R1  | HIGH     | Memory Availability (8 files)    | All 8 files state memory is available in Server, CLI, and Action with correct backends |
+| R2  | HIGH     | CLI Memory Subcommands (4 files) | `memory` command with 6 subcommands documented in 4 files                              |
+| R3  | HIGH     | `--plain` Flag (4 files)         | `--plain` global option documented in 4 files                                          |
+| R4  | HIGH     | Review Options                   | `--no-memory`, `--no-semgrep`, `--no-trivy`, `--no-cpd`, `--verbose` documented        |
+| R5  | HIGH     | Test Counts (4 files)            | 1,728 total with correct per-package breakdown in all 4 files                          |
+| R6  | HIGH     | GitHub App Permissions (2 files) | Correct 4-permission list in both files, consistent                                    |
+| R7  | HIGH     | `enable-memory` Input (2 files)  | Input documented with type, default, and description                                   |
+| R8  | HIGH     | API DELETE Endpoints             | 5 DELETE endpoints documented in `docs/api-reference.md`                               |
+| R9  | HIGH     | `severity` Column                | Column documented in `docs/database-schema.md` for both DB engines                     |
+| R10 | MEDIUM   | Dashboard Memory Features        | 3-tier delete, session mgmt, UI features documented                                    |
+| R11 | MEDIUM   | `@clack/prompts` Tech Stack      | Listed in `docs/tech-stack.md` with version and purpose                                |
+| R12 | MEDIUM   | SQLite in Architecture           | SQLite/sql.js documented as storage component in `docs/architecture.md`                |
+| R13 | MEDIUM   | Monorepo Tree                    | `README.md` tree matches actual directory structure                                    |
+| R14 | MEDIUM   | Dashboard Pages Table            | `README.md` dashboard pages table is current                                           |
+| R15 | LOW      | Version Bumps (2.0.1 -> 2.1.0)   | Zero stale `2.0.1` references in current-version contexts                              |
+| CC1 | —        | Cross-File Consistency           | Same fact stated identically across all files                                          |
+| CC2 | —        | No New Inaccuracies              | Every modified claim verified against source code                                      |
+| CC3 | —        | Docsify Rendering                | All modified files render correctly                                                    |
+| CC4 | —        | Grep Verification                | Zero matches for stale patterns                                                        |

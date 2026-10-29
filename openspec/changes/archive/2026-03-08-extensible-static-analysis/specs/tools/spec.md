@@ -14,7 +14,6 @@ This spec defines the contract for each static analysis tool plugin in the GHAGG
 ### Requirement: Semgrep Plugin (adapted)
 
 The Semgrep plugin MUST be adapted from the current hardcoded implementation to conform to the `ToolDefinition` interface.
-
 - **Name**: `semgrep`
 - **Display Name**: `Semgrep`
 - **Category**: `security`
@@ -42,7 +41,6 @@ The Semgrep plugin MUST be adapted from the current hardcoded implementation to 
 ### Requirement: Trivy Plugin (adapted + enhanced)
 
 The Trivy plugin MUST be adapted from the current implementation AND enhanced to include license scanning.
-
 - **Name**: `trivy`
 - **Display Name**: `Trivy`
 - **Category**: `sca`
@@ -80,7 +78,6 @@ The Trivy plugin MUST be adapted from the current implementation AND enhanced to
 ### Requirement: CPD Plugin (adapted)
 
 The CPD plugin MUST be adapted from the current hardcoded implementation to conform to the `ToolDefinition` interface.
-
 - **Name**: `cpd`
 - **Display Name**: `PMD/CPD`
 - **Category**: `duplication`
@@ -112,7 +109,6 @@ The CPD plugin MUST be adapted from the current hardcoded implementation to conf
 ### Requirement: Gitleaks Plugin
 
 The system MUST include a Gitleaks plugin for secret detection.
-
 - **Name**: `gitleaks`
 - **Display Name**: `Gitleaks`
 - **Category**: `secrets`
@@ -148,7 +144,6 @@ The system MUST include a Gitleaks plugin for secret detection.
 ### Requirement: ShellCheck Plugin
 
 The system MUST include a ShellCheck plugin for shell script linting.
-
 - **Name**: `shellcheck`
 - **Display Name**: `ShellCheck`
 - **Category**: `linting`
@@ -183,7 +178,6 @@ The system MUST include a ShellCheck plugin for shell script linting.
 ### Requirement: markdownlint-cli2 Plugin
 
 The system MUST include a markdownlint-cli2 plugin for Markdown quality checks.
-
 - **Name**: `markdownlint`
 - **Display Name**: `markdownlint-cli2`
 - **Category**: `docs`
@@ -217,7 +211,6 @@ The system MUST include a markdownlint-cli2 plugin for Markdown quality checks.
 ### Requirement: Lizard Plugin
 
 The system MUST include a Lizard plugin for cyclomatic complexity analysis.
-
 - **Name**: `lizard`
 - **Display Name**: `Lizard`
 - **Category**: `complexity`
@@ -270,7 +263,6 @@ Each auto-detect tool MUST define a `detect` function that receives the list of 
 ### Requirement: Ruff Plugin (Python)
 
 The system MUST include a Ruff plugin for Python linting.
-
 - **Name**: `ruff`
 - **Display Name**: `Ruff`
 - **Category**: `linting`
@@ -297,7 +289,6 @@ The system MUST include a Ruff plugin for Python linting.
 ### Requirement: Bandit Plugin (Python Security)
 
 The system MUST include a Bandit plugin for Python-specific security analysis.
-
 - **Name**: `bandit`
 - **Display Name**: `Bandit`
 - **Category**: `security`
@@ -325,7 +316,6 @@ The system MUST include a Bandit plugin for Python-specific security analysis.
 ### Requirement: golangci-lint Plugin (Go)
 
 The system MUST include a golangci-lint plugin for Go code analysis.
-
 - **Name**: `golangci-lint`
 - **Display Name**: `golangci-lint`
 - **Category**: `linting`
@@ -358,7 +348,6 @@ The system MUST include a golangci-lint plugin for Go code analysis.
 ### Requirement: Biome Plugin (JavaScript/TypeScript)
 
 The system MUST include a Biome plugin for JavaScript and TypeScript linting.
-
 - **Name**: `biome`
 - **Display Name**: `Biome`
 - **Category**: `linting`
@@ -391,7 +380,6 @@ The system MUST include a Biome plugin for JavaScript and TypeScript linting.
 ### Requirement: PMD Full Plugin (Java)
 
 The system MUST include a PMD plugin (full ruleset) for Java code analysis, separate from the CPD duplication tool.
-
 - **Name**: `pmd`
 - **Display Name**: `PMD`
 - **Category**: `quality`
@@ -419,7 +407,6 @@ The system MUST include a PMD plugin (full ruleset) for Java code analysis, sepa
 ### Requirement: Psalm Plugin (PHP)
 
 The system MUST include a Psalm plugin for PHP static analysis.
-
 - **Name**: `psalm`
 - **Display Name**: `Psalm`
 - **Category**: `quality`
@@ -447,7 +434,6 @@ The system MUST include a Psalm plugin for PHP static analysis.
 ### Requirement: clippy Plugin (Rust)
 
 The system MUST include a clippy plugin for Rust linting.
-
 - **Name**: `clippy`
 - **Display Name**: `Clippy`
 - **Category**: `linting`
@@ -482,7 +468,6 @@ The system MUST include a clippy plugin for Rust linting.
 ### Requirement: Hadolint Plugin (Dockerfile)
 
 The system MUST include a Hadolint plugin for Dockerfile linting.
-
 - **Name**: `hadolint`
 - **Display Name**: `Hadolint`
 - **Category**: `linting`

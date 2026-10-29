@@ -10,14 +10,14 @@ If you discover a security vulnerability, please do not open a public issue with
 
 ## Current Security Model
 
-| Measure | Implementation |
-|---------|----------------|
-| API key encryption | AES-256-GCM at rest; keys are never stored in plaintext |
-| Webhook verification | HMAC-SHA256 with `crypto.timingSafeEqual` |
-| Installation scoping | API data is scoped by GitHub installation membership |
-| Runner callback verification | HMAC-signed callbacks derived from `STATE_SECRET` |
-| Privacy stripping | Secret-like values are redacted before memory persistence |
-| No secret logging | Sensitive values are intentionally excluded from logs and error output |
+| Measure                      | Implementation                                                         |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| API key encryption           | AES-256-GCM at rest; keys are never stored in plaintext                |
+| Webhook verification         | HMAC-SHA256 with `crypto.timingSafeEqual`                              |
+| Installation scoping         | API data is scoped by GitHub installation membership                   |
+| Runner callback verification | HMAC-signed callbacks derived from `STATE_SECRET`                      |
+| Privacy stripping            | Secret-like values are redacted before memory persistence              |
+| No secret logging            | Sensitive values are intentionally excluded from logs and error output |
 
 ## Authentication Notes
 

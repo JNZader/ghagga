@@ -10,7 +10,6 @@
 ## Phase 1: Foundation — Prompt Constants & Memory Limit (no dependents)
 
 These tasks are independent leaf changes: new constants, function signatures, and a one-line limit change. Nothing else depends on their internal wiring yet.
-
 - [x] 1.1 **Reduce memory observation limit from 8 to 3**
   - File: `packages/core/src/memory/search.ts` (line 87)
   - Change `{ limit: 8 }` to `{ limit: 3 }` in the `searchObservations()` call
@@ -19,6 +18,7 @@ These tasks are independent leaf changes: new constants, function signatures, an
 - [x] 1.2 **Add `REVIEW_CALIBRATION` constant to `prompts.ts`**
   - File: `packages/core/src/agents/prompts.ts`
   - Add a new exported constant `REVIEW_CALIBRATION` after the consensus stances section (after line 175), containing:
+
     ```
     ## Review Calibration
     - Only report findings you are 80%+ confident about based on the actual code shown.
@@ -60,7 +60,6 @@ These tasks are independent leaf changes: new constants, function signatures, an
 ## Phase 2: Core Implementation — Thread `reviewLevel` into Agent Input Types
 
 These tasks modify the three agent files to accept `reviewLevel` and inject the new prompt elements into system prompt assembly. Depends on Phase 1 (the new functions/constants must exist).
-
 - [x] 2.1 **Add `reviewLevel` to `SimpleReviewInput` and inject into system prompt**
   - File: `packages/core/src/agents/simple.ts`
   - Add `reviewLevel: import('../types.js').ReviewLevel;` to the `SimpleReviewInput` interface (after `stackHints`)
@@ -96,7 +95,6 @@ These tasks modify the three agent files to accept `reviewLevel` and inject the 
 ## Phase 3: Pipeline Wiring — Pass `reviewLevel` from Settings to Agents
 
 Depends on Phase 2 (agent input types must accept `reviewLevel`).
-
 - [x] 3.1 **Pass `settings.reviewLevel` to all three agent calls in `pipeline.ts`**
   - File: `packages/core/src/pipeline.ts`
   - In the `case 'simple':` block (line 168-178): add `reviewLevel: input.settings.reviewLevel` to the `runSimpleReview()` call object
@@ -178,15 +176,15 @@ Phase 4 (4.1-4.6)                      — depends on all above; 4.1-4.5 can run
 
 ## Traceability to Spec Scenarios
 
-| Spec Requirement | Scenarios | Covered by Tasks |
-|-----------------|-----------|------------------|
-| Memory Context Retrieval Limit | 3 | 1.1, 4.2 |
-| Memory Context Framing in Prompts | 3 | 1.4, 4.1 |
-| Aggressive Memory Priming (REMOVED) | 1 | 1.4, 4.1 |
-| Review Level Prompt Calibration | 7 | 1.3, 2.1-2.3, 4.1, 4.3 |
-| Review Level Plumbing Through Agent Inputs | 3 | 2.1-2.3, 3.1, 4.5 |
-| Anti-False-Positive Calibration Block | 6 | 1.2, 2.1-2.3, 4.1, 4.3, 4.4 |
-| Simple Review System Prompt Content | 2 | 1.5, 4.1 |
-| No Schema or API Changes | 2 | (structural — verified by 4.6) |
-| Cross-Provider Compatibility | 1 | (manual — no provider-specific syntax in prompts) |
-| Backward Compatibility of Pipeline Calls | 2 | 3.1, 4.5 |
+| Spec Requirement                           | Scenarios | Covered by Tasks                                  |
+| ------------------------------------------ | --------- | ------------------------------------------------- |
+| Memory Context Retrieval Limit             | 3         | 1.1, 4.2                                          |
+| Memory Context Framing in Prompts          | 3         | 1.4, 4.1                                          |
+| Aggressive Memory Priming (REMOVED)        | 1         | 1.4, 4.1                                          |
+| Review Level Prompt Calibration            | 7         | 1.3, 2.1-2.3, 4.1, 4.3                            |
+| Review Level Plumbing Through Agent Inputs | 3         | 2.1-2.3, 3.1, 4.5                                 |
+| Anti-False-Positive Calibration Block      | 6         | 1.2, 2.1-2.3, 4.1, 4.3, 4.4                       |
+| Simple Review System Prompt Content        | 2         | 1.5, 4.1                                          |
+| No Schema or API Changes                   | 2         | (structural — verified by 4.6)                    |
+| Cross-Provider Compatibility               | 1         | (manual — no provider-specific syntax in prompts) |
+| Backward Compatibility of Pipeline Calls   | 2         | 3.1, 4.5                                          |

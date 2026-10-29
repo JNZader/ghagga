@@ -14,6 +14,7 @@ Phase 0 removes all Cloud Run infrastructure — both GCP resources and repo art
 
 - **Description**: Run the GCP cleanup commands from design §8.1 to delete the Cloud Run service, Artifact Registry images, Secret Manager secrets, and budget alert. This is a manual operations task (not code).
 - **Commands to run**:
+
   ```
   gcloud run services delete ghagga --region us-central1 --quiet
   gcloud artifacts repositories delete ghagga-server --location us-central1 --quiet
@@ -321,7 +322,6 @@ Phase 3 implements the security layers that protect private source code from lea
 ### Manual: Create `JNZader/ghagga-runner-template` GitHub Repository
 
 > **This is a manual step — not automatable in code.**
-
 - [ ] Create a new **public** repository `JNZader/ghagga-runner-template` on GitHub
 - [ ] In repo Settings → check **"Template repository"**
 - [ ] Copy `templates/ghagga-analysis.yml` → `.github/workflows/ghagga-analysis.yml` in the template repo
@@ -382,7 +382,7 @@ Phase 4 validates the entire system end-to-end and cleans up any remaining debug
 - **Dependencies**: T12
 - **Effort**: L
 - **Acceptance criteria**:
-    - [x] Happy path: callback received → pipeline gets precomputed results
+  - [x] Happy path: callback received → pipeline gets precomputed results
     - [x] Timeout path: no callback → pipeline gets all-skipped results with "Runner timeout" error
     - [x] Skip path: dispatch failed → pipeline runs with undefined precomputedStaticAnalysis (local tools)
     - [x] Tests run in CI without hitting real GitHub or Inngest APIs
@@ -487,12 +487,12 @@ T26 ← T24, T25 ─────────────────────
 
 ### Effort Summary
 
-| Effort | Count | Tasks |
-|--------|-------|-------|
-| **S** (< 1h) | 15 | T01, T02, T03, T04, T05, T06, T09, T11, T13, T14, T15, T16, T17, T18, T19 |
-| **M** (1-3h) | 7 | T07, T10, T20, T21, T25, T26 |
-| **L** (3-6h) | 4 | T08, T12, T22, T23, T24 |
-| **Total** | **26** | |
+| Effort       | Count  | Tasks                                                                     |
+| ------------ | ------ | ------------------------------------------------------------------------- |
+| **S** (< 1h) | 15     | T01, T02, T03, T04, T05, T06, T09, T11, T13, T14, T15, T16, T17, T18, T19 |
+| **M** (1-3h) | 7      | T07, T10, T20, T21, T25, T26                                              |
+| **L** (3-6h) | 4      | T08, T12, T22, T23, T24                                                   |
+| **Total**    | **26** |                                                                           |
 
 ### Critical Path
 

@@ -79,23 +79,22 @@ export interface MemoryObservationDetail {
   project: string;
   topicKey: string | null;
   revisionCount: number;
-  createdAt: string;   // ISO 8601
-  updatedAt: string;   // ISO 8601
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 export interface MemoryStats {
   totalObservations: number;
   byType: Record<string, number>;
   byProject: Record<string, number>;
-  oldestObservation: string | null;  // ISO 8601
-  newestObservation: string | null;  // ISO 8601
+  oldestObservation: string | null; // ISO 8601
+  newestObservation: string | null; // ISO 8601
 }
 ```
 
 ### 2. Implement in `SqliteMemoryStorage`
 
 All new methods use straightforward SQL against the existing `memory_observations` table:
-
 - **`listObservations`**: `SELECT * FROM memory_observations WHERE ... ORDER BY created_at DESC LIMIT ? OFFSET ?`
 - **`getObservation`**: `SELECT * FROM memory_observations WHERE id = ?`
 - **`deleteObservation`**: Delete from `memory_observations` (the existing FTS5 triggers don't handle DELETE — a new `obs_fts_delete` trigger must be added to the schema). Returns `true` if a row was deleted, `false` if the ID didn't exist.
@@ -127,7 +126,6 @@ program.addCommand(memoryCommand);
 ```
 
 The `memoryCommand` is a `new Command('memory')` with six subcommands. Each subcommand:
-
 1. Opens `SqliteMemoryStorage` at `~/.config/ghagga/memory.db` (via `getConfigDir()`)
 2. Executes the query
 3. Calls `storage.close()` to persist any changes
@@ -139,7 +137,6 @@ The `memoryCommand` is a `new Command('memory')` with six subcommands. Each subc
 ### 5. Output Formatting
 
 All output is plain text — no colors or fancy formatting beyond simple alignment:
-
 - **`list`**: Tabular output using fixed-width columns (id, type, title, repo, date). No external table library — `String.padEnd()` is sufficient for 5 columns.
 - **`search`**: Numbered results with title, type, repo, and a content snippet (first 120 chars).
 - **`show`**: Key-value pairs, one per line, with content shown in full.
@@ -156,26 +153,26 @@ For `delete` and `clear`, `close()` MUST be called to persist the deletion to di
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/core/src/types.ts` | Modified | Add `listObservations`, `getObservation`, `deleteObservation`, `getStats`, `clearObservations` to `MemoryStorage` interface. Add `MemoryObservationDetail` and `MemoryStats` types. |
-| `packages/core/src/memory/sqlite.ts` | Modified | Implement 5 new methods. Add `obs_fts_delete` trigger to `SCHEMA_SQL`. |
-| `packages/core/src/memory/sqlite.test.ts` | Modified | Add tests for all new methods: list with filters, get by id, get nonexistent, delete + FTS cleanup, stats aggregation, clear all, clear by project. |
-| `apps/server/src/memory/postgres.ts` | Modified | Add 5 stub methods throwing "not implemented". |
-| `apps/cli/src/index.ts` | Modified | Import and register `memoryCommand` group. |
-| `apps/cli/src/commands/memory.ts` | New | Commander.js command group with 6 subcommands (list, search, show, delete, stats, clear). ~300-400 lines. |
-| `apps/cli/src/commands/memory.test.ts` | New | Unit tests for all subcommand handlers. Mock `SqliteMemoryStorage`. Test output formatting, error cases, confirmation prompts. |
+| Area                                      | Impact   | Description                                                                                                                                                                         |
+| ----------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/types.ts`              | Modified | Add `listObservations`, `getObservation`, `deleteObservation`, `getStats`, `clearObservations` to `MemoryStorage` interface. Add `MemoryObservationDetail` and `MemoryStats` types. |
+| `packages/core/src/memory/sqlite.ts`      | Modified | Implement 5 new methods. Add `obs_fts_delete` trigger to `SCHEMA_SQL`.                                                                                                              |
+| `packages/core/src/memory/sqlite.test.ts` | Modified | Add tests for all new methods: list with filters, get by id, get nonexistent, delete + FTS cleanup, stats aggregation, clear all, clear by project.                                 |
+| `apps/server/src/memory/postgres.ts`      | Modified | Add 5 stub methods throwing "not implemented".                                                                                                                                      |
+| `apps/cli/src/index.ts`                   | Modified | Import and register `memoryCommand` group.                                                                                                                                          |
+| `apps/cli/src/commands/memory.ts`         | New      | Commander.js command group with 6 subcommands (list, search, show, delete, stats, clear). ~300-400 lines.                                                                           |
+| `apps/cli/src/commands/memory.test.ts`    | New      | Unit tests for all subcommand handlers. Mock `SqliteMemoryStorage`. Test output formatting, error cases, confirmation prompts.                                                      |
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| FTS5 index corruption if `obs_fts_delete` trigger is missing on existing DBs | Medium | High | `CREATE TRIGGER IF NOT EXISTS` is idempotent — the trigger is added on next `SqliteMemoryStorage.create()` call (which runs `SCHEMA_SQL`). Existing DBs get the trigger automatically. No migration needed. Test explicitly with a DB created without the trigger, then opened with the new code. |
-| Adding methods to `MemoryStorage` interface is a breaking change for any external implementors | Very Low | Low | `MemoryStorage` is an internal interface — the only two implementors are `SqliteMemoryStorage` and `PostgresMemoryStorage`, both in this monorepo. The `ghagga-core` npm package exports the interface, but it's documented as internal and no external implementations are known. |
-| `readline/promises` confirmation prompt hangs in non-interactive environments (piped stdin) | Low | Medium | Detect non-TTY (`process.stdin.isTTY === false`) and either skip confirmation (treat as `--force`) or error with "use --force in non-interactive mode". This also makes the commands scriptable. |
-| `SqliteMemoryStorage.close()` writes unchanged DB to disk on read-only commands | Low | Low | Correct but wasteful (~1-5ms for small DBs). Acceptable for CLI latency. Can be optimized later with a dirty flag if profiling shows it matters. |
-| `DELETE FROM memory_observations` without `VACUUM` leaves DB file size unchanged | Low | Low | SQLite reuses freed pages for future inserts. The file doesn't shrink but doesn't grow either. A `VACUUM` after `clear` could reclaim space, but adds complexity. Document as known behavior; add `VACUUM` as a future optimization if users report large files. |
-| Commander.js subcommand group may conflict with `--help` or other global options | Very Low | Low | Commander.js handles nested subcommands well (tested in many CLIs). The `memory` command group inherits standard `--help` and `--version` from the parent. |
+| Risk                                                                                           | Likelihood | Impact | Mitigation                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FTS5 index corruption if `obs_fts_delete` trigger is missing on existing DBs                   | Medium     | High   | `CREATE TRIGGER IF NOT EXISTS` is idempotent — the trigger is added on next `SqliteMemoryStorage.create()` call (which runs `SCHEMA_SQL`). Existing DBs get the trigger automatically. No migration needed. Test explicitly with a DB created without the trigger, then opened with the new code. |
+| Adding methods to `MemoryStorage` interface is a breaking change for any external implementors | Very Low   | Low    | `MemoryStorage` is an internal interface — the only two implementors are `SqliteMemoryStorage` and `PostgresMemoryStorage`, both in this monorepo. The `ghagga-core` npm package exports the interface, but it's documented as internal and no external implementations are known.                |
+| `readline/promises` confirmation prompt hangs in non-interactive environments (piped stdin)    | Low        | Medium | Detect non-TTY (`process.stdin.isTTY === false`) and either skip confirmation (treat as `--force`) or error with "use --force in non-interactive mode". This also makes the commands scriptable.                                                                                                  |
+| `SqliteMemoryStorage.close()` writes unchanged DB to disk on read-only commands                | Low        | Low    | Correct but wasteful (~1-5ms for small DBs). Acceptable for CLI latency. Can be optimized later with a dirty flag if profiling shows it matters.                                                                                                                                                  |
+| `DELETE FROM memory_observations` without `VACUUM` leaves DB file size unchanged               | Low        | Low    | SQLite reuses freed pages for future inserts. The file doesn't shrink but doesn't grow either. A `VACUUM` after `clear` could reclaim space, but adds complexity. Document as known behavior; add `VACUUM` as a future optimization if users report large files.                                  |
+| Commander.js subcommand group may conflict with `--help` or other global options               | Very Low   | Low    | Commander.js handles nested subcommands well (tested in many CLIs). The `memory` command group inherits standard `--help` and `--version` from the parent.                                                                                                                                        |
 
 ## Rollback Plan
 
@@ -194,10 +191,10 @@ For `delete` and `clear`, `close()` MUST be called to persist the deletion to di
 
 ## Distribution Mode Impact
 
-| Mode | Impact |
-|------|--------|
-| **CLI** | Primary target — all 6 commands are CLI features |
-| **SaaS** | Minimal — PostgresMemoryStorage gets stub methods. No user-visible change. |
+| Mode              | Impact                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CLI**           | Primary target — all 6 commands are CLI features                                                                                                  |
+| **SaaS**          | Minimal — PostgresMemoryStorage gets stub methods. No user-visible change.                                                                        |
 | **GitHub Action** | No impact — Actions don't expose CLI commands. Memory management for Action-cached DBs is done by the user locally or via cache key invalidation. |
 
 ## Success Criteria

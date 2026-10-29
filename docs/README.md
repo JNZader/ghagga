@@ -6,13 +6,13 @@ GHAGGA is a code review tool that posts comments on pull requests. It combines L
 
 ## New Here? Start with Your Guide
 
-| Your situation | Start here |
-|---|---|
+| Your situation               | Start here                                                        |
+| ---------------------------- | ----------------------------------------------------------------- |
 | **I want the easiest setup** | [SaaS Guide (GitHub App)](saas-getting-started.md) ⭐ Recommended |
-| I want CI/CD integration | [GitHub Action](github-action.md) |
-| I want local CLI reviews | [CLI](cli.md) |
-| I want to self-host | [Self-Hosted (Docker)](self-hosted.md) |
-| I just want to explore | Keep reading below, then check [Quick Start](quick-start.md) |
+| I want CI/CD integration     | [GitHub Action](github-action.md)                                 |
+| I want local CLI reviews     | [CLI](cli.md)                                                     |
+| I want to self-host          | [Self-Hosted (Docker)](self-hosted.md)                            |
+| I just want to explore       | Keep reading below, then check [Quick Start](quick-start.md)      |
 
 ## How It Works
 
@@ -25,18 +25,18 @@ GHAGGA is a code review tool that posts comments on pull requests. It combines L
 
 ## Key Features
 
-| Feature | Description |
-|---------|-------------|
-| **6 Review Modes** | `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, `hybrid-4r` |
-| **17 Static Analysis Tools** | 7 always-on, 10 auto-detect. SonarQube runs only with MCP |
-| **Inline Static-Analysis Workflow** | Server injects `.github/workflows/ghagga.yml` into each target repo and dispatches it — no separate runner repo to provision |
-| **Project Memory** | Learns patterns, decisions, and bug fixes across reviews. 3 backends: PostgreSQL + tsvector (Server), SQLite + FTS5 (CLI & Action), Engram (optional cross-tool sharing) |
-| **3 Provider Modes** | `gateway`, `cli-bridge`, `ollama`. Legacy names such as `github` remap to `gateway` |
-| **4 Distribution Modes** | GitHub App, GitHub Action, CLI, self-hosted |
-| **Comment Trigger** | Type `ghagga review` on any PR to re-trigger a review on demand |
-| **PR explanations** | Opt-in `/ghagga explain <question>` replies on a GitHub PR comment. Finding-free; not a review mode. See [PR explanations](pr-explanations.md) |
-| **Dashboard** | React SPA at `/app/` on the Pages deploy — review history, stats, settings, memory browser |
-| **BYOK Security** | AES-256-GCM encryption, HMAC-SHA256 webhook verification, privacy stripping |
+| Feature                             | Description                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **6 Review Modes**                  | `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, `hybrid-4r`                                                                                                  |
+| **17 Static Analysis Tools**        | 7 always-on, 10 auto-detect. SonarQube runs only with MCP                                                                                                                |
+| **Inline Static-Analysis Workflow** | Server injects `.github/workflows/ghagga.yml` into each target repo and dispatches it — no separate runner repo to provision                                             |
+| **Project Memory**                  | Learns patterns, decisions, and bug fixes across reviews. 3 backends: PostgreSQL + tsvector (Server), SQLite + FTS5 (CLI & Action), Engram (optional cross-tool sharing) |
+| **3 Provider Modes**                | `gateway`, `cli-bridge`, `ollama`. Legacy names such as `github` remap to `gateway`                                                                                      |
+| **4 Distribution Modes**            | GitHub App, GitHub Action, CLI, self-hosted                                                                                                                              |
+| **Comment Trigger**                 | Type `ghagga review` on any PR to re-trigger a review on demand                                                                                                          |
+| **PR explanations**                 | Opt-in `/ghagga explain <question>` replies on a GitHub PR comment. Finding-free; not a review mode. See [PR explanations](pr-explanations.md)                           |
+| **Dashboard**                       | React SPA at `/app/` on the Pages deploy — review history, stats, settings, memory browser                                                                               |
+| **BYOK Security**                   | AES-256-GCM encryption, HMAC-SHA256 webhook verification, privacy stripping                                                                                              |
 
 ## Architecture at a Glance
 

@@ -54,9 +54,7 @@ The `--config` CLI flag expects a **file path**, not an inline JSON string. All 
 **Source code evidence** (`apps/cli/src/commands/review.ts` lines 166-177):
 ```typescript
 function loadConfigFile(repoPath: string, configPath?: string): GhaggaConfig {
-  const filePath = configPath
-    ? resolve(configPath)
-    : join(repoPath, '.ghagga.json');
+  const filePath = configPath ? resolve(configPath) : join(repoPath, '.ghagga.json');
   // ...
   const raw = readFileSync(filePath, 'utf-8');
   return JSON.parse(raw) as GhaggaConfig;
@@ -96,7 +94,7 @@ The consensus mode example in `docs/github-action.md` (lines 74-79) passes `api-
 **Source code evidence** (`apps/action/src/index.ts` lines 66-81):
 ```typescript
 if (provider === 'github') {
-  apiKey = apiKeyInput || githubToken;  // Ignores ANTHROPIC key
+  apiKey = apiKeyInput || githubToken; // Ignores ANTHROPIC key
 } else if (provider === 'ollama') {
   apiKey = apiKeyInput || 'ollama';
 } else {
@@ -207,7 +205,6 @@ The flow MUST include these steps in order:
 The `docs/github-action.md` guide MUST include a Troubleshooting section with at least 5 common issues.
 
 The section MUST cover:
-
 1. **"Resource not accessible by integration"** (token permissions)
    - Cause: `GITHUB_TOKEN` lacks write permission for PR comments
    - Fix: Add `permissions: pull-requests: write` to the workflow job, or check repo Settings → Actions → General → Workflow permissions
@@ -267,7 +264,7 @@ The documentation MUST show the `continue-on-error: true` workaround:
 ```yaml
 - uses: JNZader/ghagga@v2
   id: review
-  continue-on-error: true  # Don't fail CI on review findings
+  continue-on-error: true # Don't fail CI on review findings
 ```
 
 The documentation SHOULD explain the two usage patterns:
@@ -458,7 +455,6 @@ Currently only `review` is detailed. The other 3 commands MUST each have:
 ### R22 (P1): CLI Guide — Troubleshooting Section
 
 The `docs/cli.md` guide MUST include a Troubleshooting section with at least 6 common issues.
-
 1. **"command not found: ghagga"**
    - Cause: npm global bin directory not in PATH, or not installed
    - Fix: use `npx ghagga` instead, or check `npm config get prefix` and add to PATH
@@ -702,7 +698,6 @@ All code examples across ALL documentation files MUST be executable without erro
 ### CC5: Structural Quality Standard
 
 Both the `docs/github-action.md` and `docs/cli.md` guides MUST follow the same structural quality standard as `docs/saas-getting-started.md`:
-
 1. Prerequisites section
 2. Numbered step-by-step flow with verification checkpoints
 3. Mermaid flow diagram
@@ -744,25 +739,25 @@ All links in modified files MUST be valid. In particular:
 
 ## Acceptance Criteria Summary
 
-| ID | Priority | Requirement | Acceptance Criteria |
-|----|----------|-------------|-------------------|
-| R11 | P0 | Fix `@ghagga/cli` package name | Zero `@ghagga/cli` references in `apps/cli/README.md` |
-| R12 | P0 | Fix `--config` inline JSON | Zero `--config '{"...'` patterns in any doc file |
-| R13 | P0 | Fix consensus missing provider | All Action examples with non-GitHub API keys include `provider` |
-| R14 | P0 | Action prerequisites | Prerequisites section with 3 items at top of guide |
-| R15 | P0 | Action step-by-step flow | 4 numbered steps with verification checkpoints |
-| R16 | P1 | Action troubleshooting | 5+ troubleshooting scenarios with symptom/cause/fix |
-| R17 | P1 | Action FAILED status docs | `core.setFailed()` behavior documented, `continue-on-error` shown |
-| R18 | P1 | Action cost/output/diagram/next | Cost section, Mermaid diagram, expected output, Next Steps |
-| R19 | P0 | CLI prerequisites | Prerequisites with Node.js >=20, Git, GitHub account |
-| R20 | P0 | CLI step-by-step flow | 4 numbered steps with verification checkpoints |
-| R21 | P1 | CLI all 4 commands | `login`, `logout`, `status`, `review` each documented |
-| R22 | P1 | CLI troubleshooting | 6+ troubleshooting scenarios with symptom/cause/fix |
-| R23 | P1 | CLI config/output/env vars | Config path, `[path]` arg, example output, env var docs |
-| R24 | P1 | CLI cost/diagram/next | Cost section, Mermaid diagram, Next Steps |
-| R25 | P1 | CLI README missing providers | `ollama` and `qwen` in Options section |
-| R5-mod | P1 | Quick-start fix labels | Only SaaS marked "Recommended" |
-| R7-mod | P1 | Cost in Action + CLI | Cost sections in both guides |
-| CC4 | P0 | Bug-free examples | Zero broken examples across all docs |
-| CC5 | P1 | Structural quality | Both guides have all 8 quality elements |
-| CC1-ext | P1 | Link integrity | Zero broken cross-links |
+| ID      | Priority | Requirement                     | Acceptance Criteria                                               |
+| ------- | -------- | ------------------------------- | ----------------------------------------------------------------- |
+| R11     | P0       | Fix `@ghagga/cli` package name  | Zero `@ghagga/cli` references in `apps/cli/README.md`             |
+| R12     | P0       | Fix `--config` inline JSON      | Zero `--config '{"...'` patterns in any doc file                  |
+| R13     | P0       | Fix consensus missing provider  | All Action examples with non-GitHub API keys include `provider`   |
+| R14     | P0       | Action prerequisites            | Prerequisites section with 3 items at top of guide                |
+| R15     | P0       | Action step-by-step flow        | 4 numbered steps with verification checkpoints                    |
+| R16     | P1       | Action troubleshooting          | 5+ troubleshooting scenarios with symptom/cause/fix               |
+| R17     | P1       | Action FAILED status docs       | `core.setFailed()` behavior documented, `continue-on-error` shown |
+| R18     | P1       | Action cost/output/diagram/next | Cost section, Mermaid diagram, expected output, Next Steps        |
+| R19     | P0       | CLI prerequisites               | Prerequisites with Node.js >=20, Git, GitHub account              |
+| R20     | P0       | CLI step-by-step flow           | 4 numbered steps with verification checkpoints                    |
+| R21     | P1       | CLI all 4 commands              | `login`, `logout`, `status`, `review` each documented             |
+| R22     | P1       | CLI troubleshooting             | 6+ troubleshooting scenarios with symptom/cause/fix               |
+| R23     | P1       | CLI config/output/env vars      | Config path, `[path]` arg, example output, env var docs           |
+| R24     | P1       | CLI cost/diagram/next           | Cost section, Mermaid diagram, Next Steps                         |
+| R25     | P1       | CLI README missing providers    | `ollama` and `qwen` in Options section                            |
+| R5-mod  | P1       | Quick-start fix labels          | Only SaaS marked "Recommended"                                    |
+| R7-mod  | P1       | Cost in Action + CLI            | Cost sections in both guides                                      |
+| CC4     | P0       | Bug-free examples               | Zero broken examples across all docs                              |
+| CC5     | P1       | Structural quality              | Both guides have all 8 quality elements                           |
+| CC1-ext | P1       | Link integrity                  | Zero broken cross-links                                           |

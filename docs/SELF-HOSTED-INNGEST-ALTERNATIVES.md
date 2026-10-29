@@ -18,6 +18,7 @@
 ## Opción 1: BullMQ + Redis (⭐ RECOMENDADA para GHAGGA)
 
 ### ¿Qué es?
+
 - **BullMQ**: Librería Node.js para queues basada en Redis
 - Usada por empresas como Adobe, Twitch, Elastic
 - Más rápida que Inngest (menos overhead de red)
@@ -49,6 +50,7 @@
 ### Implementación:
 
 #### 1. Crear Redis en Coolify
+
 ```yaml
 # docker-compose.yml para Redis
 services:
@@ -67,18 +69,20 @@ volumes:
 ```
 
 #### 2. Instalar BullMQ en GHAGGA
+
 ```bash
 pnpm add bullmq ioredis
 ```
 
 #### 3. Crear Queue y Worker
+
 ```typescript
 // src/queues/review.ts
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 
 const connection = new IORedis({
-  host: 'redis',  // nombre del servicio en docker-compose
+  host: 'redis', // nombre del servicio en docker-compose
   port: 6379,
   maxRetriesPerRequest: null,
 });
@@ -87,27 +91,31 @@ const connection = new IORedis({
 export const reviewQueue = new Queue('review', { connection });
 
 // Crear worker
-export const reviewWorker = new Worker('review', async (job) => {
-  const { reviewId, repoFullName, prNumber } = job.data;
-  
-  // Aquí va toda la lógica de review
-  // (lo que ahora hace Inngest)
-  await runReviewWorkflow({
-    reviewId,
-    repoFullName,
-    prNumber,
-  });
-  
-  return { success: true };
-}, {
-  connection,
-  concurrency: 5,  // procesar 5 reviews en paralelo
-  attempts: 3,     // retry 3 veces
-  backoff: {
-    type: 'exponential',
-    delay: 1000,
+export const reviewWorker = new Worker(
+  'review',
+  async (job) => {
+    const { reviewId, repoFullName, prNumber } = job.data;
+
+    // Aquí va toda la lógica de review
+    // (lo que ahora hace Inngest)
+    await runReviewWorkflow({
+      reviewId,
+      repoFullName,
+      prNumber,
+    });
+
+    return { success: true };
   },
-});
+  {
+    connection,
+    concurrency: 5, // procesar 5 reviews en paralelo
+    attempts: 3, // retry 3 veces
+    backoff: {
+      type: 'exponential',
+      delay: 1000,
+    },
+  },
+);
 
 // Agregar job desde webhook
 export async function enqueueReview(data: ReviewData) {
@@ -124,6 +132,7 @@ export async function enqueueReview(data: ReviewData) {
 ```
 
 #### 4. Reemplazar Inngest en webhook
+
 ```typescript
 // Antes (con Inngest)
 await inngest.send({
@@ -140,6 +149,7 @@ await enqueueReview({
 ```
 
 #### 5. Cron jobs (reemplazar Inngest scheduling)
+
 ```typescript
 // src/cleanup.ts
 import { Queue } from 'bullmq';
@@ -151,13 +161,18 @@ import cron from 'node-cron';
 
 // Ejecutar todos los días a las 3 AM
 cron.schedule('0 3 * * *', async () => {
-  await cleanupQueue.add('cleanup-old-reviews', {}, {
-    repeat: { cron: '0 3 * * *' },
-  });
+  await cleanupQueue.add(
+    'cleanup-old-reviews',
+    {},
+    {
+      repeat: { cron: '0 3 * * *' },
+    },
+  );
 });
 ```
 
 ### Ventajas de BullMQ:
+
 - ✅ **Velocidad**: Redis en localhost = 0ms latency
 - ✅ **Costo**: $0 (Redis corre en tu VPS)
 - ✅ **Control total**: Tuyo, no depende de Inngest
@@ -176,7 +191,7 @@ Coolify tiene **Jobs** integrados para tareas programadas:
 # Ejecuta comandos en containers en horarios específicos
 
 # Ejemplo: Cleanup diario
-schedule: "0 3 * * *"  # 3 AM todos los días
+schedule: "0 3 * * *" # 3 AM todos los días
 command: "node scripts/cleanup.js"
 ```
 
@@ -210,17 +225,17 @@ services:
 
 ## Comparativa: Inngest vs BullMQ vs Coolify Jobs
 
-| Feature | Inngest (SaaS) | BullMQ + Redis | Coolify Jobs |
-|---------|----------------|----------------|--------------|
-| **Costo** | $0-50/mes | $0 (tu Redis) | $0 |
-| **Latencia** | 50-200ms | 0-1ms | 0ms |
-| **Colas** | ✅ Sí | ✅ Sí | ❌ No |
-| **Retries** | ✅ Automático | ✅ Configurable | ❌ Manual |
-| **Cron jobs** | ✅ Sí | ✅ Sí | ✅ Sí |
-| **Dashboard UI** | ✅ Web | ✅ Bull Dashboard | ❌ Logs only |
-| **Durabilidad** | ✅ Alta | ✅ Alta (Redis AOF) | ❌ Baja |
-| **Escalabilidad** | ✅ Cloud | ✅ Horizontal | ❌ Vertical only |
-| **Vendor lock-in** | ✅ Sí (Inngest) | ❌ No | ❌ No |
+| Feature            | Inngest (SaaS)  | BullMQ + Redis      | Coolify Jobs     |
+| ------------------ | --------------- | ------------------- | ---------------- |
+| **Costo**          | $0-50/mes       | $0 (tu Redis)       | $0               |
+| **Latencia**       | 50-200ms        | 0-1ms               | 0ms              |
+| **Colas**          | ✅ Sí           | ✅ Sí               | ❌ No            |
+| **Retries**        | ✅ Automático   | ✅ Configurable     | ❌ Manual        |
+| **Cron jobs**      | ✅ Sí           | ✅ Sí               | ✅ Sí            |
+| **Dashboard UI**   | ✅ Web          | ✅ Bull Dashboard   | ❌ Logs only     |
+| **Durabilidad**    | ✅ Alta         | ✅ Alta (Redis AOF) | ❌ Baja          |
+| **Escalabilidad**  | ✅ Cloud        | ✅ Horizontal       | ❌ Vertical only |
+| **Vendor lock-in** | ✅ Sí (Inngest) | ❌ No               | ❌ No            |
 
 ---
 
@@ -272,7 +287,7 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
-    command: node dist/worker.js  # entrypoint del worker
+    command: node dist/worker.js # entrypoint del worker
     environment:
       - DATABASE_URL=postgresql://ghagga:password@postgres:5432/ghagga
       - REDIS_URL=redis://redis:6379
@@ -283,7 +298,7 @@ services:
       - redis
     restart: unless-stopped
     deploy:
-      replicas: 2  # 2 workers en paralelo
+      replicas: 2 # 2 workers en paralelo
 
   # Dashboard de Bull (opcional, para monitoreo)
   bull-dashboard:
@@ -314,12 +329,14 @@ volumes:
 ## Migración desde Inngest
 
 ### Paso 1: Instalar dependencias
+
 ```bash
 pnpm remove inngest
 pnpm add bullmq ioredis node-cron
 ```
 
 ### Paso 2: Reemplazar imports
+
 ```typescript
 // Antes
 import { Inngest } from 'inngest';
@@ -330,6 +347,7 @@ import Redis from 'ioredis';
 ```
 
 ### Paso 3: Reemplazar funciones
+
 ```typescript
 // Antes (Inngest)
 export const reviewFunction = inngest.createFunction(
@@ -367,6 +385,7 @@ export const reviewWorker = new Worker('review', async (job) => {
 ```
 
 ### Paso 4: Reemplazar event triggers
+
 ```typescript
 // Antes
 await inngest.send({
@@ -375,18 +394,23 @@ await inngest.send({
 });
 
 // Después
-await reviewQueue.add('process-review', {
-  reviewId,
-  repoFullName,
-  prNumber,
-}, {
-  priority: 1,
-  attempts: 3,
-  backoff: { type: 'exponential', delay: 1000 },
-});
+await reviewQueue.add(
+  'process-review',
+  {
+    reviewId,
+    repoFullName,
+    prNumber,
+  },
+  {
+    priority: 1,
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 1000 },
+  },
+);
 ```
 
 ### Paso 5: Eliminar Inngest
+
 - Borrar `/api/inngest` endpoint
 - Borrar `INNGEST_EVENT_KEY` y `INNGEST_SIGNING_KEY` de variables
 - Desuscribirse de Inngest Cloud (si tenías plan pago)
@@ -395,15 +419,15 @@ await reviewQueue.add('process-review', {
 
 ## Costo Total Self-Hosted
 
-| Componente | Costo | Incluye |
-|------------|-------|---------|
-| **VPS Hetzner CX21** | $6.55/mes | 2 vCPU, 4 GB RAM, 40 GB SSD |
-| **PostgreSQL** | $0 | Tu propia instancia |
-| **Redis** | $0 | Tu propia instancia |
-| **BullMQ** | $0 | Open source |
-| **Dominio** | ~$1/mes | .com o similar |
-| **Cloudflare** | $0 | Free tier |
-| **TOTAL** | **~$7.55/mes** | Todo incluido, ilimitado |
+| Componente           | Costo          | Incluye                     |
+| -------------------- | -------------- | --------------------------- |
+| **VPS Hetzner CX21** | $6.55/mes      | 2 vCPU, 4 GB RAM, 40 GB SSD |
+| **PostgreSQL**       | $0             | Tu propia instancia         |
+| **Redis**            | $0             | Tu propia instancia         |
+| **BullMQ**           | $0             | Open source                 |
+| **Dominio**          | ~$1/mes        | .com o similar              |
+| **Cloudflare**       | $0             | Free tier                   |
+| **TOTAL**            | **~$7.55/mes** | Todo incluido, ilimitado    |
 
 **vs Inngest + Neon + Render:**
 - Inngest: $0-20/mes

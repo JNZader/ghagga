@@ -7,6 +7,7 @@ Users who install the GHAGGA GitHub App across multiple repositories must curren
 ## Scope
 
 ### In Scope
+
 - New `installation_settings` table with its own `provider_chain`, `ai_review_enabled`, `review_mode`, and shared `settings` (static analysis toggles, ignore patterns, custom rules)
 - New server API routes: `GET/PUT /api/installation-settings`
 - New dashboard page: **Global Settings** — accessible from the sidebar, configures the installation-level defaults
@@ -15,6 +16,7 @@ Users who install the GHAGGA GitHub App across multiple repositories must curren
 - Migration: existing per-repo provider chains stay as-is (repos that already have a chain configured will be treated as having custom overrides)
 
 ### Out of Scope
+
 - Multi-installation support in the Global Settings page (one page per installation; users with multiple installations pick which one to configure)
 - CLI/Action global settings (they configure per-invocation via flags/env vars)
 - Settings templates or presets
@@ -45,27 +47,27 @@ This is explicit, easy to reason about, and doesn't change any existing per-repo
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/db/src/schema.ts` | New | Add `installationSettings` table definition |
-| `packages/db/src/queries.ts` | Modified | Add `getInstallationSettings`, `upsertInstallationSettings` queries. Modify repo queries to include `useGlobalSettings`. |
-| `packages/db/drizzle/0003_*.sql` | New | Migration to create `installation_settings` table + add `use_global_settings` column to `repositories` |
-| `apps/server/src/routes/api.ts` | Modified | Add `GET/PUT /api/installation-settings` routes. Modify `GET /api/settings` to include `useGlobalSettings` + resolved global values. |
-| `apps/server/src/routes/webhook.ts` | Modified | Resolve effective settings (repo vs installation) before dispatching Inngest event |
-| `apps/dashboard/src/lib/types.ts` | Modified | Add `InstallationSettings` type, update `RepositorySettings` with `useGlobalSettings` |
-| `apps/dashboard/src/lib/api.ts` | Modified | Add `useInstallationSettings`, `useUpdateInstallationSettings` hooks |
-| `apps/dashboard/src/pages/GlobalSettings.tsx` | New | Installation-level settings page |
-| `apps/dashboard/src/pages/Settings.tsx` | Modified | Add "Use global settings" toggle, read-only inherited view |
-| `apps/dashboard/src/components/Layout.tsx` | Modified | Add "Global Settings" to sidebar nav |
+| Area                                          | Impact   | Description                                                                                                                          |
+| --------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/db/src/schema.ts`                   | New      | Add `installationSettings` table definition                                                                                          |
+| `packages/db/src/queries.ts`                  | Modified | Add `getInstallationSettings`, `upsertInstallationSettings` queries. Modify repo queries to include `useGlobalSettings`.             |
+| `packages/db/drizzle/0003_*.sql`              | New      | Migration to create `installation_settings` table + add `use_global_settings` column to `repositories`                               |
+| `apps/server/src/routes/api.ts`               | Modified | Add `GET/PUT /api/installation-settings` routes. Modify `GET /api/settings` to include `useGlobalSettings` + resolved global values. |
+| `apps/server/src/routes/webhook.ts`           | Modified | Resolve effective settings (repo vs installation) before dispatching Inngest event                                                   |
+| `apps/dashboard/src/lib/types.ts`             | Modified | Add `InstallationSettings` type, update `RepositorySettings` with `useGlobalSettings`                                                |
+| `apps/dashboard/src/lib/api.ts`               | Modified | Add `useInstallationSettings`, `useUpdateInstallationSettings` hooks                                                                 |
+| `apps/dashboard/src/pages/GlobalSettings.tsx` | New      | Installation-level settings page                                                                                                     |
+| `apps/dashboard/src/pages/Settings.tsx`       | Modified | Add "Use global settings" toggle, read-only inherited view                                                                           |
+| `apps/dashboard/src/components/Layout.tsx`    | Modified | Add "Global Settings" to sidebar nav                                                                                                 |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Existing repos with provider_chain lose their config | Low | Migration sets `use_global_settings = false` for repos that already have a non-empty `provider_chain`. Empty-chain repos get `true`. |
-| Confusion about which settings are active | Medium | Dashboard clearly shows "Inherited from Global" badge with current values. Toggle makes it explicit. |
-| Installation settings not found (new installations) | Low | Lazy-create: if no `installation_settings` row exists, use sensible defaults (same as current repo defaults). API creates the row on first save. |
-| User has multiple installations | Low | Dashboard installation selector (already scoped by `user.installationIds`). Global Settings operates on the selected installation. |
+| Risk                                                 | Likelihood | Mitigation                                                                                                                                       |
+| ---------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Existing repos with provider_chain lose their config | Low        | Migration sets `use_global_settings = false` for repos that already have a non-empty `provider_chain`. Empty-chain repos get `true`.             |
+| Confusion about which settings are active            | Medium     | Dashboard clearly shows "Inherited from Global" badge with current values. Toggle makes it explicit.                                             |
+| Installation settings not found (new installations)  | Low        | Lazy-create: if no `installation_settings` row exists, use sensible defaults (same as current repo defaults). API creates the row on first save. |
+| User has multiple installations                      | Low        | Dashboard installation selector (already scoped by `user.installationIds`). Global Settings operates on the selected installation.               |
 
 ## Rollback Plan
 

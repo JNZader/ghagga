@@ -10,11 +10,11 @@ Run a project health assessment from the command line. The `ghagga health` comma
 ghagga health [path]
 ```
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `[path]` | `.` | Path to repository or subdirectory |
-| `--top <n>` | `5` | Number of top issues to display |
-| `--output json` | — | Inherits global `--output` flag for JSON output |
+| Option          | Default | Description                                     |
+| --------------- | ------- | ----------------------------------------------- |
+| `[path]`        | `.`     | Path to repository or subdirectory              |
+| `--top <n>`     | `5`     | Number of top issues to display                 |
+| `--output json` | —       | Inherits global `--output` flag for JSON output |
 
 ---
 
@@ -29,13 +29,13 @@ not a recorded score for this repository.
 
 ### Grading Scale
 
-| Grade | Score | Meaning |
-|-------|-------|---------|
-| **A** | 80-100 | Excellent — few or no issues |
-| **B** | 60-79 | Good — minor issues present |
-| **C** | 40-59 | Fair — several issues need attention |
-| **D** | 20-39 | Poor — significant issues detected |
-| **F** | 0-19 | Critical — immediate action required |
+| Grade | Score  | Meaning                              |
+| ----- | ------ | ------------------------------------ |
+| **A** | 80-100 | Excellent — few or no issues         |
+| **B** | 60-79  | Good — minor issues present          |
+| **C** | 40-59  | Fair — several issues need attention |
+| **D** | 20-39  | Poor — significant issues detected   |
+| **F** | 0-19   | Critical — immediate action required |
 
 ---
 

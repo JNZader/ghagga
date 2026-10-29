@@ -21,7 +21,6 @@ The extracted function MUST produce byte-for-byte identical output to the curren
 ### R3: Consumer Migration
 
 Both consumers MUST import `formatReviewComment` from `ghagga-core`:
-
 - `apps/server/src/inngest/review.ts` — currently defines locally at line 48
 - `apps/action/src/index.ts` — currently defines locally at line 221
 
@@ -29,19 +28,18 @@ Both consumers MUST import `formatReviewComment` from `ghagga-core`:
 
 The following helper constants MUST be co-located with `formatReviewComment` in `packages/core/src/format.ts`:
 
-| Constant | Type | Scope |
-|----------|------|-------|
-| `STATUS_EMOJI` | `Record<ReviewStatus, string>` | Module-level export |
-| `SEVERITY_EMOJI` | `Record<string, string>` | Module-level export |
-| `SOURCE_LABELS` | `Record<string, string>` | Function-local (not exported) |
-| `renderOrder` | `string[]` | Function-local (not exported) |
+| Constant         | Type                           | Scope                         |
+| ---------------- | ------------------------------ | ----------------------------- |
+| `STATUS_EMOJI`   | `Record<ReviewStatus, string>` | Module-level export           |
+| `SEVERITY_EMOJI` | `Record<string, string>`       | Module-level export           |
+| `SOURCE_LABELS`  | `Record<string, string>`       | Function-local (not exported) |
+| `renderOrder`    | `string[]`                     | Function-local (not exported) |
 
 `STATUS_EMOJI` and `SEVERITY_EMOJI` MUST be exported for consumers that may need them independently. `SOURCE_LABELS` and `renderOrder` MUST remain function-local as they are implementation details.
 
 ### R5: No Dead Code
 
 After migration, the duplicate implementations MUST be completely removed:
-
 - `apps/server/src/inngest/review.ts` lines 31-118 (constants + function)
 - `apps/action/src/index.ts` lines 200-291 (constants + function + JSDoc comment)
 
@@ -50,7 +48,6 @@ No orphaned imports related to these removed definitions SHALL remain.
 ### R6: Test Coverage
 
 Direct unit tests for `formatReviewComment` MUST exist in `packages/core/src/format.test.ts`. These tests MUST cover:
-
 - Findings table rendering with grouped sources
 - Empty findings (no table rendered)
 - All four `ReviewStatus` variants: `PASSED`, `FAILED`, `NEEDS_HUMAN_REVIEW`, `SKIPPED`
@@ -75,12 +72,12 @@ This follows the established convention visible at `packages/core/src/index.ts:8
 
 The function MUST use only types already exported from `ghagga-core`. Required types and their locations:
 
-| Type | Defined at |
-|------|-----------|
-| `ReviewResult` | `packages/core/src/types.ts:141` |
-| `ReviewStatus` | `packages/core/src/types.ts:137` |
+| Type              | Defined at                       |
+| ----------------- | -------------------------------- |
+| `ReviewResult`    | `packages/core/src/types.ts:141` |
+| `ReviewStatus`    | `packages/core/src/types.ts:137` |
 | `FindingSeverity` | `packages/core/src/types.ts:138` |
-| `FindingSource` | `packages/core/src/types.ts:139` |
+| `FindingSource`   | `packages/core/src/types.ts:139` |
 
 No new type definitions are needed.
 

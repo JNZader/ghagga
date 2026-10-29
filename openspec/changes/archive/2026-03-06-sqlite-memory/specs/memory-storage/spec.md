@@ -35,10 +35,7 @@ export interface MemoryStorage {
     filePaths?: string[];
   }): Promise<MemoryObservationRow>;
 
-  createSession(data: {
-    project: string;
-    prNumber?: number;
-  }): Promise<{ id: number }>;
+  createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }>;
 
   endSession(sessionId: number, summary: string): Promise<void>;
 
@@ -171,13 +168,13 @@ The `file_paths` column MUST store data as a JSON-encoded string (e.g., `'["src/
 
 The system MUST provide a `PostgresMemoryStorage` class in `apps/server/src/memory/postgres.ts` that implements the `MemoryStorage` interface by wrapping existing `ghagga-db` query functions:
 
-| Interface Method | Delegates To |
-|---|---|
-| `searchObservations` | `ghagga-db.searchObservations` |
-| `saveObservation` | `ghagga-db.saveObservation` |
-| `createSession` | `ghagga-db.createMemorySession` |
-| `endSession` | `ghagga-db.endMemorySession` |
-| `close` | No-op (PostgreSQL connection is managed externally) |
+| Interface Method     | Delegates To                                        |
+| -------------------- | --------------------------------------------------- |
+| `searchObservations` | `ghagga-db.searchObservations`                      |
+| `saveObservation`    | `ghagga-db.saveObservation`                         |
+| `createSession`      | `ghagga-db.createMemorySession`                     |
+| `endSession`         | `ghagga-db.endMemorySession`                        |
+| `close`              | No-op (PostgreSQL connection is managed externally) |
 
 The constructor MUST accept the Drizzle `Database` instance (the existing `db` parameter used throughout the server).
 
@@ -337,7 +334,6 @@ When `memoryStorage` is `undefined`, the pipeline MUST behave identically to the
 ### CC1: Graceful Degradation
 
 If memory initialization fails at any point (file permission errors, WASM load failure, sql.js import failure, corrupted database file, etc.), the review MUST still proceed without memory. Specifically:
-
 - `SqliteMemoryStorage.create()` SHOULD be wrapped in a try/catch at the call site (CLI and Action). On failure, `memoryStorage` MUST be set to `undefined` and a warning MUST be logged.
 - The pipeline's existing graceful degradation in `searchMemorySafe` and `persistReviewObservations` MUST remain: errors are caught, logged as warnings, and the pipeline continues.
 - Memory failures MUST NOT cause the review to fail or throw.
@@ -345,7 +341,6 @@ If memory initialization fails at any point (file permission errors, WASM load f
 ### CC2: sql.js WASM Loading
 
 The sql.js WASM binary (~1MB) MUST be loadable in both environments:
-
 - **CLI** (direct Node.js): sql.js loads its WASM binary from its npm package's `dist/` directory by default. This MUST work without special configuration.
 - **Action** (ncc-bundled): The Action uses `@vercel/ncc` for bundling. The WASM binary MUST be included as an asset. If ncc cannot inline the WASM, the `locateFile` option of sql.js MUST be used to load it from a known sibling path.
 

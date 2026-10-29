@@ -117,6 +117,7 @@
 
 - [x] **4.1** Add lint step to `.github/workflows/ci.yml`
   - Add a new `lint` job that runs BEFORE the `test` job:
+
     ```yaml
     lint:
       name: Lint
@@ -171,14 +172,14 @@
 
 ## Summary
 
-| Phase | Tasks | Focus | Spec Requirements |
-|-------|-------|-------|-------------------|
-| Phase 1 | 4 | Setup (install, config, scripts, turbo) | R1, R2 |
-| Phase 2 | 3 | Initial Fix (assess, auto-fix, manual fix) | R4 |
-| Phase 3 | 3 | Audit Quick Fixes (logger, env vars) | R5a, R5b |
-| Phase 4 | 1 | CI Integration | R3 |
-| Phase 5 | 3 | Verification (lint, tests, CI config) | R4, R3 |
-| **Total** | **14** | | |
+| Phase     | Tasks  | Focus                                      | Spec Requirements |
+| --------- | ------ | ------------------------------------------ | ----------------- |
+| Phase 1   | 4      | Setup (install, config, scripts, turbo)    | R1, R2            |
+| Phase 2   | 3      | Initial Fix (assess, auto-fix, manual fix) | R4                |
+| Phase 3   | 3      | Audit Quick Fixes (logger, env vars)       | R5a, R5b          |
+| Phase 4   | 1      | CI Integration                             | R3                |
+| Phase 5   | 3      | Verification (lint, tests, CI config)      | R4, R3            |
+| **Total** | **14** |                                            |                   |
 
 ## Dependency Graph
 

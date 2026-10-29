@@ -31,7 +31,6 @@ This change proposes a new GHAGGA capability: **Delegated CI**. GHAGGA becomes t
 ## Approach
 
 The proposal extends GHAGGA's existing delegated runner architecture into a more general delegated execution capability while preserving the same core separation of responsibilities:
-
 - GHAGGA remains the **platform/orchestrator** that decides whether a repository is eligible, which jobs are delegable, how execution is configured, and how results are correlated back into GHAGGA.
 - The public runner repository remains a **controlled execution surface** for approved delegated work.
 - Private repositories remain the **source of truth** for code and for all jobs that are classified as sensitive or non-delegable.
@@ -39,7 +38,6 @@ The proposal extends GHAGGA's existing delegated runner architecture into a more
 The MVP should be shaped around an explicit trust model rather than convenience. Delegation is only allowed when a repository configuration marks a job as `safe/delegable` and the execution contract proves that the job does not require sensitive secrets, privileged environment access, or high-risk side effects.
 
 At a high level, GHAGGA would:
-
 1. Allow per-repository configuration of eligible delegated CI jobs.
 2. Validate that a requested job belongs to the `safe/delegable` class.
 3. Dispatch that job through the existing runner/orchestrator pattern.
@@ -47,7 +45,6 @@ At a high level, GHAGGA would:
 5. Refuse delegation for jobs that are sensitive, ambiguous, or violate the MVP safety contract.
 
 This proposal intentionally preserves compatibility with GHAGGA's four distribution modes:
-
 - **SaaS**: primary target for delegated CI orchestration.
 - **Action**: no delegated-CI migration required for the MVP; native repo execution remains valid.
 - **CLI**: unchanged; local workflows remain local.
@@ -55,32 +52,31 @@ This proposal intentionally preserves compatibility with GHAGGA's four distribut
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `apps/server/` | Modified | Extend server-side orchestration, repository settings evaluation, dispatch, callback correlation, and policy enforcement for delegated CI jobs. |
-| `apps/dashboard/` | Modified | Add repository-level configuration surfaces for delegated CI enablement, job classification, and safety constraints. |
-| `packages/core/` | Modified | Reuse or extend execution/result types so delegated CI results and status can be modeled consistently with existing runner patterns. |
-| `templates/ghagga-analysis.yml` or successor runner workflow template(s) | Modified/New | Evolve the runner workflow template to support delegated CI execution contracts beyond static analysis. |
-| `docs/runner-architecture.md` | Modified | Document how delegated CI builds on the current runner model and where the new safety boundaries apply. |
-| `docs/security.md` | Modified | Define security guarantees and limitations for delegated CI logs, artifacts, caches, tokens, and secrets. |
-| `.github/workflows/` | Possibly modified | Internal GHAGGA workflows or validation jobs may need updates if the capability introduces new templates or contract checks. |
-| `apps/action/`, `apps/cli/` | Unchanged for MVP | Existing local/native execution modes remain supported and are not migrated by this proposal. |
+| Area                                                                     | Impact            | Description                                                                                                                                     |
+| ------------------------------------------------------------------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/server/`                                                           | Modified          | Extend server-side orchestration, repository settings evaluation, dispatch, callback correlation, and policy enforcement for delegated CI jobs. |
+| `apps/dashboard/`                                                        | Modified          | Add repository-level configuration surfaces for delegated CI enablement, job classification, and safety constraints.                            |
+| `packages/core/`                                                         | Modified          | Reuse or extend execution/result types so delegated CI results and status can be modeled consistently with existing runner patterns.            |
+| `templates/ghagga-analysis.yml` or successor runner workflow template(s) | Modified/New      | Evolve the runner workflow template to support delegated CI execution contracts beyond static analysis.                                         |
+| `docs/runner-architecture.md`                                            | Modified          | Document how delegated CI builds on the current runner model and where the new safety boundaries apply.                                         |
+| `docs/security.md`                                                       | Modified          | Define security guarantees and limitations for delegated CI logs, artifacts, caches, tokens, and secrets.                                       |
+| `.github/workflows/`                                                     | Possibly modified | Internal GHAGGA workflows or validation jobs may need updates if the capability introduces new templates or contract checks.                    |
+| `apps/action/`, `apps/cli/`                                              | Unchanged for MVP | Existing local/native execution modes remain supported and are not migrated by this proposal.                                                   |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Misclassifying a sensitive job as delegable | Medium | Require explicit per-repo classification, conservative defaults, and policy validation before dispatch. |
-| Private data leakage through logs, artifacts, or caches in the public runner repo | Medium | Treat logs/artifacts/caches as first-class security surfaces; minimize output, redact aggressively, constrain retention, and define safe artifact rules. |
-| Delegated jobs implicitly depending on secrets or privileged environment state | High | MVP allows only jobs that can run with tightly scoped ephemeral credentials or no sensitive secrets at all. |
-| Scope creep into full CI replacement | High | Keep proposal language, spec boundaries, and success criteria focused on limited `safe/delegable` workloads only. |
-| Existing runner architecture not being sufficient for more general CI orchestration | Medium | Reuse the current pattern as the baseline, but validate the abstraction and expand only where the MVP proves the model. |
-| User confusion about what GHAGGA will and will not delegate | Medium | Make classification explicit in docs and configuration UI, with clear examples of allowed vs blocked jobs. |
+| Risk                                                                                | Likelihood | Mitigation                                                                                                                                               |
+| ----------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Misclassifying a sensitive job as delegable                                         | Medium     | Require explicit per-repo classification, conservative defaults, and policy validation before dispatch.                                                  |
+| Private data leakage through logs, artifacts, or caches in the public runner repo   | Medium     | Treat logs/artifacts/caches as first-class security surfaces; minimize output, redact aggressively, constrain retention, and define safe artifact rules. |
+| Delegated jobs implicitly depending on secrets or privileged environment state      | High       | MVP allows only jobs that can run with tightly scoped ephemeral credentials or no sensitive secrets at all.                                              |
+| Scope creep into full CI replacement                                                | High       | Keep proposal language, spec boundaries, and success criteria focused on limited `safe/delegable` workloads only.                                        |
+| Existing runner architecture not being sufficient for more general CI orchestration | Medium     | Reuse the current pattern as the baseline, but validate the abstraction and expand only where the MVP proves the model.                                  |
+| User confusion about what GHAGGA will and will not delegate                         | Medium     | Make classification explicit in docs and configuration UI, with clear examples of allowed vs blocked jobs.                                               |
 
 ## Rollback Plan
 
 This change should be rolled out behind configuration and capability checks so rollback is primarily a control-plane action rather than a destructive migration.
-
 1. Disable Delegated CI at the platform or repository level.
 2. Stop dispatching delegated CI jobs while preserving the existing delegated static-analysis path.
 3. Revert any runner template additions specific to delegated CI.
@@ -106,9 +102,9 @@ Rollback should not require data migration. The safe fallback is to keep GHAGGA 
 
 ## Distribution Mode Impact
 
-| Mode | Impact | Notes |
-|------|--------|-------|
-| **SaaS** | Major change | GHAGGA becomes the orchestrator for approved delegated CI jobs in private repos. |
-| **Action** | No MVP change | Native GitHub Actions execution in the target repo remains the default for sensitive or non-delegable jobs. |
-| **CLI** | No change | Local execution stays local; delegated CI is not a CLI concern in the MVP. |
-| **1-click deploy / self-hosted** | Deferred | Capability should remain conceptually compatible, but MVP delivery can focus on SaaS first. |
+| Mode                             | Impact        | Notes                                                                                                       |
+| -------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------- |
+| **SaaS**                         | Major change  | GHAGGA becomes the orchestrator for approved delegated CI jobs in private repos.                            |
+| **Action**                       | No MVP change | Native GitHub Actions execution in the target repo remains the default for sensitive or non-delegable jobs. |
+| **CLI**                          | No change     | Local execution stays local; delegated CI is not a CLI concern in the MVP.                                  |
+| **1-click deploy / self-hosted** | Deferred      | Capability should remain conceptually compatible, but MVP delivery can focus on SaaS first.                 |

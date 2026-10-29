@@ -2,7 +2,7 @@
 
 **Status**: draft  
 **Proposal**: [proposal.md](./proposal.md)  
-**Date**: 2026-03-16  
+**Date**: 2026-03-16
 
 ## Requirements
 
@@ -81,34 +81,34 @@ API keys for new providers MUST be handled identically to existing ones (AES-256
 **And** enter their API key and click "Validate"  
 **Then** the system calls `GET https://api.groq.com/openai/v1/models` with Bearer auth  
 **And** returns a filtered list of chat-capable models  
-**And** the user can select a model and save the configuration  
+**And** the user can select a model and save the configuration
 
 ### S2: Provider chain fallback with new providers
 
 **Given** a repo configured with chain: [DeepSeek (primary), Groq (fallback)]  
 **When** a PR is opened and DeepSeek returns a retryable error  
 **Then** the pipeline falls back to Groq  
-**And** the review completes using the Groq provider  
+**And** the review completes using the Groq provider
 
 ### S3: CLI usage with new providers
 
 **Given** a user running `ghagga review --provider cerebras --model gpt-oss-120b`  
 **When** the review executes  
 **Then** `createModel('cerebras', 'gpt-oss-120b', apiKey)` produces a valid LanguageModel  
-**And** the review completes normally  
+**And** the review completes normally
 
 ### S4: OpenRouter with free model
 
 **Given** a user configuring OpenRouter with model `deepseek/deepseek-r1:free`  
 **When** validation runs  
 **Then** the system validates against `https://openrouter.ai/api/v1/models`  
-**And** the free model is available in the model list  
+**And** the free model is available in the model list
 
 ### S5: TypeScript exhaustive check
 
 **Given** a developer adds a new provider string to `LLMProvider`  
 **But** forgets to add the corresponding case in `createProvider()`  
-**Then** TypeScript reports a compile error on the `never` exhaustive check  
+**Then** TypeScript reports a compile error on the `never` exhaustive check
 
 ### S6: Invalid API key for new provider
 
@@ -116,14 +116,14 @@ API keys for new providers MUST be handled identically to existing ones (AES-256
 **When** they click "Validate"  
 **Then** the system calls the Cerebras models endpoint  
 **And** receives a 401 response  
-**And** returns `{ valid: false, error: 'Invalid API key' }`  
+**And** returns `{ valid: false, error: 'Invalid API key' }`
 
 ### S7: Existing providers unaffected
 
 **Given** an existing repo with Anthropic + OpenAI configured  
 **When** the code changes are deployed  
 **Then** the existing configuration continues to work identically  
-**And** no migration or reconfiguration is needed  
+**And** no migration or reconfiguration is needed
 
 ## Edge Cases
 

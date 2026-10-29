@@ -1,6 +1,7 @@
 # Tasks: Add zizmor — GitHub Actions Security Analysis
 
 ## Status
+
 Ready
 
 ## Overview
@@ -15,10 +16,12 @@ Add zizmor as the 16th tool plugin in GHAGGA's static analysis pipeline to detec
   - **File**: `packages/core/src/tools/types.ts` (modify)
   - **Change**: Add `| 'zizmor'` after `| 'hadolint'` on line 30, making the union 16 members
   - **Before** (line 30):
+
     ```typescript
       | 'hadolint';
     ```
   - **After** (lines 30-31):
+
     ```typescript
       | 'hadolint'
       | 'zizmor';
@@ -77,19 +80,23 @@ Add zizmor as the 16th tool plugin in GHAGGA's static analysis pipeline to detec
 - [ ] **T3: Register zizmor in plugin index**
   - **File**: `packages/core/src/tools/plugins/index.ts` (modify, 4 changes)
   - **Change 1 — Import** (after line 24 `hadolintPlugin` import):
+
     ```typescript
     import { zizmorPlugin } from './zizmor.js';
     ```
   - **Change 2 — Registration** (after line 54 `hadolintPlugin,`):
+
     ```typescript
       // Phase 6: auto-detect (CI/CD security)
       zizmorPlugin,
     ```
   - **Change 3 — Header comment update** (add Phase 6 to the docblock at lines 7-10):
+
     ```typescript
      * Phase 6: zizmor (auto-detect)
     ```
   - **Change 4 — Re-export** (after line 99 `trivyPlugin` export):
+
     ```typescript
     export { zizmorPlugin } from './zizmor.js';
     ```
@@ -110,10 +117,7 @@ Add zizmor as the 16th tool plugin in GHAGGA's static analysis pipeline to detec
       1. `ruleId: "template-injection"`, `level: "error"` — targets critical elevation testing
       2. `ruleId: "unpinned-uses"`, `level: "warning"` — standard medium severity
       3. `ruleId: "excessive-permissions"`, `level: "warning"` — second warning-level finding
-      4. `ruleId: "artipacked"`, `level: "note"` — info-level finding
-    - 2 different workflow files (`/workspace/.github/workflows/ci.yml` and `/workspace/.github/workflows/deploy.yaml`) — validates multi-file path extraction
-    - All file URIs prefixed with `/workspace/` — validates `repoDir` stripping in `parse()`
-    - Realistic `message.text` values matching actual zizmor output
+      4. `ruleId: "artipacked"`, `level: "note"` — info-level finding - 2 different workflow files (`/workspace/.github/workflows/ci.yml` and `/workspace/.github/workflows/deploy.yaml`) — validates multi-file path extraction - All file URIs prefixed with `/workspace/` — validates `repoDir` stripping in `parse()` - Realistic `message.text` values matching actual zizmor output
   - **Verification**: `cat <file> | python3 -m json.tool` confirms valid JSON
   - **Commit**: (included with T5 — test fixture is not meaningful alone)
 
@@ -129,13 +133,13 @@ Add zizmor as the 16th tool plugin in GHAGGA's static analysis pipeline to detec
 
   - **Test groups** (~34 tests total):
 
-    | Group | Tests | Validates |
-    |-------|-------|-----------|
-    | `zizmorPlugin metadata` | 6 | `name: 'zizmor'`, `displayName: 'Zizmor'`, `category: 'security'`, `tier: 'auto-detect'`, `version: '1.23.1'`, `outputFormat: 'sarif'` |
-    | `zizmorPlugin detect` | 7 | ✅ `.github/workflows/ci.yml`, ✅ `.github/workflows/deploy.yaml`, ✅ `apps/web/.github/workflows/test.yml` (monorepo), ✗ `.github/dependabot.yml`, ✗ `.github/actions/my-action/action.yml`, ✗ `docker-compose.yml`, ✗ `[]` |
-    | `mapZizmorSeverity` | 7 | `error→high`, `warning→medium`, `note→info`, `none→low`, `unknown→low`, `template-injection + error → critical` (elevation), `unpinned-uses + warning → medium` (non-critical stays at base) |
-    | `parseZizmorOutput` (happy path) | 8 | Finding count (4), critical severity for template-injection, medium for unpinned-uses, `category: 'security'` for all, `source: 'zizmor'` for all, `/workspace/` prefix stripped from file paths, line numbers present, message format `"ruleId: text"` |
-    | `parseZizmorOutput` (edge cases) | 6 | Empty SARIF `'{}'`, empty `results: []`, missing `locations` array, malformed JSON, timeout (`timedOut: true`), empty stdout `''` |
+    | Group                            | Tests | Validates                                                                                                                                                                                                                                               |
+    | -------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `zizmorPlugin metadata`          | 6     | `name: 'zizmor'`, `displayName: 'Zizmor'`, `category: 'security'`, `tier: 'auto-detect'`, `version: '1.23.1'`, `outputFormat: 'sarif'`                                                                                                                  |
+    | `zizmorPlugin detect`            | 7     | ✅ `.github/workflows/ci.yml`, ✅ `.github/workflows/deploy.yaml`, ✅ `apps/web/.github/workflows/test.yml` (monorepo), ✗ `.github/dependabot.yml`, ✗ `.github/actions/my-action/action.yml`, ✗ `docker-compose.yml`, ✗ `[]`                            |
+    | `mapZizmorSeverity`              | 7     | `error→high`, `warning→medium`, `note→info`, `none→low`, `unknown→low`, `template-injection + error → critical` (elevation), `unpinned-uses + warning → medium` (non-critical stays at base)                                                            |
+    | `parseZizmorOutput` (happy path) | 8     | Finding count (4), critical severity for template-injection, medium for unpinned-uses, `category: 'security'` for all, `source: 'zizmor'` for all, `/workspace/` prefix stripped from file paths, line numbers present, message format `"ruleId: text"` |
+    | `parseZizmorOutput` (edge cases) | 6     | Empty SARIF `'{}'`, empty `results: []`, missing `locations` array, malformed JSON, timeout (`timedOut: true`), empty stdout `''`                                                                                                                       |
 
   - **Verification**: `pnpm vitest run packages/core/src/tools/plugins/__tests__/zizmor.test.ts` — all 34 tests pass
   - **Commit**: `test(tools): add zizmor plugin test suite`
@@ -151,11 +155,13 @@ Add zizmor as the 16th tool plugin in GHAGGA's static analysis pipeline to detec
   - **File 1**: `docs/static-analysis.md`
     - Update tool count: `"15 static analysis tools"` → `"16 static analysis tools"` (line 7)
     - Add table row after Hadolint (line 25):
+
       ```markdown
       | **Zizmor** | security | auto-detect | GitHub Actions (`.github/workflows/*.yml`) |
       ```
     - Update always-on/auto-detect count: `"8 tools activate"` → `"9 tools activate"` (line 35)
     - Add Zizmor section after Hadolint section (after line 216):
+
       ```markdown
       ## Zizmor (auto-detect: GitHub Actions)
 
@@ -210,25 +216,25 @@ All tasks are strictly sequential — each depends on the prior task. T4 and T5 
 
 ## Estimated Effort
 
-| Phase | Tasks | Estimate | Notes |
-|-------|-------|----------|-------|
-| Phase 1: Type Registration | T1 | 2 min | One-line type union addition |
-| Phase 2: Plugin Implementation | T2 | 25 min | Core work — 140 lines, SARIF types + parse + install/run |
-| Phase 3: Registry Registration | T3 | 5 min | Import + array entry + export + comment |
-| Phase 4: Test Fixture | T4 | 10 min | Craft representative SARIF JSON with 4 findings |
-| Phase 5: Tests | T5 | 25 min | ~34 tests across 5 groups, ~200 lines |
-| Phase 6: Documentation | T6 | 10 min | Update 2 doc files with counts and new section |
-| Phase 7: Verification | T7, T8 | 5 min | Run test suite + smoke test |
-| **Total** | **8 tasks** | **~80 min** | 6 commits (T4+T5 combined, T7+T8 no commit) |
+| Phase                          | Tasks       | Estimate    | Notes                                                    |
+| ------------------------------ | ----------- | ----------- | -------------------------------------------------------- |
+| Phase 1: Type Registration     | T1          | 2 min       | One-line type union addition                             |
+| Phase 2: Plugin Implementation | T2          | 25 min      | Core work — 140 lines, SARIF types + parse + install/run |
+| Phase 3: Registry Registration | T3          | 5 min       | Import + array entry + export + comment                  |
+| Phase 4: Test Fixture          | T4          | 10 min      | Craft representative SARIF JSON with 4 findings          |
+| Phase 5: Tests                 | T5          | 25 min      | ~34 tests across 5 groups, ~200 lines                    |
+| Phase 6: Documentation         | T6          | 10 min      | Update 2 doc files with counts and new section           |
+| Phase 7: Verification          | T7, T8      | 5 min       | Run test suite + smoke test                              |
+| **Total**                      | **8 tasks** | **~80 min** | 6 commits (T4+T5 combined, T7+T8 no commit)              |
 
 ## Commit Summary
 
-| Order | Commit Message | Files Changed |
-|-------|---------------|---------------|
-| 1 | `feat(tools): add zizmor to ToolName union` | `packages/core/src/tools/types.ts` |
-| 2 | `feat(tools): implement zizmor plugin for GitHub Actions security` | `packages/core/src/tools/plugins/zizmor.ts` (new) |
-| 3 | `feat(tools): register zizmor plugin in tool registry` | `packages/core/src/tools/plugins/index.ts` |
-| 4 | `test(tools): add zizmor plugin test suite` | `packages/core/src/tools/plugins/__tests__/zizmor.test.ts` (new), `packages/core/src/tools/plugins/__tests__/fixtures/zizmor-output.json` (new) |
-| 5 | `docs: add zizmor to supported tools documentation` | `docs/static-analysis.md`, `docs/github-action.md` |
+| Order | Commit Message                                                     | Files Changed                                                                                                                                   |
+| ----- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `feat(tools): add zizmor to ToolName union`                        | `packages/core/src/tools/types.ts`                                                                                                              |
+| 2     | `feat(tools): implement zizmor plugin for GitHub Actions security` | `packages/core/src/tools/plugins/zizmor.ts` (new)                                                                                               |
+| 3     | `feat(tools): register zizmor plugin in tool registry`             | `packages/core/src/tools/plugins/index.ts`                                                                                                      |
+| 4     | `test(tools): add zizmor plugin test suite`                        | `packages/core/src/tools/plugins/__tests__/zizmor.test.ts` (new), `packages/core/src/tools/plugins/__tests__/fixtures/zizmor-output.json` (new) |
+| 5     | `docs: add zizmor to supported tools documentation`                | `docs/static-analysis.md`, `docs/github-action.md`                                                                                              |
 
 5 commits total. Each is atomic and independently reviewable.

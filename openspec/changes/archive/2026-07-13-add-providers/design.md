@@ -2,7 +2,7 @@
 
 **Status**: draft  
 **Spec**: [spec.md](./spec.md)  
-**Date**: 2026-03-16  
+**Date**: 2026-03-16
 
 ## Architecture Decision
 

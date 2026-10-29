@@ -3,7 +3,6 @@
 ## Technical Approach
 
 Five features land in a single release, all layered on top of the existing TUI facade pattern established in the `cli-tui` change. The strategy is:
-
 1. **TUI facade extension** — Add `severity()`, `box()`, `divider()`, `progress()` to the existing `ui/tui.ts` facade. A new `ui/chalk.ts` adapter wraps chalk v5, ensuring commands never import chalk directly (extending AD1 from cli-tui design). The facade remains the single output abstraction; the four new methods follow the same `_plain` branching pattern used by `intro()`, `outro()`, `log.*`, and `spinner()`.
 
 2. **Core-side modules for reuse** — AI Enhance (`packages/core/src/enhance/`), health scoring (`packages/core/src/health/`), and SARIF builder (`packages/core/src/sarif/`) live in the core package so they're usable from CLI, Action, and SaaS. These modules are pure functions with no CLI dependencies.
@@ -74,10 +73,17 @@ All changes follow the existing patterns: Commander for arg parsing, `tui.*` for
 
 ```typescript
 switch (outputFormat) {
-  case 'json':    stdout(JSON.stringify(result, null, 2)); break;
-  case 'sarif':   stdout(JSON.stringify(buildSarif(result, version))); break;
-  case 'markdown': stdout(formatMarkdownResult(result)); break;
-  default:        /* styled TUI output via tui.* */ break;
+  case 'json':
+    stdout(JSON.stringify(result, null, 2));
+    break;
+  case 'sarif':
+    stdout(JSON.stringify(buildSarif(result, version)));
+    break;
+  case 'markdown':
+    stdout(formatMarkdownResult(result));
+    break;
+  default:
+    /* styled TUI output via tui.* */ break;
 }
 ```
 
@@ -291,37 +297,37 @@ Step 6: Merge and assemble result
 
 ### New Files
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/cli/src/ui/chalk.ts` | **Create** | Chalk v5 adapter. Imports chalk, re-exports color functions. Exports `colorSeverity(text, level)` helper. ~30 lines. |
-| `apps/cli/src/ui/sarif.ts` | **Create** | Re-export of `buildSarif` from core for CLI convenience. ~5 lines. (Actual builder in core.) |
-| `apps/cli/src/commands/health.ts` | **Create** | Health command handler. Runs always-on tools, computes score, renders output. ~300 lines. |
-| `apps/cli/src/lib/github-api.ts` | **Create** | Minimal GitHub REST API client. `createIssue()`, `createComment()`, `ensureLabel()`. Uses `fetch`. ~150 lines. |
-| `packages/core/src/enhance/types.ts` | **Create** | `EnhanceResult`, `FindingGroup`, `EnhanceMetadata` types. ~50 lines. |
-| `packages/core/src/enhance/prompt.ts` | **Create** | AI enhance prompt template for gpt-4o-mini. ~100 lines. |
-| `packages/core/src/enhance/enhance.ts` | **Create** | `enhanceFindings()` main function. Serializes findings, calls LLM, parses response, merges metadata. ~200 lines. |
-| `packages/core/src/enhance/index.ts` | **Create** | Barrel export for enhance module. ~5 lines. |
-| `packages/core/src/health/score.ts` | **Create** | `computeHealthScore(findings)` — weighted severity scoring. ~250 lines. |
-| `packages/core/src/health/trends.ts` | **Create** | `loadHistory()`, `saveHistory()`, `computeTrend()`, `pruneHistory()`. ~200 lines. |
-| `packages/core/src/health/recommendations.ts` | **Create** | `generateRecommendations(findings)` — category-based actionable advice. ~200 lines. |
-| `packages/core/src/health/index.ts` | **Create** | Barrel export for health module. ~5 lines. |
-| `packages/core/src/sarif/builder.ts` | **Create** | `buildSarif(result, version)` — pure function mapping ReviewResult to SARIF v2.1.0. ~200 lines. |
-| `packages/core/src/sarif/types.ts` | **Create** | Inline SARIF v2.1.0 type subset: `SarifDocument`, `SarifRun`, `SarifResult`, `SarifRule`, `SarifLocation`. ~40 lines. |
-| `packages/core/src/sarif/index.ts` | **Create** | Barrel export for SARIF module. ~5 lines. |
+| File                                          | Action     | Description                                                                                                           |
+| --------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| `apps/cli/src/ui/chalk.ts`                    | **Create** | Chalk v5 adapter. Imports chalk, re-exports color functions. Exports `colorSeverity(text, level)` helper. ~30 lines.  |
+| `apps/cli/src/ui/sarif.ts`                    | **Create** | Re-export of `buildSarif` from core for CLI convenience. ~5 lines. (Actual builder in core.)                          |
+| `apps/cli/src/commands/health.ts`             | **Create** | Health command handler. Runs always-on tools, computes score, renders output. ~300 lines.                             |
+| `apps/cli/src/lib/github-api.ts`              | **Create** | Minimal GitHub REST API client. `createIssue()`, `createComment()`, `ensureLabel()`. Uses `fetch`. ~150 lines.        |
+| `packages/core/src/enhance/types.ts`          | **Create** | `EnhanceResult`, `FindingGroup`, `EnhanceMetadata` types. ~50 lines.                                                  |
+| `packages/core/src/enhance/prompt.ts`         | **Create** | AI enhance prompt template for gpt-4o-mini. ~100 lines.                                                               |
+| `packages/core/src/enhance/enhance.ts`        | **Create** | `enhanceFindings()` main function. Serializes findings, calls LLM, parses response, merges metadata. ~200 lines.      |
+| `packages/core/src/enhance/index.ts`          | **Create** | Barrel export for enhance module. ~5 lines.                                                                           |
+| `packages/core/src/health/score.ts`           | **Create** | `computeHealthScore(findings)` — weighted severity scoring. ~250 lines.                                               |
+| `packages/core/src/health/trends.ts`          | **Create** | `loadHistory()`, `saveHistory()`, `computeTrend()`, `pruneHistory()`. ~200 lines.                                     |
+| `packages/core/src/health/recommendations.ts` | **Create** | `generateRecommendations(findings)` — category-based actionable advice. ~200 lines.                                   |
+| `packages/core/src/health/index.ts`           | **Create** | Barrel export for health module. ~5 lines.                                                                            |
+| `packages/core/src/sarif/builder.ts`          | **Create** | `buildSarif(result, version)` — pure function mapping ReviewResult to SARIF v2.1.0. ~200 lines.                       |
+| `packages/core/src/sarif/types.ts`            | **Create** | Inline SARIF v2.1.0 type subset: `SarifDocument`, `SarifRun`, `SarifResult`, `SarifRule`, `SarifLocation`. ~40 lines. |
+| `packages/core/src/sarif/index.ts`            | **Create** | Barrel export for SARIF module. ~5 lines.                                                                             |
 
 ### Modified Files
 
-| File | Action | Description |
-|------|--------|-------------|
-| `apps/cli/src/ui/tui.ts` | **Modify** | Add 4 new methods: `severity()`, `box()`, `divider()`, `progress()`. Import from `chalk.ts`. ~80 lines added. |
-| `apps/cli/src/ui/theme.ts` | **Modify** | Add `SEVERITY_COLORS` map (severity → chalk color fn reference), `BOX_CHARS` constant, `DIVIDER_CHAR`. ~25 lines added. |
-| `apps/cli/src/ui/format.ts` | **Modify** | Add `formatBoxSummary()`, `formatSeverityLine()`, `formatDivider()`, `formatHealthScore()`. Update `formatMarkdownResult()` to use dividers between tool groups. ~100 lines added. |
+| File                              | Action     | Description                                                                                                                                                                                                                                                                                                        |
+| --------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/cli/src/ui/tui.ts`          | **Modify** | Add 4 new methods: `severity()`, `box()`, `divider()`, `progress()`. Import from `chalk.ts`. ~80 lines added.                                                                                                                                                                                                      |
+| `apps/cli/src/ui/theme.ts`        | **Modify** | Add `SEVERITY_COLORS` map (severity → chalk color fn reference), `BOX_CHARS` constant, `DIVIDER_CHAR`. ~25 lines added.                                                                                                                                                                                            |
+| `apps/cli/src/ui/format.ts`       | **Modify** | Add `formatBoxSummary()`, `formatSeverityLine()`, `formatDivider()`, `formatHealthScore()`. Update `formatMarkdownResult()` to use dividers between tool groups. ~100 lines added.                                                                                                                                 |
 | `apps/cli/src/commands/review.ts` | **Modify** | (1) Add `outputFormat` and `enhance` and `issue` to `ReviewOptions`. (2) Wire step progress via `tui.progress()` in non-verbose mode. (3) Add post-pipeline output format routing (switch). (4) Add post-pipeline issue creation. (5) Call `enhanceFindings()` or pass enhance flag to pipeline. ~120 lines added. |
-| `apps/cli/src/index.ts` | **Modify** | (1) Register `health` command. (2) Add `--output` flag with choices `json|sarif|markdown`. (3) Add `--format` as deprecated alias. (4) Add `--enhance`/`--no-enhance` flags. (5) Add `--issue` flag. (6) Update preAction hook for `--output` plain mode. ~60 lines added. |
-| `packages/core/src/types.ts` | **Modify** | Add optional `enhanced?: boolean`, `enhanceMetadata?: EnhanceMetadata` to `ReviewResult`. Add `enhance?: boolean` to `ReviewInput`. Add `HealthResult` type. ~30 lines added. |
-| `packages/core/src/pipeline.ts` | **Modify** | Add conditional enhance step (Step 4.5) between static analysis and agent mode. ~20 lines added. |
-| `packages/core/src/index.ts` | **Modify** | Export new modules: `enhance`, `health`, `sarif`. Export new types: `EnhanceMetadata`, `HealthResult`, `SarifDocument`. ~15 lines added. |
-| `apps/cli/package.json` | **Modify** | Add `"chalk": "^5.4.0"` to dependencies. |
+| `apps/cli/src/index.ts`           | **Modify** | (1) Register `health` command. (2) Add `--output` flag with choices `json                                                                                                                                                                                                                                          | sarif | markdown`. (3) Add `--format`as deprecated alias. (4) Add`--enhance`/`--no-enhance`flags. (5) Add`--issue`flag. (6) Update preAction hook for`--output` plain mode. ~60 lines added. |
+| `packages/core/src/types.ts`      | **Modify** | Add optional `enhanced?: boolean`, `enhanceMetadata?: EnhanceMetadata` to `ReviewResult`. Add `enhance?: boolean` to `ReviewInput`. Add `HealthResult` type. ~30 lines added.                                                                                                                                      |
+| `packages/core/src/pipeline.ts`   | **Modify** | Add conditional enhance step (Step 4.5) between static analysis and agent mode. ~20 lines added.                                                                                                                                                                                                                   |
+| `packages/core/src/index.ts`      | **Modify** | Export new modules: `enhance`, `health`, `sarif`. Export new types: `EnhanceMetadata`, `HealthResult`, `SarifDocument`. ~15 lines added.                                                                                                                                                                           |
+| `apps/cli/package.json`           | **Modify** | Add `"chalk": "^5.4.0"` to dependencies.                                                                                                                                                                                                                                                                           |
 
 ### Files NOT Changed
 
@@ -351,10 +357,10 @@ export { chalk };
 /** Map severity level to a chalk color function. */
 export const SEVERITY_COLOR_FNS: Record<FindingSeverity, (text: string) => string> = {
   critical: (t) => chalk.red(t),
-  high:     (t) => chalk.hex('#FFA500')(t),  // orange
-  medium:   (t) => chalk.yellow(t),
-  low:      (t) => chalk.blue(t),
-  info:     (t) => chalk.gray(t),
+  high: (t) => chalk.hex('#FFA500')(t), // orange
+  medium: (t) => chalk.yellow(t),
+  low: (t) => chalk.blue(t),
+  info: (t) => chalk.gray(t),
 };
 
 /**
@@ -498,8 +504,8 @@ export interface ReviewFinding {
 import type { ReviewFinding, FindingSeverity } from '../types.js';
 
 export interface HealthScore {
-  score: number;        // 0-100
-  grade: string;        // A (80+), B (60-79), C (40-59), D (20-39), F (0-19)
+  score: number; // 0-100
+  grade: string; // A (80+), B (60-79), C (40-59), D (20-39), F (0-19)
   findingCounts: Record<FindingSeverity, number>;
   totalFindings: number;
 }
@@ -507,10 +513,10 @@ export interface HealthScore {
 /** Severity weights for health score computation. */
 export const SEVERITY_WEIGHTS: Record<FindingSeverity, number> = {
   critical: -20,
-  high:     -10,
-  medium:    -3,
-  low:       -1,
-  info:       0,
+  high: -10,
+  medium: -3,
+  low: -1,
+  info: 0,
 };
 
 /**
@@ -525,7 +531,7 @@ export function computeHealthScore(findings: ReviewFinding[]): HealthScore;
 
 ```typescript
 export interface HealthHistoryEntry {
-  timestamp: string;       // ISO 8601
+  timestamp: string; // ISO 8601
   score: number;
   findingCounts: Record<string, number>;
   toolsRun: string[];
@@ -669,25 +675,25 @@ export async function healthCommand(targetPath: string, options: HealthOptions):
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| **Unit** | `tui.severity()` plain/styled modes | Init in plain → assert `[LEVEL]` prefix, no ANSI. Init in styled → assert ANSI codes present. |
-| **Unit** | `tui.box()` plain/styled modes | Assert `---` delimiters in plain, `┌┐│└┘` in styled. Assert auto-sizing width. |
-| **Unit** | `tui.divider()` plain/styled modes | Assert `---` in plain, `─` chars in styled. |
-| **Unit** | `tui.progress()` output | Assert `[n/m] label` format in both modes. |
-| **Unit** | `computeHealthScore()` | Zero findings → 100. 10 criticals → 0. Mixed severities → expected weighted result. |
-| **Unit** | `computeTrend()` | First run → null trend. Improvement → positive delta. Regression → negative delta. |
-| **Unit** | `generateRecommendations()` | Findings in multiple categories → sorted by impact. Zero findings → empty. |
-| **Unit** | `loadHistory()` / `saveHistory()` | Missing file → []. Corrupt file → []. Prune to 10. Multiple projects isolated. |
-| **Unit** | `buildSarif()` | Zero findings → valid SARIF with empty results. 5 findings → 5 results. Severity mapping (critical→error, medium→warning, info→note). Missing line number → no region. |
-| **Unit** | `enhanceFindings()` | Mock LLM call → assert groups, priorities, suggestions, filtered findings merged. LLM failure → returns unenhanced. Zero findings → skips LLM call. |
-| **Unit** | `parseGitHubRemote()` | HTTPS URL → owner/repo. SSH URL → owner/repo. Non-GitHub URL → throws. |
-| **Unit** | `createIssue()` / `createComment()` | Mock fetch → assert correct URL, headers, body. 401 → auth error. 429 → rate limit error. |
-| **Integration** | SARIF schema validation | Generate SARIF from real ReviewResult, validate against official schema JSON. |
-| **Integration** | Health command end-to-end | Run `healthCommand()` with mocked tools → assert score, trend, recommendations rendered. |
-| **Integration** | Review with --output json | Run review command → assert stdout is valid JSON, no ANSI codes. |
-| **Integration** | Review with --enhance (mocked LLM) | Run pipeline with enhance=true, mock AI response → assert enhanced fields on findings. |
-| **Existing** | All 124+ existing tests | Must pass without modification. TUI facade auto-selects plain in test runner (no TTY). |
+| Layer           | What to Test                        | Approach                                                                                                                                                               |
+| --------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit**        | `tui.severity()` plain/styled modes | Init in plain → assert `[LEVEL]` prefix, no ANSI. Init in styled → assert ANSI codes present.                                                                          |
+| **Unit**        | `tui.box()` plain/styled modes      | Assert `---` delimiters in plain, `┌┐│└┘` in styled. Assert auto-sizing width.                                                                                         |
+| **Unit**        | `tui.divider()` plain/styled modes  | Assert `---` in plain, `─` chars in styled.                                                                                                                            |
+| **Unit**        | `tui.progress()` output             | Assert `[n/m] label` format in both modes.                                                                                                                             |
+| **Unit**        | `computeHealthScore()`              | Zero findings → 100. 10 criticals → 0. Mixed severities → expected weighted result.                                                                                    |
+| **Unit**        | `computeTrend()`                    | First run → null trend. Improvement → positive delta. Regression → negative delta.                                                                                     |
+| **Unit**        | `generateRecommendations()`         | Findings in multiple categories → sorted by impact. Zero findings → empty.                                                                                             |
+| **Unit**        | `loadHistory()` / `saveHistory()`   | Missing file → []. Corrupt file → []. Prune to 10. Multiple projects isolated.                                                                                         |
+| **Unit**        | `buildSarif()`                      | Zero findings → valid SARIF with empty results. 5 findings → 5 results. Severity mapping (critical→error, medium→warning, info→note). Missing line number → no region. |
+| **Unit**        | `enhanceFindings()`                 | Mock LLM call → assert groups, priorities, suggestions, filtered findings merged. LLM failure → returns unenhanced. Zero findings → skips LLM call.                    |
+| **Unit**        | `parseGitHubRemote()`               | HTTPS URL → owner/repo. SSH URL → owner/repo. Non-GitHub URL → throws.                                                                                                 |
+| **Unit**        | `createIssue()` / `createComment()` | Mock fetch → assert correct URL, headers, body. 401 → auth error. 429 → rate limit error.                                                                              |
+| **Integration** | SARIF schema validation             | Generate SARIF from real ReviewResult, validate against official schema JSON.                                                                                          |
+| **Integration** | Health command end-to-end           | Run `healthCommand()` with mocked tools → assert score, trend, recommendations rendered.                                                                               |
+| **Integration** | Review with --output json           | Run review command → assert stdout is valid JSON, no ANSI codes.                                                                                                       |
+| **Integration** | Review with --enhance (mocked LLM)  | Run pipeline with enhance=true, mock AI response → assert enhanced fields on findings.                                                                                 |
+| **Existing**    | All 124+ existing tests             | Must pass without modification. TUI facade auto-selects plain in test runner (no TTY).                                                                                 |
 
 ### SARIF Schema Validation
 
@@ -718,6 +724,7 @@ No data migration required. No config file schema changes. No database changes.
 3. **After chalk is added**: Run `npx ncc build dist/index.js -o ncc-out` to verify bundling
 4. **Bundle size check**: `ls -la ncc-out/index.js` — increase must be < 30KB
 5. **After all changes**: Full verification:
+
    ```bash
    pnpm test                                          # All tests pass
    pnpm typecheck                                     # No type errors
@@ -743,7 +750,6 @@ No data migration required. No config file schema changes. No database changes.
 ### Rollback Plan
 
 Each feature is independently reversible:
-
 1. **TUI Polish**: Revert `ui/tui.ts`, `ui/chalk.ts`, `ui/theme.ts`, `ui/format.ts` changes. Remove chalk dependency.
 2. **--output**: Revert `index.ts` flag changes and review.ts routing. Remove `sarif/` from core.
 3. **AI Enhance**: Remove `core/enhance/`. Revert pipeline.ts and types.ts additions.
@@ -756,27 +762,27 @@ Full rollback: single PR revert. No database, config, or API changes to undo.
 
 ### Health Command (≤1,500 lines target)
 
-| File | Est. Lines |
-|------|-----------|
-| `apps/cli/src/commands/health.ts` | ~300 |
-| `packages/core/src/health/score.ts` | ~250 |
-| `packages/core/src/health/trends.ts` | ~200 |
-| `packages/core/src/health/recommendations.ts` | ~200 |
-| **Total** | **~950** |
+| File                                          | Est. Lines |
+| --------------------------------------------- | ---------- |
+| `apps/cli/src/commands/health.ts`             | ~300       |
+| `packages/core/src/health/score.ts`           | ~250       |
+| `packages/core/src/health/trends.ts`          | ~200       |
+| `packages/core/src/health/recommendations.ts` | ~200       |
+| **Total**                                     | **~950**   |
 
 Margin: ~550 lines under budget. Barrel exports (`index.ts`) not counted as they're boilerplate.
 
 ### Total New Code Across All Features
 
-| Feature | Est. Lines |
-|---------|-----------|
-| TUI methods (chalk.ts + tui.ts additions + theme.ts additions) | ~135 |
-| Output formats (sarif builder + types + format.ts additions) | ~340 |
-| AI Enhance (enhance.ts + prompt.ts + types.ts) | ~350 |
-| Health (command + core modules) | ~950 |
-| Issue (github-api.ts + review.ts additions) | ~270 |
-| Wiring (index.ts changes, review.ts routing) | ~180 |
-| **Total new code** | **~2,225** |
+| Feature                                                        | Est. Lines |
+| -------------------------------------------------------------- | ---------- |
+| TUI methods (chalk.ts + tui.ts additions + theme.ts additions) | ~135       |
+| Output formats (sarif builder + types + format.ts additions)   | ~340       |
+| AI Enhance (enhance.ts + prompt.ts + types.ts)                 | ~350       |
+| Health (command + core modules)                                | ~950       |
+| Issue (github-api.ts + review.ts additions)                    | ~270       |
+| Wiring (index.ts changes, review.ts routing)                   | ~180       |
+| **Total new code**                                             | **~2,225** |
 
 ## Open Questions
 

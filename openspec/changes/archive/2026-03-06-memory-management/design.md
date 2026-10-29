@@ -5,7 +5,6 @@
 This change extends the GHAGGA memory system with inspection and management capabilities. The implementation adds five new methods to the `MemoryStorage` interface (R1), two new types (R2), an FTS5 delete trigger (R3), and a `ghagga memory` CLI command group with six subcommands (R6–R12).
 
 The approach is layered:
-
 1. **Core layer** (`packages/core`): Extend the interface and types, implement SQL methods in `SqliteMemoryStorage`, add the missing FTS5 delete trigger to `SCHEMA_SQL`, stub methods in `PostgresMemoryStorage`.
 2. **CLI layer** (`apps/cli`): Register a `memory` command group with Commander.js, implement six subcommand handlers that open `SqliteMemoryStorage`, query/mutate, format output, and close.
 
@@ -32,12 +31,11 @@ import { memoryCommand } from './commands/memory/index.js';
 program.addCommand(memoryCommand);
 ```
 
-The existing CLI commands (`login.ts`, `logout.ts`, `status.ts`, `review.ts`) are all single files because they're single commands. A command *group* with six subcommands is a different beast — the subdirectory pattern is the right escalation.
+The existing CLI commands (`login.ts`, `logout.ts`, `status.ts`, `review.ts`) are all single files because they're single commands. A command _group_ with six subcommands is a different beast — the subdirectory pattern is the right escalation.
 
 ### AD2: Shared Utilities — `utils.ts` in the Memory Command Directory
 
 **Choice**: Create `apps/cli/src/commands/memory/utils.ts` containing three shared helpers:
-
 1. **`openMemoryOrExit(configDir: string): Promise<{ storage: SqliteMemoryStorage; dbPath: string }>`** — Checks `existsSync(dbPath)`, prints the "no database" message and exits with code 0 if missing, otherwise opens `SqliteMemoryStorage.create(dbPath)` and returns both the storage instance and the resolved path.
 
 2. **`confirmOrExit(message: string, force: boolean): Promise<void>`** — Handles the confirmation flow: if `force` is true, returns immediately. If `!process.stdin.isTTY` and `!force`, prints non-TTY error and exits with code 1. Otherwise, prompts with `readline/promises` and exits with code 0 on cancel.
@@ -79,7 +77,7 @@ END;
 
 ### AD5: ID Handling — Direct Integer, Display as Zero-Padded
 
-**Choice**: Observation IDs are SQLite auto-increment integers. CLI commands accept the integer directly as an argument. IDs are *displayed* as 8-character zero-padded strings (e.g., `42` → `00000042`) using `String(id).padStart(8, '0')`. The underlying `getObservation(id)` and `deleteObservation(id)` always use the raw integer.
+**Choice**: Observation IDs are SQLite auto-increment integers. CLI commands accept the integer directly as an argument. IDs are _displayed_ as 8-character zero-padded strings (e.g., `42` → `00000042`) using `String(id).padStart(8, '0')`. The underlying `getObservation(id)` and `deleteObservation(id)` always use the raw integer.
 
 **Alternatives considered**:
 - UUID-based IDs — requires schema migration, breaks existing data.
@@ -259,8 +257,8 @@ export interface MemoryObservationDetail {
   project: string;
   topicKey: string | null;
   revisionCount: number;
-  createdAt: string;   // ISO 8601 from SQLite datetime()
-  updatedAt: string;   // ISO 8601 from SQLite datetime()
+  createdAt: string; // ISO 8601 from SQLite datetime()
+  updatedAt: string; // ISO 8601 from SQLite datetime()
 }
 
 /**
@@ -271,8 +269,8 @@ export interface MemoryStats {
   totalObservations: number;
   byType: Record<string, number>;
   byProject: Record<string, number>;
-  oldestObservation: string | null;  // ISO 8601, null if empty
-  newestObservation: string | null;  // ISO 8601, null if empty
+  oldestObservation: string | null; // ISO 8601, null if empty
+  newestObservation: string | null; // ISO 8601, null if empty
 }
 
 /**
@@ -308,10 +306,7 @@ export interface MemoryStorage {
     filePaths?: string[];
   }): Promise<MemoryObservationRow>;
 
-  createSession(data: {
-    project: string;
-    prNumber?: number;
-  }): Promise<{ id: number }>;
+  createSession(data: { project: string; prNumber?: number }): Promise<{ id: number }>;
 
   endSession(sessionId: number, summary: string): Promise<void>;
 
@@ -562,29 +557,29 @@ private mapToDetail(row: Record<string, unknown>): MemoryObservationDetail {
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/core/src/types.ts` | Modify | Add `MemoryObservationDetail`, `MemoryStats`, `ListObservationsOptions` interfaces. Add 5 new methods to `MemoryStorage` interface. |
-| `packages/core/src/index.ts` | Modify | Export `MemoryObservationDetail`, `MemoryStats`, `ListObservationsOptions` types. |
-| `packages/core/src/memory/sqlite.ts` | Modify | Append `obs_fts_delete` trigger to `SCHEMA_SQL`. Import new types. Add `mapToDetail()` private method. Implement `listObservations()`, `getObservation()`, `deleteObservation()`, `getStats()`, `clearObservations()`. |
-| `packages/core/src/memory/sqlite.test.ts` | Modify | Add test cases for all 5 new methods: list with filters, get by id, get not found, delete + FTS5 cleanup, stats aggregation, stats empty, clear all, clear by project. |
-| `apps/server/src/memory/postgres.ts` | Modify | Import new types. Add 5 stub methods, each throwing `Error('Not implemented — use Dashboard for memory management')`. |
-| `apps/cli/src/index.ts` | Modify | Import `memoryCommand` from `'./commands/memory/index.js'`. Add `program.addCommand(memoryCommand)` after existing command registrations. |
-| `apps/cli/src/commands/memory/index.ts` | Create | Barrel file: creates `new Command('memory')` with `.description('Inspect, search, and manage review memory')`, registers 6 subcommands, exports `memoryCommand`. |
-| `apps/cli/src/commands/memory/utils.ts` | Create | Shared helpers: `openMemoryOrExit()`, `confirmOrExit()`, `formatTable()`, `formatSize()`, `formatId()`, `truncate()`. |
-| `apps/cli/src/commands/memory/list.ts` | Create | `ghagga memory list` subcommand: `--repo`, `--type`, `--limit` options, tabular output, empty-results handling. |
-| `apps/cli/src/commands/memory/search.ts` | Create | `ghagga memory search <query>` subcommand: `--repo` (inferred from git if omitted), `--limit`, numbered results with snippets. |
-| `apps/cli/src/commands/memory/show.ts` | Create | `ghagga memory show <id>` subcommand: full key-value display, ID validation, not-found error. |
-| `apps/cli/src/commands/memory/delete.ts` | Create | `ghagga memory delete <id>` subcommand: `--force`, confirmation flow, TTY detection, FTS5 cleanup via trigger. |
-| `apps/cli/src/commands/memory/stats.ts` | Create | `ghagga memory stats` subcommand: aggregates, file size, date range formatting. |
-| `apps/cli/src/commands/memory/clear.ts` | Create | `ghagga memory clear` subcommand: `--repo`, `--force`, confirmation with count, bulk delete. |
-| `apps/cli/src/commands/memory/utils.test.ts` | Create | Unit tests for shared helpers: `formatTable()`, `formatSize()`, `formatId()`, `truncate()`, `confirmOrExit()` (mocked readline). |
-| `apps/cli/src/commands/memory/list.test.ts` | Create | Unit tests for `list` handler: happy path, filters, empty results, no DB file. |
-| `apps/cli/src/commands/memory/search.test.ts` | Create | Unit tests for `search` handler: happy path, repo inference, empty results, no DB file. |
-| `apps/cli/src/commands/memory/show.test.ts` | Create | Unit tests for `show` handler: happy path, not found, invalid ID, no DB file. |
-| `apps/cli/src/commands/memory/delete.test.ts` | Create | Unit tests for `delete` handler: happy path, cancel, force, not found, non-TTY, invalid ID, no DB file. |
-| `apps/cli/src/commands/memory/stats.test.ts` | Create | Unit tests for `stats` handler: happy path, empty DB, no DB file. |
-| `apps/cli/src/commands/memory/clear.test.ts` | Create | Unit tests for `clear` handler: happy path, scoped, cancel, force, no observations, non-TTY, no DB file. |
+| File                                          | Action | Description                                                                                                                                                                                                            |
+| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/types.ts`                  | Modify | Add `MemoryObservationDetail`, `MemoryStats`, `ListObservationsOptions` interfaces. Add 5 new methods to `MemoryStorage` interface.                                                                                    |
+| `packages/core/src/index.ts`                  | Modify | Export `MemoryObservationDetail`, `MemoryStats`, `ListObservationsOptions` types.                                                                                                                                      |
+| `packages/core/src/memory/sqlite.ts`          | Modify | Append `obs_fts_delete` trigger to `SCHEMA_SQL`. Import new types. Add `mapToDetail()` private method. Implement `listObservations()`, `getObservation()`, `deleteObservation()`, `getStats()`, `clearObservations()`. |
+| `packages/core/src/memory/sqlite.test.ts`     | Modify | Add test cases for all 5 new methods: list with filters, get by id, get not found, delete + FTS5 cleanup, stats aggregation, stats empty, clear all, clear by project.                                                 |
+| `apps/server/src/memory/postgres.ts`          | Modify | Import new types. Add 5 stub methods, each throwing `Error('Not implemented — use Dashboard for memory management')`.                                                                                                  |
+| `apps/cli/src/index.ts`                       | Modify | Import `memoryCommand` from `'./commands/memory/index.js'`. Add `program.addCommand(memoryCommand)` after existing command registrations.                                                                              |
+| `apps/cli/src/commands/memory/index.ts`       | Create | Barrel file: creates `new Command('memory')` with `.description('Inspect, search, and manage review memory')`, registers 6 subcommands, exports `memoryCommand`.                                                       |
+| `apps/cli/src/commands/memory/utils.ts`       | Create | Shared helpers: `openMemoryOrExit()`, `confirmOrExit()`, `formatTable()`, `formatSize()`, `formatId()`, `truncate()`.                                                                                                  |
+| `apps/cli/src/commands/memory/list.ts`        | Create | `ghagga memory list` subcommand: `--repo`, `--type`, `--limit` options, tabular output, empty-results handling.                                                                                                        |
+| `apps/cli/src/commands/memory/search.ts`      | Create | `ghagga memory search <query>` subcommand: `--repo` (inferred from git if omitted), `--limit`, numbered results with snippets.                                                                                         |
+| `apps/cli/src/commands/memory/show.ts`        | Create | `ghagga memory show <id>` subcommand: full key-value display, ID validation, not-found error.                                                                                                                          |
+| `apps/cli/src/commands/memory/delete.ts`      | Create | `ghagga memory delete <id>` subcommand: `--force`, confirmation flow, TTY detection, FTS5 cleanup via trigger.                                                                                                         |
+| `apps/cli/src/commands/memory/stats.ts`       | Create | `ghagga memory stats` subcommand: aggregates, file size, date range formatting.                                                                                                                                        |
+| `apps/cli/src/commands/memory/clear.ts`       | Create | `ghagga memory clear` subcommand: `--repo`, `--force`, confirmation with count, bulk delete.                                                                                                                           |
+| `apps/cli/src/commands/memory/utils.test.ts`  | Create | Unit tests for shared helpers: `formatTable()`, `formatSize()`, `formatId()`, `truncate()`, `confirmOrExit()` (mocked readline).                                                                                       |
+| `apps/cli/src/commands/memory/list.test.ts`   | Create | Unit tests for `list` handler: happy path, filters, empty results, no DB file.                                                                                                                                         |
+| `apps/cli/src/commands/memory/search.test.ts` | Create | Unit tests for `search` handler: happy path, repo inference, empty results, no DB file.                                                                                                                                |
+| `apps/cli/src/commands/memory/show.test.ts`   | Create | Unit tests for `show` handler: happy path, not found, invalid ID, no DB file.                                                                                                                                          |
+| `apps/cli/src/commands/memory/delete.test.ts` | Create | Unit tests for `delete` handler: happy path, cancel, force, not found, non-TTY, invalid ID, no DB file.                                                                                                                |
+| `apps/cli/src/commands/memory/stats.test.ts`  | Create | Unit tests for `stats` handler: happy path, empty DB, no DB file.                                                                                                                                                      |
+| `apps/cli/src/commands/memory/clear.test.ts`  | Create | Unit tests for `clear` handler: happy path, scoped, cancel, force, no observations, non-TTY, no DB file.                                                                                                               |
 
 **Totals**: 8 files modified, 14 files created, 0 files deleted.
 
@@ -627,8 +622,9 @@ import { registerDeleteCommand } from './delete.js';
 import { registerStatsCommand } from './stats.js';
 import { registerClearCommand } from './clear.js';
 
-export const memoryCommand = new Command('memory')
-  .description('Inspect, search, and manage review memory');
+export const memoryCommand = new Command('memory').description(
+  'Inspect, search, and manage review memory',
+);
 
 registerListCommand(memoryCommand);
 registerSearchCommand(memoryCommand);
@@ -735,11 +731,7 @@ export function formatSize(bytes: number): string {
 /**
  * Format a plain-text table with headers, separator, and padded columns.
  */
-export function formatTable(
-  headers: string[],
-  rows: string[][],
-  widths: number[],
-): string {
+export function formatTable(headers: string[], rows: string[][], widths: number[]): string {
   const lines: string[] = [];
 
   // Header row
@@ -761,17 +753,17 @@ export function formatTable(
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| **Unit — SqliteMemoryStorage** | `listObservations`: no filters, project filter, type filter, combined filters, limit/offset, empty results, newest-first ordering. `getObservation`: found, not found. `deleteObservation`: found + deleted + FTS5 cleaned, not found returns false. `getStats`: populated DB, empty DB, null dates. `clearObservations`: all observations, scoped by project, returns count, FTS5 cleaned. | Extend existing `packages/core/src/memory/sqlite.test.ts`. Use real sql.js with temp directory (same pattern as existing tests). Add FTS5 verification: after delete, `searchObservations` must NOT return the deleted row. |
-| **Unit — PostgresMemoryStorage** | All 5 new methods throw `Error('Not implemented — use Dashboard for memory management')`. Existing methods remain unchanged. | Add tests to `apps/server/src/memory/postgres.test.ts` (or create if not exists). Mock `ghagga-db` imports. Call each new method and `expect(...).rejects.toThrow('Not implemented')`. |
-| **Unit — CLI utils** | `formatTable`: header/separator/data alignment. `formatSize`: bytes, KB, MB thresholds. `formatId`: padding for various ID lengths. `truncate`: short string unchanged, long string truncated with `...`. | New `apps/cli/src/commands/memory/utils.test.ts`. Pure functions, no mocking needed. |
-| **Unit — CLI list** | Happy path (table output), `--repo` filter, `--type` filter, `--limit`, empty results ("No observations found."), no DB file (prints message, exits 0). | New `apps/cli/src/commands/memory/list.test.ts`. Mock `SqliteMemoryStorage.create` and `existsSync`. Spy on `console.log` and `process.exit`. Verify output format and exit codes. |
-| **Unit — CLI search** | Happy path (numbered results), `--repo` explicit, `--repo` inferred from git, `--limit`, empty results, no DB file. | New `apps/cli/src/commands/memory/search.test.ts`. Mock `SqliteMemoryStorage.create`, `existsSync`, and `resolveProjectId`. |
-| **Unit — CLI show** | Happy path (all fields displayed), not found (exit 1), invalid ID format (exit 1), no DB file (exit 0). | New `apps/cli/src/commands/memory/show.test.ts`. Mock storage, verify output contains all expected fields. |
-| **Unit — CLI delete** | Happy path with confirmation, cancel, `--force`, not found (exit 1), non-TTY without force (exit 1), non-TTY with force, invalid ID, no DB file. | New `apps/cli/src/commands/memory/delete.test.ts`. Mock storage, `readline/promises`, and `process.stdin.isTTY`. |
-| **Unit — CLI stats** | Happy path (full stats output), empty DB ("(none)" sections), no DB file. | New `apps/cli/src/commands/memory/stats.test.ts`. Mock storage and `fs.statSync`. |
-| **Unit — CLI clear** | Happy path all, scoped `--repo`, cancel, `--force`, no observations (exit 0, no prompt), non-TTY without force (exit 1), non-TTY with force, no DB file. | New `apps/cli/src/commands/memory/clear.test.ts`. Mock storage and confirmation. |
+| Layer                            | What to Test                                                                                                                                                                                                                                                                                                                                                                                | Approach                                                                                                                                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit — SqliteMemoryStorage**   | `listObservations`: no filters, project filter, type filter, combined filters, limit/offset, empty results, newest-first ordering. `getObservation`: found, not found. `deleteObservation`: found + deleted + FTS5 cleaned, not found returns false. `getStats`: populated DB, empty DB, null dates. `clearObservations`: all observations, scoped by project, returns count, FTS5 cleaned. | Extend existing `packages/core/src/memory/sqlite.test.ts`. Use real sql.js with temp directory (same pattern as existing tests). Add FTS5 verification: after delete, `searchObservations` must NOT return the deleted row. |
+| **Unit — PostgresMemoryStorage** | All 5 new methods throw `Error('Not implemented — use Dashboard for memory management')`. Existing methods remain unchanged.                                                                                                                                                                                                                                                                | Add tests to `apps/server/src/memory/postgres.test.ts` (or create if not exists). Mock `ghagga-db` imports. Call each new method and `expect(...).rejects.toThrow('Not implemented')`.                                      |
+| **Unit — CLI utils**             | `formatTable`: header/separator/data alignment. `formatSize`: bytes, KB, MB thresholds. `formatId`: padding for various ID lengths. `truncate`: short string unchanged, long string truncated with `...`.                                                                                                                                                                                   | New `apps/cli/src/commands/memory/utils.test.ts`. Pure functions, no mocking needed.                                                                                                                                        |
+| **Unit — CLI list**              | Happy path (table output), `--repo` filter, `--type` filter, `--limit`, empty results ("No observations found."), no DB file (prints message, exits 0).                                                                                                                                                                                                                                     | New `apps/cli/src/commands/memory/list.test.ts`. Mock `SqliteMemoryStorage.create` and `existsSync`. Spy on `console.log` and `process.exit`. Verify output format and exit codes.                                          |
+| **Unit — CLI search**            | Happy path (numbered results), `--repo` explicit, `--repo` inferred from git, `--limit`, empty results, no DB file.                                                                                                                                                                                                                                                                         | New `apps/cli/src/commands/memory/search.test.ts`. Mock `SqliteMemoryStorage.create`, `existsSync`, and `resolveProjectId`.                                                                                                 |
+| **Unit — CLI show**              | Happy path (all fields displayed), not found (exit 1), invalid ID format (exit 1), no DB file (exit 0).                                                                                                                                                                                                                                                                                     | New `apps/cli/src/commands/memory/show.test.ts`. Mock storage, verify output contains all expected fields.                                                                                                                  |
+| **Unit — CLI delete**            | Happy path with confirmation, cancel, `--force`, not found (exit 1), non-TTY without force (exit 1), non-TTY with force, invalid ID, no DB file.                                                                                                                                                                                                                                            | New `apps/cli/src/commands/memory/delete.test.ts`. Mock storage, `readline/promises`, and `process.stdin.isTTY`.                                                                                                            |
+| **Unit — CLI stats**             | Happy path (full stats output), empty DB ("(none)" sections), no DB file.                                                                                                                                                                                                                                                                                                                   | New `apps/cli/src/commands/memory/stats.test.ts`. Mock storage and `fs.statSync`.                                                                                                                                           |
+| **Unit — CLI clear**             | Happy path all, scoped `--repo`, cancel, `--force`, no observations (exit 0, no prompt), non-TTY without force (exit 1), non-TTY with force, no DB file.                                                                                                                                                                                                                                    | New `apps/cli/src/commands/memory/clear.test.ts`. Mock storage and confirmation.                                                                                                                                            |
 
 ### Test Patterns
 

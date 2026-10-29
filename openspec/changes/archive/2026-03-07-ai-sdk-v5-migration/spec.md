@@ -299,7 +299,7 @@ work without changes.
 **Given** a valid provider/model/apiKey configuration
 **When** `generateText({ model, system, prompt, temperature })` is called
 **Then** the result has `.text` (string) and `.usage` with
-  `promptTokens` and `completionTokens` (numbers)
+`promptTokens` and `completionTokens` (numbers)
 **And** behavior is identical to v4
 
 ### S-05: Provider Factory Functions
@@ -322,17 +322,17 @@ work without changes.
 
 ## 6. Summary of Required Code Changes
 
-| File | Line(s) | Change | Risk |
-|------|---------|--------|------|
-| `packages/core/package.json` | 54-57, 60 | Bump `ai`, `@ai-sdk/*`, `zod` versions | Low |
-| `apps/server/package.json` | 28 | Bump `zod` version | Low |
-| `packages/core/src/providers/index.ts` | — | **None expected** (verify at typecheck) | Low |
-| `packages/core/src/providers/fallback.ts` | — | **None expected** (verify at typecheck) | Low |
-| `packages/core/src/agents/simple.ts` | — | **None expected** (verify at typecheck) | Low |
-| `packages/core/src/agents/consensus.ts` | — | **None expected** (verify at typecheck) | Low |
-| `packages/core/src/agents/workflow.ts` | — | **None expected** (verify at typecheck) | Low |
-| `apps/server/src/routes/api/settings.ts` | 148 | Possibly `.issues` → `.errors` (Zod v4) | Low |
-| Test files | — | **None expected** (verify at test run) | Low |
+| File                                      | Line(s)   | Change                                  | Risk |
+| ----------------------------------------- | --------- | --------------------------------------- | ---- |
+| `packages/core/package.json`              | 54-57, 60 | Bump `ai`, `@ai-sdk/*`, `zod` versions  | Low  |
+| `apps/server/package.json`                | 28        | Bump `zod` version                      | Low  |
+| `packages/core/src/providers/index.ts`    | —         | **None expected** (verify at typecheck) | Low  |
+| `packages/core/src/providers/fallback.ts` | —         | **None expected** (verify at typecheck) | Low  |
+| `packages/core/src/agents/simple.ts`      | —         | **None expected** (verify at typecheck) | Low  |
+| `packages/core/src/agents/consensus.ts`   | —         | **None expected** (verify at typecheck) | Low  |
+| `packages/core/src/agents/workflow.ts`    | —         | **None expected** (verify at typecheck) | Low  |
+| `apps/server/src/routes/api/settings.ts`  | 148       | Possibly `.issues` → `.errors` (Zod v4) | Low  |
+| Test files                                | —         | **None expected** (verify at test run)  | Low  |
 
 **Key insight:** GHAGGA's usage of the AI SDK is minimal and focused —
 `generateText()` with `system` + `prompt` strings, no tools, no streaming, no

@@ -6,6 +6,7 @@
 > `changeset version`, or these won't be picked up for the version bump).
 
 ### Changed
+
 - **TypeScript 6.0** — bumped `typescript` to `^6.0.3` across all 7 workspaces (#246). TS 6.0 stopped auto-including `@types/node` when `lib` is set explicitly and made `baseUrl` a deprecation error; fixed via `types: ["node"]` in the base tsconfig, adding `@types/node` to `@ghagga/types`, and dropping the deprecated `baseUrl` in the dashboard tsconfig (paths now resolve relative to the tsconfig — TS 7-ready).
 - **Dependency bumps** — `commander` 14 → 15 (#243); the `minor-and-patch` group of 23 deps (#245); `actions/setup-node` 6.3 → 6.4 (#240); `actions/deploy-pages` 4 → 5 (#241).
 - **CI/runtime on Node 24** — `actions/checkout` 4.2.2 → 6.0.3 and the Action's own runtime `node20` → `node24` (#247), ahead of the GitHub Actions Node 20 deprecation (forced 2026-06-16, removed 2026-09-16).
@@ -20,37 +21,43 @@
 > change mislabeled as minor — corrected after a 3-package breaking-change audit.
 
 ### ⚠ BREAKING CHANGES
+
 - **ghagga-core — `applyVirtualPatches` return type**: changed from `string` to `VirtualPatchResult` (`{ diff, injectedLineIndices }`). Callers using the return value as a string break at compile and runtime.
 - **ghagga (CLI) — legacy `--provider` values rejected**: `github`, `anthropic`, `openai`, `google`, `groq`, `openrouter`, `azure`, `deepseek`, `qwen`, `cerebras` now exit 1 (use `gateway`, the new default). Default model `gpt-4o-mini` → `auto`. Stored-config legacy values are silently remapped, so logged-in users without an explicit flag are unaffected.
 - **ghagga-db — delegated-CI surface removed**: 9 query functions + 5 schema exports (`delegatedCiRuns`, `DbDelegatedCi*`, …) deleted. `encrypt()` output format `v1` → `v2`; `decrypt()` auto-detects both (read-compatible).
 
 ### Added
+
 - **"What changed" semantic-diff section in the PR comment (wire-semantic-diff)** — the bot's review comment now renders an entity-level "🧬 What changed" section (collapsed `<details>`) between the Summary and the Findings, listing the functions/classes/types/exports added/removed/modified by the PR, grouped by file, plus an aggregate import-change count. It is driven by `ReviewResult.semanticDiff` (see below) via `formatSemanticDiffSection`, which is now the module's first production consumer — the extractor is no longer an unwired re-export. Presentation policy: `method_*` noise is dropped, only TS/JS files are surfaced (the gate now covers the full module-extension set including the TS variants `.mts`/`.cts`, not just `.mjs`/`.cjs`), visible entities are capped at 10 with a `+N more` indicator, and the section silently collapses to nothing for imports-only/empty diffs (the comment stays byte-identical to having no section). Entity names and file basenames are attacker-controlled (diff-derived) and are contained accordingly — see the Security entry below.
 - **Entity-level semantic diff wired into the review pipeline (wire-semantic-diff)** — `ReviewResult` gains `semanticDiff?: SemanticDiff` (entity-level changes + human-readable summary), computed in the enrich phase over the FILTERED diff (never truncated — `truncateDiff` writes the separate `truncatedDiff` field — so counts stay honest on giant PRs). Degrades warn-only: an extractor failure never downgrades the verdict or enters `failedSteps`; it surfaces only through `coverageComplete: false`. A deliberate size gate skips the computation entirely when the filtered diff exceeds 2 000 000 chars (~2 MB, flood-scale) — that skip is policy, not failure, so no degradation is recorded and `coverageComplete` stays `true`. Serialization surface is part of the observable contract: the field is NOT persisted in the DB and NOT exposed by the HTTP API (`toReviewDto`), but it DOES appear in full-result serializations — `ghagga review --format json` output and the ACP `review-result` artifact — deliberately (additive-optional; both consumers already own the raw diff; pinned by tests). The arrow-function declaration pattern was also tightened and extended: parenthesized non-function initializers (casts) no longer classify as functions, bare single-param arrows are detected, and generic arrows (`const f = <T>(x: T) => x`, `<T extends object>`, async + return-type variants, nested paren-free constraints) are now detected; documented limitations (multiline arrows, generic constraints containing parens) are pinned in tests.
 - **First-class coverage signal, orthogonal to the review verdict (coverage-complete-signal)** — `ReviewResult` gains `coverageComplete?: boolean`: `true` when every pipeline step ran, `false` when at least one step degraded — tracked failures (see `failedSteps`) AND warn-only degradations (call-chain, negative-examples, self-improve, whose step names stay internal and never trigger the PARTIAL downgrade) — `undefined` when the pipeline never ran (SKIPPED early-returns like flood-skip / all-files-filtered, which short-circuit before finalize). Previously only a PASSED review signaled incomplete coverage (via the PASSED→PARTIAL downgrade) — a FAILED or NEEDS_HUMAN_REVIEW review with degraded steps carried `failedSteps` but no first-class signal. The verdict logic is UNCHANGED: the downgrade stays PASSED-only and the Action/CLI exit behavior is untouched (semver minor, new optional field). The signal travels the full stack: persisted inside the review row's `metadata` jsonb by the server queue, surfaced on the wire `Review` type (`@ghagga/types`) — key omitted for legacy rows and SKIPPED reviews — and rendered in the dashboard as a discreet ⚠ next to the status badge ("Incomplete coverage — some pipeline steps degraded"). Also corrects the `failedSteps` docstring, which falsely claimed the field was only present for PARTIAL status.
 
 ### Fixed
+
 - **Recursive review off-by-N closed + collision-immune marker tracking (recursive-coordinate-contract)** — `applyVirtualPatches` now emits a VALID unified diff: when it injects a `+[SUGGESTED FIX]` marker it renumbers the affected hunk header (`newCount += markers-in-hunk`) and shifts every later hunk's `newStart` by the markers injected above it, so the declared `@@ +N` matches the real physical line. Previously the headers were left untouched, so on iteration 2+ of the recursive loop the markers from iteration 1 shifted the line counter and later suggestions landed one line late per preceding injection (a non-deterministic off-by-N that depended on whether the re-review LLM numbered by hunk headers or by physical lines). Both interpretations now read truthful coordinates and converge on the same line (gated by a both-interpretation contract test). Marker identity is tracked OUT-OF-BAND via positional indices recorded at injection time (`VirtualPatchResult.injectedLineIndices`) instead of scanning the `[SUGGESTED FIX]` text prefix — collision-immune against genuine source lines that begin with that string. `applyVirtualPatches` now returns `VirtualPatchResult { diff, injectedLineIndices }` instead of a bare string (**BREAKING** — see ⚠ Breaking Changes above; this was previously mislabeled "semver minor". The public `RecursiveReviewReport` is unchanged). The malformed-only and no-op walker behaviors stay byte-identical to the legacy walker (gated by the parity suite).
 - **Quoted diff paths no longer dropped (CORE-M6)** — `parseDiffFiles` now parses `core.quotepath`-quoted headers (`diff --git "a/caf\303\251.ts" "b/caf\303\251.ts"`), unescaping C-style and octal UTF-8 escapes into the real path (`café.ts`). Previously these files were silently dropped from the review AND their diff lines were absorbed into the previous file's `content`, polluting both per-file stats and the diff sent to the LLM. Behavior change in a public API (semver minor); all other inputs remain byte-identical (gated by a golden-corpus byte-parity suite). Under the same umbrella, the experimental `extractSemanticDiff` now resolves the real unescaped path for quoted headers (previously their declarations were attributed to `unknown`).
 - **Rename detection now uses a real LCS similarity (CORE-M8)** — `computeSimilarity` (private helper of `detectRenames` in `scope/entity-diff.ts`) now computes an actual longest-common-subsequence ratio (`LCS(a, b) / max(len)`, classic two-row DP, O(n*m) time / O(min(n, m)) memory) as its doc comment always claimed. Previously it compared characters at the SAME positions, so any shift in the normalized body ("Xabcde" vs "abcde") scored near 0 and broke rename detection for bodies with a small leading edit. Strictly more permissive: every pair scores ≥ its old positional score, so previously detected renames are still detected and shifted-body renames are now caught too; the default 0.9 threshold is unchanged. Defensive guards: (1) the DP compares at most the first 10 000 chars of each body, but the ratio's denominator keeps the ORIGINAL lengths, so two giant bodies identical only within the capped prefix score at most `10k / max(len)` instead of a false 1.0 (truly identical bodies still score exact 1.0 via an identity fast-path on the uncapped strings); (2) a free length-ratio prefilter skips the DP for pairs that provably cannot reach the threshold (`LCS ≤ min(len)` ⇒ `similarity ≤ min(len)/max(len)`); (3) a per-`detectRenames` DP work budget (200M cell updates ≈ low single-digit seconds worst case, configurable via `EntityDiffOptions.lcsDpCellBudget`) bounds total CPU — once exhausted, remaining pairs are treated as not similar (renames possibly missed on pathological diffs, CPU never unbounded). Behavior change reaches the public `detectRenames` (no production callers; exercised via re-exports and tests only).
-- **Semantic-diff summary kinds: import/export double-count and class_modified (semantic-diff)** — `EntityChangeKind` gains `class_modified`, `import_modified` and `export_modified`, and `extractSemanticDiff` now uses them truthfully. Previously (A) `buildSummary` passed `import_added`/`export_added` as the import/export group's *modifiedKind* (the `*_modified` members did not exist), so every added import/export was double-counted in the summary ("1 import added, 1 import modified" for a single added import), and a genuinely modified import/export (same module/name on both diff sides — reachable) fell into the false branch of a two-way ternary and was misreported as `import_removed`/`export_removed` despite carrying both signatures; and (B) `mapToChangeKind` collapsed a modified class to `function_modified`, which `buildSummary` ALSO keyed the class group's modified count off — so every modified function leaked into the summary as "N class modified". Now: added imports/exports count once, modified imports/exports/classes report `import_modified`/`export_modified`/`class_modified`, and the function/class summary groups no longer cross-contaminate. Behavior change in a public type + public API (semver minor); the module is `@experimental` with ZERO production callers (only re-exported from `core/src/index.ts`). The parity harness vs the frozen pre-adapter baseline now scopes legacy equality to the unchanged surface (change sets identical up to three pinned kind rewrites) and pins the divergence explicitly against a frozen fixed-summary expectation, following the `assertMarkerPathDivergence` precedent.
+- **Semantic-diff summary kinds: import/export double-count and class_modified (semantic-diff)** — `EntityChangeKind` gains `class_modified`, `import_modified` and `export_modified`, and `extractSemanticDiff` now uses them truthfully. Previously (A) `buildSummary` passed `import_added`/`export_added` as the import/export group's _modifiedKind_ (the `*_modified` members did not exist), so every added import/export was double-counted in the summary ("1 import added, 1 import modified" for a single added import), and a genuinely modified import/export (same module/name on both diff sides — reachable) fell into the false branch of a two-way ternary and was misreported as `import_removed`/`export_removed` despite carrying both signatures; and (B) `mapToChangeKind` collapsed a modified class to `function_modified`, which `buildSummary` ALSO keyed the class group's modified count off — so every modified function leaked into the summary as "N class modified". Now: added imports/exports count once, modified imports/exports/classes report `import_modified`/`export_modified`/`class_modified`, and the function/class summary groups no longer cross-contaminate. Behavior change in a public type + public API (semver minor); the module is `@experimental` with ZERO production callers (only re-exported from `core/src/index.ts`). The parity harness vs the frozen pre-adapter baseline now scopes legacy equality to the unchanged surface (change sets identical up to three pinned kind rewrites) and pins the divergence explicitly against a frozen fixed-summary expectation, following the `assertMarkerPathDivergence` precedent.
 - **Entity diff deletions attributed by new-side position (CORE-M9)** — `extractEntityDiffLines` now attributes deletions to the symbol containing the live new-side position where the removal happened. Previously deletions were compared by their OLD-side line number against the NEW-side symbol ranges (the contract of `mapDiffToSymbols`), mis-attributing them whenever earlier hunks made old/new line numbers drift apart (insertions above, deleted-file hunks). Behavior change in a public API with no production callers (semver minor); every other input stays identical to the historical behavior (gated by a dual-baseline parity suite where the frozen legacy copy and the M9-fixed copy differ by exactly one comparison).
 - **Static-analysis findings scoped to the changed files** — static tools (Semgrep, CPD, …) scan the whole repo, so reviewing a small change could surface — and FAIL on — pre-existing findings from unrelated files. The static-only verdict now counts only findings located in the changed files (out-of-diff dependents excluded by design; a finding in an unchanged file is pre-existing and must not fail the change). Dependency/SCA findings (Trivy / `dependency-vulnerability`) are exempt — they live in lockfiles usually outside the diff but represent real risk. Out-of-scope findings stay visible but no longer drive the verdict.
 - **Bundled Semgrep ruleset now runs in the active pipeline** — the active `semgrepPlugin` ran only `--config auto`, so ghagga's own curated rules (`semgrep-rules.yml`: command-injection, eval usage, SQL string concat) never executed. It now also passes the bundled rules. The secret rule was tightened to high-signal provider prefixes + secret-keyword var names (dropping generic base64/hex matches that flagged any UUID/hash). A gitleaks allowlist for test-fixture paths was added.
 - **`getClientIp` trust-boundary documented** — replaced the stale "Render" reference with an explicit, deploy-time-validated contract (last-IP is correct only behind exactly one trusted appending proxy with the app port firewalled). No behavior change.
 
 ### Security
+
 - **Attacker-controlled basenames contained in inline code (wire-semantic-diff)** — file basenames rendered in the PR comment are fully attacker-controlled: git emits diff headers for paths containing arbitrary bytes, and the quoted-path unescaper (`diff/parse.ts`) decodes octal/`\n` escapes into a REAL newline that survives into `filePath`. `sanitizeMarkdownText` did NOT defang this — it does not flatten newlines (only normalizes CRLF) and does not suppress `#1234`/SHA/`@` auto-links — so a basename like `x\n# PWNED\n| t |` rendered as `**${basename}**` broke the bold span and injected a live heading/table/bullets into the bot's own comment, and embedded `#refs`/40-hex SHAs auto-linked (notification spam / forged backlinks). A shared `sanitizeBasename` helper now wraps the basename in INLINE CODE (`sanitizeTableCell` flattens newlines + escapes pipes; GitHub suppresses `#ref`/SHA/`@mention` auto-links inside code spans; a backtick strip stops the span from being closed), closing markdown-structure injection AND autolink forgery at once. Applied to BOTH the new "What changed" section header AND the pre-existing "Files Changed" summary (`formatFileCategorySummary`), which shared the same sink — "Files Changed" basenames now render in monospace (a deliberate, security-motivated presentation change). Reproduced end-to-end against the real parser, not theory; not XSS (`<`→`&lt;` plus the `/`-split kill slash payloads).
 - **`/api/reviews` no longer exposes AI-internal finding fields (project-wire-finding)** — the HTTP API's wire `Finding` type is now a deliberate projection of core's `ReviewFinding`: `toReviewDto` strips `filterReason` (raw LLM reasoning) and `exploitabilityDetail`/`usageDetail` (which carry internal repo paths — `importSites`, `reachableFrom`, `filesScanned`) from every finding before it reaches the auth-gated endpoint (any installation-token holder). Only labels and signals are kept (`exploitability`, `usageLabel`, `aiFiltered`, `aiPriority`, `source`), mirroring how `coverageComplete` exposes a boolean without the degraded step names. These fields were already emitted untyped (a consequence of persisting findings verbatim — #227) but had no consumer; the local `ghagga review --format json` and ACP outputs still carry the full `ReviewFinding` (the user owns that data). `@ghagga/types` `Finding` changes from an alias of `ReviewFinding` to `Omit<ReviewFinding, 'filterReason' | 'exploitabilityDetail' | 'usageDetail'>`, so the type now matches exactly what the wire emits.
 
 ## [2.8.1] - 2026-03-31
 
 ### Fixed
+
 - CLI published with unresolvable `workspace:*` dependency for ghagga-core
 
 ## [2.8.0] - 2026-03-31
 
 ### Added
+
 - **Review Checklist** -- Configurable SOLID principles, error handling, boundary conditions, and security checklist with weighted scoring engine. Each dimension contains named checks with importance weights (1-10). Findings are mapped to the most relevant dimension and check via keyword analysis, producing per-dimension score summaries. Checklist is injected into agent prompts for structured evaluation. Configurable via `ChecklistConfig` (enable/disable dimensions, adjust weights).
 - **Tree-sitter Symbol Scoping** -- Symbol-level review scoping using `web-tree-sitter`. Extracts functions, classes, methods, and interfaces from source files (TypeScript, JavaScript, Python, Go), maps diff hunks to affected symbols, and builds scoped context so AI agents review only the symbols touched by the change instead of entire files.
 - **Recursive Quality Feedback Loop** -- Self-validating review cycle that re-reviews suggested patches before presenting them to the user. Extracts patches from review suggestions, runs them through a second review pass, and flags regressions. Converges early if no new issues are found. Configurable max iterations (default: 2).
@@ -64,23 +71,27 @@
 ## [2.6.0] - 2026-03-21
 
 ### Added
+
 - **LLM Gateway provider** — Centralized provider for routing to multiple LLM endpoints with round-robin distribution, API key management, and model selection UI in dashboard.
 - **Model selector in dashboard** — Dropdown for choosing specific models within the LLM Gateway provider, with Copilot pricing tiers support.
 - **Models used in review comments** — Review output now shows which specialist agent used which model for each finding.
 - **Gateway debug logging** — Enhanced logging for troubleshooting provider chain issues.
 
 ### Fixed
+
 - **Gateway provider chain** — Now maps ALL provider entries for proper round-robin distribution instead of just the first one.
 - **Gateway dashboard bugs** — Fixed validated state, autocomplete, and MIMO model handling.
 - **Default ignorePatterns** — Added all lockfile formats (package-lock.json, yarn.lock, pnpm-lock.yaml, etc.) to prevent review noise.
 - **Workflow and consensus modes** — Now work with all backends (CLI bridge, gateway, SDK) instead of only GitHub provider.
 
 ### Refactored
+
 - **Backend compatibility** — Unified workflow and consensus agent implementations to work across all provider backends.
 
 ## [2.5.0] - 2026-03-08
 
 ### Added
+
 - **TUI polish** — Colored severity indicators (red/yellow/cyan), box-drawing summary at end of review, step progress `[n/m]` with spinners, section dividers between tool groups.
 - **`--output json|sarif|markdown` flag** — Unified output format flag for the review command. SARIF v2.1.0 output integrates with GitHub Security tab and standard SAST tooling.
 - **`--enhance` flag** — AI-powered post-analysis enhancement (opt-in). Groups related findings, assigns AI priorities, suggests fixes, and filters noise. Non-blocking — failures fall back to unenhanced results.
@@ -91,25 +102,30 @@
 - **chalk adapter** — `ui/chalk.ts` wraps chalk v5 for styled terminal output. Commands access colors only through the TUI facade.
 
 ### Fixed
+
 - **Dashboard ToolGrid invisible** — Server never called `initializeDefaultTools()`, so `toolRegistry.getAll()` returned `[]` and the dashboard fell back to the legacy 3-checkbox UI. Now initializes the 15-tool registry at server startup.
 - **Webhook tool config dropped** — `enabledTools`/`disabledTools` were omitted when the webhook handler dispatched Inngest events, so dashboard tool configuration had no effect on actual PR reviews. Both fields are now forwarded.
 
 ### Deprecated
+
 - **`--format` flag** — Replaced by `--output`. Still works as an alias but shows no warning (silent deprecation).
 
 ## [2.4.2] - 2026-03-08
 
 ### Fixed
+
 - **API globalSettings response** — `GET /api/settings` now includes `enabledTools` and `disabledTools` in the `globalSettings` object. Previously the dashboard's inherited ToolGrid always showed all tools as enabled.
 - **Installation settings API** — `GET /api/installation-settings` now returns `enabledTools`, `disabledTools`, and `registeredTools`. `PUT /api/installation-settings` now accepts `enabledTools`/`disabledTools`.
 - **GlobalSettings dashboard page** — Replaced 4 legacy checkboxes (Semgrep/Trivy/CPD/Memory) with full ToolGrid component showing all 15 tools with category grouping and per-tool toggles.
 
 ### Removed
+
 - **`GHAGGA_TOOL_REGISTRY` feature flag** — The registry-driven orchestrator is now the only path. The legacy 3-tool hardcoded path has been removed. `isToolRegistryEnabled()` kept as deprecated stub for existing imports.
 
 ## [2.4.1] - 2026-03-08
 
 ### Fixed
+
 - **Runner template dynamic tool resolution** — The runner YAML template now dynamically resolves which of the 15 static analysis tools to run. Previously, `enabledTools`/`disabledTools` sent by the server were silently ignored by the runner, which only ran the 3 legacy tools (Semgrep, Trivy, CPD).
 - **12 new tool blocks in runner** — Gitleaks, ShellCheck, markdownlint, Lizard, Ruff, Bandit, golangci-lint, Biome, PMD, Psalm, clippy, and Hadolint can now run on the user's GitHub Actions runner.
 - **Auto-detection in runner** — The resolve step detects which auto-detect tools to activate based on file extensions in the target repository.
@@ -118,6 +134,7 @@
 ## [2.4.0] - 2026-03-08
 
 ### Added
+
 - **Extensible Static Analysis (3→15 tools)** — Replaced hardcoded Semgrep/Trivy/CPD integration with a plugin registry supporting 15 static analysis tools across 5 categories (security, SCA, duplication, lint, complexity). Enable via `GHAGGA_TOOL_REGISTRY=true` feature flag.
 - **Tool Tier System** — Tools are classified as `always-on` (run on every review) or `auto-detect` (activate when matching files are detected in the diff). Resolution order: always-on → auto-detect(files) → +enabledTools → -disabledTools.
 - **7 always-on tools** — Semgrep (security), Trivy (SCA + license scanning), CPD (duplication), Gitleaks (secret detection in git history), ShellCheck (Bash/Shell lint), markdownlint (Markdown lint), Lizard (cyclomatic complexity, 20+ languages).
@@ -133,6 +150,7 @@
 - **Delete memory sessions** — Users can now delete memory sessions from the dashboard and API.
 
 ### Deprecated
+
 - **`--no-semgrep`, `--no-trivy`, `--no-cpd` CLI flags** — Still work but show deprecation warnings. Use `--disable-tool semgrep`, `--disable-tool trivy`, `--disable-tool cpd` instead.
 - **`enable-semgrep`, `enable-trivy`, `enable-cpd` Action inputs** — Still work but deprecated. Use `enabled-tools`/`disabled-tools` inputs instead.
 - **`enableSemgrep`, `enableTrivy`, `enableCpd` config fields** — Still work in `.ghagga.json` but deprecated. Use `enabledTools`/`disabledTools` arrays instead.
@@ -140,6 +158,7 @@
 ## [2.3.0] - 2026-03-07
 
 ### Security
+
 - **Stack trace leak removed** — Error handler no longer exposes `err.message` or `err.stack` in non-production environments. Only generic error returned to client; full error logged server-side.
 - **Memory session auth** — `GET /api/memory/sessions/:id/observations` now verifies session ownership against the authenticated user's installations, preventing cross-team data access.
 - **CORS, rate limiting, security headers** — Server hardened with strict CORS origins, per-IP rate limiting, and security headers (X-Content-Type-Options, X-Frame-Options, etc.).
@@ -149,12 +168,14 @@
 - **Docker FROM annotated** — Base images annotated with digest comments for reproducibility.
 
 ### Performance
+
 - **N+1→Promise.all** — Sequential per-installation queries replaced with parallel `Promise.all()`, reducing API latency by ~90% for multi-installation users.
 - **Auth token cache (5min TTL)** — GitHub API user validation cached in-memory with 5-minute TTL, eliminating redundant `GET /user` calls on every request.
 - **Virtual scrolling** — Memory page uses `@tanstack/react-virtual` for observation/session lists, handling 1000+ items without DOM bloat.
 - **createdAt index on memoryObservations** — Added database index for efficient time-range queries at scale.
 
 ### Architecture
+
 - **api.ts split into 6 domain modules** — Monolithic 912-line route file refactored into `reviews.ts`, `repositories.ts`, `installations.ts`, `memory.ts`, `runner.ts`, and `settings.ts`.
 - **@ghagga/types shared types package** — 24 API types extracted into `packages/types`, replacing duplicated type definitions between dashboard and server.
 - **Provider chain DRY** — Extracted `buildProviderChainView()` helper, eliminating 3× duplicated `maskApiKey()` + mapping logic.
@@ -164,6 +185,7 @@
 - **Dynamic callback TTL** — Runner callback secret TTL configurable via `CALLBACK_TTL_MINUTES` env var (default: 11 min), supporting slow LLM providers.
 
 ### Added
+
 - **Biome linting** — Replaced ESLint + Prettier with Biome. Fixed 450 linting errors across the monorepo.
 - **Reviews-by-day stub** — `GET /api/stats/reviews-by-day` query endpoint for daily review statistics.
 - **Provider chain documentation** — Added inline docs and README section explaining provider chain configuration and fallback behavior.
@@ -174,10 +196,12 @@
 - **Dashboard typecheck fixes** — Added `jest-dom` types, resolved implicit `any` errors, and corrected `@ghagga/types` exports for clean CI builds.
 
 ### Accessibility
+
 - **useFocusTrap hook** — Custom hook traps keyboard focus inside modals (ObservationDetailModal, ConfirmDialog) per WCAG 2.4.3.
 - **7 axe a11y tests** — Automated accessibility tests with `jest-axe` across dashboard pages and modal components.
 
 ### Testing
+
 - **~2,778 total tests** — Up from 1,940 in v2.2.0 (+838 tests). Per-package: db:118, core:1328, cli:272, server:523, action:195, dashboard:342, types:24, e2e:14, security:14+.
 - **E2E integration tests** — 3 suites, 14 tests covering webhook→pipeline→comment, CLI review flow, and Action review flow.
 - **CI hardening** — Security scanning (CodeQL), coverage reporting, and mutation testing integrated into CI pipeline.
@@ -190,29 +214,34 @@
 ### Audit R4 — Production Readiness (16 improvements)
 
 #### Critical
+
 - **HTTP timeouts on all fetch() calls** — Added `AbortSignal.timeout()` to all GitHub API calls (10s for API calls, 15s for diff fetching, 5s for keepalive). Prevents resource exhaustion when GitHub is slow.
 - **Environment validation at startup (fail-fast)** — Server validates `DATABASE_URL`, `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, and `ENCRYPTION_KEY` at startup via `validate-env.ts`. Missing vars cause immediate exit with clear error message.
 - **FK cascade delete on all remaining FKs** — Migration `0008` adds `ON DELETE CASCADE` to `repositories.installation_id`, `reviews.repository_id`, and `github_user_mappings.installation_id`. Prevents orphaned data on GitHub App uninstall.
 
 #### High
+
 - **Correlation IDs (reviewId)** — Each review generates a `reviewId` (8-char UUID) propagated from webhook → Inngest event → pipeline logs → PR comment. Enables end-to-end tracing for debugging.
 - **Token cache periodic cleanup** — Added `setInterval` (every 5 minutes) to clean expired tokens from the auth cache, preventing slow memory leaks in low-traffic deployments.
 - **GitHub API pagination for >100 files/commits** — `getPRFileList()` and `getPRCommitMessages()` now paginate through all pages instead of truncating at 100 items.
 - **Keepalive fetch with timeout** — Render keepalive ping now uses `AbortSignal.timeout(5000)`.
 
 #### Medium
+
 - **CONTRIBUTING.md** — New contributor guide covering prerequisites, setup, testing, commit conventions, PR process, code style, and local PostgreSQL setup.
 - **`.env.example` improved** — All variables labeled `[REQUIRED]` or `[OPTIONAL]` with format descriptions and generation commands.
 - **Migrations made idempotent** — All custom SQL migrations now use `IF NOT EXISTS` / `DROP ... IF EXISTS` guards for safe re-execution.
 - **Dockerfile HEALTHCHECK** — Added `HEALTHCHECK` instruction for container orchestration health monitoring.
 
 #### Low
+
 - **Structured review metrics in logs** — Review completion logs now include structured `metrics` object with `durationMs`, `provider`, `status`, and `findingsCount`.
 - **API response envelope standardized** — All mutation endpoints (`PUT /api/settings`, `PUT /api/installation-settings`) now use `{ data: { message: ... } }` envelope consistent with GET endpoints.
 - **Error IDs in 500 responses** — All internal server errors include an `errorId` (8-char UUID) in both the response body and server logs, enabling support ticket correlation.
 - **Missing router imports fix** — Fixed missing route module imports that caused 404s on some API endpoints.
 
 ### Upgrades
+
 - **Vercel AI SDK v4 → v5** — Migrated to AI SDK 5 with updated provider APIs and streaming patterns.
 - **Zod v3 → v4** — Migrated to Zod 4 with updated schema APIs.
 - **Docker digest pinning** — All base images annotated with digest comments for supply-chain reproducibility.
@@ -220,6 +249,7 @@
 ## [2.2.0] - 2026-03-07
 
 ### Added
+
 - **Git Hooks Support** — `ghagga hooks install/uninstall/status` command group for automated pre-commit and commit-msg review. Hooks auto-detect `ghagga` in PATH with graceful fallback.
 - **`--staged` Flag** — Review only staged files via `git diff --cached` (for pre-commit hook).
 - **`--quick` Flag** — Static analysis only, skip AI review (~5-10s vs ~30-60s).
@@ -230,12 +260,14 @@
 - **3 New Environment Variables** — `GHAGGA_MEMORY_BACKEND`, `GHAGGA_ENGRAM_HOST`, `GHAGGA_ENGRAM_TIMEOUT`.
 
 ### Testing
+
 - **1,940 Total Tests** — Added 63 hooks tests + 149 Engram adapter tests. Per-package: db:118, core:675, cli:272, server:413, action:195, dashboard:267.
 - **91.61% Mutation Score** — Stryker mutation testing on EngramMemoryStorage (client: 87.96%, mapping: 91.40%, adapter: 95.41%).
 
 ## [2.1.0] - 2026-03-07
 
 ### Added
+
 - **SQLite Memory for CLI & Action** — Local review memory using sql.js (WASM) with FTS5 full-text search. CLI stores at `~/.config/ghagga/memory.db`, Action persists via `@actions/cache`. (#10)
 - **Memory Management Commands** — 6 new CLI subcommands: `ghagga memory list|search|show|delete|stats|clear`. (#11)
 - **CLI TUI** — Styled terminal output using `@clack/prompts` with automatic plain fallback in CI/non-TTY environments. Global `--plain` flag. (#12)
@@ -246,10 +278,12 @@
 - **5 DELETE API Endpoints** — Memory management via REST API: delete observation, clear project, purge all, delete session, clean empty sessions.
 
 ### Changed
+
 - **Expanded Significance Filter** — Now saves critical + high + medium findings to memory (was critical + high only).
 - **Documentation Overhaul** — Updated 15 documentation files to reflect all v2.1 features: memory availability, CLI commands, permissions, test counts, API reference, schema, architecture.
 
 ### Fixed
+
 - **Empty Memory Sessions** — Sessions are now created only after confirming significant findings exist, preventing orphaned empty sessions.
 - **Dedup Session Reassignment** — When re-reviewing a PR within 15 minutes, deduplication now correctly reassigns observations to the new session.
 - **CASCADE Delete** — Fixed missing `ON DELETE CASCADE` on `memory_observations.session_id` foreign key.
@@ -259,21 +293,25 @@
 - **Dashboard Session Fields** — Fixed `startedAt`→`createdAt` mapping and added `observationCount` via LEFT JOIN.
 
 ### Security
+
 - **GitHub App Permissions Reduced** — Removed Administration R&W and Contents R&W. Now requires only: Pull requests R&W, Actions Write, Secrets R&W, Metadata Read.
 
 ### Testing
+
 - **1,728 Total Tests** — Added 211 tests in coverage audit plus 65 tests for memory detail view. Per-package: db:118, core:526, cli:209, server:413, action:195, dashboard:267.
 - **91% Mutation Score** — Stryker mutation testing on SqliteMemoryStorage exceeds 80% target.
 
 ## [2.0.1] - 2026-03-05
 
 ### Fixed
+
 - Duplicate review bug (workflow running alongside GitHub App)
 - False positives (memory bias, dead reviewLevel config, phantom coding standards)
 - Docsify sidebar links (absolute URLs for internal navigation)
 - Format review comment deduplication (extracted to `packages/core/src/format.ts`)
 
 ### Added
+
 - Delegated runner architecture (static analysis via GitHub Actions `workflow_dispatch`)
 - Auto-runner creation (dashboard OAuth creates runner repo from template)
 - Dashboard OAuth authentication (composite UNIQUE, stale cleanup, OAuth Web Flow)
@@ -284,6 +322,7 @@
 ## [2.0.0] - 2026-03-04
 
 ### Added
+
 - Complete v2 rewrite from Deno/Supabase to TypeScript monorepo
 - 3 distribution modes: SaaS (GitHub App), GitHub Action, CLI
 - Semgrep + Trivy + CPD static analysis integration

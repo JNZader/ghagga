@@ -2,7 +2,7 @@
 
 **Status**: draft  
 **Spec**: [spec.md](./spec.md)  
-**Date**: 2026-03-16  
+**Date**: 2026-03-16
 
 ## Architecture Decisions
 
@@ -38,13 +38,13 @@ export async function runWithConcurrency<T>(
 **Design**:
 ```typescript
 // Full system prompt (specialist 1):
-[specialist.system, staticContext, memoryContext, stackHints, reviewLevel, REVIEW_CALIBRATION]
-
-// Compact system prompt (specialists 2-5):
-[specialist.system, reviewLevel, COMPACT_CALIBRATION]
-
-// Synthesis (unchanged):
-[SYNTHESIS_SYSTEM, reviewLevel, REVIEW_CALIBRATION]
+[specialist.system, staticContext, memoryContext, stackHints, reviewLevel, REVIEW_CALIBRATION][
+  // Compact system prompt (specialists 2-5):
+  (specialist.system, reviewLevel, COMPACT_CALIBRATION)
+][
+  // Synthesis (unchanged):
+  (SYNTHESIS_SYSTEM, reviewLevel, REVIEW_CALIBRATION)
+];
 ```
 
 The compact calibration preserves the most important constraint (80%+ confidence threshold) while dropping verbose context that the specialist doesn't need for its focused analysis.
@@ -64,7 +64,7 @@ The compact calibration preserves the most important constraint (80%+ confidence
 ```typescript
 export interface WorkflowReviewInput {
   diff: string;
-  providerChain: FallbackProvider[];  // replaces provider/model/apiKey
+  providerChain: FallbackProvider[]; // replaces provider/model/apiKey
   staticContext: string;
   memoryContext: string | null;
   stackHints: string;
@@ -237,6 +237,7 @@ Pipeline → Consensus Agent
 ## Compact Prompt Detail
 
 ### Full system prompt (~800-1000 tokens, specialist 1 only):
+
 ```
 [WORKFLOW_SCOPE_SYSTEM]         ~120 tokens
 [staticContext]                  ~300 tokens (variable)
@@ -247,6 +248,7 @@ Pipeline → Consensus Agent
 ```
 
 ### Compact system prompt (~170-210 tokens, specialists 2-5):
+
 ```
 [WORKFLOW_*_SYSTEM]             ~120-170 tokens
 [reviewLevelInstruction]        ~40 tokens
@@ -254,6 +256,7 @@ Pipeline → Consensus Agent
 ```
 
 ### COMPACT_CALIBRATION content:
+
 ```
 Only report findings you are 80%+ confident about based on the actual code shown.
 Do not flag stylistic preferences or hypothetical edge cases.

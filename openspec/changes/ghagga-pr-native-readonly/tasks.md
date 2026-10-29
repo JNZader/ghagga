@@ -2,14 +2,14 @@
 
 ## Review Workload Forecast
 
-| Field | Value |
-|---|---|
+| Field                   | Value                                                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Estimated changed lines | ~4,500–6,000 including full snapshot ≥1,027. Separate planning prerequisite: 903 lines plus design/tasks, excluded from Unit 1; overage pending (research alone: 427). |
-| 400-line budget risk | High; coherent Unit 2B migration `size:exception` is approved; planning and PR4 scopes remain pending |
-| Chained PRs recommended | Yes |
-| Suggested split | PR1–PR5 follow Units 1–5; planning separate |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | feature-branch-chain |
+| 400-line budget risk    | High; coherent Unit 2B migration `size:exception` is approved; planning and PR4 scopes remain pending                                                                  |
+| Chained PRs recommended | Yes                                                                                                                                                                    |
+| Suggested split         | PR1–PR5 follow Units 1–5; planning separate                                                                                                                            |
+| Delivery strategy       | ask-on-risk                                                                                                                                                            |
+| Chain strategy          | feature-branch-chain                                                                                                                                                   |
 
 Decision needed before apply: No
 Chained PRs recommended: Yes
@@ -20,14 +20,14 @@ Units 1, 2A, 2H, 2B, 2C, 2D, and 3 are complete and were delivered with PR #383 
 
 ### Units
 
-| Unit | Order / estimate | Focused test command | Runtime harness | Rollback boundary |
-|---|---|---|---|---|
-| 1 | Candidate: contracts/tests/exports (~180) | `pnpm --filter ghagga-core exec vitest run src/explanation.test.ts` | N/A: no external harness; pure-contract/data tests above | Core contracts/tests |
-| 2 | Claim/result/migration (~1,200 plus snapshot ≥1,027); after 1 | `pnpm --filter ghagga-db exec vitest run src/queries.test.ts`; integration below | Authorized PostgreSQL race/CAS; unavailable = proof unproven | DB schema/query/migration |
-| 3 | Forge seam (~250); after 2 | `pnpm --filter ghagga-forge exec vitest run src/adapters/github/github-forge-adapter.test.ts` | Mocked pinned snapshot/owner | Forge seam/adapter |
-| 4 | Server route/worker/provider/bootstrap (~500); after 1–3 | `pnpm --filter @ghagga/server exec vitest run src/routes/webhook.test.ts src/queues/explanation.test.ts src/index.test.ts` | Mocked provider/worker | Server route/queue/bootstrap |
-| 5 | Publication/compatibility (~350); after 4 | `pnpm --filter @ghagga/server exec vitest run src/github/explanation-marker.test.ts src/queues/explanation.test.ts src/routes/webhook.test.ts` | Mocked publication, unknown POST/PATCH | Markers/publisher |
-DB integration: `pnpm --filter ghagga-db exec vitest run --config vitest.integration.config.ts src/__integration__/explanation-invocation.integration.test.ts`.
+| Unit                                                                                                                                                            | Order / estimate                                              | Focused test command                                                                                                                           | Runtime harness                                              | Rollback boundary            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------- |
+| 1                                                                                                                                                               | Candidate: contracts/tests/exports (~180)                     | `pnpm --filter ghagga-core exec vitest run src/explanation.test.ts`                                                                            | N/A: no external harness; pure-contract/data tests above     | Core contracts/tests         |
+| 2                                                                                                                                                               | Claim/result/migration (~1,200 plus snapshot ≥1,027); after 1 | `pnpm --filter ghagga-db exec vitest run src/queries.test.ts`; integration below                                                               | Authorized PostgreSQL race/CAS; unavailable = proof unproven | DB schema/query/migration    |
+| 3                                                                                                                                                               | Forge seam (~250); after 2                                    | `pnpm --filter ghagga-forge exec vitest run src/adapters/github/github-forge-adapter.test.ts`                                                  | Mocked pinned snapshot/owner                                 | Forge seam/adapter           |
+| 4                                                                                                                                                               | Server route/worker/provider/bootstrap (~500); after 1–3      | `pnpm --filter @ghagga/server exec vitest run src/routes/webhook.test.ts src/queues/explanation.test.ts src/index.test.ts`                     | Mocked provider/worker                                       | Server route/queue/bootstrap |
+| 5                                                                                                                                                               | Publication/compatibility (~350); after 4                     | `pnpm --filter @ghagga/server exec vitest run src/github/explanation-marker.test.ts src/queues/explanation.test.ts src/routes/webhook.test.ts` | Mocked publication, unknown POST/PATCH                       | Markers/publisher            |
+| DB integration: `pnpm --filter ghagga-db exec vitest run --config vitest.integration.config.ts src/__integration__/explanation-invocation.integration.test.ts`. |
 
 ## 1. Core
 

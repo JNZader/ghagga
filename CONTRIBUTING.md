@@ -4,12 +4,12 @@ Thanks for your interest in contributing! This guide covers everything you need 
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| **Node.js** | 22.22.2+ | Required for all packages |
-| **pnpm** | 12+ | Exact version managed via `packageManager` in root `package.json` |
-| **Docker** | Any recent | For local PostgreSQL (or use a remote Postgres instance) |
-| **Git** | 2.x+ | Conventional commit messages expected |
+| Tool        | Version    | Notes                                                             |
+| ----------- | ---------- | ----------------------------------------------------------------- |
+| **Node.js** | 22.22.2+   | Required for all packages                                         |
+| **pnpm**    | 12+        | Exact version managed via `packageManager` in root `package.json` |
+| **Docker**  | Any recent | For local PostgreSQL (or use a remote Postgres instance)          |
+| **Git**     | 2.x+       | Conventional commit messages expected                             |
 
 ## Quick Start
 
@@ -47,20 +47,20 @@ This is a **pnpm workspace + Turborepo** monorepo. Build order is managed automa
 
 ### Packages (shared libraries)
 
-| Package | Name | Description |
-|---------|------|-------------|
-| `packages/types` | `@ghagga/types` | Shared TypeScript API types (dashboard ↔ server contract) |
-| `packages/db` | `ghagga-db` | Database layer — Drizzle ORM schema, queries, AES-256-GCM crypto, migrations |
-| `packages/core` | `ghagga-core` | Review engine — pipeline, AI agents, static analysis tools, memory, providers |
+| Package          | Name            | Description                                                                   |
+| ---------------- | --------------- | ----------------------------------------------------------------------------- |
+| `packages/types` | `@ghagga/types` | Shared TypeScript API types (dashboard ↔ server contract)                     |
+| `packages/db`    | `ghagga-db`     | Database layer — Drizzle ORM schema, queries, AES-256-GCM crypto, migrations  |
+| `packages/core`  | `ghagga-core`   | Review engine — pipeline, AI agents, static analysis tools, memory, providers |
 
 ### Apps (distribution modes)
 
-| App | Name | Description |
-|-----|------|-------------|
-| `apps/server` | `@ghagga/server` | Hono HTTP server — GitHub webhooks, REST API, Inngest durable functions |
-| `apps/dashboard` | `@ghagga/dashboard` | React 19 SPA — review history, settings, memory browser (deployed to GitHub Pages) |
-| `apps/cli` | `ghagga` | CLI tool — `ghagga review`, `ghagga memory`, `ghagga hooks`, `ghagga health` (published to npm) |
-| `apps/action` | `@ghagga/action` | GitHub Action — runs reviews in CI with `@vercel/ncc` bundle |
+| App              | Name                | Description                                                                                     |
+| ---------------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| `apps/server`    | `@ghagga/server`    | Hono HTTP server — GitHub webhooks, REST API, Inngest durable functions                         |
+| `apps/dashboard` | `@ghagga/dashboard` | React 19 SPA — review history, settings, memory browser (deployed to GitHub Pages)              |
+| `apps/cli`       | `ghagga`            | CLI tool — `ghagga review`, `ghagga memory`, `ghagga hooks`, `ghagga health` (published to npm) |
+| `apps/action`    | `@ghagga/action`    | GitHub Action — runs reviews in CI with `@vercel/ncc` bundle                                    |
 
 ### Build Order
 
@@ -190,16 +190,16 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ### Types
 
-| Type | When to use |
-|------|-------------|
-| `feat` | New feature |
-| `fix` | Bug fix |
-| `test` | Adding or updating tests |
+| Type       | When to use                                             |
+| ---------- | ------------------------------------------------------- |
+| `feat`     | New feature                                             |
+| `fix`      | Bug fix                                                 |
+| `test`     | Adding or updating tests                                |
 | `refactor` | Code change that neither fixes a bug nor adds a feature |
-| `chore` | Build, CI, dependencies, tooling |
-| `docs` | Documentation only |
-| `perf` | Performance improvement |
-| `style` | Code style (formatting, no logic change) |
+| `chore`    | Build, CI, dependencies, tooling                        |
+| `docs`     | Documentation only                                      |
+| `perf`     | Performance improvement                                 |
+| `style`    | Code style (formatting, no logic change)                |
 
 ### Scopes (optional)
 
@@ -222,6 +222,7 @@ docs: update CONTRIBUTING.md with DB setup steps
 2. **Make your changes** — follow the code style (Biome will enforce it)
 
 3. **Run the full check locally** before pushing:
+
    ```bash
    pnpm lint:fix
    pnpm typecheck
@@ -232,11 +233,11 @@ docs: update CONTRIBUTING.md with DB setup steps
 4. **Push and open a PR** against `main`
 
 5. **CI must pass** — the pipeline runs these jobs:
-    - **Security Audit** — `pnpm audit --prod`
-    - **Typecheck & Build** — `pnpm exec turbo typecheck && turbo build`
-    - **Lint** — `pnpm lint` (Biome)
-    - **Tests + Coverage** — `pnpm exec turbo test:coverage`
-    - **Mutation Tests** — Stryker on `packages/core` (main branch only, non-blocking)
+   - **Security Audit** — `pnpm audit --prod`
+     - **Typecheck & Build** — `pnpm exec turbo typecheck && turbo build`
+       - **Lint** — `pnpm lint` (Biome)
+         - **Tests + Coverage** — `pnpm exec turbo test:coverage`
+           - **Mutation Tests** — Stryker on `packages/core` (main branch only, non-blocking)
 
 6. **PR review** — a maintainer will review your changes
 
@@ -261,13 +262,13 @@ docs: update CONTRIBUTING.md with DB setup steps
 
 Biome is the **only** linter and formatter. Do not add ESLint, Prettier, or other formatting tools.
 
-| Setting | Value |
-|---------|-------|
-| Indent | 2 spaces |
-| Line width | 100 characters |
-| Quotes | Single quotes |
-| Trailing commas | Always |
-| Semicolons | Always (default) |
+| Setting         | Value            |
+| --------------- | ---------------- |
+| Indent          | 2 spaces         |
+| Line width      | 100 characters   |
+| Quotes          | Single quotes    |
+| Trailing commas | Always           |
+| Semicolons      | Always (default) |
 
 ### TypeScript
 
@@ -286,12 +287,12 @@ Biome is the **only** linter and formatter. Do not add ESLint, Prettier, or othe
 
 The `docker-compose.yml` starts PostgreSQL 16 with these defaults:
 
-| Setting | Value |
-|---------|-------|
-| Host | `localhost` |
-| Port | `5432` |
-| Database | `ghagga` |
-| User | `ghagga` |
+| Setting  | Value        |
+| -------- | ------------ |
+| Host     | `localhost`  |
+| Port     | `5432`       |
+| Database | `ghagga`     |
+| User     | `ghagga`     |
 | Password | `ghagga_dev` |
 
 Connection string for `.env`:

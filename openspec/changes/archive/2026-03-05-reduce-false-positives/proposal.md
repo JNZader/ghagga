@@ -29,15 +29,15 @@ Three surgical edits to the `packages/core` package, all confined to the prompt/
 - Change `{ limit: 8 }` to `{ limit: 3 }`
 
 **File**: `packages/core/src/agents/prompts.ts` (lines 184-187)
-- Rewrite `buildMemoryContext()` to use phrasing like: *"The following observations are background context from past reviews of this project. They are provided for situational awareness only. Do NOT use them as reasons to flag issues. Only flag issues you can justify from the code diff itself."*
+- Rewrite `buildMemoryContext()` to use phrasing like: _"The following observations are background context from past reviews of this project. They are provided for situational awareness only. Do NOT use them as reasons to flag issues. Only flag issues you can justify from the code diff itself."_
 
 ### Change 2: Wire `reviewLevel` into prompts
 
 **File**: `packages/core/src/agents/prompts.ts`
 - Add a new `buildReviewLevelInstruction(level: ReviewLevel): string` function that returns:
-  - `soft`: *"Only flag issues you are very confident about (90%+). Focus exclusively on bugs, security vulnerabilities, and logic errors. Ignore style, naming, and maintainability concerns."*
-  - `normal`: *"Flag issues you are confident about (80%+). Cover bugs, security, performance, and error handling. Be cautious with style-only findings."*
-  - `strict`: *"Perform a thorough review covering all categories including style, naming, and documentation. Flag anything that could be improved."*
+  - `soft`: _"Only flag issues you are very confident about (90%+). Focus exclusively on bugs, security vulnerabilities, and logic errors. Ignore style, naming, and maintainability concerns."_
+  - `normal`: _"Flag issues you are confident about (80%+). Cover bugs, security, performance, and error handling. Be cautious with style-only findings."_
+  - `strict`: _"Perform a thorough review covering all categories including style, naming, and documentation. Flag anything that could be improved."_
 
 **Files**: `packages/core/src/agents/simple.ts` (lines 156-163), `packages/core/src/agents/workflow.ts` (lines 97-104), `packages/core/src/agents/consensus.ts` (lines 205-212)
 - Thread `reviewLevel` from `ReviewSettings` through the input types and inject `buildReviewLevelInstruction()` into the system prompt assembly for all three review modes.
@@ -46,6 +46,7 @@ Three surgical edits to the `packages/core` package, all confined to the prompt/
 
 **File**: `packages/core/src/agents/prompts.ts`
 - Add a `REVIEW_CALIBRATION` constant appended to `SIMPLE_REVIEW_SYSTEM` and all workflow specialist prompts:
+
   ```
   ## Review Calibration
   - Only report findings you are 80%+ confident about based on the actual code shown.
@@ -58,30 +59,29 @@ Three surgical edits to the `packages/core` package, all confined to the prompt/
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `packages/core/src/agents/prompts.ts` | Modified | Rewrite `buildMemoryContext()`, add `buildReviewLevelInstruction()`, add `REVIEW_CALIBRATION` constant, remove phantom standards check |
-| `packages/core/src/memory/search.ts` | Modified | Reduce observation limit from 8 to 3 |
-| `packages/core/src/agents/simple.ts` | Modified | Accept `reviewLevel` in input, inject into system prompt assembly |
-| `packages/core/src/agents/workflow.ts` | Modified | Accept `reviewLevel` in input, inject into system prompt assembly for all specialists |
-| `packages/core/src/agents/consensus.ts` | Modified | Accept `reviewLevel` in input, inject into system prompt assembly for all stances |
-| `packages/core/src/types.ts` | Unchanged | `ReviewLevel` type already exists and is correctly defined |
-| `packages/db/src/schema.ts` | Unchanged | Schema already stores `reviewLevel` |
+| Area                                    | Impact    | Description                                                                                                                            |
+| --------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/agents/prompts.ts`   | Modified  | Rewrite `buildMemoryContext()`, add `buildReviewLevelInstruction()`, add `REVIEW_CALIBRATION` constant, remove phantom standards check |
+| `packages/core/src/memory/search.ts`    | Modified  | Reduce observation limit from 8 to 3                                                                                                   |
+| `packages/core/src/agents/simple.ts`    | Modified  | Accept `reviewLevel` in input, inject into system prompt assembly                                                                      |
+| `packages/core/src/agents/workflow.ts`  | Modified  | Accept `reviewLevel` in input, inject into system prompt assembly for all specialists                                                  |
+| `packages/core/src/agents/consensus.ts` | Modified  | Accept `reviewLevel` in input, inject into system prompt assembly for all stances                                                      |
+| `packages/core/src/types.ts`            | Unchanged | `ReviewLevel` type already exists and is correctly defined                                                                             |
+| `packages/db/src/schema.ts`             | Unchanged | Schema already stores `reviewLevel`                                                                                                    |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Reducing memory from 8 to 3 may lose relevant context for large repos with deep history | Low | 3 observations is still sufficient for the top-ranked matches; quality > quantity. Can tune later with A/B testing. |
-| Anti-false-positive instructions may suppress real findings (false negatives) | Medium | The 80% confidence threshold is deliberately conservative. `strict` mode preserves the old thorough behavior. We monitor PASSED rate and finding counts post-deploy. |
-| `soft` mode may be too aggressive in suppressing findings, making reviews feel useless | Low | `soft` is opt-in and clearly documented. Default remains `normal`. |
-| Prompt changes interact unpredictably across LLM providers (Anthropic vs OpenAI vs Google) | Medium | Test the same diff against all 3 major providers before merging. Calibration instructions use universal language, not provider-specific tricks. |
-| Adding review level to all three agent input types requires plumbing through the pipeline | Low | `reviewLevel` is already on `ReviewSettings` which is on `ReviewInput`. We just need to pass `settings.reviewLevel` into each agent's input type. |
+| Risk                                                                                       | Likelihood | Mitigation                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reducing memory from 8 to 3 may lose relevant context for large repos with deep history    | Low        | 3 observations is still sufficient for the top-ranked matches; quality > quantity. Can tune later with A/B testing.                                                  |
+| Anti-false-positive instructions may suppress real findings (false negatives)              | Medium     | The 80% confidence threshold is deliberately conservative. `strict` mode preserves the old thorough behavior. We monitor PASSED rate and finding counts post-deploy. |
+| `soft` mode may be too aggressive in suppressing findings, making reviews feel useless     | Low        | `soft` is opt-in and clearly documented. Default remains `normal`.                                                                                                   |
+| Prompt changes interact unpredictably across LLM providers (Anthropic vs OpenAI vs Google) | Medium     | Test the same diff against all 3 major providers before merging. Calibration instructions use universal language, not provider-specific tricks.                      |
+| Adding review level to all three agent input types requires plumbing through the pipeline  | Low        | `reviewLevel` is already on `ReviewSettings` which is on `ReviewInput`. We just need to pass `settings.reviewLevel` into each agent's input type.                    |
 
 ## Rollback Plan
 
 All changes are in the prompt/retrieval layer with no schema or API changes:
-
 1. **Revert the commit** — A single `git revert` restores the previous prompts, memory limit, and agent inputs.
 2. **No data migration needed** — Memory observations are unaffected. The database schema is unchanged.
 3. **No client-side changes** — All 4 distribution modes (SaaS, Action, CLI, 1-click) consume the same `@ghagga/core` package. Reverting core reverts everything.

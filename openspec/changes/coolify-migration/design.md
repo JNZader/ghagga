@@ -192,8 +192,8 @@ sequenceDiagram
 export const redis = new Redis({
   host: process.env.REDIS_HOST || 'redis',
   port: parseInt(process.env.REDIS_PORT || '6379'),
-  maxRetriesPerRequest: null,  // Required by BullMQ
-  enableReadyCheck: false,     // Required by BullMQ
+  maxRetriesPerRequest: null, // Required by BullMQ
+  enableReadyCheck: false, // Required by BullMQ
 });
 ```
 
@@ -413,7 +413,7 @@ fi
 ### docker-compose.yml
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   server:
@@ -495,33 +495,39 @@ volumes:
 ## Deployment Strategy
 
 ### Phase 1: Infrastructure
+
 1. Create Hetzner CX21
 2. Configure DNS
 3. Install Coolify
 4. Verify SSL
 
 ### Phase 2: Services
+
 1. Create PostgreSQL in Coolify
 2. Create Redis in Coolify
 3. Note connection strings
 
 ### Phase 3: Application
+
 1. Push code with BullMQ migration
 2. Configure env vars in Coolify
 3. Deploy
 4. Verify /health
 
 ### Phase 4: GitHub App
+
 1. Update webhook URL
 2. Test webhook delivery
 3. Verify signature validation
 
 ### Phase 5: Testing
+
 1. Test "ghagga review"
 2. Verify job processing
 3. Check Bull Dashboard
 
 ### Phase 6: Cleanup
+
 1. Archive/Delete Neon
 2. Cancel Render
 3. Cancel Northflank
@@ -529,17 +535,20 @@ volumes:
 ## Monitoring
 
 ### Health Checks
+
 - Coolify health checks cada 30s
 - PostgreSQL healthcheck con pg_isready
 - Redis healthcheck con PING
 - API endpoint /health
 
 ### Logs
+
 - Coolify centraliza logs de todos los containers
 - Accesibles via Dashboard → Service → Logs
 - Persistencia: Configurable en Coolify
 
 ### Bull Dashboard
+
 - URL: http://TU_IP:3001
 - Muestra:
   - Jobs pending (en cola)
@@ -549,6 +558,7 @@ volumes:
   - Retry attempts
 
 ### Alerting (Future)
+
 - Uptime Kuma (self-hosted)
 - Email notifications
 - Slack webhooks
@@ -556,18 +566,21 @@ volumes:
 ## Security Considerations
 
 ### Network
+
 - PostgreSQL: Solo accesible desde red Docker interna
 - Redis: Solo accesible desde red Docker interna
 - Bull Dashboard: Puerto 3001 (opcional, puede ser interno)
 - API: Puerto 3000 expuesto via Nginx (SSL)
 
 ### Secrets
+
 - Nunca commitear .env
 - Usar Coolify secrets management
 - Rotar keys cada 90 días (próximamente)
 - ENCRYPTION_KEY: 64 hex chars (suficiente para AES-256)
 
 ### GitHub App
+
 - Webhook secret valida cada request
 - Private key nunca expuesta en logs
 - Scope mínimo necesario
@@ -575,18 +588,21 @@ volumes:
 ## Rollback Strategy
 
 ### Code Rollback
+
 ```bash
 # En Coolify Dashboard
 # Service → Deployments → Rollback to previous version
 ```
 
 ### Infrastructure Rollback
+
 ```bash
 # Cambiar DNS A record a IP vieja
 # TTL bajo (5 min) permite rollback rápido
 ```
 
 ### Database Rollback
+
 - Exportar backup antes de migrar
 - Importar a Neon si es necesario volver
 - (Pero objetivo es no volver atrás)
@@ -594,12 +610,14 @@ volumes:
 ## Future Improvements
 
 ### Phase 2
+
 - Backups automáticos a S3/Backblaze
 - Monitoreo con Uptime Kuma
 - Log aggregation con Loki
 - Métricas con Prometheus/Grafana
 
 ### Phase 3
+
 - Autoscaling de workers según queue length
 - Multi-region (si es necesario)
 - CDN para assets estáticos

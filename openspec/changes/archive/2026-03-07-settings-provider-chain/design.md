@@ -144,23 +144,23 @@ Webhook ──► Inngest                    Core Pipeline
 
 ## File Changes
 
-| File | Action | Description |
-|------|--------|-------------|
-| `packages/db/src/schema.ts` | Modify | Add `providerChain` JSONB + `aiReviewEnabled` boolean to `repositories`. Add `ProviderChainEntry` interface. Keep old columns during transition. |
-| `packages/db/src/queries.ts` | Modify | Update `updateRepoSettings` to accept `providerChain` + `aiReviewEnabled`. |
-| `packages/db/drizzle/XXXX_add_provider_chain.sql` | Create | Migration: add columns, copy data from old to new, set defaults. |
-| `packages/core/src/types.ts` | Modify | Add `ProviderChainEntry`, `SaaSProvider` types. Add `aiReviewEnabled` + `providerChain` to `ReviewInput` as optional (backward compat). |
-| `packages/core/src/pipeline.ts` | Modify | Add static-only path. Build fallback chain from `providerChain` or single `provider`/`model`/`apiKey`. |
-| `packages/core/src/providers/fallback.ts` | Modify | Minor: export types for reuse. |
-| `apps/server/src/routes/api.ts` | Modify | Add `GET /api/settings`, `PUT /api/settings`, `POST /api/providers/validate`. Merge logic for API keys. |
-| `apps/server/src/routes/webhook.ts` | Modify | Read `provider_chain` + `ai_review_enabled` instead of flat fields when dispatching to Inngest. |
-| `apps/server/src/inngest/review.ts` | Modify | Build `FallbackProvider[]` from chain. Handle AI disabled. |
-| `apps/server/src/lib/provider-models.ts` | Create | Curated static model lists + dynamic model fetching logic. |
-| `apps/dashboard/src/pages/Settings.tsx` | Modify | Complete rewrite with new component structure. |
-| `apps/dashboard/src/components/settings/ProviderChainEditor.tsx` | Create | Main chain editor: list of entries, add/remove/reorder. |
-| `apps/dashboard/src/components/settings/ProviderEntry.tsx` | Create | Single provider row: dropdown, API key, validate, model select. |
-| `apps/dashboard/src/lib/types.ts` | Modify | Add `ProviderChainEntry`, `SaaSProvider`, `ValidationResponse`. Update `RepositorySettings`. |
-| `apps/dashboard/src/lib/api.ts` | Modify | Add `useValidateProvider` mutation hook. Update `useSettings`/`useUpdateSettings` for new shape. |
+| File                                                             | Action | Description                                                                                                                                      |
+| ---------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/db/src/schema.ts`                                      | Modify | Add `providerChain` JSONB + `aiReviewEnabled` boolean to `repositories`. Add `ProviderChainEntry` interface. Keep old columns during transition. |
+| `packages/db/src/queries.ts`                                     | Modify | Update `updateRepoSettings` to accept `providerChain` + `aiReviewEnabled`.                                                                       |
+| `packages/db/drizzle/XXXX_add_provider_chain.sql`                | Create | Migration: add columns, copy data from old to new, set defaults.                                                                                 |
+| `packages/core/src/types.ts`                                     | Modify | Add `ProviderChainEntry`, `SaaSProvider` types. Add `aiReviewEnabled` + `providerChain` to `ReviewInput` as optional (backward compat).          |
+| `packages/core/src/pipeline.ts`                                  | Modify | Add static-only path. Build fallback chain from `providerChain` or single `provider`/`model`/`apiKey`.                                           |
+| `packages/core/src/providers/fallback.ts`                        | Modify | Minor: export types for reuse.                                                                                                                   |
+| `apps/server/src/routes/api.ts`                                  | Modify | Add `GET /api/settings`, `PUT /api/settings`, `POST /api/providers/validate`. Merge logic for API keys.                                          |
+| `apps/server/src/routes/webhook.ts`                              | Modify | Read `provider_chain` + `ai_review_enabled` instead of flat fields when dispatching to Inngest.                                                  |
+| `apps/server/src/inngest/review.ts`                              | Modify | Build `FallbackProvider[]` from chain. Handle AI disabled.                                                                                       |
+| `apps/server/src/lib/provider-models.ts`                         | Create | Curated static model lists + dynamic model fetching logic.                                                                                       |
+| `apps/dashboard/src/pages/Settings.tsx`                          | Modify | Complete rewrite with new component structure.                                                                                                   |
+| `apps/dashboard/src/components/settings/ProviderChainEditor.tsx` | Create | Main chain editor: list of entries, add/remove/reorder.                                                                                          |
+| `apps/dashboard/src/components/settings/ProviderEntry.tsx`       | Create | Single provider row: dropdown, API key, validate, model select.                                                                                  |
+| `apps/dashboard/src/lib/types.ts`                                | Modify | Add `ProviderChainEntry`, `SaaSProvider`, `ValidationResponse`. Update `RepositorySettings`.                                                     |
+| `apps/dashboard/src/lib/api.ts`                                  | Modify | Add `useValidateProvider` mutation hook. Update `useSettings`/`useUpdateSettings` for new shape.                                                 |
 
 ## Interfaces / Contracts
 
@@ -212,8 +212,8 @@ interface ValidateProviderRequest {
 // Response
 interface ValidateProviderResponse {
   valid: boolean;
-  models: string[];   // populated on success, empty on failure
-  error?: string;     // human-readable error on failure
+  models: string[]; // populated on success, empty on failure
+  error?: string; // human-readable error on failure
 }
 ```
 
@@ -277,12 +277,7 @@ const CURATED_MODELS: Record<string, string[]> = {
     'claude-haiku-4-20250414',
     'claude-3-5-haiku-20241022',
   ],
-  google: [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
-  ],
+  google: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
 };
 
 // OpenAI and GitHub Models: fetch dynamically from GET /v1/models
@@ -291,16 +286,16 @@ const CURATED_MODELS: Record<string, string[]> = {
 
 ## Testing Strategy
 
-| Layer | What to Test | Approach |
-|-------|-------------|----------|
-| Unit | `mergeProviderChain()` — key preservation logic | Vitest: given old chain + update, assert correct merge |
-| Unit | `validateProviderKey()` — each provider branch | Vitest: mock HTTP calls, test success/failure/timeout paths |
-| Unit | Pipeline static-only path | Vitest: `reviewPipeline()` with `aiReviewEnabled: false`, assert no LLM calls |
-| Unit | Pipeline fallback path | Vitest: mock primary fail, assert fallback called |
-| Integration | `POST /api/providers/validate` | Vitest + Hono test client: mock provider APIs, test full endpoint |
-| Integration | `PUT /api/settings` merge logic | Vitest + test DB: save chain, update partially, verify keys preserved |
-| Integration | DB migration | Run migration on test DB, verify data transformation |
-| E2E | Settings page flow | Playwright: select repo → add provider → validate → select model → save |
+| Layer       | What to Test                                    | Approach                                                                      |
+| ----------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| Unit        | `mergeProviderChain()` — key preservation logic | Vitest: given old chain + update, assert correct merge                        |
+| Unit        | `validateProviderKey()` — each provider branch  | Vitest: mock HTTP calls, test success/failure/timeout paths                   |
+| Unit        | Pipeline static-only path                       | Vitest: `reviewPipeline()` with `aiReviewEnabled: false`, assert no LLM calls |
+| Unit        | Pipeline fallback path                          | Vitest: mock primary fail, assert fallback called                             |
+| Integration | `POST /api/providers/validate`                  | Vitest + Hono test client: mock provider APIs, test full endpoint             |
+| Integration | `PUT /api/settings` merge logic                 | Vitest + test DB: save chain, update partially, verify keys preserved         |
+| Integration | DB migration                                    | Run migration on test DB, verify data transformation                          |
+| E2E         | Settings page flow                              | Playwright: select repo → add provider → validate → select model → save       |
 
 ## Migration / Rollout
 

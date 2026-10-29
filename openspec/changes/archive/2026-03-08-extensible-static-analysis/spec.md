@@ -10,13 +10,13 @@ This change replaces GHAGGA's hardcoded 3-tool static analysis (`semgrep`, `triv
 
 ## Spec Domains
 
-| Domain | Spec Path | Type | Description |
-|--------|-----------|------|-------------|
-| Core Types | `specs/core/spec.md` | Delta | `ToolDefinition`, `ToolResult`, `StaticAnalysisResult` refactor, `ToolCategory`, `FindingSource` |
-| Tool Definitions | `specs/tools/spec.md` | New | 14 new + 3 adapted tool plugins with detect/install/run/parse contracts |
-| Runner/Orchestrator | `specs/runner/spec.md` | New | Time budget, on-demand install, failure isolation, result aggregation |
-| Settings | `specs/settings/spec.md` | Delta | Migration from boolean flags to `enabled_tools` JSONB, backward compat |
-| CLI | `specs/cli/spec.md` | Delta | `--disable-tool`/`--enable-tool` flags, deprecated aliases |
+| Domain              | Spec Path                | Type  | Description                                                                                      |
+| ------------------- | ------------------------ | ----- | ------------------------------------------------------------------------------------------------ |
+| Core Types          | `specs/core/spec.md`     | Delta | `ToolDefinition`, `ToolResult`, `StaticAnalysisResult` refactor, `ToolCategory`, `FindingSource` |
+| Tool Definitions    | `specs/tools/spec.md`    | New   | 14 new + 3 adapted tool plugins with detect/install/run/parse contracts                          |
+| Runner/Orchestrator | `specs/runner/spec.md`   | New   | Time budget, on-demand install, failure isolation, result aggregation                            |
+| Settings            | `specs/settings/spec.md` | Delta | Migration from boolean flags to `enabled_tools` JSONB, backward compat                           |
+| CLI                 | `specs/cli/spec.md`      | Delta | `--disable-tool`/`--enable-tool` flags, deprecated aliases                                       |
 
 ## Cross-Cutting Concerns
 

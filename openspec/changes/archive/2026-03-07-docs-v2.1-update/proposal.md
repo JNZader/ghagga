@@ -7,12 +7,14 @@ After 15 major changes to GHAGGA, the documentation is significantly out of sync
 ## Scope
 
 ### In Scope
+
 - Fix 28 HIGH priority issues: memory availability corrections (8 files), missing CLI memory subcommands (4 files), missing `--plain` flag (4 files), wrong test counts (4 files), wrong GitHub App permissions (2 files), missing `enable-memory` Action input (2 files), missing DELETE endpoints in API reference, missing `severity` column in schema docs, missing `--no-memory` flag
 - Fix 16 MEDIUM priority issues: undocumented dashboard memory management features, missing `@clack/prompts` in tech stack, missing SQLite in architecture docs, outdated monorepo tree, outdated dashboard pages table
 - Fix 8 LOW priority issues: version number bumps (2.0.1 -> 2.1.0)
 - Ensure cross-file consistency (same feature described identically everywhere)
 
 ### Out of Scope
+
 - Code changes of any kind
 - New documentation pages or restructuring
 - Landing page updates (`landing/`)
@@ -22,7 +24,6 @@ After 15 major changes to GHAGGA, the documentation is significantly out of sync
 ## Approach
 
 Batch updates grouped by topic rather than by file, to ensure consistency across all files that reference the same feature:
-
 1. **Memory availability sweep** — Update all 8 files that incorrectly state memory is unavailable in CLI/Action. Add SQLite-based memory documentation where missing.
 2. **CLI commands sweep** — Add `ghagga memory` subcommands (list, search, show, delete, stats, clear), `--plain` flag, and `--no-memory` flag across CLI docs.
 3. **Metrics and permissions sweep** — Correct test counts to 1,728 (with per-package breakdown), fix GitHub App permissions, add `enable-memory` Action input.
@@ -34,32 +35,32 @@ Design phase is skipped since this is a docs-only change with no architectural d
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `README.md` | Modified | Memory availability, CLI memory subcommands, `--plain` flag, test counts, `enable-memory` input, monorepo tree, dashboard pages, version bumps |
-| `docs/cli.md` | Modified | Memory availability, memory subcommands, `--plain` flag, `--no-memory` flag |
-| `docs/github-action.md` | Modified | Memory availability, `enable-memory` input |
-| `docs/architecture.md` | Modified | Memory availability, SQLite in architecture |
-| `docs/memory-system.md` | Modified | Memory availability for CLI/Action |
-| `docs/review-pipeline.md` | Modified | Memory availability |
-| `docs/README.md` | Modified | Memory availability |
-| `docs/quick-start.md` | Modified | CLI memory subcommands |
-| `docs/tech-stack.md` | Modified | `--plain` flag, test counts, `@clack/prompts` |
-| `docs/v1-vs-v2.md` | Modified | Test counts |
-| `docs/saas-getting-started.md` | Modified | GitHub App permissions |
-| `docs/self-hosted.md` | Modified | GitHub App permissions |
-| `docs/api-reference.md` | Modified | 5 missing DELETE endpoints |
-| `docs/database-schema.md` | Modified | Missing `severity` column |
-| `apps/cli/README.md` | Modified | Memory availability, memory subcommands, `--plain` flag |
+| Area                           | Impact   | Description                                                                                                                                    |
+| ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `README.md`                    | Modified | Memory availability, CLI memory subcommands, `--plain` flag, test counts, `enable-memory` input, monorepo tree, dashboard pages, version bumps |
+| `docs/cli.md`                  | Modified | Memory availability, memory subcommands, `--plain` flag, `--no-memory` flag                                                                    |
+| `docs/github-action.md`        | Modified | Memory availability, `enable-memory` input                                                                                                     |
+| `docs/architecture.md`         | Modified | Memory availability, SQLite in architecture                                                                                                    |
+| `docs/memory-system.md`        | Modified | Memory availability for CLI/Action                                                                                                             |
+| `docs/review-pipeline.md`      | Modified | Memory availability                                                                                                                            |
+| `docs/README.md`               | Modified | Memory availability                                                                                                                            |
+| `docs/quick-start.md`          | Modified | CLI memory subcommands                                                                                                                         |
+| `docs/tech-stack.md`           | Modified | `--plain` flag, test counts, `@clack/prompts`                                                                                                  |
+| `docs/v1-vs-v2.md`             | Modified | Test counts                                                                                                                                    |
+| `docs/saas-getting-started.md` | Modified | GitHub App permissions                                                                                                                         |
+| `docs/self-hosted.md`          | Modified | GitHub App permissions                                                                                                                         |
+| `docs/api-reference.md`        | Modified | 5 missing DELETE endpoints                                                                                                                     |
+| `docs/database-schema.md`      | Modified | Missing `severity` column                                                                                                                      |
+| `apps/cli/README.md`           | Modified | Memory availability, memory subcommands, `--plain` flag                                                                                        |
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Introducing new inaccuracies while fixing old ones | Medium | Cross-reference every claim against actual source code before writing |
-| Missing a file that references a changed feature | Low | Use grep/search across entire repo for each term being updated |
-| Breaking docsify rendering with bad markdown | Low | Preview docsify locally after changes |
-| Inconsistent language across files after partial updates | Medium | Topic-based batching (not file-based) ensures same wording everywhere |
+| Risk                                                     | Likelihood | Mitigation                                                            |
+| -------------------------------------------------------- | ---------- | --------------------------------------------------------------------- |
+| Introducing new inaccuracies while fixing old ones       | Medium     | Cross-reference every claim against actual source code before writing |
+| Missing a file that references a changed feature         | Low        | Use grep/search across entire repo for each term being updated        |
+| Breaking docsify rendering with bad markdown             | Low        | Preview docsify locally after changes                                 |
+| Inconsistent language across files after partial updates | Medium     | Topic-based batching (not file-based) ensures same wording everywhere |
 
 ## Rollback Plan
 
