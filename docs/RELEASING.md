@@ -2,7 +2,6 @@
 
 This monorepo uses [Changesets](https://github.com/changesets/changesets).
 Four published packages share one version:
-
 - `ghagga-core` (`packages/core`)
 - `ghagga` (`apps/cli`)
 - `ghagga-db` (`packages/db`)
@@ -34,7 +33,6 @@ workflow does that on `main`.
 
 `.github/workflows/release.yml` runs [changesets/action](https://github.com/changesets/action)
 on every push to `main`.
-
 1. **Pending changesets.** The action opens or updates a pull request titled
    **Version Packages** from `changeset-release/main`. The PR applies
    `changeset version` (versions, changelogs, and a lockfile refresh). Merging
@@ -70,7 +68,6 @@ must be enabled. Without it, the action cannot open the Version Packages PR.
 
 A personal access token is optional. Create one only if the approval click
 should be skipped:
-
 1. GitHub → Settings → Developer settings → Personal access tokens →
    Fine-grained tokens → Generate new token.
 2. Resource owner: the account that owns `JNZader/ghagga`. Repository
