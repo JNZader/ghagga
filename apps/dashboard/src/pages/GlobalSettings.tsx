@@ -1,5 +1,13 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Card, CardHeader } from '@/components/Card';
+import {
+  ExplainTour,
+  ExplainTourBanner,
+  ExplainTourReplayButton,
+} from '@/components/explain-tour/ExplainTour';
+import { buildExplainTourSteps } from '@/components/explain-tour/steps';
+import { useExplainTour } from '@/components/explain-tour/useExplainTour';
+import { PrExplanationsSection } from '@/components/settings/PrExplanationsSection';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
 import type { ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { KNOWN_MODELS } from '@/components/settings/provider-fields/shared';
@@ -43,6 +51,17 @@ export function GlobalSettings() {
   const { data: settings, isLoading: settingsLoading } =
     useInstallationSettings(selectedInstallation);
   const updateSettings = useUpdateInstallationSettings();
+  const explanationsVisible =
+    !instLoading &&
+    !instError &&
+    !hasNoInstallations &&
+    selectedInstallation > 0 &&
+    !settingsLoading;
+  const explainTour = useExplainTour(explanationsVisible);
+  const explainTourSteps = useMemo(
+    () => buildExplainTourSteps({ scope: 'installation', editable: true }),
+    [],
+  );
 
   // ── Form state ──────────────────────────────────────────────
   const [enableSemgrep, setEnableSemgrep] = useState(true);
@@ -140,26 +159,41 @@ export function GlobalSettings() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Global Settings</h1>
           <p className="mt-1 text-text-secondary">Default settings inherited by all repositories</p>
         </div>
 
-        {installations && installations.length > 1 && (
-          <select
-            value={selectedInstallation}
-            onChange={(e) => setSelectedInstallation(Number(e.target.value))}
-            className="select-field w-64"
-          >
-            {installations.map((inst) => (
-              <option key={inst.id} value={inst.id}>
-                {inst.accountLogin} ({inst.accountType})
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <ExplainTourReplayButton visible={explanationsVisible} onReplay={explainTour.replay} />
+          {installations && installations.length > 1 && (
+            <select
+              value={selectedInstallation}
+              onChange={(e) => setSelectedInstallation(Number(e.target.value))}
+              className="select-field w-64"
+            >
+              {installations.map((inst) => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.accountLogin} ({inst.accountType})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
+
+      <ExplainTourBanner
+        visible={explainTour.bannerVisible}
+        tourOpen={explainTour.open}
+        onStart={explainTour.replay}
+        onDismiss={explainTour.dismissBanner}
+      />
+      <ExplainTour
+        open={explainTour.open}
+        steps={explainTourSteps}
+        onDismiss={explainTour.dismissTour}
+      />
 
       {instLoading ? (
         /* ── Loading: fetching the caller's GitHub App installations ── */
@@ -345,33 +379,12 @@ export function GlobalSettings() {
             )}
           </Card>
 
-          <Card>
-            <div className="flex items-center justify-between">
-              <CardHeader
-                title="PR explanations"
-                description="Let maintainers ask /ghagga explain on a pull request. Repositories using global settings inherit this opt-in."
-              />
-              <label className="flex cursor-pointer items-center gap-3">
-                <span className="text-sm text-text-secondary">
-                  {explanationsEnabled ? 'Enabled' : 'Disabled'}
-                </span>
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    aria-label="PR explanations"
-                    checked={explanationsEnabled}
-                    onChange={(e) => setExplanationsEnabled(e.target.checked)}
-                    className="peer sr-only"
-                  />
-                  <div className="h-6 w-11 rounded-full bg-surface-border peer-checked:bg-primary-600 transition-colors" />
-                  <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
-                </div>
-              </label>
-            </div>
-            <p className="mt-2 text-xs text-text-secondary">
-              Off by default. This does not add a review mode and does not post review findings.
-            </p>
-          </Card>
+          <PrExplanationsSection
+            mode="edit"
+            enabled={explanationsEnabled}
+            onChange={setExplanationsEnabled}
+            description="Let maintainers ask /ghagga explain on a pull request. Repositories using global settings inherit this opt-in."
+          />
 
           {/* ── AI Review ────────────────────────────────────── */}
           <Card>
@@ -486,7 +499,12 @@ export function GlobalSettings() {
 
           {/* ── Save Button ──────────────────────────────────── */}
           <div className="flex items-center gap-4">
-            <button type="submit" disabled={updateSettings.isPending} className="btn-primary">
+            <button
+              type="submit"
+              data-critical-save="true"
+              disabled={updateSettings.isPending}
+              className="btn-primary"
+            >
               {updateSettings.isPending ? 'Saving...' : 'Save Global Settings'}
             </button>
             {saveSuccess && (
