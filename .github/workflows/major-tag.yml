@@ -1,0 +1,41 @@
+# When a stable release vX.Y.Z is published, move the floating major tag vX
+# to that commit so `JNZader/ghagga@vX` tracks the latest patch of the line.
+name: Update major version tag
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  major-tag:
+    name: Move vX tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Move floating major tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "Prerelease ${RELEASE_TAG} — leaving the major tag unchanged"
+            exit 0
+          fi
+          if ! printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag ${RELEASE_TAG} is not a stable vX.Y.Z release — skipping"
+            exit 0
+          fi
+          major="${RELEASE_TAG%%.*}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa "$major" -m "Update ${major} to ${RELEASE_TAG}"
+          git push origin "refs/tags/${major}" --force
