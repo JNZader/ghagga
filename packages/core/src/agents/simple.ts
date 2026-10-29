@@ -225,6 +225,10 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
       memoryContext,
     );
   } catch (error) {
+    // Groq is a direct provider: a failed call must fail the review (the Action
+    // test treats a swallowed NEEDS_HUMAN_REVIEW as a false pass).
+    if (provider === 'groq') throw error;
+
     const executionTimeMs = Date.now() - startTime;
 
     // Timeout or other failure: fall back to empty AI result (static analysis still applies)

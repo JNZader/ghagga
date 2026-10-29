@@ -160,12 +160,17 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
     const generateFns = resolveGenerateTextFns(input, isCliBridge, isGateway, isOllama);
 
     // Step 2: Resolve effective mode (diagnostic → simple for non-SDK backends; ollama keeps it)
-    const effectiveMode = resolveEffectiveMode(resolvedInputMode, isCliBridge, isGateway);
+    let effectiveMode = resolveEffectiveMode(resolvedInputMode, isCliBridge, isGateway);
+    // Diagnostic builds an Ollama client. Groq must stay on its own generateFn.
+    if (activeProvider === 'groq' && resolvedInputMode === 'diagnostic') {
+      effectiveMode = 'simple';
+    }
 
     if (effectiveMode !== resolvedInputMode) {
+      const backend = activeProvider === 'groq' ? 'groq' : isCliBridge ? 'CLI bridge' : 'gateway';
       emit({
         step: 'mode-fallback',
-        message: `Diagnostic mode not supported with ${isCliBridge ? 'CLI bridge' : 'gateway'} — falling back to simple mode`,
+        message: `Diagnostic mode not supported with ${backend} — falling back to simple mode`,
       });
     }
 
@@ -293,6 +298,9 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
         }
       }
     } catch (error) {
+      // Groq errors propagate so callers (the Action check) fail the run.
+      if (activeProvider === 'groq') throw error;
+
       // Agent failed — return static results with NEEDS_HUMAN_REVIEW
       console.warn(
         '[ghagga] AI review failed, returning static analysis only:',

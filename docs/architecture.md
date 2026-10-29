@@ -127,7 +127,7 @@ GHAGGA migrated from Inngest (SaaS) to BullMQ + Redis (self-hosted). BullMQ elim
 
 ### Provider chain in SaaS mode
 
-Provider chain entries are `gateway`, `cli-bridge`, or `ollama`. A legacy stored name such as `github` is normalized to `gateway` before the call. There is no GitHub Models path that uses the GitHub App installation token, and there is no `models:read` filter in the server. A review without a usable chain degrades to static analysis.
+Provider chain entries are `gateway`, `cli-bridge`, or `ollama`. A legacy stored name such as `github` is normalized to `gateway` before the call. The CLI and GitHub Action also accept `groq` directly (`https://api.groq.com/openai/v1` chat completions). There is no GitHub Models path that uses the GitHub App installation token, and there is no `models:read` filter in the server. A review without a usable chain degrades to static analysis.
 
 ### Binary Execution for Static Analysis
 

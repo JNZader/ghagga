@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.6.1
+      - uses: JNZader/ghagga@v3.7.0
 ```
 
 See [GitHub Action](github-action.md) for all inputs and outputs.
@@ -102,7 +102,7 @@ See [Architecture — Inline Static-Analysis Workflow](architecture.md#inline-st
 
 ## BYOK — Bring Your Own Key
 
-> **Mode note**: GHAGGA is MIT-licensed. The model call is separate: `gateway`, `cli-bridge`, or `ollama`.
+> **Mode note**: GHAGGA is MIT-licensed. The model call is separate: `gateway`, `cli-bridge`, `ollama`, or `groq`.
 
 GHAGGA stores provider credentials encrypted with AES-256-GCM. The provider modes are:
 
@@ -111,5 +111,6 @@ GHAGGA stores provider credentials encrypted with AES-256-GCM. The provider mode
 | `gateway`    | mcp-llm-bridge. This is what `ghagga login` saves      |
 | `cli-bridge` | A local CLI (Claude, Codex, OpenCode, Gemini, Copilot) |
 | `ollama`     | A local Ollama model                                   |
+| `groq`       | Groq chat completions (`api.groq.com`, `GROQ_API_KEY`) |
 
 Static analysis tools (Semgrep, Trivy, CPD) are always free — they run on GitHub Actions runners (unlimited free minutes for public repos).

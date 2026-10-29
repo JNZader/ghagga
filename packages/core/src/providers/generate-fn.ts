@@ -82,4 +82,5 @@ export function createGatewayGenerateFn(options: {
 }
 
 // ─── Factory: Ollama — re-exported from ollama.ts ───────────────
+export { createGroqGenerateFn } from './groq.js';
 export { createOllamaGenerateFn } from './ollama.js';

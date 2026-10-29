@@ -60,7 +60,6 @@ const ACTION_LEGACY_PROVIDERS = new Set([
   'anthropic',
   'openai',
   'google',
-  'groq',
   'openrouter',
   'azure',
   'deepseek',
@@ -69,7 +68,7 @@ const ACTION_LEGACY_PROVIDERS = new Set([
 ]);
 
 function resolveActionProvider(raw: string): LLMProvider {
-  if (raw === 'cli-bridge' || raw === 'ollama' || raw === 'gateway') {
+  if (raw === 'cli-bridge' || raw === 'ollama' || raw === 'gateway' || raw === 'groq') {
     return raw as LLMProvider;
   }
   if (ACTION_LEGACY_PROVIDERS.has(raw)) {
@@ -238,6 +237,14 @@ async function run(): Promise<void> {
     } else if (provider === 'cli-bridge') {
       // CLI bridge uses whatever credential the tool accepts (optional)
       apiKey = apiKeyInput || '';
+    } else if (provider === 'groq') {
+      if (!apiKeyInput) {
+        core.setFailed(
+          'api-key is required for provider groq. Pass a Groq API key (GROQ_API_KEY).',
+        );
+        return;
+      }
+      apiKey = apiKeyInput;
     } else {
       // Should not be reached after resolveActionProvider, but guard defensively
       apiKey = apiKeyInput || '';

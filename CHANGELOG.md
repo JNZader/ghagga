@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.7.0] - 2026-10-29
+
+### Added
+
+- **Groq as a direct provider** — `ghagga`, `ghagga-core`, `ghagga-db`, and `ghagga-forge` move 3.6.1 → 3.7.0. The CLI and GitHub Action accept `provider: groq` and call Groq chat completions at `https://api.groq.com/openai/v1` (`.chat()`). Default model is `openai/gpt-oss-120b`. `groq` is no longer remapped to `gateway`. A failed Groq call fails the Action instead of posting a silent `NEEDS_HUMAN_REVIEW`.
+
+### Fixed
+
+- **Action bundle loads on Node** — the ESM bundle defines `require` via `createRequire`, so `tunnel`'s `require("net")` no longer throws when the Action starts.
+
 ## [3.6.1] - 2026-10-29
 
 ### Fixed

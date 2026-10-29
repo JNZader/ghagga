@@ -105,6 +105,9 @@ export async function auditCommand(targetPath: string, options: AuditOptions): P
 
       if (!apiKey) {
         apiKey = process.env.GHAGGA_API_KEY ?? undefined;
+        if (!apiKey && provider === 'groq') {
+          apiKey = process.env.GROQ_API_KEY;
+        }
         // gateway / cli-bridge can use the stored GitHub token (same as review)
         if (!apiKey && (provider === 'gateway' || provider === 'cli-bridge')) {
           apiKey = getStoredToken() ?? undefined;

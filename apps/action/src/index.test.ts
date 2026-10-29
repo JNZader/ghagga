@@ -399,6 +399,54 @@ describe('run() — integration', () => {
     expect(mockSetFailed).not.toHaveBeenCalled();
   });
 
+  it('provider groq is passed through with the api key and model', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        provider: 'groq',
+        model: 'openai/gpt-oss-120b',
+        mode: 'simple',
+        'api-key': 'gsk_test',
+        'github-token': 'ghp_faketoken',
+        'enable-semgrep': 'true',
+        'enable-trivy': 'true',
+        'enable-cpd': 'true',
+        'enable-memory': 'false',
+      };
+      return inputs[name] ?? '';
+    });
+
+    await run();
+
+    expect(mockReviewPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'groq',
+        model: 'openai/gpt-oss-120b',
+        apiKey: 'gsk_test',
+      }),
+    );
+    expect(mockWarning).not.toHaveBeenCalledWith(expect.stringContaining('no longer supported'));
+    expect(mockSetFailed).not.toHaveBeenCalled();
+  });
+
+  it('provider groq without api-key fails the action', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        provider: 'groq',
+        model: 'openai/gpt-oss-120b',
+        mode: 'simple',
+        'api-key': '',
+        'github-token': 'ghp_faketoken',
+        'enable-memory': 'false',
+      };
+      return inputs[name] ?? '';
+    });
+
+    await run();
+
+    expect(mockSetFailed).toHaveBeenCalledWith(expect.stringContaining('api-key'));
+    expect(mockReviewPipeline).not.toHaveBeenCalled();
+  });
+
   it('empty diff: sets output status=SKIPPED without calling reviewPipeline', async () => {
     mockPullsGet.mockResolvedValue({ data: '' });
 

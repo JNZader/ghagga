@@ -8,17 +8,18 @@ branding:
 inputs:
   provider:
     description: >-
-      LLM provider to use. Options: gateway (default — route via mcp-llm-bridge),
-      cli-bridge (local CLIs: Claude Code, Codex, OpenCode, Copilot), ollama (local).
-      Legacy values (github, anthropic, openai, google, etc.) are automatically
-      remapped to "gateway" for backward compatibility.
+      LLM provider. gateway (default — mcp-llm-bridge), cli-bridge (local CLIs),
+      ollama (local), or groq (https://api.groq.com/openai/v1 chat completions;
+      requires api-key). Legacy values (github, anthropic, openai, google, qwen,
+      etc.) are remapped to "gateway". groq is not remapped.
     required: false
     default: "gateway"
 
   model:
     description: >-
       LLM model identifier. For gateway/cli-bridge, use "auto" to let the
-      provider select the best available model.
+      provider select the best available model. For groq, a Groq model id
+      such as "openai/gpt-oss-120b" (default when omitted).
     required: false
 
   mode:
@@ -30,8 +31,9 @@ inputs:
 
   api-key:
     description: >-
-      LLM provider credential. For gateway: bearer token. For cli-bridge: tool
-      API key (optional). For ollama: not required.
+      LLM provider credential. Required for groq (Groq API key). For gateway:
+      bearer token. For cli-bridge: tool API key (optional). For ollama: not
+      required.
     required: false
 
   github-token:

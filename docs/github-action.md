@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.6.1
+      - uses: JNZader/ghagga@v3.7.0
 ```
 
 ### What each section does
@@ -58,7 +58,7 @@ jobs:
 | `on: pull_request`                  | Triggers the review when a PR is opened, updated, or reopened                   |
 | `permissions: pull-requests: write` | Allows the Action to post comments on the PR                                    |
 | `actions/checkout@v4`               | Checks out the repository code for static analysis                              |
-| `JNZader/ghagga@v3.6.1`             | Runs the GHAGGA review. Default provider is `gateway`, default mode is `simple` |
+| `JNZader/ghagga@v3.7.0`             | Runs the GHAGGA review. Default provider is `gateway`, default mode is `simple` |
 
 > ✅ **Verification**: You should now have a file at `.github/workflows/ghagga.yml` in your repository.
 
@@ -136,10 +136,10 @@ All configuration is done via Action inputs in the workflow YAML. The Action doe
 
 | Input            | Required | Default               | Description                                                                                                              |
 | ---------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `provider`       | No       | `gateway`             | `gateway`, `cli-bridge`, or `ollama`. Legacy names are remapped to `gateway`                                             |
-| `model`          | No       | provider default      | Model id. `auto` lets the gateway or CLI pick                                                                            |
+| `provider`       | No       | `gateway`             | `gateway`, `cli-bridge`, `ollama`, or `groq`. Legacy names other than `groq` are remapped to `gateway`                   |
+| `model`          | No       | provider default      | Model id. `auto` lets the gateway or CLI pick. Groq defaults to `openai/gpt-oss-120b`                                    |
 | `mode`           | No       | `simple`              | `simple`, `workflow`, `consensus`, `diagnostic`, `fan-out`, or `hybrid-4r`                                               |
-| `api-key`        | No       | —                     | Credential for `gateway` or `cli-bridge`. Not used by `ollama`                                                           |
+| `api-key`        | No       | —                     | Required for `groq`. Credential for `gateway` or `cli-bridge`. Not used by `ollama`                                      |
 | `github-token`   | No       | `${{ github.token }}` | GitHub token for fetching PR diffs and posting comments. Automatic.                                                      |
 | `enabled-tools`  | No       | —                     | Comma-separated list of tools to force-enable (e.g., `ruff,bandit`). Properly forwarded through webhooks in SaaS mode.   |
 | `disabled-tools` | No       | —                     | Comma-separated list of tools to force-disable (e.g., `markdownlint`). Properly forwarded through webhooks in SaaS mode. |
@@ -170,7 +170,7 @@ This is intentional: `FAILED` means the review found critical issues that should
 Review failures block merging. For teams that want strict enforcement:
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   id: review
   with:
     mode: workflow
@@ -181,7 +181,7 @@ Review failures block merging. For teams that want strict enforcement:
 Add `continue-on-error: true` to make reviews informational — findings are posted as comments but the CI check always passes:
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   id: review
   continue-on-error: true # Don't fail CI on review findings
 ```
@@ -189,7 +189,7 @@ Add `continue-on-error: true` to make reviews informational — findings are pos
 ### Use review status in subsequent steps
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   id: review
 
 - name: Check review result
@@ -206,7 +206,7 @@ Add `continue-on-error: true` to make reviews informational — findings are pos
 Uses `node24` runtime (`action.yml` `using: node24`). Static analysis tools are **auto-installed and cached** on the GitHub Actions runner. First run takes ~3-5 minutes for tool installation; subsequent runs use `@actions/cache` (~1-2 minutes). There is no published GHCR action image; `apps/action/Dockerfile` is unused by `action.yml`.
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
 ```
 
 ---
@@ -218,7 +218,7 @@ Uses `node24` runtime (`action.yml` `using: node24`). Static analysis tools are 
 `github-token` only reads the diff and posts the comment. The model call uses `api-key` as the gateway credential:
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   with:
     provider: gateway
     api-key: ${{ secrets.GHAGGA_API_KEY }}
@@ -227,12 +227,24 @@ Uses `node24` runtime (`action.yml` `using: node24`). Static analysis tools are 
 `github-token` stays the automatic `GITHUB_TOKEN` unless you override it:
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   with:
     github-token: ${{ secrets.MY_GITHUB_TOKEN }}
 ```
 
-BYOK is `provider: gateway` plus `api-key`. Do not set `provider` to `openai`, `anthropic`, `google`, or `qwen`.
+BYOK is `provider: gateway` plus `api-key`, or `provider: groq` plus a Groq API key. Do not set `provider` to `openai`, `anthropic`, `google`, or `qwen`.
+
+### Groq
+
+`groq` calls `https://api.groq.com/openai/v1` chat completions. It is not remapped to `gateway`. A failed Groq call fails the Action.
+
+```yaml
+- uses: JNZader/ghagga@v3.7.0
+  with:
+    provider: groq
+    model: openai/gpt-oss-120b
+    api-key: ${{ secrets.GROQ_API_KEY }}
+```
 
 ### Ollama (self-hosted runner)
 
@@ -244,7 +256,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.6.1
+      - uses: JNZader/ghagga@v3.7.0
         with:
           provider: ollama
           model: qwen2.5-coder:7b
@@ -261,7 +273,7 @@ GHAGGA runs the 17-tool registry before the LLM review. SonarQube stays inert wi
 Control tools with the `enabled-tools` and `disabled-tools` inputs:
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   with:
     enabled-tools: "ruff,bandit"
     disabled-tools: "markdownlint"
@@ -343,7 +355,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.6.1
+      - uses: JNZader/ghagga@v3.7.0
 ```
 
 Or check repo **Settings** → **Actions** → **General** → **Workflow permissions** → select "Read and write permissions".
@@ -389,7 +401,7 @@ Also ensure the workflow file is committed to the branch that the PR targets (us
 **Fix**: If you want advisory-only reviews (non-blocking), add `continue-on-error: true`:
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   continue-on-error: true
 ```
 
@@ -402,7 +414,7 @@ Also ensure the workflow file is committed to the branch that the PR targets (us
 **Fix**: Store the gateway credential as a repository secret:
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.1
+- uses: JNZader/ghagga@v3.7.0
   with:
     provider: gateway
     api-key: ${{ secrets.GHAGGA_API_KEY }}

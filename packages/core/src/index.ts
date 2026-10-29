@@ -178,6 +178,7 @@ export type { GenerateResult, GenerateTextFn } from './providers/generate-fn.js'
 export {
   createCLIBridgeGenerateFn,
   createGatewayGenerateFn,
+  createGroqGenerateFn,
   createOllamaGenerateFn,
 } from './providers/generate-fn.js';
 

@@ -31,7 +31,7 @@ GHAGGA is a code review tool that posts comments on pull requests. It combines L
 | **17 Static Analysis Tools**        | 7 always-on, 10 auto-detect. SonarQube runs only with MCP                                                                                                                |
 | **Inline Static-Analysis Workflow** | Server injects `.github/workflows/ghagga.yml` into each target repo and dispatches it — no separate runner repo to provision                                             |
 | **Project Memory**                  | Learns patterns, decisions, and bug fixes across reviews. 3 backends: PostgreSQL + tsvector (Server), SQLite + FTS5 (CLI & Action), Engram (optional cross-tool sharing) |
-| **3 Provider Modes**                | `gateway`, `cli-bridge`, `ollama`. Legacy names such as `github` remap to `gateway`                                                                                      |
+| **Provider Modes**                  | `gateway`, `cli-bridge`, `ollama`, and `groq` (Groq chat completions). Other legacy names such as `github` remap to `gateway`                                            |
 | **4 Distribution Modes**            | GitHub App, GitHub Action, CLI, self-hosted                                                                                                                              |
 | **Comment Trigger**                 | Type `ghagga review` on any PR to re-trigger a review on demand                                                                                                          |
 | **PR explanations**                 | Opt-in `/ghagga explain <question>` replies on a GitHub PR comment. Finding-free; not a review mode. See [PR explanations](pr-explanations.md)                           |

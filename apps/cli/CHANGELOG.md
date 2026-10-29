@@ -1,5 +1,17 @@
 # ghagga
 
+## 3.7.0
+
+### Minor Changes
+
+- Add Groq as a direct provider. The CLI and GitHub Action call Groq chat completions at api.groq.com with an API key instead of remapping `groq` to gateway.
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.7.0
+  - ghagga-forge@3.7.0
+
 ## 3.6.1
 
 ### Patch Changes

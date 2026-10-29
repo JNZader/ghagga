@@ -8,10 +8,16 @@ import { resolveCredentialEnvVar } from '../providers/cli-bridge.js';
 import {
   createCLIBridgeGenerateFn,
   createGatewayGenerateFn,
+  createGroqGenerateFn,
   createOllamaGenerateFn,
   type GenerateTextFn,
 } from '../providers/generate-fn.js';
-import type { ProviderChainEntry, ReviewInput, ReviewMode } from '../types.js';
+import {
+  DEFAULT_MODELS,
+  type ProviderChainEntry,
+  type ReviewInput,
+  type ReviewMode,
+} from '../types.js';
 
 // ─── Provider Resolution ────────────────────────────────────────
 
@@ -110,6 +116,17 @@ export function resolveGenerateTextFns(
   isGateway: boolean,
   isOllama: boolean,
 ): GenerateTextFn[] {
+  const activeProvider = input.providerChain?.[0]?.provider ?? input.provider;
+  if (activeProvider === 'groq') {
+    const requested = input.providerChain?.[0]?.model ?? input.model;
+    const model = requested && requested !== 'auto' ? requested : DEFAULT_MODELS.groq;
+    const apiKey = input.providerChain?.[0]?.apiKey || input.apiKey || '';
+    if (!apiKey) {
+      throw new Error('Groq provider requires an API key');
+    }
+    return [createGroqGenerateFn(model, apiKey)];
+  }
+
   if (isCliBridge) {
     // Resolve CLI bridge options from provider chain or flat input fields
     const cliBridgeEntry = input.providerChain?.[0];

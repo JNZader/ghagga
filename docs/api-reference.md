@@ -533,7 +533,7 @@ Updates configuration for a repository. Supports partial updates — only includ
 
 > **API Key Behavior**: When you send a `providerChain` entry without an `apiKey`, the server preserves the previously stored encrypted key for that provider. Send a new `apiKey` to rotate it. The `cli-bridge` and `ollama` providers do not require an API key.
 
-> **Valid Providers**: `gateway`, `cli-bridge`, `ollama`. Pre-v2 legacy provider values are automatically remapped to `gateway` for backward compatibility. The `ollama` provider is stored as a valid setting but is **not** accepted by `POST /api/providers/validate` — see that endpoint for runtime restrictions.
+> **Valid Providers**: SaaS chain entries are `gateway`, `cli-bridge`, `ollama`. Pre-v2 legacy provider values stored on an installation are remapped to `gateway`. `groq` is a direct provider on the CLI and GitHub Action (not a SaaS chain entry). The `ollama` provider is stored as a valid setting but is **not** accepted by `POST /api/providers/validate` — see that endpoint for runtime restrictions.
 
 **Response** `200`:
 

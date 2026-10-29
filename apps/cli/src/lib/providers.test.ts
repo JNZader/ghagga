@@ -20,6 +20,7 @@ describe('isLegacyProvider', () => {
     expect(isLegacyProvider('gateway')).toBe(false);
     expect(isLegacyProvider('cli-bridge')).toBe(false);
     expect(isLegacyProvider('ollama')).toBe(false);
+    expect(isLegacyProvider('groq')).toBe(false);
   });
 
   it('returns false for undefined', () => {
@@ -54,6 +55,10 @@ describe('remapLegacyStoredProvider', () => {
     });
     expect(remapLegacyStoredProvider('cli-bridge')).toEqual({
       provider: 'cli-bridge',
+      remapped: false,
+    });
+    expect(remapLegacyStoredProvider('groq')).toEqual({
+      provider: 'groq',
       remapped: false,
     });
   });

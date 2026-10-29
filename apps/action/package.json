@@ -1,10 +1,10 @@
 {
   "name": "@ghagga/action",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/index.js --sourcemap --external:@xenova/transformers --legal-comments=none",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/index.js --sourcemap --external:@xenova/transformers --legal-comments=none --banner:js=\"import { createRequire as __ghaggaCreateRequire } from 'node:module'; const require = __ghaggaCreateRequire(import.meta.url);\"",
     "build:tsc": "tsc",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

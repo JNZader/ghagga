@@ -418,7 +418,7 @@ Transitive re-export resolution (a barrel re-exporting from another barrel) and 
 | ------------------------- | ----- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `[path]`                  | —     | `.`            | Optional path to repository or subdirectory                                                                                                    |
 | `--mode <mode>`           | `-m`  | `simple`       | Review mode: `simple`, `workflow`, `consensus`, `fan-out`, `hybrid-4r`. The CLI rejects `diagnostic`.                                          |
-| `--provider <provider>`   | `-p`  | `gateway`      | LLM provider: `gateway`, `cli-bridge`, `ollama`. Legacy SDK names exit 1.                                                                      |
+| `--provider <provider>`   | `-p`  | `gateway`      | LLM provider: `gateway`, `cli-bridge`, `ollama`, `groq`. Other legacy SDK names exit 1.                                                        |
 | `--model <model>`         | —     | Auto           | Model identifier (auto-selects best model per provider)                                                                                        |
 | `--api-key <key>`         | —     | —              | LLM provider API key (or use env vars)                                                                                                         |
 | `--output <format>`       | `-o`  | `markdown`     | Output format: `markdown`, `json`, `sarif`                                                                                                     |
@@ -544,7 +544,17 @@ ghagga review
 
 The command uses `provider: gateway`. Point that gateway at mcp-llm-bridge. The login token is not an LLM credential.
 
-BYOK is a gateway credential, not `--provider openai` (or anthropic/google/qwen). Those names exit 1.
+BYOK is a gateway credential, or `--provider groq` with `GROQ_API_KEY` / `--api-key`. `--provider openai` (or anthropic/google/qwen) still exits 1.
+
+### Groq
+
+```bash
+export GROQ_API_KEY=gsk_...
+ghagga review --provider groq
+ghagga review --provider groq --model openai/gpt-oss-120b
+```
+
+Groq uses chat completions at `https://api.groq.com/openai/v1`. The default model is `openai/gpt-oss-120b`.
 
 ### Ollama (local, no API key)
 
