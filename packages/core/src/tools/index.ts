@@ -15,6 +15,7 @@ export type {
   ToolCategory,
   ToolDefinition,
   ToolName,
+  ToolScanScope,
   ToolTier,
 } from './types.js';
 

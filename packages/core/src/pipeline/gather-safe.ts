@@ -34,14 +34,19 @@ export async function runStaticAnalysisSafe(
       files.set(path, ''); // Content is extracted from diff by the tool runner
     }
 
-    return await runStaticAnalysis(files, '.', {
-      enableSemgrep: input.settings.enableSemgrep,
-      enableTrivy: input.settings.enableTrivy,
-      enableCpd: input.settings.enableCpd,
-      customRules: input.settings.customRules,
-      enabledTools: input.settings.enabledTools,
-      disabledTools: input.settings.disabledTools,
-    });
+    return await runStaticAnalysis(
+      files,
+      '.',
+      {
+        enableSemgrep: input.settings.enableSemgrep,
+        enableTrivy: input.settings.enableTrivy,
+        enableCpd: input.settings.enableCpd,
+        customRules: input.settings.customRules,
+        enabledTools: input.settings.enabledTools,
+        disabledTools: input.settings.disabledTools,
+      },
+      input.diff,
+    );
   } catch (error) {
     console.warn(
       '[ghagga] Static analysis failed (degrading gracefully):',

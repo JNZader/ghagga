@@ -38025,10 +38025,10 @@ var require_dist6 = __commonJS({
 
 // src/index.ts
 import { randomBytes } from "node:crypto";
-import { copyFileSync, existsSync as existsSync9, mkdirSync as mkdirSync3, renameSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync as existsSync9, mkdirSync as mkdirSync4, renameSync, rmSync as rmSync2 } from "node:fs";
 import http3 from "node:http";
 import https3 from "node:https";
-import { tmpdir as tmpdir2 } from "node:os";
+import { tmpdir as tmpdir3 } from "node:os";
 import { join as join10 } from "node:path";
 
 // ../../node_modules/.pnpm/@actions+core@3.0.1/node_modules/@actions/core/lib/command.js
@@ -50012,21 +50012,21 @@ var Matcher = class {
    * @returns {string}
    */
   toString(separator, includeNamespace = true) {
-    const sep10 = separator || this.separator;
-    const isDefault = sep10 === this.separator && includeNamespace === true;
+    const sep11 = separator || this.separator;
+    const isDefault = sep11 === this.separator && includeNamespace === true;
     if (isDefault) {
       if (this._pathStringCache !== null) {
         return this._pathStringCache;
       }
       const result = this.path.map(
         (n) => n.namespace ? `${n.namespace}:${n.tag}` : n.tag
-      ).join(sep10);
+      ).join(sep11);
       this._pathStringCache = result;
       return result;
     }
     return this.path.map(
       (n) => includeNamespace && n.namespace ? `${n.namespace}:${n.tag}` : n.tag
-    ).join(sep10);
+    ).join(sep11);
   }
   /**
    * Get path as array of tag names.
@@ -129407,7 +129407,7 @@ function validateLens(data) {
   };
 }
 async function loadLensesFromDir(dirPath, onProgress) {
-  const { existsSync: existsSync10, readdirSync, readFileSync: readFileSync5 } = await import("node:fs");
+  const { existsSync: existsSync10, readdirSync, readFileSync: readFileSync6 } = await import("node:fs");
   const { join: join11, basename: basename5 } = await import("node:path");
   const emit = onProgress ?? (() => {
   });
@@ -129426,7 +129426,7 @@ async function loadLensesFromDir(dirPath, onProgress) {
   for (const file2 of files) {
     const filePath = join11(dirPath, file2);
     try {
-      const raw = readFileSync5(filePath, "utf-8");
+      const raw = readFileSync6(filePath, "utf-8");
       const parsed = JSON.parse(raw);
       const validation = validateLens(parsed);
       if (validation.lens) {
@@ -131707,8 +131707,9 @@ var cpdPlugin = {
 };
 
 // ../../packages/core/dist/tools/plugins/gitleaks.js
-import { existsSync as existsSync6 } from "node:fs";
-import { dirname as dirname6, join as join8 } from "node:path";
+import { existsSync as existsSync6, mkdirSync as mkdirSync2, mkdtempSync, readFileSync as readFileSync4, realpathSync, rmSync, statSync as statSync2, symlinkSync } from "node:fs";
+import { tmpdir as tmpdir2 } from "node:os";
+import { dirname as dirname6, join as join8, sep as sep10 } from "node:path";
 import { fileURLToPath } from "node:url";
 var GITLEAKS_VERSION = "8.21.2";
 var GITLEAKS_BIN = "/usr/local/bin/gitleaks";
@@ -131716,6 +131717,114 @@ function resolveGitleaksConfigPath() {
   const here = dirname6(fileURLToPath(import.meta.url));
   const configPath = join8(here, "..", "gitleaks-config.toml");
   return existsSync6(configPath) ? configPath : void 0;
+}
+function resolveActiveGitleaksConfig(repoDir) {
+  const repoConfig = join8(repoDir, ".gitleaks.toml");
+  if (existsSync6(repoConfig))
+    return repoConfig;
+  return resolveGitleaksConfigPath();
+}
+function addedLinesByFile(diff) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const file2 of parseUnifiedDiff(diff).files) {
+    if (file2.isDeleted || !file2.path || file2.path === "/dev/null")
+      continue;
+    const lines = map2.get(file2.path) ?? /* @__PURE__ */ new Set();
+    for (const hunk of file2.hunks) {
+      let newLine = hunk.newStart;
+      for (const hunkLine of hunk.lines) {
+        if (hunkLine.prefix === "+") {
+          if (newLine > 0)
+            lines.add(newLine);
+          newLine++;
+        } else if (hunkLine.prefix === " ") {
+          newLine++;
+        }
+      }
+    }
+    if (lines.size > 0)
+      map2.set(file2.path, lines);
+  }
+  return map2;
+}
+function toRepoRelative(file2, repoDir) {
+  const normalized = file2.replace(/\\/g, "/");
+  const roots = /* @__PURE__ */ new Set();
+  const add = (root) => {
+    const cleaned = root.replace(/\\/g, "/").replace(/\/$/, "");
+    if (cleaned && cleaned !== ".")
+      roots.add(cleaned);
+  };
+  add(repoDir);
+  try {
+    add(realpathSync(repoDir));
+  } catch {
+  }
+  for (const root of roots) {
+    if (normalized === root)
+      return "";
+    if (normalized.startsWith(`${root}/`))
+      return normalized.slice(root.length + 1);
+  }
+  return normalized.replace(/^\.\//, "");
+}
+function filterGitleaksReport(rawJson, repoDir, files, changedLines) {
+  let findings;
+  try {
+    const parsed = JSON.parse(rawJson);
+    if (!Array.isArray(parsed))
+      return "[]";
+    findings = parsed;
+  } catch {
+    return "[]";
+  }
+  const fileSet = new Set(files.map((file2) => file2.replace(/\\/g, "/").replace(/^\.\//, "")));
+  const filtered = findings.flatMap((finding) => {
+    const rel = toRepoRelative(finding.File ?? "", repoDir);
+    if (fileSet.size > 0 && !fileSet.has(rel))
+      return [];
+    if (changedLines) {
+      const lines = changedLines.get(rel);
+      if (!lines?.has(finding.StartLine))
+        return [];
+    }
+    return [{ ...finding, File: rel }];
+  });
+  return JSON.stringify(filtered);
+}
+function gitleaksScanTargets(files, scope) {
+  if (scope?.diff === void 0 && files.length === 0) {
+    return { scoped: false, targets: [] };
+  }
+  const changedLines = scope?.diff !== void 0 ? addedLinesByFile(scope.diff) : void 0;
+  const requested = files.map((file2) => file2.replace(/\\/g, "/").replace(/^\.\//, "")).filter(Boolean);
+  if (!changedLines) {
+    return { scoped: true, targets: requested };
+  }
+  const targets = (requested.length > 0 ? requested : [...changedLines.keys()]).filter((file2) => changedLines.has(file2));
+  return { scoped: true, targets, changedLines };
+}
+function safeRepoFile(repoDir, rel) {
+  if (!rel || rel.startsWith("/") || rel.includes("\0"))
+    return void 0;
+  const normalized = rel.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (normalized.split("/").includes(".."))
+    return void 0;
+  const abs = join8(repoDir, normalized);
+  if (!existsSync6(abs))
+    return void 0;
+  try {
+    if (!statSync2(abs).isFile())
+      return void 0;
+    const repoReal = realpathSync(repoDir);
+    const fileReal = realpathSync(abs);
+    const root = repoReal.endsWith(sep10) ? repoReal : repoReal + sep10;
+    if (fileReal !== repoReal && !fileReal.startsWith(root))
+      return void 0;
+    return fileReal;
+  } catch {
+    return void 0;
+  }
 }
 function parseGitleaksOutput(raw, repoDir) {
   if (raw.timedOut)
@@ -131759,30 +131868,76 @@ var gitleaksPlugin = {
     await ctx.exec("gitleaks", ["version"], { timeoutMs: 1e4 });
     await ctx.cacheSave("gitleaks", [GITLEAKS_BIN]);
   },
-  async run(ctx, repoDir, _files, timeout) {
-    const reportPath = "/tmp/gitleaks-result.json";
-    const detectArgs = [
-      "detect",
-      `--source=${repoDir}`,
-      "--report-format=json",
-      `--report-path=${reportPath}`,
-      "--no-git",
-      "--exit-code=0"
-    ];
-    const configPath = resolveGitleaksConfigPath();
-    if (configPath) {
-      detectArgs.push(`--config=${configPath}`);
-    } else {
-      ctx.log("warn", "gitleaks: bundled gitleaks-config.toml not found, using default rules only");
+  async run(ctx, repoDir, files, timeout, scope) {
+    const { scoped, targets, changedLines } = gitleaksScanTargets(files, scope);
+    let repoRoot = repoDir;
+    try {
+      repoRoot = realpathSync(repoDir);
+    } catch {
+      repoRoot = repoDir;
     }
-    await ctx.exec("gitleaks", detectArgs, {
-      timeoutMs: timeout
-    });
-    return ctx.exec("cat", [reportPath], {
-      timeoutMs: 1e4,
-      allowExitCodes: [1]
-      // cat may fail if no findings file
-    });
+    const reportPath = join8(tmpdir2(), `ghagga-gitleaks-${process.pid}-${Date.now()}.json`);
+    let tempTree;
+    try {
+      let source = repoDir;
+      if (scoped) {
+        tempTree = mkdtempSync(join8(tmpdir2(), "ghagga-gitleaks-"));
+        let linked = 0;
+        for (const rel of targets) {
+          const real = safeRepoFile(repoDir, rel);
+          if (!real)
+            continue;
+          const dest = join8(tempTree, rel);
+          mkdirSync2(dirname6(dest), { recursive: true });
+          symlinkSync(real, dest);
+          linked++;
+        }
+        if (linked === 0) {
+          ctx.log("info", "gitleaks: no changed files to scan");
+          return { stdout: "[]", stderr: "", exitCode: 0, timedOut: false };
+        }
+        source = tempTree;
+        ctx.log("info", `gitleaks: scanning ${linked} changed file(s)`);
+      }
+      const detectArgs = [
+        "detect",
+        `--source=${source}`,
+        "--report-format=json",
+        `--report-path=${reportPath}`,
+        "--no-git",
+        "--exit-code=0",
+        `--gitleaks-ignore-path=${repoRoot}`
+      ];
+      if (scoped)
+        detectArgs.push("--follow-symlinks");
+      const configPath = resolveActiveGitleaksConfig(repoDir);
+      if (configPath) {
+        detectArgs.push(`--config=${configPath}`);
+      } else {
+        ctx.log("warn", "gitleaks: no .gitleaks.toml or bundled config found, using default rules");
+      }
+      const detectResult = await ctx.exec("gitleaks", detectArgs, { timeoutMs: timeout });
+      if (detectResult.timedOut)
+        return detectResult;
+      let raw = "[]";
+      try {
+        raw = readFileSync4(reportPath, "utf8");
+      } catch {
+        raw = "[]";
+      }
+      if (scoped)
+        raw = filterGitleaksReport(raw, repoDir, targets, changedLines);
+      return {
+        stdout: raw,
+        stderr: detectResult.stderr,
+        exitCode: detectResult.exitCode,
+        timedOut: false
+      };
+    } finally {
+      if (tempTree)
+        rmSync(tempTree, { recursive: true, force: true });
+      rmSync(reportPath, { force: true });
+    }
   },
   parse: parseGitleaksOutput
 };
@@ -132845,7 +133000,7 @@ var SKIPPED_RESULT = {
   executionTimeMs: 0
 };
 var LEGACY_TOOL_NAMES = ["semgrep", "trivy", "cpd"];
-async function runTools(ctx, activatedTools, targetDir, files, totalBudgetMs = 6e5) {
+async function runTools(ctx, activatedTools, targetDir, files, totalBudgetMs = 6e5, scope) {
   const results = {};
   const budget = allocateTimeBudget(activatedTools, totalBudgetMs);
   const elapsedByTool = /* @__PURE__ */ new Map();
@@ -132867,7 +133022,7 @@ async function runTools(ctx, activatedTools, targetDir, files, totalBudgetMs = 6
     const start2 = Date.now();
     try {
       await tool2.install(ctx);
-      const raw = await tool2.run(ctx, targetDir, files, effectiveBudget);
+      const raw = await tool2.run(ctx, targetDir, files, effectiveBudget, scope);
       if (raw.timedOut) {
         const durationMs2 = Date.now() - start2;
         ctx.log("warn", `[ghagga:tools] ${tool2.name}: timeout after ${durationMs2}ms`);
@@ -132975,10 +133130,10 @@ var FINDING_CAP = 200;
 function isToolRegistryEnabled() {
   return true;
 }
-async function runStaticAnalysis(files, scanPath, settings) {
-  return runStaticAnalysisWithRegistry(scanPath, Array.from(files.keys()), settings);
+async function runStaticAnalysis(files, scanPath, settings, diff) {
+  return runStaticAnalysisWithRegistry(scanPath, Array.from(files.keys()), settings, diff);
 }
-async function runStaticAnalysisWithRegistry(scanPath, fileList, settings) {
+async function runStaticAnalysisWithRegistry(scanPath, fileList, settings, diff) {
   console.error("[ghagga:tools] Running static analysis with registry-driven orchestrator");
   initializeDefaultTools();
   const activatedTools = resolveActivatedTools({
@@ -132991,7 +133146,8 @@ async function runStaticAnalysisWithRegistry(scanPath, fileList, settings) {
     enableCpd: settings.enableCpd
   });
   const ctx = createNodeExecutionContext();
-  const results = await runTools(ctx, activatedTools, scanPath, fileList);
+  const scope = diff !== void 0 ? { diff } : void 0;
+  const results = await runTools(ctx, activatedTools, scanPath, fileList, 6e5, scope);
   return results;
 }
 var SEVERITY_ORDER2 = {
@@ -133697,12 +133853,12 @@ function formatNegativeExamplesPrompt(examples) {
 }
 
 // ../../packages/core/dist/self-improve/index.js
-import { appendFileSync as appendFileSync2, existsSync as existsSync8, mkdirSync as mkdirSync2, readFileSync as readFileSync4 } from "node:fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync8, mkdirSync as mkdirSync3, readFileSync as readFileSync5 } from "node:fs";
 async function loadFeedback(storagePath) {
   if (!existsSync8(storagePath)) {
     return [];
   }
-  const raw = readFileSync4(storagePath, "utf-8").trim();
+  const raw = readFileSync5(storagePath, "utf-8").trim();
   if (!raw)
     return [];
   const records = [];
@@ -134009,7 +134165,7 @@ async function runStaticAnalysisSafe(fileList, input2, failedSteps) {
       customRules: input2.settings.customRules,
       enabledTools: input2.settings.enabledTools,
       disabledTools: input2.settings.disabledTools
-    });
+    }, input2.diff);
   } catch (error63) {
     console.warn("[ghagga] Static analysis failed (degrading gracefully):", error63 instanceof Error ? error63.message : String(error63));
     failedSteps.push({
@@ -140148,10 +140304,10 @@ async function runLocalAnalysis(options) {
 async function runLocalAnalysisWithRegistry(options) {
   info2("[ghagga:tools] Running static analysis with registry-driven orchestrator");
   initializeDefaultTools();
-  const fileList = [];
+  const fileList = options.files ?? [];
   const activatedTools = resolveActivatedTools({
     registry: toolRegistry,
-    files: fileList,
+    files: [],
     enabledTools: options.enabledTools,
     disabledTools: options.disabledTools,
     enableSemgrep: options.enableSemgrep,
@@ -140162,7 +140318,14 @@ async function runLocalAnalysisWithRegistry(options) {
     `[ghagga:tools] Activated tools: ${activatedTools.map((t) => t.definition.name).join(", ")}`
   );
   const ctx = createActionsExecutionContext();
-  const results = await runTools(ctx, activatedTools, options.repoDir, fileList);
+  const results = await runTools(
+    ctx,
+    activatedTools,
+    options.repoDir,
+    fileList,
+    6e5,
+    options.diff !== void 0 ? { diff: options.diff } : void 0
+  );
   return results;
 }
 
@@ -140218,7 +140381,7 @@ function sanitizeForPath(value) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-");
 }
 function resolveMemoryPaths(params) {
-  const runnerTemp = process.env.RUNNER_TEMP || tmpdir2();
+  const runnerTemp = process.env.RUNNER_TEMP || tmpdir3();
   const repoSlug = sanitizeForPath(params.repoFullName);
   const uniqueSuffix = [
     sanitizeForPath(params.repoId || "noid"),
@@ -140301,7 +140464,8 @@ async function run2() {
       }
     });
     const diff = diffResponse.data;
-    if (!diff || typeof diff === "string" && diff.trim().length === 0) {
+    const diffText = typeof diff === "string" ? diff : String(diff);
+    if (!diffText.trim()) {
       info2("\u23ED\uFE0F  PR has no diff content. Skipping review.");
       setOutput("status", "SKIPPED");
       setOutput("findings-count", 0);
@@ -140309,13 +140473,16 @@ async function run2() {
     }
     info2("Running static analysis tools...");
     const repoDir = process.env.GITHUB_WORKSPACE ?? ".";
+    const changedFiles = parseDiffFiles(diffText).map((file2) => file2.path).filter((path12) => path12.length > 0);
     const staticAnalysis = await runLocalAnalysis({
       enableSemgrep,
       enableTrivy,
       enableCpd,
       enabledTools,
       disabledTools,
-      repoDir
+      repoDir,
+      files: changedFiles,
+      diff: diffText
     });
     const toolSummaries = [];
     let totalFindings = 0;
@@ -140344,8 +140511,8 @@ async function run2() {
     let memoryStorage;
     if (enableMemory) {
       try {
-        mkdirSync3(memoryPaths.perRunDir, { recursive: true, mode: 448 });
-        mkdirSync3(memoryPaths.cacheDir, { recursive: true });
+        mkdirSync4(memoryPaths.perRunDir, { recursive: true, mode: 448 });
+        mkdirSync4(memoryPaths.cacheDir, { recursive: true });
       } catch (error63) {
         warning(
           `[ghagga] Failed to prepare memory directory (non-fatal): ${error63 instanceof Error ? error63.message : String(error63)}`
@@ -140372,8 +140539,8 @@ async function run2() {
       }
       if (!restored) {
         try {
-          rmSync(memoryPaths.workingDbPath, { force: true });
-          rmSync(memoryPaths.stagingDbPath, { force: true });
+          rmSync2(memoryPaths.workingDbPath, { force: true });
+          rmSync2(memoryPaths.stagingDbPath, { force: true });
         } catch (error63) {
           warning(
             `[ghagga] Failed to clear residual memory file (non-fatal): ${error63 instanceof Error ? error63.message : String(error63)}`
@@ -140401,7 +140568,7 @@ async function run2() {
     let result;
     try {
       result = await reviewPipeline({
-        diff: typeof diff === "string" ? diff : String(diff),
+        diff: diffText,
         mode,
         provider,
         model,
@@ -140489,7 +140656,7 @@ async function run2() {
           }
         }
         try {
-          rmSync(memoryPaths.perRunDir, { recursive: true, force: true });
+          rmSync2(memoryPaths.perRunDir, { recursive: true, force: true });
         } catch {
         }
       }
