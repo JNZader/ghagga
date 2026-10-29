@@ -10,6 +10,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  readExplainTourSeen,
+  resetExplainTourStorageForTests,
+  writeExplainTourBannerDismissed,
+  writeExplainTourSeen,
+} from '@/components/explain-tour/storage';
 
 // ─── Mock modules ───────────────────────────────────────────────
 
@@ -229,6 +235,8 @@ function setupWithSettings(settingsData = DEFAULT_SETTINGS) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  writeExplainTourSeen();
+  writeExplainTourBannerDismissed();
 
   mockUseSelectedRepo.mockReturnValue({
     selectedRepo: '',
@@ -1060,5 +1068,48 @@ describe('Settings — tool grid', () => {
     // Should show old checkboxes since no registered tools
     expect(screen.queryByTestId('tool-grid')).not.toBeInTheDocument();
     expect(screen.getByText('Semgrep (security + patterns)')).toBeInTheDocument();
+  });
+});
+
+describe('Settings — PR explanations tour', () => {
+  it('opens once, spotlights explanationsEnabled, and still saves', async () => {
+    resetExplainTourStorageForTests();
+    const mockMutateAsync = vi.fn().mockResolvedValue({ message: 'ok' });
+    mockUseUpdateSettings.mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+      isError: false,
+    });
+    setupWithSettings();
+
+    const { unmount } = renderSettings();
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('data-tour-step', 'what');
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-field', 'explanationsEnabled');
+    const toggle = document.querySelector('[data-explain-tour="toggle"]');
+    expect(toggle?.querySelector('input[name="explanationsEnabled"]')).toBe(
+      screen.getByRole('checkbox', { name: 'PR explanations' }),
+    );
+
+    const save = screen.getByRole('button', { name: 'Save Settings' });
+    expect(save).not.toBeDisabled();
+    fireEvent.click(save);
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(readExplainTourSeen()).toBe(true);
+
+    unmount();
+    renderSettings();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Replay tour' }));
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-step', 'what');
   });
 });

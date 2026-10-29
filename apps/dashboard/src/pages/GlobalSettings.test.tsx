@@ -10,6 +10,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetExplainTourStorageForTests,
+  writeExplainTourBannerDismissed,
+  writeExplainTourSeen,
+} from '@/components/explain-tour/storage';
 
 // ─── Mock modules ───────────────────────────────────────────────
 
@@ -108,6 +113,8 @@ const DEFAULT_VALIDATE = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  writeExplainTourSeen();
+  writeExplainTourBannerDismissed();
   mockUseInstallations.mockReturnValue(DEFAULT_INSTALLATION);
   mockUseInstallationSettings.mockReturnValue(DEFAULT_SETTINGS);
   mockUseUpdateInstallationSettings.mockReturnValue(DEFAULT_UPDATE);
@@ -249,5 +256,40 @@ describe('GlobalSettings — zero installations (PRODOPS-006)', () => {
     // No stray spinner left running once the empty state is shown.
     const spinners = document.querySelectorAll('.animate-spin');
     expect(spinners.length).toBe(0);
+  });
+});
+
+describe('GlobalSettings — PR explanations tour', () => {
+  it('targets explanationsEnabled and keeps Save Global Settings available', async () => {
+    resetExplainTourStorageForTests();
+    const mutateAsync = vi.fn().mockResolvedValue({ message: 'ok' });
+    mockUseUpdateInstallationSettings.mockReturnValue({
+      mutateAsync,
+      isPending: false,
+      isError: false,
+    });
+
+    renderGlobalSettings();
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveAttribute('data-tour-step', 'what');
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-anchor', 'toggle');
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-field', 'explanationsEnabled');
+    const toggle = document.querySelector('[data-explain-tour="toggle"]');
+    expect(toggle?.querySelector('input[name="explanationsEnabled"]')).toBe(
+      screen.getByRole('checkbox', { name: 'PR explanations' }),
+    );
+
+    const save = screen.getByRole('button', { name: 'Save Global Settings' });
+    expect(save).not.toBeDisabled();
+    fireEvent.click(save);
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ installationId: 100, explanationsEnabled: false }),
+      );
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

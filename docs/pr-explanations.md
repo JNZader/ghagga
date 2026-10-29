@@ -4,6 +4,12 @@
 
 GitLab merge-request review still uses the existing forge adapter. That adapter does not expose the explanation snapshot or reply seam, so the same command is not accepted on GitLab.
 
+## Tour in the dashboard
+
+The first time you open [Repository Settings](https://ghagga.javierzader.com/app/#/settings) or [Global Settings](https://ghagga.javierzader.com/app/#/global-settings) where **PR explanations** is on screen, the dashboard starts a short tour. The steps cover what `/ghagga explain` is, the `explanationsEnabled` switch, commenting `/ghagga explain …` on a GitHub pull request, and the fact that an answer does not approve or request changes.
+
+**Replay tour** on either page runs it again. Escape, Skip, or Done dismisses it. A note on the same page can start the tour and can be dismissed on its own. The seen flag lives in the browser (`localStorage` key `ghagga.tour.pr-explanations.seen`). It is not a repository setting, so dismissing the tour does not change the opt-in. Saving settings stays available while the tour is open.
+
 ## Enable it
 
 Explanations stay **off** until a maintainer opts in. There is no new server secret.

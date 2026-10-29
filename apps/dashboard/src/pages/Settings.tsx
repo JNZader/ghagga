@@ -1,6 +1,14 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader } from '@/components/Card';
+import {
+  ExplainTour,
+  ExplainTourBanner,
+  ExplainTourReplayButton,
+} from '@/components/explain-tour/ExplainTour';
+import { buildExplainTourSteps } from '@/components/explain-tour/steps';
+import { useExplainTour } from '@/components/explain-tour/useExplainTour';
+import { PrExplanationsSection } from '@/components/settings/PrExplanationsSection';
 import { ProviderChainEditor } from '@/components/settings/ProviderChainEditor';
 import type { ProviderEntryState } from '@/components/settings/ProviderEntry';
 import { KNOWN_MODELS } from '@/components/settings/provider-fields/shared';
@@ -68,6 +76,16 @@ export function Settings() {
 
   // ── Global vs custom toggle ─────────────────────────────────
   const [useGlobalSettings, setUseGlobalSettings] = useState(true);
+  const explanationsVisible = Boolean(selectedRepo) && !isLoading && !isError && !!settings;
+  const explainTour = useExplainTour(explanationsVisible);
+  const explainTourSteps = useMemo(
+    () =>
+      buildExplainTourSteps({
+        scope: 'repository',
+        editable: !useGlobalSettings,
+      }),
+    [useGlobalSettings],
+  );
 
   // ── Static analysis toggles (legacy) ─────────────────────────
   const [enableSemgrep, setEnableSemgrep] = useState(true);
@@ -288,7 +306,7 @@ export function Settings() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Repository Settings</h1>
           <p className="mt-1 text-text-secondary">
@@ -296,19 +314,34 @@ export function Settings() {
           </p>
         </div>
 
-        <select
-          value={selectedRepo}
-          onChange={(e) => setSelectedRepo(e.target.value)}
-          className="select-field w-64"
-        >
-          <option value="">Select a repository</option>
-          {repos?.map((repo) => (
-            <option key={repo.id} value={repo.fullName}>
-              {repo.fullName}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-3">
+          <ExplainTourReplayButton visible={explanationsVisible} onReplay={explainTour.replay} />
+          <select
+            value={selectedRepo}
+            onChange={(e) => setSelectedRepo(e.target.value)}
+            className="select-field w-64"
+          >
+            <option value="">Select a repository</option>
+            {repos?.map((repo) => (
+              <option key={repo.id} value={repo.fullName}>
+                {repo.fullName}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      <ExplainTourBanner
+        visible={explainTour.bannerVisible}
+        tourOpen={explainTour.open}
+        onStart={explainTour.replay}
+        onDismiss={explainTour.dismissBanner}
+      />
+      <ExplainTour
+        open={explainTour.open}
+        steps={explainTourSteps}
+        onDismiss={explainTour.dismissTour}
+      />
 
       {!selectedRepo ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -488,13 +521,11 @@ export function Settings() {
                 )}
               </Card>
 
-              <Card>
-                <CardHeader title="PR explanations" description="Inherited from global settings" />
-                <p className="text-sm text-text-secondary">
-                  <strong className="text-text-primary">/ghagga explain:</strong>{' '}
-                  {globalSettings.explanationsEnabled ? 'Enabled' : 'Disabled'}
-                </p>
-              </Card>
+              <PrExplanationsSection
+                mode="inherited"
+                enabled={globalSettings.explanationsEnabled ?? false}
+                description="Inherited from global settings"
+              />
 
               <Card>
                 <CardHeader title="AI Review" description="Inherited from global settings" />
@@ -633,35 +664,12 @@ export function Settings() {
                 )}
               </Card>
 
-              <Card>
-                <div className="flex items-center justify-between">
-                  <CardHeader
-                    title="PR explanations"
-                    description="Let maintainers ask /ghagga explain on a pull request. Answers stay separate from reviews."
-                  />
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <span className="text-sm text-text-secondary">
-                      {explanationsEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        aria-label="PR explanations"
-                        checked={explanationsEnabled}
-                        onChange={(e) => setExplanationsEnabled(e.target.checked)}
-                        className="peer sr-only"
-                      />
-                      <div className="h-6 w-11 rounded-full bg-surface-border peer-checked:bg-primary-600 transition-colors" />
-                      <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
-                    </div>
-                  </label>
-                </div>
-                <p className="mt-2 text-xs text-text-secondary">
-                  Off by default. An OWNER, MEMBER, or COLLABORATOR comments{' '}
-                  <code>/ghagga explain &lt;question&gt;</code> on the pull request. GHAGGA replies
-                  in the conversation and does not approve or request changes.
-                </p>
-              </Card>
+              <PrExplanationsSection
+                mode="edit"
+                enabled={explanationsEnabled}
+                onChange={setExplanationsEnabled}
+                description="Let maintainers ask /ghagga explain on a pull request. Answers stay separate from reviews."
+              />
 
               {/* ── AI Review ────────────────────────────────────── */}
               <Card>
@@ -862,6 +870,7 @@ export function Settings() {
           <div className="flex items-center gap-4">
             <button
               type="submit"
+              data-critical-save="true"
               disabled={updateSettings.isPending || !canSave}
               className="btn-primary"
             >
