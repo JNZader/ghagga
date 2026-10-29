@@ -1,5 +1,11 @@
 # ghagga-core
 
+## 3.6.0
+
+### Minor Changes
+
+- Lockstep v3.6.0. Dependency ranges since 3.5.0 move forward (AI SDK, Zod, protobuf, tree-sitter WASMs). No public API change.
+
 ## 3.5.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # ghagga-db
 
+## 3.6.0
+
+### Minor Changes
+
+- Lockstep v3.6.0. Dependency ranges since 3.5.0 move forward (Drizzle ORM, pg). No public API change.
+
 ## 3.5.0
 
 ### Minor Changes

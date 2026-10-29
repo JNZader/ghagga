@@ -1,5 +1,13 @@
 # ghagga-triage-engine
 
+## 0.3.2
+
+### Patch Changes
+
+- Update Zod and the optional Playwright peer range. No triage behavior change.
+- Updated dependencies
+  - ghagga-core@3.6.0
+
 ## 0.3.1
 
 ### Patch Changes

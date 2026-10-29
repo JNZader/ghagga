@@ -1,5 +1,16 @@
 # ghagga-forge
 
+## 3.6.0
+
+### Minor Changes
+
+- Lockstep v3.6.0 with ghagga, ghagga-core, and ghagga-db. No public API change. Runtime dependencies are unchanged; this package moves so the fixed group stays on one version.
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.6.0
+
 ## 3.5.0
 
 ### Minor Changes

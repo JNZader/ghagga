@@ -1,5 +1,14 @@
 # @ghagga/dashboard
 
+## 3.1.2
+
+### Patch Changes
+
+- Opt in to `/ghagga explain` from repository and installation settings (`explanationsEnabled`), and publish progress replies on their own channel (#445).
+- a5863a9: Add a first-visit tour for the PR explanations switch on repository and installation settings (#450).
+- Updated dependencies
+  - @ghagga/types@3.0.6
+
 ## 3.1.1
 
 ### Patch Changes

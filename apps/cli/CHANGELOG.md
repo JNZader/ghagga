@@ -1,5 +1,18 @@
 # ghagga
 
+## 3.6.0
+
+### Minor Changes
+
+- Lockstep v3.6.0. Dependency ranges since 3.5.0 move forward (dotenv, chalk, and the workspace packages). No public CLI change.
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.6.0
+  - ghagga-forge@3.6.0
+  - ghagga-triage-engine@0.3.2
+
 ## 3.5.0
 
 ### Minor Changes
