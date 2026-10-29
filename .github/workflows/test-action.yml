@@ -1,0 +1,37 @@
+# Smoke-test the local GHAGGA Action on pull requests.
+#
+# GitHub Models (`provider: github`) is no longer a direct provider: the Action
+# remaps it to gateway, which needs a gateway URL and credential this repo does
+# not store. `provider: ollama` is the no-API-key mode (the Action supplies the
+# dummy key Ollama expects). On a GitHub-hosted runner nothing listens on
+# localhost:11434, so the model call fails closed and the Action posts
+# NEEDS_HUMAN_REVIEW instead of failing the check. Static analysis still runs.
+name: Test GHAGGA Action
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run GHAGGA Review
+        uses: ./
+        with:
+          provider: ollama
+          mode: simple
+          github-token: ${{ github.token }}

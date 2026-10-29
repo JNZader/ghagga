@@ -50,5 +50,9 @@ Create a GitHub Release pointing at the new tag (`vX.Y.Z`). The
 `.github/workflows/publish.yml` workflow triggers on `release: published` and
 runs `pnpm publish` in order `db → core → cli`.
 
+The same event runs `.github/workflows/major-tag.yml`, which moves the
+floating major tag (`vX`) to that commit. Pre-releases and tags that are
+not `vX.Y.Z` are left alone.
+
 > We do **not** use the Changesets GitHub Action bot. Publishing is driven
 > entirely by the GitHub Release → `publish.yml` flow above.

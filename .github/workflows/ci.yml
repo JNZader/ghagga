@@ -57,30 +57,28 @@ jobs:
               - '.github/workflows/**'
               - '.github/actions/**'
 
-  # ── Security Scanning (advisory) ───────────────────────────
+  # ── Security Scanning (blocking) ───────────────────────────
   security:
     name: Security Audit
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup
         uses: ./.github/actions/setup
-      - name: Audit production dependencies (OSV)
+      - name: Audit dependencies (OSV)
         run: |
           # npm retired the endpoint pnpm audit uses (HTTP 410 on
           # /-/npm/v1/security/audits, pnpm 9.x never migrated to the bulk
           # endpoint), so `pnpm audit` fails unconditionally. Use OSV.dev, which
-          # scans the pnpm lockfile directly. Advisory-only (job is
-          # continue-on-error): findings are surfaced, never block the merge.
+          # scans the pnpm lockfile directly. A non-zero exit fails this job
+          # and CI Gate. Transitive fixes live in pnpm-workspace.yaml overrides.
           curl -sSfL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v2.6.0/osv-scanner_linux_amd64"
           chmod +x osv-scanner
-          ./osv-scanner --lockfile=pnpm-lock.yaml \
-            || echo "::warning::OSV advisories found (advisory-only, non-blocking) — review the report above and address separately"
+          ./osv-scanner --lockfile=pnpm-lock.yaml
 
   # ── Typecheck & Build ──────────────────────────────────────
   check:
@@ -156,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: always()
-    needs: [changes, check, lint, test]
+    needs: [changes, check, lint, test, security]
     steps:
       - name: Fail unless required jobs succeeded or skipped
         run: |
@@ -164,7 +162,11 @@ jobs:
             echo "Detect Changes must succeed (got ${{ needs.changes.result }})"
             exit 1
           fi
-          for result in "${{ needs.check.result }}" "${{ needs.lint.result }}" "${{ needs.test.result }}"; do
+          for result in \
+            "${{ needs.check.result }}" \
+            "${{ needs.lint.result }}" \
+            "${{ needs.test.result }}" \
+            "${{ needs.security.result }}"; do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "Required job ended with $result (want success or skipped)"
               exit 1

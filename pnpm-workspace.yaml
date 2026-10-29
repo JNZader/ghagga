@@ -17,11 +17,19 @@ allowBuilds:
   ssh2: false
 
 overrides:
-  undici: ">=7.28.0 <8"
+  # Floors are the OSV fixed versions (osv-scanner 2.6.0 against pnpm-lock.yaml).
+  undici: ">=7.30.1 <8"
   "esbuild@<=0.24.2": ">=0.25.0"
   "hono@<4.12.7": ">=4.12.7"
   "fast-xml-parser@>=4.0.0-beta.3 <=5.5.5": ">=5.5.6"
   "lodash-es@<4.18.0": ">=4.18.0"
-  "qs@>=6.0.0 <6.15.2": ">=6.15.2"
+  "qs@>=6.0.0 <6.16.1": ">=6.16.1 <7"
   "js-yaml@>=3.0.0 <3.15.0": ">=3.15.0 <4"
   "@babel/core@>=7.0.0 <7.29.6": ">=7.29.6 <8"
+  "@grpc/grpc-js@<1.14.5": ">=1.14.5 <2"
+  "brace-expansion@>=2.0.0 <2.1.7": ">=2.1.7 <3"
+  "brace-expansion@>=5.0.0 <5.0.12": ">=5.0.12 <6"
+  "fast-uri@<3.1.9": ">=3.1.9 <4"
+  "launch-editor@<2.14.2": ">=2.14.2 <3"
+  "shell-quote@<1.11.0": ">=1.11.0 <2"
+  "source-map-js@<1.2.2": ">=1.2.2 <2"
