@@ -251,6 +251,7 @@ docs: update CONTRIBUTING.md with DB setup steps
 ### Repo automation
 
 - **CI**: `.github/workflows/ci.yml` runs on pushes and PRs to `main`; doc-only changes skip heavy jobs cleanly
+- **Release**: `.github/workflows/release.yml` opens the Version Packages pull request or publishes to npm. See [docs/RELEASING.md](docs/RELEASING.md)
 - **Pages**: `.github/workflows/deploy-pages.yml` publishes the landing page, dashboard, and docs from `main`
 - **GHCR**: `.github/workflows/docker.yml` builds and pushes the server image to `ghcr.io`
 - **Render**: `render.yaml` is the canonical Blueprint for the hosted server environment
