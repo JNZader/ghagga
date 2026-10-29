@@ -168,6 +168,8 @@ export interface InstallationSettings {
   enableCpd: boolean;
   enableMemory: boolean;
   enableBlastRadius?: boolean;
+  /** Opt-in for `/ghagga explain` on pull-request comments. Omitted means disabled. */
+  explanationsEnabled?: boolean;
   customRules: string;
   ignorePatterns: string[];
   enabledTools?: string[];
@@ -197,6 +199,8 @@ export interface RepositorySettings {
   enableCpd: boolean;
   enableMemory: boolean;
   enableBlastRadius?: boolean;
+  /** Opt-in for `/ghagga explain` on pull-request comments. Omitted means disabled. */
+  explanationsEnabled?: boolean;
   customRules: string;
   ignorePatterns: string[];
   enabledTools: string[];

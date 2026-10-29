@@ -171,6 +171,23 @@ sequenceDiagram
 
 ---
 
+## Ask why a change was made
+
+`/ghagga explain` is a separate, opt-in question path. It is not one of the six review modes and it never approves or requests changes.
+1. In the dashboard, open **Global Settings** or a repository's custom settings and turn on **PR explanations**. The flag is off until you do this. Repositories that inherit global settings use the installation value.
+2. Configure the same provider chain the review worker already uses. There is no separate explanation API key.
+3. On the pull request, comment as an `OWNER`, `MEMBER`, or `COLLABORATOR`:
+
+```
+/ghagga explain Why did this function start returning early?
+```
+
+GHAGGA acknowledges the comment and later posts the answer in the pull request conversation. The command has to be the start of a line, outside a code fence, with a non-empty question. GitLab merge requests are not on this path: the explanation snapshot and reply seam exists for the GitHub App only.
+
+Details, failure modes, and the self-hosted requirements are in [PR explanations](pr-explanations.md).
+
+---
+
 ## Troubleshooting
 
 ### No review comment posted
@@ -208,6 +225,7 @@ sequenceDiagram
 
 ## Next Steps
 
+- **[PR explanations](pr-explanations.md)** — Opt-in `/ghagga explain` answers on a pull request
 - **[Review Modes](review-modes.md)** — Learn about Simple, Workflow, and Consensus modes
 - **[Memory System](memory-system.md)** — How GHAGGA learns from past reviews
 - **[Configuration](configuration.md)** — Environment variables and config file options

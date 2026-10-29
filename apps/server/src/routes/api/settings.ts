@@ -42,6 +42,7 @@ const RepoSettingsSchema = z
     enabledTools: z.array(z.string()).optional(),
     disabledTools: z.array(z.string()).optional(),
     enableBlastRadius: z.boolean().optional(),
+    explanationsEnabled: z.boolean().optional(),
   })
   .strict();
 
@@ -118,6 +119,7 @@ export function createSettingsRouter(db: Database) {
           enabledTools: gSettings.enabledTools ?? [],
           disabledTools: gSettings.disabledTools ?? [],
           enableBlastRadius: gSettings.enableBlastRadius ?? false,
+          explanationsEnabled: gSettings.explanationsEnabled ?? false,
         };
       }
 
@@ -138,6 +140,7 @@ export function createSettingsRouter(db: Database) {
           enabledTools: settings.enabledTools ?? [],
           disabledTools: settings.disabledTools ?? [],
           enableBlastRadius: settings.enableBlastRadius ?? false,
+          explanationsEnabled: settings.explanationsEnabled ?? false,
           registeredTools: getRegisteredToolsList(),
           globalSettings,
         },
@@ -182,6 +185,7 @@ export function createSettingsRouter(db: Database) {
       'enabledTools',
       'disabledTools',
       'enableBlastRadius',
+      'explanationsEnabled',
     ];
     for (const key of SETTINGS_KEYS) {
       if (key in body) {
@@ -429,6 +433,10 @@ export function createSettingsRouter(db: Database) {
           typeof body.enableBlastRadius === 'boolean'
             ? body.enableBlastRadius
             : currentSettings.enableBlastRadius,
+        explanationsEnabled:
+          typeof body.explanationsEnabled === 'boolean'
+            ? body.explanationsEnabled
+            : currentSettings.explanationsEnabled,
       };
 
       // ── Bidirectional translation: old booleans → new arrays ──
@@ -562,6 +570,7 @@ export function createSettingsRouter(db: Database) {
           enableCpd: repoSettings.enableCpd,
           enableMemory: repoSettings.enableMemory,
           enableBlastRadius: repoSettings.enableBlastRadius,
+          explanationsEnabled: repoSettings.explanationsEnabled === true,
           customRules: repoSettings.customRules,
           ignorePatterns: repoSettings.ignorePatterns,
           reviewLevel: repoSettings.reviewLevel,

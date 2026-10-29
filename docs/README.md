@@ -34,6 +34,7 @@ GHAGGA is a code review tool that posts comments on pull requests. It combines L
 | **3 Provider Modes**                | `gateway`, `cli-bridge`, `ollama`. Legacy names such as `github` remap to `gateway`                                                                                      |
 | **4 Distribution Modes**            | GitHub App, GitHub Action, CLI, self-hosted                                                                                                                              |
 | **Comment Trigger**                 | Type `ghagga review` on any PR to re-trigger a review on demand                                                                                                          |
+| **PR explanations**                 | Opt-in `/ghagga explain <question>` replies on a GitHub PR comment. Finding-free; not a review mode. See [PR explanations](pr-explanations.md)                           |
 | **Dashboard**                       | React SPA at `/app/` on the Pages deploy — review history, stats, settings, memory browser                                                                               |
 | **BYOK Security**                   | AES-256-GCM encryption, HMAC-SHA256 webhook verification, privacy stripping                                                                                              |
 

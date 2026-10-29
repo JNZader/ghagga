@@ -288,6 +288,116 @@ describe('createPersistedExplanationPublisher', () => {
       ]),
     );
   });
+
+  it('does not publish an answer when explanations are disabled at publication time', async () => {
+    databaseMocks.getEffectiveRepoSettings.mockResolvedValue({
+      settings: { explanationsEnabled: false },
+    });
+    databaseMocks.lookupExplanationInvocation.mockResolvedValue({
+      status: 'found',
+      invocation: invocationRow(),
+    });
+    const adapter = {
+      fetchChangeRequest: vi.fn(),
+      lookupExplanationComment: vi.fn(),
+      createExplanationComment: vi.fn(),
+      updateExplanationComment: vi.fn(),
+    };
+    adapterMocks.makeGitHubAdapter.mockReturnValue(adapter);
+
+    await expect(
+      createPersistedExplanationPublisher({
+        credentials: () => ({ appId: 'app-id', privateKey: 'private-key' }),
+      })(confirmed()),
+    ).resolves.toEqual({
+      kind: EXPLANATION_PUBLICATION_RESULT.NOT_PUBLISHED,
+      channel: 'answer',
+    });
+
+    expect(adapter.createExplanationComment).not.toHaveBeenCalled();
+    expect(adapter.updateExplanationComment).not.toHaveBeenCalled();
+    expect(databaseMocks.reserveExplanationPublicationCreate).not.toHaveBeenCalled();
+    expect(adapterMocks.makeGitHubAdapter).not.toHaveBeenCalled();
+  });
+
+  it('keeps forbidden progress outcomes inactive before any lookup', async () => {
+    const publisher = createPersistedExplanationPublisher('progress');
+
+    await expect(
+      publisher({
+        ...confirmed(),
+        outcome: { kind: EXPLANATION_OUTCOME.STALE, reason: 'stale' },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(databaseMocks.lookupExplanationInvocation).not.toHaveBeenCalled();
+    expect(databaseMocks.createDatabaseFromEnv).not.toHaveBeenCalled();
+  });
+
+  it('publishes progress on its own channel without touching the answer comment', async () => {
+    const initial = invocationRow({
+      answerPublicationStatus: 'PUBLISHED',
+      answerPublicationVersion: 4,
+      answerCommentId: 700,
+      progressPublicationStatus: 'NOT_STARTED',
+      progressPublicationVersion: 0,
+    });
+    const reserved = invocationRow({
+      answerPublicationStatus: 'PUBLISHED',
+      answerPublicationVersion: 4,
+      answerCommentId: 700,
+      progressPublicationStatus: 'CREATE_STARTED',
+      progressPublicationVersion: 1,
+      progressPublicationFence: 'progress-fence',
+    });
+    const adapter = {
+      fetchChangeRequest: vi.fn().mockResolvedValue({ headSha: request.identity.requestedHeadSha }),
+      lookupExplanationComment: vi.fn().mockResolvedValue({ kind: 'ABSENT' }),
+      createExplanationComment: vi.fn().mockResolvedValue({
+        kind: 'github:issue-comment',
+        raw: 902,
+      }),
+      updateExplanationComment: vi.fn(),
+    };
+    databaseMocks.lookupExplanationInvocation
+      .mockResolvedValueOnce({ status: 'found', invocation: initial })
+      .mockResolvedValueOnce({ status: 'found', invocation: reserved });
+    databaseMocks.reserveExplanationPublicationCreate.mockResolvedValue({
+      status: 'reserved',
+      invocation: reserved,
+      publicationFence: 'progress-fence',
+    });
+    databaseMocks.settleExplanationPublicationCreate.mockResolvedValue({
+      status: 'settled',
+      invocation: reserved,
+    });
+    adapterMocks.makeGitHubAdapter.mockReturnValue(adapter);
+
+    await expect(
+      createPersistedExplanationPublisher(
+        { credentials: () => ({ appId: 'app-id', privateKey: 'private-key' }) },
+        'progress',
+      )(confirmed()),
+    ).resolves.toMatchObject({ kind: 'PUBLISHED', channel: 'progress' });
+
+    expect(adapter.createExplanationComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'progress',
+        ownerId: '88',
+        invocationId: expect.any(String),
+      }),
+      'Explanation completed with outcome ANSWERED.',
+    );
+    expect(adapter.updateExplanationComment).not.toHaveBeenCalled();
+    expect(databaseMocks.reserveExplanationPublicationCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ channel: 'progress', expectedPublicationVersion: 0 }),
+    );
+    expect(databaseMocks.settleExplanationPublicationCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ channel: 'progress', commentId: 902 }),
+    );
+  });
 });
 
 function confirmed() {

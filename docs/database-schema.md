@@ -183,6 +183,8 @@ interface RepoSettings {
   enableTrivy: boolean;
   enableCpd: boolean;
   enableMemory: boolean;
+  /** Opt-in for `/ghagga explain`. Omitted values resolve to false. */
+  explanationsEnabled?: boolean;
   enabledTools?: string[];
   disabledTools?: string[];
   customRules: string[];

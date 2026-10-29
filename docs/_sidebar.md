@@ -15,6 +15,7 @@
   - [Health Check](health.md)
   - [Memory System](memory-system.md)
   - [Issue Triage](issue-triage.md)
+  - [PR Explanations](pr-explanations.md)
   - [Security Policy](security.md)
 
 - Distribution

@@ -98,6 +98,7 @@ export function createInstallationsRouter(db: Database) {
             enabledTools: settings.enabledTools ?? [],
             disabledTools: settings.disabledTools ?? [],
             enableBlastRadius: settings.enableBlastRadius ?? false,
+            explanationsEnabled: settings.explanationsEnabled ?? false,
             registeredTools: getRegisteredToolsList(),
           },
         });
@@ -120,6 +121,7 @@ export function createInstallationsRouter(db: Database) {
           enabledTools: [],
           disabledTools: [],
           enableBlastRadius: false,
+          explanationsEnabled: false,
           registeredTools: getRegisteredToolsList(),
         },
       });
@@ -357,6 +359,10 @@ export function createInstallationsRouter(db: Database) {
           typeof body.enableBlastRadius === 'boolean'
             ? body.enableBlastRadius
             : currentSettings.enableBlastRadius,
+        explanationsEnabled:
+          typeof body.explanationsEnabled === 'boolean'
+            ? body.explanationsEnabled
+            : currentSettings.explanationsEnabled,
       };
 
       await upsertInstallationSettings(db, installationId, {

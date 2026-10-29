@@ -417,6 +417,7 @@ Returns the settings for a specific repository, including its resolved global se
     "enableTrivy": true,
     "enableCpd": true,
     "enableMemory": true,
+    "explanationsEnabled": false,
     "enabledTools": ["semgrep", "trivy", "cpd", "gitleaks", "shellcheck"],
     "disabledTools": ["psalm"],
     "registeredTools": [
@@ -452,6 +453,7 @@ Returns the settings for a specific repository, including its resolved global se
       "enableTrivy": true,
       "enableCpd": true,
       "enableMemory": true,
+      "explanationsEnabled": false,
       "enabledTools": [],
       "disabledTools": [],
       "customRules": "",
@@ -489,6 +491,7 @@ Updates configuration for a repository. Supports partial updates — only includ
   "enableTrivy": true,
   "enableCpd": false,
   "enableMemory": true,
+  "explanationsEnabled": false,
   "enabledTools": ["semgrep", "trivy", "gitleaks"],
   "disabledTools": ["cpd"],
   "customRules": "rule1\nrule2",
@@ -498,22 +501,23 @@ Updates configuration for a repository. Supports partial updates — only includ
 
 **Body Fields**:
 
-| Field               | Type       | Required | Description                                                                                     |
-| ------------------- | ---------- | -------- | ----------------------------------------------------------------------------------------------- |
-| `repoFullName`      | `string`   | Yes      | Full repository name (`owner/repo`)                                                             |
-| `useGlobalSettings` | `boolean`  | No       | Use installation-level settings instead of per-repo                                             |
-| `aiReviewEnabled`   | `boolean`  | No       | Enable/disable AI review                                                                        |
-| `reviewMode`        | `string`   | No       | Review mode: `simple`, `workflow`, `consensus`                                                  |
-| `providerChain`     | `array`    | No       | Ordered list of LLM providers (see below)                                                       |
-| `enableSemgrep`     | `boolean`  | No       | **Deprecated.** Enable Semgrep static analysis. Use `enabledTools`/`disabledTools` instead      |
-| `enableTrivy`       | `boolean`  | No       | **Deprecated.** Enable Trivy vulnerability scanning. Use `enabledTools`/`disabledTools` instead |
-| `enableCpd`         | `boolean`  | No       | **Deprecated.** Enable copy-paste detection. Use `enabledTools`/`disabledTools` instead         |
-| `enableMemory`      | `boolean`  | No       | Enable project memory                                                                           |
-| `enabledTools`      | `string[]` | No       | Tools to force-enable (e.g., `["semgrep", "gitleaks"]`). Overrides registry defaults            |
-| `disabledTools`     | `string[]` | No       | Tools to force-disable (e.g., `["cpd", "psalm"]`). Overrides registry defaults                  |
-| `customRules`       | `string`   | No       | Custom review rules (newline-separated)                                                         |
-| `ignorePatterns`    | `string[]` | No       | Glob patterns for files to skip                                                                 |
-| `reviewLevel`       | `string`   | No       | Review thoroughness level                                                                       |
+| Field                 | Type       | Required | Description                                                                                                                           |
+| --------------------- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `repoFullName`        | `string`   | Yes      | Full repository name (`owner/repo`)                                                                                                   |
+| `useGlobalSettings`   | `boolean`  | No       | Use installation-level settings instead of per-repo                                                                                   |
+| `aiReviewEnabled`     | `boolean`  | No       | Enable/disable AI review                                                                                                              |
+| `reviewMode`          | `string`   | No       | Review mode: `simple`, `workflow`, `consensus`                                                                                        |
+| `providerChain`       | `array`    | No       | Ordered list of LLM providers (see below)                                                                                             |
+| `enableSemgrep`       | `boolean`  | No       | **Deprecated.** Enable Semgrep static analysis. Use `enabledTools`/`disabledTools` instead                                            |
+| `enableTrivy`         | `boolean`  | No       | **Deprecated.** Enable Trivy vulnerability scanning. Use `enabledTools`/`disabledTools` instead                                       |
+| `enableCpd`           | `boolean`  | No       | **Deprecated.** Enable copy-paste detection. Use `enabledTools`/`disabledTools` instead                                               |
+| `enableMemory`        | `boolean`  | No       | Enable project memory                                                                                                                 |
+| `explanationsEnabled` | `boolean`  | No       | Opt in to `/ghagga explain` on pull-request comments. Omitted or `false` leaves the command disabled. Does not change review behavior |
+| `enabledTools`        | `string[]` | No       | Tools to force-enable (e.g., `["semgrep", "gitleaks"]`). Overrides registry defaults                                                  |
+| `disabledTools`       | `string[]` | No       | Tools to force-disable (e.g., `["cpd", "psalm"]`). Overrides registry defaults                                                        |
+| `customRules`         | `string`   | No       | Custom review rules (newline-separated)                                                                                               |
+| `ignorePatterns`      | `string[]` | No       | Glob patterns for files to skip                                                                                                       |
+| `reviewLevel`         | `string`   | No       | Review thoroughness level                                                                                                             |
 
 **Provider Chain Entries**:
 
@@ -571,6 +575,7 @@ Returns the global (installation-level) settings that apply as defaults to all r
     "enableTrivy": true,
     "enableCpd": true,
     "enableMemory": true,
+    "explanationsEnabled": false,
     "enabledTools": [],
     "disabledTools": [],
     "registeredTools": [
@@ -616,6 +621,7 @@ Updates the global settings for an installation. These settings apply to all rep
   "enableTrivy": true,
   "enableCpd": true,
   "enableMemory": true,
+  "explanationsEnabled": true,
   "enabledTools": ["semgrep", "trivy", "cpd", "gitleaks"],
   "disabledTools": [],
   "customRules": "rule1\nrule2",
