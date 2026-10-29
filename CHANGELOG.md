@@ -1,11 +1,20 @@
 # Changelog
 
-## [Unreleased]
+## [3.6.0] - 2026-10-29
 
-> Post-3.0.0 maintenance merged to `main` (no changeset yet — add one before the next
-> `changeset version`, or these won't be picked up for the version bump).
+### Added
+
+- **`/ghagga explain` opt-in (#445)** — repository and installation settings can persist `explanationsEnabled`. Progress replies publish on their own channel, separate from the finding-free answer. Omitted still means disabled.
+- **Settings tour for PR explanations (#450)** — the first visit to the PR explanations switch opens a spotlight tour, with a dismissible note and Replay tour. The enable step stays on `explanationsEnabled`.
 
 ### Changed
+
+- **Published packages lockstep 3.5.0 → 3.6.0** — `ghagga`, `ghagga-core`, `ghagga-db`, and `ghagga-forge`. Dependency ranges only; no public API change. `ghagga-triage-engine` takes a patch for its Zod dependency and optional Playwright peer range.
+- **Dependabot bumps since 3.5.0** — `minor-and-patch` groups (#432, #440, #447, including Biome 2.6 lint fixes in #447); TanStack group and `@tanstack/react-query` (#439, #443); AI SDK group (#442); `docker/login-action` 4.6.0 → 4.7.0 (#441); leftover Stryker, dotenv, and BullMQ (#449).
+
+### Carried forward from Unreleased
+
+> These notes stayed under Unreleased after 3.0.0. Their commits are ancestors of the v3.5.0 tag, where TypeScript 7 superseded TypeScript 6. They are recorded under 3.6.0 so the root changelog has one dated home for them.
 
 - **TypeScript 6.0** — bumped `typescript` to `^6.0.3` across all 7 workspaces (#246). TS 6.0 stopped auto-including `@types/node` when `lib` is set explicitly and made `baseUrl` a deprecation error; fixed via `types: ["node"]` in the base tsconfig, adding `@types/node` to `@ghagga/types`, and dropping the deprecated `baseUrl` in the dashboard tsconfig (paths now resolve relative to the tsconfig — TS 7-ready).
 - **Dependency bumps** — `commander` 14 → 15 (#243); the `minor-and-patch` group of 23 deps (#245); `actions/setup-node` 6.3 → 6.4 (#240); `actions/deploy-pages` 4 → 5 (#241).

@@ -1,5 +1,19 @@
 # @ghagga/server
 
+## 3.2.0
+
+### Minor Changes
+
+- Opt in to `/ghagga explain` from repository and installation settings (`explanationsEnabled`), and publish progress replies on their own channel (#445).
+
+### Patch Changes
+
+- Updated dependencies
+  - @ghagga/types@3.0.6
+  - ghagga-core@3.6.0
+  - ghagga-db@3.6.0
+  - ghagga-forge@3.6.0
+
 ## 3.1.1
 
 ### Patch Changes

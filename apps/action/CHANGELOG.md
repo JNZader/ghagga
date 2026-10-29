@@ -1,5 +1,12 @@
 # @ghagga/action
 
+## 3.0.6
+
+### Patch Changes
+
+- Updated dependencies
+  - ghagga-core@3.6.0
+
 ## 3.0.5
 
 ### Patch Changes

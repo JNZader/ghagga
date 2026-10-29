@@ -1,5 +1,13 @@
 # @ghagga/types
 
+## 3.0.6
+
+### Patch Changes
+
+- Opt in to `/ghagga explain` from repository and installation settings (`explanationsEnabled`), and publish progress replies on their own channel (#445).
+- Updated dependencies
+  - ghagga-core@3.6.0
+
 ## 3.0.5
 
 ### Patch Changes

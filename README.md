@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.4.0
+      - uses: JNZader/ghagga@v3.6.0
 ```
 
 **CLI** — review local changes before they hit CI:
