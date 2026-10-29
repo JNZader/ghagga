@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.6.1] - 2026-10-29
+
+### Fixed
+
+- **CI blocks on OSV lockfile advisories (#453)** — Security Audit fails the build when `osv-scanner` reports a finding, and CI Gate waits on that job. The advisories that the scan would have flagged are pinned with pnpm overrides.
+- **Test GHAGGA Action workflow restored (#453)** — `.github/workflows/test-action.yml` is back. It uses `provider: ollama` (no API key). On a GitHub-hosted runner the model call fails closed and the Action reports `NEEDS_HUMAN_REVIEW`. Static analysis still runs.
+- **Floating major tag on stable publish (#453)** — `.github/workflows/major-tag.yml` moves `vX` to the commit of a published stable `vX.Y.Z` release. Pre-releases and non-semver tags are left alone.
+
+### Changed
+
+- **Published packages lockstep 3.6.0 → 3.6.1** — `ghagga`, `ghagga-core`, `ghagga-db`, and `ghagga-forge`. No public API change. Private workspace packages take a patch for the internal dependency bump (`@ghagga/action` 3.0.7, `@ghagga/dashboard` 3.1.3, `@ghagga/server` 3.2.1, `@ghagga/types` 3.0.7).
+
 ## [3.6.0] - 2026-10-29
 
 ### Added

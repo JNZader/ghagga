@@ -1,6 +1,6 @@
 {
   "name": "@ghagga/types",
-  "version": "3.0.6",
+  "version": "3.0.7",
   "private": true,
   "type": "module",
   "description": "Shared API types for GHAGGA dashboard and server",

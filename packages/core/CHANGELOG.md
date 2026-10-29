@@ -1,5 +1,11 @@
 # ghagga-core
 
+## 3.6.1
+
+### Patch Changes
+
+- 48ebc73: Fail CI when OSV reports a lockfile advisory, restore the Test GHAGGA Action workflow, and move the floating major tag when a stable release is published.
+
 ## 3.6.0
 
 ### Minor Changes
