@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.6.0
+      - uses: JNZader/ghagga@v3.7.0
 ```
 
 **CLI** — revisá tus cambios locales antes de que lleguen a CI:
@@ -250,7 +250,7 @@ Paquetes publicados: `ghagga` (CLI), `ghagga-core`, `ghagga-db`, `ghagga-forge` 
 
 **Stack:** TypeScript (strict) · Hono · BullMQ + Redis · PostgreSQL 16 + Drizzle · React 19 + Vite + Tailwind 4 · Vitest + Stryker · Biome · pnpm + Turborepo
 
-**Proveedores de LLM:** tres modos, con fallback ordenado. `gateway` (cualquier modelo vía [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge)), `cli-bridge` (CLIs locales, incluidos Claude, Codex, Gemini y Copilot) u `ollama`. `ghagga login` guarda `gateway`. Los nombres viejos (`github`, `anthropic`, `openai`) son legacy: la config guardada se remapea a `gateway`, y pasarlos explícito falla.
+**Proveedores de LLM:** `gateway` (cualquier modelo vía [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge)), `cli-bridge` (CLIs locales, incluidos Claude, Codex, Gemini y Copilot), `ollama` y `groq` (chat completions de Groq en `api.groq.com`, clave `GROQ_API_KEY`). `ghagga login` guarda `gateway`. Los nombres viejos (`github`, `anthropic`, `openai`) son legacy: la config guardada se remapea a `gateway`, y pasarlos explícito falla. `groq` no se remapea.
 
 ## Notas de ingeniería
 

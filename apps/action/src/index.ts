@@ -22,6 +22,8 @@
 
 import { randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as cache from '@actions/cache';
@@ -60,7 +62,6 @@ const ACTION_LEGACY_PROVIDERS = new Set([
   'anthropic',
   'openai',
   'google',
-  'groq',
   'openrouter',
   'azure',
   'deepseek',
@@ -69,7 +70,7 @@ const ACTION_LEGACY_PROVIDERS = new Set([
 ]);
 
 function resolveActionProvider(raw: string): LLMProvider {
-  if (raw === 'cli-bridge' || raw === 'ollama' || raw === 'gateway') {
+  if (raw === 'cli-bridge' || raw === 'ollama' || raw === 'gateway' || raw === 'groq') {
     return raw as LLMProvider;
   }
   if (ACTION_LEGACY_PROVIDERS.has(raw)) {
@@ -238,6 +239,14 @@ async function run(): Promise<void> {
     } else if (provider === 'cli-bridge') {
       // CLI bridge uses whatever credential the tool accepts (optional)
       apiKey = apiKeyInput || '';
+    } else if (provider === 'groq') {
+      if (!apiKeyInput) {
+        core.setFailed(
+          'api-key is required for provider groq. Pass a Groq API key (GROQ_API_KEY).',
+        );
+        return;
+      }
+      apiKey = apiKeyInput;
     } else {
       // Should not be reached after resolveActionProvider, but guard defensively
       apiKey = apiKeyInput || '';
@@ -559,9 +568,49 @@ async function run(): Promise<void> {
 
 // ─── Execute ────────────────────────────────────────────────────
 
+/** undici stores its process-wide Agent here (legacy symbol still written by undici 7). */
+const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1');
+
+/**
+ * Drop keep-alive clients left by Groq/GitHub fetch and the Actions HTTP stack.
+ *
+ * undici's default Agent uses keepAliveMaxTimeout of 10 minutes. After the
+ * review comment is posted those sockets are idle but still referenced, so
+ * Node never reaches a natural exit and the Action step hangs.
+ */
+export async function releaseNetworkClients(): Promise<void> {
+  const dispatcher = (globalThis as Record<symbol, { close?: () => Promise<void> | void }>)[
+    UNDICI_GLOBAL_DISPATCHER
+  ];
+  try {
+    await dispatcher?.close?.();
+  } catch (error) {
+    core.warning(
+      `[ghagga] Failed to close undici dispatcher (non-fatal): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  http.globalAgent.destroy();
+  https.globalAgent.destroy();
+}
+
+/** Close network clients, then exit with the code setFailed already recorded. */
+export async function finishAction(): Promise<void> {
+  await releaseNetworkClients();
+  process.exit(process.exitCode ?? 0);
+}
+
 export { resolveMemoryPaths, run };
 
 // Only auto-run when executed directly (not imported by tests)
 if (process.env.NODE_ENV !== 'test') {
-  run();
+  run()
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      core.setFailed(`GHAGGA review failed: ${message}`);
+    })
+    .finally(() => {
+      void finishAction();
+    });
 }

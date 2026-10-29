@@ -1,11 +1,9 @@
-# Smoke-test the local GHAGGA Action on pull requests.
+# Live GHAGGA Action review on pull requests, using Groq.
 #
-# GitHub Models (`provider: github`) is no longer a direct provider: the Action
-# remaps it to gateway, which needs a gateway URL and credential this repo does
-# not store. `provider: ollama` is the no-API-key mode (the Action supplies the
-# dummy key Ollama expects). On a GitHub-hosted runner nothing listens on
-# localhost:11434, so the model call fails closed and the Action posts
-# NEEDS_HUMAN_REVIEW instead of failing the check. Static analysis still runs.
+# `provider: groq` calls https://api.groq.com/openai/v1 chat completions with
+# `api-key`. A Groq error fails this job (the Action calls setFailed). Fork
+# PRs do not receive repository secrets, so the review steps are skipped and
+# the job stays green.
 name: Test GHAGGA Action
 
 on:
@@ -24,14 +22,23 @@ jobs:
   review:
     name: Review
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
+      - name: Skip live review on fork PRs
+        if: github.event.pull_request.head.repo.fork == true
+        run: |
+          echo "Fork PR: GROQ_API_KEY is unavailable. Skipping the live Groq review."
+
       - name: Checkout
+        if: github.event.pull_request.head.repo.fork == false
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run GHAGGA Review
+        if: github.event.pull_request.head.repo.fork == false
         uses: ./
         with:
-          provider: ollama
+          provider: groq
+          model: openai/gpt-oss-120b
           mode: simple
+          api-key: ${{ secrets.GROQ_API_KEY }}
           github-token: ${{ github.token }}

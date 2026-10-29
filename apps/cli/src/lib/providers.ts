@@ -1,7 +1,7 @@
 /**
  * Provider resolution helpers.
  *
- * GHAGGA v3 only supports three providers: gateway, cli-bridge, ollama.
+ * Direct providers: gateway, cli-bridge, ollama, and groq.
  * Older versions of "ghagga login" stored direct SDK providers (most
  * commonly 'github') in the user config. Those stored values are migrated
  * at read time so existing users don't get a hard failure on first run.
@@ -17,7 +17,6 @@ export const LEGACY_CLI_PROVIDERS: ReadonlySet<string> = new Set([
   'openai',
   'google',
   'github',
-  'groq',
   'openrouter',
   'azure',
   'deepseek',

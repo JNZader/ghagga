@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JNZader/ghagga@v3.6.0
+      - uses: JNZader/ghagga@v3.7.0
 ```
 
 **CLI** — review local changes before they hit CI:
@@ -250,7 +250,7 @@ Published packages: `ghagga` (CLI), `ghagga-core`, `ghagga-db`, `ghagga-forge`, 
 
 **Stack:** TypeScript (strict) · Hono · BullMQ + Redis · PostgreSQL 16 + Drizzle · React 19 + Vite + Tailwind 4 · Vitest + Stryker · Biome · pnpm + Turborepo
 
-**LLM providers:** three modes, with ordered fallback. `gateway` (any model via [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge)), `cli-bridge` (local CLIs, including Claude, Codex, Gemini, and Copilot), or `ollama`. `ghagga login` saves `gateway`. Older names such as `github`, `anthropic`, and `openai` are legacy: stored config is remapped to `gateway`, and passing them explicitly fails.
+**LLM providers:** `gateway` (any model via [mcp-llm-bridge](https://github.com/JNZader/mcp-llm-bridge)), `cli-bridge` (local CLIs, including Claude, Codex, Gemini, and Copilot), `ollama`, and `groq` (Groq chat completions at `api.groq.com`, key `GROQ_API_KEY`). `ghagga login` saves `gateway`. Older names such as `github`, `anthropic`, and `openai` are legacy: stored config is remapped to `gateway`, and passing them explicitly fails. `groq` is not remapped.
 
 ## Engineering Notes
 

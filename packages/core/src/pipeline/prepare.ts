@@ -20,7 +20,7 @@
 
 import { buildStackHints } from '../agents/prompts.js';
 import { detectFlood } from '../flood/index.js';
-import type { LLMProvider, ReviewInput, ReviewResult, ToolResult } from '../types.js';
+import type { ReviewInput, ReviewResult, ToolResult } from '../types.js';
 import { filterDiffFiles, parseDiffFiles, truncateDiff } from '../utils/diff.js';
 import { detectStacks } from '../utils/stack-detect.js';
 import { calculateTokenBudget } from '../utils/token-budget.js';
@@ -108,16 +108,24 @@ function validateInput(input: ReviewInput): void {
     return;
   }
 
-  // Single provider mode — must be one of the 3 supported providers
-  if (input.provider) {
-    const supported: LLMProvider[] = ['gateway', 'cli-bridge', 'ollama'];
-    if (!supported.includes(input.provider)) {
-      throw new Error(
-        `Provider '${input.provider}' is no longer supported directly. ` +
-          `Set provider: 'gateway' and configure credentials in mcp-llm-bridge. ` +
-          `See docs/configuration.md#gateway-mode-mcp-llm-bridge`,
-      );
+  // Groq calls api.groq.com directly and needs both a key and a model.
+  if (input.provider === 'groq') {
+    if (!input.apiKey) {
+      throw new Error('Review input must include an API key');
     }
+    if (!input.model) {
+      throw new Error('Review input must specify a model');
+    }
+    return;
+  }
+
+  // Single provider mode — anything left is a legacy name.
+  if (input.provider) {
+    throw new Error(
+      `Provider '${input.provider}' is no longer supported directly. ` +
+        `Set provider: 'gateway' and configure credentials in mcp-llm-bridge. ` +
+        `See docs/configuration.md#gateway-mode-mcp-llm-bridge`,
+    );
   }
 
   if (!input.apiKey && input.provider !== 'cli-bridge' && input.provider !== 'ollama') {

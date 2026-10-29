@@ -24,11 +24,12 @@ export type ReviewMode =
  * - gateway: delegates to mcp-llm-bridge (recommended for server/action)
  * - cli-bridge: calls local CLIs directly (Claude, OpenCode, Gemini, Copilot) — CLI only
  * - ollama: calls local Ollama instance directly (no subprocess, OpenAI-compatible)
+ * - groq: calls Groq chat completions at https://api.groq.com/openai/v1
  *
  * Migration: 'anthropic', 'openai', 'google', etc. → set provider: 'gateway' and
- * configure credentials in mcp-llm-bridge vault.
+ * configure credentials in mcp-llm-bridge vault. 'groq' is a direct provider.
  */
-export type LLMProvider = 'gateway' | 'cli-bridge' | 'ollama';
+export type LLMProvider = 'gateway' | 'cli-bridge' | 'ollama' | 'groq';
 
 /** Providers available in the SaaS dashboard */
 export type SaaSProvider = 'gateway' | 'cli-bridge' | 'ollama';
@@ -1007,4 +1008,6 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   gateway: 'auto',
   'cli-bridge': 'auto',
   ollama: 'llama3',
+  // Production Groq model. llama-3.3-70b-versatile shut down 2026-08-16.
+  groq: 'openai/gpt-oss-120b',
 };

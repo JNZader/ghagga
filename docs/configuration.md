@@ -172,7 +172,7 @@ In the SaaS dashboard, you can configure an ordered **provider chain** as a fall
 
 Example chain: `gateway (model A) → gateway (model B) → ollama`
 
-Chain entries are `gateway`, `cli-bridge`, or `ollama`. A legacy name such as `github` is normalized to `gateway`. There is no `models:read` skip. `ghagga login` and the Action's `GITHUB_TOKEN` do not themselves call a model.
+Chain entries are `gateway`, `cli-bridge`, or `ollama`. A legacy name such as `github` is normalized to `gateway`. The CLI and GitHub Action also accept `groq` as a direct provider (Groq chat completions at `https://api.groq.com/openai/v1`); it is not remapped. There is no `models:read` skip. `ghagga login` and the Action's `GITHUB_TOKEN` do not themselves call a model.
 
 Provider chains are configured per-repo or globally (see Global Settings).
 

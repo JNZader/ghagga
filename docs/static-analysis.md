@@ -83,7 +83,7 @@ ghagga review --list-tools
 ### GitHub Action
 
 ```yaml
-- uses: JNZader/ghagga@v3.6.0
+- uses: JNZader/ghagga@v3.7.0
   with:
     enabled-tools: "ruff,bandit"
     disabled-tools: "markdownlint"

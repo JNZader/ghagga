@@ -211,6 +211,17 @@ describe('reviewPipeline', () => {
   // ── Mode Dispatch ─────────────────────────────────────────
 
   describe('mode dispatch', () => {
+    it('groq review errors reject the pipeline', async () => {
+      (runSimpleReview as MockedFunction<typeof runSimpleReview>).mockRejectedValueOnce(
+        new Error('Groq 401'),
+      );
+      await expect(
+        reviewPipeline(
+          makeInput({ provider: 'groq', model: 'openai/gpt-oss-120b', apiKey: 'gsk_test' }),
+        ),
+      ).rejects.toThrow('Groq 401');
+    });
+
     it('dispatches to simple agent in simple mode', async () => {
       await reviewPipeline(makeInput({ mode: 'simple' }));
       expect(runSimpleReview).toHaveBeenCalledOnce();

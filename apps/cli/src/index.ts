@@ -200,6 +200,10 @@ program
     }
 
     // Auto-resolve API key: CLI flag > env var > stored token (gateway/cli-bridge)
+    if (!options.apiKey && options.provider === 'groq') {
+      options.apiKey = process.env.GROQ_API_KEY;
+    }
+
     if (!options.apiKey) {
       if (options.provider === 'gateway' || options.provider === 'cli-bridge') {
         options.apiKey = storedToken ?? undefined;
@@ -214,7 +218,7 @@ program
     }
 
     // ── Validate / migrate provider ───────────────────────────
-    const currentProviders: LLMProvider[] = ['gateway', 'cli-bridge', 'ollama'];
+    const currentProviders: LLMProvider[] = ['gateway', 'cli-bridge', 'ollama', 'groq'];
 
     // Explicit legacy values (--provider flag / env var) are a hard error.
     // Stored-config legacy values were already remapped above.

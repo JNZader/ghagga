@@ -15,6 +15,7 @@
  * package so it can never end up embedded in `dist/index.js`.
  */
 
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -32,6 +33,21 @@ describe('Action esbuild build excludes @xenova/transformers', () => {
     const buildScript = pkg.scripts.build;
     expect(buildScript).toContain('esbuild ');
     expect(buildScript).toContain('--external:@xenova/transformers');
+    // ESM bundle: CJS deps (tunnel) call require("net") at load time. Without
+    // a real require, Node throws "Dynamic require of net is not supported"
+    // before the Action starts.
+    expect(buildScript).toContain('createRequire as __ghaggaCreateRequire');
+    expect(buildScript).toContain('const require = __ghaggaCreateRequire(import.meta.url)');
+  });
+
+  it('the committed bundle loads under Node ESM (tunnel can require net)', () => {
+    const dist = fileURLToPath(new URL('../dist/index.js', import.meta.url));
+    const result = spawnSync(process.execPath, [dist], {
+      env: { ...process.env, NODE_ENV: 'test' },
+      encoding: 'utf8',
+    });
+    expect(result.stderr ?? '').not.toContain('Dynamic require');
+    expect(result.status).toBe(0);
   });
 
   it('the Action package.json does NOT declare @xenova/transformers as a direct/dev dependency', () => {
