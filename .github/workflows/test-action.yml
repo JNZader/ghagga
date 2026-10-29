@@ -22,7 +22,7 @@ jobs:
   review:
     name: Review
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Skip live review on fork PRs
         if: github.event.pull_request.head.repo.fork == true

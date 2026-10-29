@@ -45,8 +45,8 @@ var require_tunnel = __commonJS({
     "use strict";
     var net = __require("net");
     var tls = __require("tls");
-    var http3 = __require("http");
-    var https3 = __require("https");
+    var http4 = __require("http");
+    var https4 = __require("https");
     var events2 = __require("events");
     var assert5 = __require("assert");
     var util5 = __require("util");
@@ -56,24 +56,24 @@ var require_tunnel = __commonJS({
     exports2.httpsOverHttps = httpsOverHttps2;
     function httpOverHttp2(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = http3.request;
+      agent.request = http4.request;
       return agent;
     }
     function httpsOverHttp2(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = http3.request;
+      agent.request = http4.request;
       agent.createSocket = createSecureSocket;
       agent.defaultPort = 443;
       return agent;
     }
     function httpOverHttps2(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = https3.request;
+      agent.request = https4.request;
       return agent;
     }
     function httpsOverHttps2(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = https3.request;
+      agent.request = https4.request;
       agent.createSocket = createSecureSocket;
       agent.defaultPort = 443;
       return agent;
@@ -82,7 +82,7 @@ var require_tunnel = __commonJS({
       var self2 = this;
       self2.options = options || {};
       self2.proxyOptions = self2.options.proxy || {};
-      self2.maxSockets = self2.options.maxSockets || http3.Agent.defaultMaxSockets;
+      self2.maxSockets = self2.options.maxSockets || http4.Agent.defaultMaxSockets;
       self2.requests = [];
       self2.sockets = [];
       self2.on("free", function onFree(socket, host, port, localAddress) {
@@ -8897,7 +8897,7 @@ var require_client = __commonJS({
     "use strict";
     var assert5 = __require("node:assert");
     var net = __require("node:net");
-    var http3 = __require("node:http");
+    var http4 = __require("node:http");
     var util5 = require_util();
     var { ClientStats } = require_stats();
     var { channels } = require_diagnostics();
@@ -8955,7 +8955,7 @@ var require_client = __commonJS({
     var connectH1 = require_client_h1();
     var connectH2 = require_client_h2();
     var kClosedResolve = /* @__PURE__ */ Symbol("kClosedResolve");
-    var getDefaultNodeMaxHeaderSize = http3 && http3.maxHeaderSize && Number.isInteger(http3.maxHeaderSize) && http3.maxHeaderSize > 0 ? () => http3.maxHeaderSize : () => {
+    var getDefaultNodeMaxHeaderSize = http4 && http4.maxHeaderSize && Number.isInteger(http4.maxHeaderSize) && http4.maxHeaderSize > 0 ? () => http4.maxHeaderSize : () => {
       throw new InvalidArgumentError3("http module not available or http.maxHeaderSize invalid");
     };
     var noop4 = () => {
@@ -29223,8 +29223,8 @@ var require_helpers = __commonJS({
     };
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.req = exports2.json = exports2.toBuffer = void 0;
-    var http3 = __importStar(__require("http"));
-    var https3 = __importStar(__require("https"));
+    var http4 = __importStar(__require("http"));
+    var https4 = __importStar(__require("https"));
     async function toBuffer(stream2) {
       let length = 0;
       const chunks = [];
@@ -29249,7 +29249,7 @@ var require_helpers = __commonJS({
     exports2.json = json2;
     function req(url3, opts = {}) {
       const href = typeof url3 === "string" ? url3 : url3.href;
-      const req2 = (href.startsWith("https:") ? https3 : http3).request(url3, opts);
+      const req2 = (href.startsWith("https:") ? https4 : http4).request(url3, opts);
       const promise2 = new Promise((resolve4, reject) => {
         req2.once("response", resolve4).once("error", reject).end();
       });
@@ -29297,11 +29297,11 @@ var require_dist = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.Agent = void 0;
     var net = __importStar(__require("net"));
-    var http3 = __importStar(__require("http"));
+    var http4 = __importStar(__require("http"));
     var https_1 = __require("https");
     __exportStar(require_helpers(), exports2);
     var INTERNAL2 = /* @__PURE__ */ Symbol("AgentBaseInternalState");
-    var Agent3 = class extends http3.Agent {
+    var Agent3 = class extends http4.Agent {
       constructor(opts) {
         super(opts);
         this[INTERNAL2] = {};
@@ -29373,7 +29373,7 @@ var require_dist = __commonJS({
         const fakeSocket = this.incrementSockets(name6);
         Promise.resolve().then(() => this.connect(req, connectOpts)).then((socket) => {
           this.decrementSockets(name6, fakeSocket);
-          if (socket instanceof http3.Agent) {
+          if (socket instanceof http4.Agent) {
             try {
               return socket.addRequest(req, connectOpts);
             } catch (err2) {
@@ -34275,8 +34275,8 @@ var require_lib = __commonJS({
     exports2.HttpClient = exports2.HttpClientResponse = exports2.HttpClientError = exports2.MediaTypes = exports2.Headers = exports2.HttpCodes = void 0;
     exports2.getProxyUrl = getProxyUrl2;
     exports2.isHttps = isHttps;
-    var http3 = __importStar(__require("http"));
-    var https3 = __importStar(__require("https"));
+    var http4 = __importStar(__require("http"));
+    var https4 = __importStar(__require("https"));
     var pm = __importStar(require_proxy());
     var tunnel2 = __importStar(require_tunnel2());
     var undici_1 = require_undici();
@@ -34665,7 +34665,7 @@ var require_lib = __commonJS({
         const info3 = {};
         info3.parsedUrl = requestUrl;
         const usingSsl = info3.parsedUrl.protocol === "https:";
-        info3.httpModule = usingSsl ? https3 : http3;
+        info3.httpModule = usingSsl ? https4 : http4;
         const defaultPort = usingSsl ? 443 : 80;
         info3.options = {};
         info3.options.host = info3.parsedUrl.hostname;
@@ -34766,7 +34766,7 @@ var require_lib = __commonJS({
         const usingSsl = parsedUrl.protocol === "https:";
         let maxSockets = 100;
         if (this.requestOptions) {
-          maxSockets = this.requestOptions.maxSockets || http3.globalAgent.maxSockets;
+          maxSockets = this.requestOptions.maxSockets || http4.globalAgent.maxSockets;
         }
         if (proxyUrl && proxyUrl.hostname) {
           const agentOptions = {
@@ -34788,7 +34788,7 @@ var require_lib = __commonJS({
         }
         if (!agent) {
           const options = { keepAlive: this._keepAlive, maxSockets };
-          agent = usingSsl ? new https3.Agent(options) : new http3.Agent(options);
+          agent = usingSsl ? new https4.Agent(options) : new http4.Agent(options);
           this._agent = agent;
         }
         if (usingSsl && this._ignoreSslError) {
@@ -38026,6 +38026,8 @@ var require_dist6 = __commonJS({
 // src/index.ts
 import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync as existsSync9, mkdirSync as mkdirSync3, renameSync, rmSync } from "node:fs";
+import http3 from "node:http";
+import https3 from "node:https";
 import { tmpdir as tmpdir2 } from "node:os";
 import { join as join10 } from "node:path";
 
@@ -140506,10 +140508,34 @@ async function run2() {
     setFailed(`GHAGGA review failed: ${message}`);
   }
 }
+var UNDICI_GLOBAL_DISPATCHER = /* @__PURE__ */ Symbol.for("undici.globalDispatcher.1");
+async function releaseNetworkClients() {
+  const dispatcher = globalThis[UNDICI_GLOBAL_DISPATCHER];
+  try {
+    await dispatcher?.close?.();
+  } catch (error63) {
+    warning(
+      `[ghagga] Failed to close undici dispatcher (non-fatal): ${error63 instanceof Error ? error63.message : String(error63)}`
+    );
+  }
+  http3.globalAgent.destroy();
+  https3.globalAgent.destroy();
+}
+async function finishAction() {
+  await releaseNetworkClients();
+  process.exit(process.exitCode ?? 0);
+}
 if (process.env.NODE_ENV !== "test") {
-  run2();
+  run2().catch((error63) => {
+    const message = error63 instanceof Error ? error63.message : String(error63);
+    setFailed(`GHAGGA review failed: ${message}`);
+  }).finally(() => {
+    void finishAction();
+  });
 }
 export {
+  finishAction,
+  releaseNetworkClients,
   resolveMemoryPaths,
   run2 as run
 };

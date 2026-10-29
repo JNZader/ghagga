@@ -311,7 +311,40 @@ describe('GitHub Action', () => {
 // Integration tests — invoke run() directly (enabled by T2.5 guard)
 // ═══════════════════════════════════════════════════════════════
 
-import { resolveMemoryPaths, run } from './index.js';
+import http from 'node:http';
+import https from 'node:https';
+import { finishAction, resolveMemoryPaths, run } from './index.js';
+
+describe('finishAction', () => {
+  it('closes the undici dispatcher and exits with the recorded code', async () => {
+    const close = vi.fn(async () => undefined);
+    const symbol = Symbol.for('undici.globalDispatcher.1');
+    const previous = (globalThis as Record<symbol, unknown>)[symbol];
+    (globalThis as Record<symbol, unknown>)[symbol] = { close };
+    const previousCode = process.exitCode;
+    process.exitCode = 1;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const destroyHttp = vi.spyOn(http.globalAgent, 'destroy').mockImplementation(() => undefined);
+    const destroyHttps = vi.spyOn(https.globalAgent, 'destroy').mockImplementation(() => undefined);
+
+    await finishAction();
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(destroyHttp).toHaveBeenCalledOnce();
+    expect(destroyHttps).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledWith(1);
+
+    exit.mockRestore();
+    destroyHttp.mockRestore();
+    destroyHttps.mockRestore();
+    process.exitCode = previousCode;
+    if (previous === undefined) {
+      delete (globalThis as Record<symbol, unknown>)[symbol];
+    } else {
+      (globalThis as Record<symbol, unknown>)[symbol] = previous;
+    }
+  });
+});
 
 const defaultStaticAnalysis = {
   semgrep: { status: 'skipped' as const, findings: [], executionTimeMs: 0 },
