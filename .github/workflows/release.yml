@@ -1,0 +1,81 @@
+# On every push to main, changesets/action either opens or updates the
+# "Version Packages" pull request, or — once that PR is merged and no
+# changesets remain — publishes to npm and tags the release.
+#
+# Publishing reuses scripts/publish-npm.sh (NPM_TOKEN + provenance + OIDC).
+# This workflow does not listen to `release`, and Publish to npm no longer
+# does either, so creating the GitHub Release cannot publish a second time.
+#
+# A release created with the default GITHUB_TOKEN does not trigger other
+# workflows. major-tag.yml therefore does not run for these releases;
+# scripts/ensure-github-release.sh moves the floating vN tag in this job.
+# No personal access token is required. The Version Packages PR is opened
+# with GITHUB_TOKEN, so its CI runs only after a maintainer approves the
+# workflow (see docs/RELEASING.md).
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: Version or publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.22.2"
+          cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Version Packages PR or publish to npm
+        id: changesets
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-script: bash scripts/publish-npm.sh
+          version-script: bash scripts/version-packages.sh
+          commit-message: "chore(release): version packages"
+          pr-title: "Version Packages"
+          # Tags and the GitHub Release are created by the next step as vX.Y.Z.
+          # The action's own releases would be one tag per package (name@version).
+          create-github-releases: false
+          push-git-tags: false
+        env:
+          GHAGGA_PUBLISHED_FILE: ${{ runner.temp }}/ghagga-published.tsv
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Restore triggering commit
+        if: steps.changesets.outcome == 'success'
+        run: git checkout --force "$GITHUB_SHA"
+
+      - name: Create GitHub Release and move vX
+        if: steps.changesets.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GHAGGA_PUBLISHED_FILE: ${{ runner.temp }}/ghagga-published.tsv
+        run: bash scripts/ensure-github-release.sh

@@ -1,10 +1,26 @@
-# When a stable release vX.Y.Z is published, move the floating major tag vX
-# to that commit so `JNZader/ghagga@vX` tracks the latest patch of the line.
+# When a stable release is published by someone (a real release event), move
+# the floating major tag vN to that commit so `JNZader/ghagga@vN` tracks the
+# latest patch of the line.
+#
+# Tags are accepted with or without a leading v (v3.7.0 and 3.7.0). The
+# floating tag is always vN. Prereleases and other names are left unchanged.
+#
+# release.yml also moves vN. A GitHub Release created with the default
+# GITHUB_TOKEN does not trigger this workflow, so the Release job does the
+# move itself. This workflow still covers a release published by a person.
+# workflow_dispatch can repair a tag after the fact (input: v3.7.0 or 3.7.0).
+
 name: Update major version tag
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Stable release tag to move vN onto (vX.Y.Z or X.Y.Z)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,27 +31,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout release tag
+      # Check out the default branch, not the release tag. The tag being
+      # moved may predate this script; the script then fetches the tag.
+      - name: Checkout default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: true
 
       - name: Move floating major tag
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          PRERELEASE: ${{ github.event.release.prerelease }}
-        run: |
-          set -euo pipefail
-          if [ "$PRERELEASE" = "true" ]; then
-            echo "Prerelease ${RELEASE_TAG} — leaving the major tag unchanged"
-            exit 0
-          fi
-          if ! printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Tag ${RELEASE_TAG} is not a stable vX.Y.Z release — skipping"
-            exit 0
-          fi
-          major="${RELEASE_TAG%%.*}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -fa "$major" -m "Update ${major} to ${RELEASE_TAG}"
-          git push origin "refs/tags/${major}" --force
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          PRERELEASE: ${{ github.event.release.prerelease || false }}
+        run: bash scripts/move-major-tag.sh "$RELEASE_TAG" --push
