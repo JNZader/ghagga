@@ -1,9 +1,5 @@
 name: "GHAGGA Code Review"
-description: >-
-  AI-powered multi-agent code review for PRs with built-in static analysis.
-  Runs the static-analysis registry on the GitHub Actions runner (cached).
-  SonarQube stays inert unless an MCP server is configured.
-  3 provider modes: gateway (mcp-llm-bridge), cli-bridge (local CLIs), ollama.
+description: "AI-powered multi-agent code review for PRs with built-in static analysis."
 
 branding:
   icon: "eye"
