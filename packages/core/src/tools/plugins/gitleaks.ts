@@ -19,7 +19,6 @@ import {
   statSync,
   symlinkSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseUnifiedDiff } from '../../diff/parse.js';
@@ -28,6 +27,13 @@ import type { ExecutionContext, RawToolOutput, ToolDefinition, ToolScanScope } f
 
 const GITLEAKS_VERSION = '8.21.2';
 const GITLEAKS_BIN = '/usr/local/bin/gitleaks';
+
+/** Scratch directory for the scan report and the changed-file tree. */
+function reviewTempDir(): string {
+  const fromEnv = process.env.TMPDIR || process.env.TMP || process.env.TEMP;
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  return '/tmp';
+}
 
 /**
  * Resolve the bundled gitleaks config (extends defaults + test-file allowlist).
@@ -268,13 +274,13 @@ export const gitleaksPlugin: ToolDefinition = {
     } catch {
       repoRoot = repoDir;
     }
-    const reportPath = join(tmpdir(), `ghagga-gitleaks-${process.pid}-${Date.now()}.json`);
+    const reportPath = join(reviewTempDir(), `ghagga-gitleaks-${process.pid}-${Date.now()}.json`);
     let tempTree: string | undefined;
 
     try {
       let source = repoDir;
       if (scoped) {
-        tempTree = mkdtempSync(join(tmpdir(), 'ghagga-gitleaks-'));
+        tempTree = mkdtempSync(join(reviewTempDir(), 'ghagga-gitleaks-'));
         let linked = 0;
         for (const rel of targets) {
           const real = safeRepoFile(repoDir, rel);

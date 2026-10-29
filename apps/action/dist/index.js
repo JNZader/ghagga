@@ -38028,7 +38028,7 @@ import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync as existsSync9, mkdirSync as mkdirSync4, renameSync, rmSync as rmSync2 } from "node:fs";
 import http3 from "node:http";
 import https3 from "node:https";
-import { tmpdir as tmpdir3 } from "node:os";
+import { tmpdir as tmpdir2 } from "node:os";
 import { join as join10 } from "node:path";
 
 // ../../node_modules/.pnpm/@actions+core@3.0.1/node_modules/@actions/core/lib/command.js
@@ -131708,11 +131708,16 @@ var cpdPlugin = {
 
 // ../../packages/core/dist/tools/plugins/gitleaks.js
 import { existsSync as existsSync6, mkdirSync as mkdirSync2, mkdtempSync, readFileSync as readFileSync4, realpathSync, rmSync, statSync as statSync2, symlinkSync } from "node:fs";
-import { tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname6, join as join8, sep as sep10 } from "node:path";
 import { fileURLToPath } from "node:url";
 var GITLEAKS_VERSION = "8.21.2";
 var GITLEAKS_BIN = "/usr/local/bin/gitleaks";
+function reviewTempDir() {
+  const fromEnv = process.env.TMPDIR || process.env.TMP || process.env.TEMP;
+  if (fromEnv && fromEnv.length > 0)
+    return fromEnv;
+  return "/tmp";
+}
 function resolveGitleaksConfigPath() {
   const here = dirname6(fileURLToPath(import.meta.url));
   const configPath = join8(here, "..", "gitleaks-config.toml");
@@ -131876,12 +131881,12 @@ var gitleaksPlugin = {
     } catch {
       repoRoot = repoDir;
     }
-    const reportPath = join8(tmpdir2(), `ghagga-gitleaks-${process.pid}-${Date.now()}.json`);
+    const reportPath = join8(reviewTempDir(), `ghagga-gitleaks-${process.pid}-${Date.now()}.json`);
     let tempTree;
     try {
       let source = repoDir;
       if (scoped) {
-        tempTree = mkdtempSync(join8(tmpdir2(), "ghagga-gitleaks-"));
+        tempTree = mkdtempSync(join8(reviewTempDir(), "ghagga-gitleaks-"));
         let linked = 0;
         for (const rel of targets) {
           const real = safeRepoFile(repoDir, rel);
@@ -140381,7 +140386,7 @@ function sanitizeForPath(value) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-");
 }
 function resolveMemoryPaths(params) {
-  const runnerTemp = process.env.RUNNER_TEMP || tmpdir3();
+  const runnerTemp = process.env.RUNNER_TEMP || tmpdir2();
   const repoSlug = sanitizeForPath(params.repoFullName);
   const uniqueSuffix = [
     sanitizeForPath(params.repoId || "noid"),
