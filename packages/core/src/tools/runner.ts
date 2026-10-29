@@ -11,6 +11,7 @@ import { runTools } from './orchestrator.js';
 import { initializeDefaultTools } from './plugins/index.js';
 import { toolRegistry } from './registry.js';
 import { resolveActivatedTools } from './resolve.js';
+import type { ToolScanScope } from './types.js';
 
 /** Maximum number of findings to include in LLM context */
 const FINDING_CAP = 200;
@@ -29,6 +30,8 @@ export function isToolRegistryEnabled(): boolean {
  * @param files - Map of file paths to file contents
  * @param scanPath - Directory path on disk
  * @param settings - Which tools are enabled
+ * @param diff - Unified diff of the change. When set, diff-aware tools (gitleaks)
+ *   report only added lines instead of scanning the whole tree.
  */
 export async function runStaticAnalysis(
   files: Map<string, string>,
@@ -37,8 +40,9 @@ export async function runStaticAnalysis(
     ReviewSettings,
     'enableSemgrep' | 'enableTrivy' | 'enableCpd' | 'customRules' | 'enabledTools' | 'disabledTools'
   >,
+  diff?: string,
 ): Promise<StaticAnalysisResult> {
-  return runStaticAnalysisWithRegistry(scanPath, Array.from(files.keys()), settings);
+  return runStaticAnalysisWithRegistry(scanPath, Array.from(files.keys()), settings, diff);
 }
 
 /**
@@ -52,6 +56,7 @@ async function runStaticAnalysisWithRegistry(
     ReviewSettings,
     'enableSemgrep' | 'enableTrivy' | 'enableCpd' | 'enabledTools' | 'disabledTools'
   >,
+  diff?: string,
 ): Promise<StaticAnalysisResult> {
   // Diagnostic/progress → stderr; stdout is reserved for machine output (SARIF/JSON).
   console.error('[ghagga:tools] Running static analysis with registry-driven orchestrator');
@@ -72,7 +77,8 @@ async function runStaticAnalysisWithRegistry(
 
   // Run tools with Node execution context
   const ctx = createNodeExecutionContext();
-  const results = await runTools(ctx, activatedTools, scanPath, fileList);
+  const scope: ToolScanScope | undefined = diff !== undefined ? { diff } : undefined;
+  const results = await runTools(ctx, activatedTools, scanPath, fileList, 600_000, scope);
 
   return results as StaticAnalysisResult;
 }
