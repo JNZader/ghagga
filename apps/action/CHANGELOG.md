@@ -1,5 +1,13 @@
 # @ghagga/action
 
+## 3.0.9
+
+### Patch Changes
+
+- 870b616: Scope Gitleaks to files and lines added by the review diff, and honor a repository `.gitleaks.toml` or `.gitleaksignore` when one is present.
+- Updated dependencies [870b616]
+  - ghagga-core@3.7.1
+
 ## 3.0.8
 
 ### Patch Changes

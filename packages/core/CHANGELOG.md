@@ -1,5 +1,11 @@
 # ghagga-core
 
+## 3.7.1
+
+### Patch Changes
+
+- 870b616: Scope Gitleaks to files and lines added by the review diff, and honor a repository `.gitleaks.toml` or `.gitleaksignore` when one is present.
+
 ## 3.7.0
 
 ### Minor Changes

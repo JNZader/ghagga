@@ -1,5 +1,14 @@
 # ghagga
 
+## 3.7.1
+
+### Patch Changes
+
+- Updated dependencies [870b616]
+  - ghagga-core@3.7.1
+  - ghagga-forge@3.7.1
+  - ghagga-triage-engine@0.3.3
+
 ## 3.7.0
 
 ### Minor Changes
