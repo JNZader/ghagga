@@ -6,6 +6,7 @@
  */
 
 import type { ReviewFinding, ReviewResult } from 'ghagga-core';
+import { formatBlastRadiusSection } from 'ghagga-core';
 import { SEVERITY_EMOJI, SOURCE_LABELS, STATUS_EMOJI } from './theme.js';
 
 // ─── Table & Value Formatting ───────────────────────────────────
@@ -106,6 +107,15 @@ export function formatMarkdownResult(result: ReviewResult): string {
   lines.push('## Summary');
   lines.push(result.summary);
   lines.push('');
+
+  // Blast Radius — same position and gate as core's formatReviewComment
+  // (format.ts: Summary → Blast Radius → Findings). Data-presence gated:
+  // no diagram in the metadata adds zero bytes, so the output stays
+  // byte-identical to the pre-section renderer.
+  const blastRadiusSection = formatBlastRadiusSection(result.metadata.blastRadius?.diagram);
+  if (blastRadiusSection) {
+    lines.push(blastRadiusSection);
+  }
 
   // Findings grouped by source
   if (result.findings.length > 0) {

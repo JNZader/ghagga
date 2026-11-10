@@ -4,7 +4,7 @@
  * All functions are pure (string in, string out) — no mocking needed.
  */
 
-import type { ReviewResult } from 'ghagga-core';
+import type { BlastRadiusDiagram, ReviewResult } from 'ghagga-core';
 import { describe, expect, it } from 'vitest';
 import {
   formatId,
@@ -40,6 +40,17 @@ function makeResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     ...overrides,
   };
 }
+
+/** Minimal valid diagram (passes formatBlastRadiusSection's data gate). */
+const BLAST_RADIUS_DIAGRAM: BlastRadiusDiagram = {
+  mermaid: 'graph TD\n  n0["src/a.ts"] --> n1["src/b.ts"]',
+  nodes: [
+    { id: 'n0', label: 'src/a.ts', role: 'changed', cluster: 'src' },
+    { id: 'n1', label: 'src/b.ts', role: 'dependent', cluster: 'src' },
+  ],
+  edges: [{ from: 'n1', to: 'n0' }],
+  meta: { stale: false, exceededCap: false, truncated: false },
+};
 
 // ─── formatTable ────────────────────────────────────────────────
 
@@ -306,5 +317,90 @@ describe('formatMarkdownResult', () => {
   it('should render FAILED status emoji', () => {
     const result = formatMarkdownResult(makeResult({ status: 'FAILED' }));
     expect(result).toContain('FAILED');
+  });
+
+  // ─── Blast Radius (demo investigation D2) ─────────────────────
+
+  it('should render the Blast Radius section when metadata carries a diagram', () => {
+    const result = formatMarkdownResult(
+      makeResult({
+        metadata: {
+          mode: 'simple',
+          provider: 'gateway',
+          model: 'claude-sonnet-4-20250514',
+          tokensUsed: 1000,
+          executionTimeMs: 2000,
+          toolsRun: [],
+          toolsSkipped: [],
+          blastRadius: {
+            enabled: true,
+            graphAvailable: true,
+            totalFiles: 2,
+            blastRadiusFiles: 2,
+            diagram: BLAST_RADIUS_DIAGRAM,
+          },
+        },
+        findings: [
+          { severity: 'low', category: 'style', file: 'a.ts', message: 'Minor', source: 'ai' },
+        ],
+      }),
+    );
+
+    expect(result).toContain('### Blast Radius');
+    expect(result).toContain('```mermaid');
+    expect(result).toContain('graph TD');
+    // Position mirrors core's formatReviewComment: Summary → Blast Radius → Findings
+    const summaryIdx = result.indexOf('## Summary');
+    const blastIdx = result.indexOf('### Blast Radius');
+    const findingsIdx = result.indexOf('## Findings');
+    expect(summaryIdx).toBeLessThan(blastIdx);
+    expect(blastIdx).toBeLessThan(findingsIdx);
+  });
+
+  it('should be byte-identical to the pre-blast-radius output when no diagram is present', () => {
+    // Exact-string pin: the data-presence gate must contribute ZERO bytes,
+    // so a diagram-less result renders exactly as before the section existed.
+    const result = formatMarkdownResult(makeResult());
+    expect(result).toBe(
+      [
+        '---',
+        '🤖 GHAGGA Code Review  |  ✅ PASSED',
+        'Mode: simple | Model: claude-sonnet-4-20250514 | Time: 2.0s | Tokens: 1000',
+        '---',
+        '',
+        '## Summary',
+        'All good.',
+        '',
+        'No findings. Nice work! 🎉',
+        '',
+        '---',
+        'Powered by GHAGGA — AI Code Review',
+      ].join('\n'),
+    );
+  });
+
+  it('should contribute zero bytes when blastRadius metadata exists but carries no diagram', () => {
+    // Counts-only blast-radius result (e.g. exceededCap) — same gate, same zero bytes.
+    const withCountsOnly = formatMarkdownResult(
+      makeResult({
+        metadata: {
+          mode: 'simple',
+          provider: 'gateway',
+          model: 'claude-sonnet-4-20250514',
+          tokensUsed: 1000,
+          executionTimeMs: 2000,
+          toolsRun: [],
+          toolsSkipped: [],
+          blastRadius: {
+            enabled: true,
+            graphAvailable: true,
+            totalFiles: 60,
+            blastRadiusFiles: 60,
+          },
+        },
+      }),
+    );
+    expect(withCountsOnly).not.toContain('Blast Radius');
+    expect(withCountsOnly).toBe(formatMarkdownResult(makeResult()));
   });
 });
