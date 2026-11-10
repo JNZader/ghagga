@@ -1421,3 +1421,277 @@ describe('formatBlastRadiusSection + formatReviewComment — blast-radius diagra
     expect(formatBlastRadiusSection({ ...makeDiagram(), nodes: [] })).toBe('');
   });
 });
+
+// ─── Findings collapse + cap (comment-format-signal Fix 1) ──────
+
+describe('formatReviewComment — findings collapse (>10 findings)', () => {
+  /** 12 semgrep findings: 2 critical, 5 high, 3 medium, 2 info (all same tool). */
+  function makeManyFindings(): ReviewFinding[] {
+    const severities = [
+      'critical',
+      'high',
+      'high',
+      'medium',
+      'critical',
+      'high',
+      'medium',
+      'info',
+      'high',
+      'medium',
+      'info',
+      'high',
+    ] as const;
+    return severities.map((severity, i) =>
+      makeFinding({
+        severity,
+        source: 'semgrep',
+        file: `src/f${i}.ts`,
+        line: i + 1,
+        message: `row ${i} (${severity})`,
+      }),
+    );
+  }
+
+  it('shows the top 10 by severity as the visible table and collapses the rest', () => {
+    const result = makeResult({ findings: makeManyFindings() });
+    const output = formatReviewComment(result);
+
+    expect(output).toContain('### Findings (12)');
+
+    // Visible merged table carries a Source column (per-tool headers no
+    // longer sit above every row).
+    expect(output).toContain('**🎯 Top 10 findings (by severity)**');
+    expect(output).toContain('| Severity | Source | Category | File | Message |');
+
+    // Exactly one details block with the exact remaining count (12 − 10).
+    expect(output.match(/<details>/g) ?? []).toHaveLength(1);
+    expect(output).toContain('<summary>📊 +2 more findings (all severities)</summary>');
+
+    // The visible table (before <details>) holds exactly 10 data rows: the
+    // 2 critical + 5 high + 3 medium findings. The 2 info rows appear only
+    // inside the collapsed block.
+    const [visiblePart, collapsedPart] = output.split('<details>');
+    const visibleRows = visiblePart
+      .split('\n')
+      .filter(
+        (l) =>
+          l.startsWith('| 🟡') ||
+          l.startsWith('| 🔴') ||
+          l.startsWith('| 🟠') ||
+          l.startsWith('| 🟢') ||
+          l.startsWith('| 🟣'),
+      );
+    expect(visibleRows).toHaveLength(10);
+    expect(visiblePart).toContain('row 0 (critical)');
+    expect(visiblePart).toContain('row 9 (medium)');
+    expect(visiblePart).not.toContain('row 7 (info)');
+    expect(visiblePart).not.toContain('row 10 (info)');
+
+    // The collapsed block keeps today's per-tool grouping format.
+    expect(collapsedPart).toContain('**🔧 Semgrep (2)**');
+    expect(collapsedPart).toContain('| Severity | Category | File | Message |');
+    expect(collapsedPart).toContain('row 7 (info)');
+    expect(collapsedPart).toContain('row 10 (info)');
+
+    // The block closes after the tables.
+    expect(output).toContain('</details>');
+  });
+
+  it('orders the visible table critical > high > medium > low > info across tools', () => {
+    const findings = [
+      makeFinding({ severity: 'low', source: 'cpd', message: 'cpd low' }),
+      makeFinding({ severity: 'info', source: 'trivy', message: 'trivy info' }),
+      makeFinding({ severity: 'high', source: 'semgrep', message: 'semgrep high' }),
+      makeFinding({ severity: 'medium', source: 'ai', message: 'ai medium' }),
+      makeFinding({ severity: 'critical', source: 'semgrep', message: 'semgrep critical' }),
+      ...Array.from({ length: 6 }, (_, i) =>
+        makeFinding({
+          severity: 'low',
+          source: 'cpd',
+          file: `src/x${i}.ts`,
+          message: `cpd low ${i}`,
+        }),
+      ),
+      makeFinding({ severity: 'medium', source: 'semgrep', message: 'semgrep medium' }),
+      // 12th finding — the lowest-ranked one collapses.
+      makeFinding({ severity: 'low', source: 'cpd', message: 'cpd low collapse me' }),
+    ];
+    const output = formatReviewComment(makeResult({ findings }));
+    const visiblePart = output.split('<details>')[0];
+    const rows = visiblePart
+      .split('\n')
+      .filter(
+        (l) =>
+          l.startsWith('| 🔴') ||
+          l.startsWith('| 🟠') ||
+          l.startsWith('| 🟡') ||
+          l.startsWith('| 🟢') ||
+          l.startsWith('| 🟣'),
+      );
+
+    expect(rows).toHaveLength(10);
+    // Severity order: the single critical first, then the high, then the two
+    // mediums, then lows. Ties keep input order (stable sort).
+    expect(rows[0]).toContain('semgrep critical');
+    expect(rows[1]).toContain('semgrep high');
+    expect(rows[2]).toContain('ai medium');
+    expect(rows[3]).toContain('semgrep medium');
+    expect(rows.slice(4).every((r) => r.includes('low'))).toBe(true);
+    // The lowest-ranked ties collapse (13 findings → 10 visible, +3 more).
+    expect(visiblePart).not.toContain('cpd low collapse me');
+    expect(output).toContain('<summary>📊 +3 more findings (all severities)</summary>');
+  });
+
+  it('is deterministic: same input renders byte-identical comments', () => {
+    const result = makeResult({ findings: makeManyFindings() });
+    expect(formatReviewComment(result)).toBe(formatReviewComment(result));
+  });
+
+  // ── ≤10 byte-identity (Fix 1 hard rule) ──
+
+  it('renders EXACTLY the pre-Fix-1 per-tool output for 10 findings (byte-identical)', () => {
+    // Golden captured from main's formatter for this exact input: grouped
+    // per tool (Semgrep → Trivy → PMD/CPD → AI Review), no details block,
+    // no Source column. Any byte introduced by the collapse path fails this.
+    let n = 0;
+    const f = (severity: string, source: string, file: string): ReviewFinding => {
+      n++;
+      return makeFinding({
+        severity: severity as ReviewFinding['severity'],
+        source: source as ReviewFinding['source'],
+        file,
+        line: n,
+        category: 'cat',
+        message: `finding ${n} (${severity}/${source})`,
+      });
+    };
+    const result = makeResult({
+      status: 'FAILED',
+      summary: 'Ten findings.',
+      findings: [
+        f('critical', 'semgrep', 'src/a.ts'),
+        f('high', 'semgrep', 'src/b.ts'),
+        f('low', 'semgrep', 'src/c.ts'),
+        f('medium', 'trivy', 'Dockerfile'),
+        f('info', 'trivy', 'Dockerfile'),
+        f('low', 'cpd', 'src/d.ts'),
+        f('low', 'cpd', 'src/e.ts'),
+        f('high', 'ai', 'src/f.ts'),
+        f('medium', 'ai', 'src/g.ts'),
+        f('medium', 'ai', 'src/h.ts'),
+      ],
+      metadata: {
+        mode: 'standard',
+        provider: 'gateway',
+        model: 'gpt-4o',
+        tokensUsed: 5000,
+        executionTimeMs: 1000,
+        toolsRun: ['semgrep', 'trivy', 'cpd'],
+        toolsSkipped: [],
+      },
+    });
+
+    expect(formatReviewComment(result)).toBe(`<!-- ghagga-review -->
+## 🤖 GHAGGA Code Review
+
+**Status:** ❌ FAILED
+**Mode:** standard | **Model:** gpt-4o | **Time:** 1.0s
+
+### Summary
+Ten findings.
+
+### Findings (10)
+
+**🔧 Semgrep (3)**
+| Severity | Category | File | Message |
+|----------|----------|------|----------|
+| 🔴 critical | cat | src/a.ts:1 | finding 1 (critical/semgrep) |
+| 🟠 high | cat | src/b.ts:2 | finding 2 (high/semgrep) |
+| 🟢 low | cat | src/c.ts:3 | finding 3 (low/semgrep) |
+
+**🔧 Trivy (2)**
+| Severity | Category | File | Message |
+|----------|----------|------|----------|
+| 🟡 medium | cat | Dockerfile:4 | finding 4 (medium/trivy) |
+| 🟣 info | cat | Dockerfile:5 | finding 5 (info/trivy) |
+
+**🔧 PMD/CPD (2)**
+| Severity | Category | File | Message |
+|----------|----------|------|----------|
+| 🟢 low | cat | src/d.ts:6 | finding 6 (low/cpd) |
+| 🟢 low | cat | src/e.ts:7 | finding 7 (low/cpd) |
+
+**🤖 AI Review (3)**
+| Severity | Category | File | Message |
+|----------|----------|------|----------|
+| 🟠 high | cat | src/f.ts:8 | finding 8 (high/ai) |
+| 🟡 medium | cat | src/g.ts:9 | finding 9 (medium/ai) |
+| 🟡 medium | cat | src/h.ts:10 | finding 10 (medium/ai) |
+
+### Static Analysis
+✅ Tools run: semgrep, trivy, cpd
+
+
+<sub>📊 5K tokens (in 4K / out 2K, estimated 70/30) · $0.0238 · \`gpt-4o\`</sub>
+---
+*Powered by [GHAGGA](https://github.com/JNZader/ghagga) — AI Code Review*`);
+  });
+
+  it('is byte-identical to main when every Fix 1-4 trigger is absent (no collapse, no diagram, no summary headings, unmeasured footer)', () => {
+    // Hard-rule pin: features absent → the comment is byte-identical to the
+    // pre-change formatter. Golden captured from main for this input.
+    const result = makeResult({
+      status: 'NEEDS_HUMAN_REVIEW',
+      summary: 'Found one potential issue in the diff.',
+      findings: [
+        makeFinding({
+          severity: 'medium',
+          category: 'best-practice',
+          file: 'src/app.ts',
+          line: 1,
+          message: 'Avoid console.log in production code.',
+        }),
+      ],
+      metadata: {
+        mode: 'simple',
+        provider: 'gateway',
+        model: 'claude-sonnet-4',
+        tokensUsed: 13000,
+        executionTimeMs: 4200,
+        toolsRun: [],
+        toolsSkipped: [],
+      },
+    });
+
+    expect(
+      formatReviewComment(result, {
+        fileStats: { additions: 1, deletions: 0 },
+        fileList: ['src/app.ts'],
+        prAuthor: 'octocat',
+      }),
+    ).toBe(`<!-- ghagga-review -->
+## 🤖 GHAGGA Code Review
+
+**Status:** ⚠️ NEEDS_HUMAN_REVIEW
+**Mode:** simple | **Model:** claude-sonnet-4 | **Time:** 4.2s
+🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 +1 / -0 (net +1)
+
+### Summary
+Found one potential issue in the diff.
+
+### Findings (1)
+
+**🤖 AI Review (1)**
+| Severity | Category | File | Message |
+|----------|----------|------|----------|
+| 🟡 medium | best-practice | src/app.ts:1 | Avoid console.log in production code. |
+
+### Files Changed (1)
+🔧 **Core**: \`app.ts\`
+
+
+<sub>📊 13K tokens (in 9K / out 4K, estimated 70/30) · $0.0858 · \`claude-sonnet-4\`</sub>
+---
+*Powered by [GHAGGA](https://github.com/JNZader/ghagga) — AI Code Review* — @octocat`);
+  });
+});

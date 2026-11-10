@@ -13,7 +13,7 @@ import type { EntityChange, EntityChangeKind, SemanticDiff } from './semantic-di
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import { isToolRegistryEnabled } from './tools/runner.js';
-import type { ReviewResult, ReviewStatus } from './types.js';
+import type { ReviewFinding, ReviewResult, ReviewStatus } from './types.js';
 
 // ─── File Stats Types ───────────────────────────────────────────
 
@@ -127,6 +127,29 @@ export const SEVERITY_EMOJI: Record<string, string> = {
 export const REVIEW_COMMENT_MARKER = '<!-- ghagga-review -->';
 
 const STATS_BAR_BLOCKS = 20;
+
+/**
+ * Max findings rendered in the visible table before the rest collapse into a
+ * single `<details>` block (comment-format-signal Fix 1). Whole-repo static
+ * runs can emit hundreds of rows for a one-file PR (PR #479: 286 rows,
+ * 50KB); the top slice by severity stays visible, everything else is one
+ * click away. ≤ this many findings renders EXACTLY the pre-change per-tool
+ * output (byte-identical backward compat for small reviews).
+ */
+const MAX_VISIBLE_FINDINGS = 10;
+
+/**
+ * Severity rank for the visible-table ordering: critical > high > medium >
+ * low > info — mirrors `SEVERITY_ORDER` in `tools/runner.ts` (the existing
+ * severity sort). Unknown severities rank with `info`.
+ */
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
 
 /**
  * Build a visual emoji stats bar showing additions vs deletions.
@@ -498,6 +521,74 @@ export function formatBlastRadiusSection(diagram: BlastRadiusDiagram | undefined
   return section;
 }
 
+// ─── Findings rendering (comment-format-signal Fix 1) ───────────
+
+/**
+ * Render one sanitized finding-table row (the exact per-row format the
+ * comment has always used). ALL finding fields are LLM/tool-derived (and
+ * ultimately derived from the attacker-controlled PR diff) — sanitize every
+ * cell, not just the message.
+ */
+function renderFindingRow(finding: ReviewFinding): string {
+  const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
+  const severity = sanitizeTableCell(String(finding.severity));
+  const category = sanitizeTableCell(String(finding.category));
+  const location = sanitizeTableCell(
+    finding.line ? `${finding.file}:${finding.line}` : finding.file,
+  );
+  const message = sanitizeTableCell(finding.message);
+  return `| ${emoji} ${severity} | ${category} | ${location} | ${message} |\n`;
+}
+
+/**
+ * Render findings as per-tool grouped tables — the comment's original
+ * findings format (group label + count, table header, rows, blank line).
+ *
+ * Used verbatim for ≤ `MAX_VISIBLE_FINDINGS` findings (byte-identical to
+ * the pre-Fix-1 output) and for the collapsed remainder when collapsing
+ * (grouping headers stay in today's format, just inside `<details>`).
+ *
+ * `sourceLabels` values are trusted literals; unknown sources come from
+ * finding.source (LLM/tool output) and must be sanitized — the fallback
+ * does that here.
+ */
+function renderFindingGroups(
+  grouped: Map<string, ReviewFinding[]>,
+  renderOrder: string[],
+  sourceLabels: Record<string, string>,
+): string {
+  let out = '';
+  for (const src of renderOrder) {
+    const findings = grouped.get(src);
+    if (!findings || findings.length === 0) continue;
+
+    const label = sourceLabels[src] ?? sanitizeTableCell(src);
+    out += `**${label} (${findings.length})**\n`;
+    out += `| Severity | Category | File | Message |\n`;
+    out += `|----------|----------|------|----------|\n`;
+    for (const finding of findings) {
+      out += renderFindingRow(finding);
+    }
+    out += '\n';
+  }
+  return out;
+}
+
+/** Group findings by source, preserving first-seen source and finding order. */
+function groupFindingsBySource(findings: ReviewFinding[]): Map<string, ReviewFinding[]> {
+  const grouped = new Map<string, ReviewFinding[]>();
+  for (const finding of findings) {
+    const src = finding.source ?? 'ai';
+    const bucket = grouped.get(src);
+    if (bucket) {
+      bucket.push(finding);
+    } else {
+      grouped.set(src, [finding]);
+    }
+  }
+  return grouped;
+}
+
 // ─── Format Options ─────────────────────────────────────────────
 
 export interface FormatReviewCommentOptions {
@@ -568,12 +659,7 @@ export function formatReviewComment(
     comment += `### Findings (${result.findings.length})\n\n`;
 
     // Group findings by source
-    const grouped = new Map<string, typeof result.findings>();
-    for (const finding of result.findings) {
-      const src = finding.source ?? 'ai';
-      if (!grouped.has(src)) grouped.set(src, []);
-      grouped.get(src)?.push(finding);
-    }
+    const grouped = groupFindingsBySource(result.findings);
 
     // Render order: static tools first, then AI
     // Generate SOURCE_LABELS dynamically from registry when available
@@ -605,31 +691,43 @@ export function formatReviewComment(
     }
     renderOrder.push('ai');
 
-    for (const src of renderOrder) {
-      const findings = grouped.get(src);
-      if (!findings || findings.length === 0) continue;
+    if (result.findings.length <= MAX_VISIBLE_FINDINGS) {
+      // Small reviews: EXACTLY the historical per-tool output (byte-identical
+      // backward compat — comment-format-signal Fix 1 hard rule).
+      comment += renderFindingGroups(grouped, renderOrder, SOURCE_LABELS);
+    } else {
+      // Fix 1: top slice by severity stays visible (merged across tools, with
+      // a Source column since the per-tool headers no longer sit next to
+      // every row); ALL remaining findings collapse into ONE details block,
+      // still grouped per tool in today's format.
+      const ranked = [...result.findings].sort(
+        (a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4),
+      );
+      const visible = ranked.slice(0, MAX_VISIBLE_FINDINGS);
+      const rest = ranked.slice(MAX_VISIBLE_FINDINGS);
 
-      // Registry labels are trusted literals; unknown sources come from
-      // finding.source (LLM/tool output) and must be sanitized.
-      const label = SOURCE_LABELS[src] ?? sanitizeTableCell(src);
-      comment += `**${label} (${findings.length})**\n`;
-      comment += `| Severity | Category | File | Message |\n`;
-      comment += `|----------|----------|------|----------|\n`;
-
-      for (const finding of findings) {
+      comment += `**\ud83c\udfaf Top ${visible.length} findings (by severity)**\n`;
+      comment += `| Severity | Source | Category | File | Message |\n`;
+      comment += `|----------|--------|----------|------|----------|\n`;
+      for (const finding of visible) {
         const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
-        // ALL finding fields are LLM/tool-derived (and ultimately derived
-        // from the attacker-controlled PR diff) — sanitize every cell, not
-        // just the message.
         const severity = sanitizeTableCell(String(finding.severity));
+        // Same trusted-literal-or-sanitized label as the group headers.
+        const src = finding.source ?? 'ai';
+        const sourceLabel = SOURCE_LABELS[src] ?? sanitizeTableCell(src);
         const category = sanitizeTableCell(String(finding.category));
         const location = sanitizeTableCell(
           finding.line ? `${finding.file}:${finding.line}` : finding.file,
         );
         const message = sanitizeTableCell(finding.message);
-        comment += `| ${emoji} ${severity} | ${category} | ${location} | ${message} |\n`;
+        comment += `| ${emoji} ${severity} | ${sourceLabel} | ${category} | ${location} | ${message} |\n`;
       }
       comment += '\n';
+
+      comment += `<details>\n`;
+      comment += `<summary>\ud83d\udcca +${rest.length} more findings (all severities)</summary>\n\n`;
+      comment += renderFindingGroups(groupFindingsBySource(rest), renderOrder, SOURCE_LABELS);
+      comment += `</details>\n\n`;
     }
   }
 
