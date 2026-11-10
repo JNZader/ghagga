@@ -1,5 +1,17 @@
 # ghagga-triage-engine
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [d9827d0]
+- Updated dependencies [97ee9af]
+- Updated dependencies [97a5c74]
+- Updated dependencies [07a06f8]
+- Updated dependencies [455967a]
+- Updated dependencies [0ebccde]
+  - ghagga-core@3.8.0
+
 ## 0.3.3
 
 ### Patch Changes

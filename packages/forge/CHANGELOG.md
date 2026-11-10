@@ -1,5 +1,24 @@
 # ghagga-forge
 
+## 3.8.0
+
+### Minor Changes
+
+- 455967a: Add an opt-in nightly health digest for SaaS/App repositories: set `digestsEnabled` on a repository (or at the installation level for repos using global settings) and the server aggregates the stored review findings in the database — zero LLM calls, zero tokens — and publishes them nightly at 03:00 UTC as ONE `GHAGGA Health Digest` issue per repository, updated in place on every run (per-severity window counts, score trend, top-10 riskiest files by severity weight x recency). Runs with no new findings skip without touching the issue; publication failures (e.g. missing Issues-write permission) are recorded as `FAILED` on the digest history row, never silently dropped, and the next nightly run still fires.
+  
+  Digest scheduling is a SaaS/App-only capability by design (the CLI's `ghagga health` and the GitHub Action path are unchanged); publication is GitHub-only in v1 (the GitLab port exposes MR notes only). The feature defaults to OFF for every repository.
+
+### Patch Changes
+
+- d9827d0: Fix wave: 24 backlog items from the day's five SDD 4R reviews. Correctness: spec three-writer reconciliation, extractChangedSymbols tail-fallback reset, staleness NaN fail-closed, per-side token split guards (workflow/consensus/fan-out), watermark clock-skew pin. Resilience: diagram lazy-load error boundary, digest worker lazy forge seam (deleted repo → SKIPPED not 3 attempts), settings scheduler hooks surfaced, reconciler NaN guard. Quality: fixture score-docs, 30-day window cross-refs, GRAPH_STALE_DAYS constant, mermaid-lazy regex tightened, comparePaths deduplicated, double graph load skipped. Investigation: CLI markdown output now renders Blast Radius; GatewayResponse accepts token split (bridge-side pending); semgrep failures surface as errors instead of silent 0-findings; NEEDS_HUMAN_REVIEW added to the reviewer's STATUS menu. Diagram redesigned for legibility: flowchart LR, theme-adaptive palette, 2-segment clusters, test files collapsed into per-cluster summary nodes. Comment format overhauled: top-10 visible findings with the rest collapsed (byte-capped), diagram positioned after Summary, AI summary headings normalized, cost footer honest about partial token measurement.
+- Updated dependencies [d9827d0]
+- Updated dependencies [97ee9af]
+- Updated dependencies [97a5c74]
+- Updated dependencies [07a06f8]
+- Updated dependencies [455967a]
+- Updated dependencies [0ebccde]
+  - ghagga-core@3.8.0
+
 ## 3.7.1
 
 ### Patch Changes

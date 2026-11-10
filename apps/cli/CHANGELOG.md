@@ -1,5 +1,32 @@
 # ghagga
 
+## 3.8.0
+
+### Minor Changes
+
+- 97ee9af: Add a blast-radius diagram to review comments and the dashboard: graph-backed reviews now render a sanitized, deterministic mermaid flowchart of the narrowed blast radius (changed files, their dependents, tests, and import edges in both directions, capped at 25 nodes / 40 edges with directory clustering) in an open `### Blast Radius` section between Files Changed and the cost footer. On by default wherever blast radius runs; reviews without a graph, without diagram data, or with an oversize blast radius keep byte-identical comments (counts-only fallback, no section).
+  
+  The capped node/edge lists and legend flags (`stale`, `truncated`, omitted-per-cluster counts) persist inside the existing review metadata, are projected through a single optional `blastRadiusDiagram` DTO key on `GET /api/reviews`, and the dashboard detail modal renders the same pre-rendered mermaid source via a lazily loaded mermaid chunk — no bundle cost for reviews without diagram data, with a read-only source fallback when rendering fails.
+- 07a06f8: Add graph-guided context retrieval: reviews now include a budgeted "Graph Neighborhood" section listing each changed file's direct importers, imports and exported symbols, assembled from the dependency graph index. On by default when a graph is available (`ghagga index` or a published `ghagga/graph` branch); disable with `--no-graph-context` or `enableGraphContext: false`. The section degrades fail-closed (missing, stale >7d, or oversized graph → no section, prompts byte-identical to before) and never shrinks the diff budget — it rides a dedicated `graphContextMaxTokens` sidecar (default 1200).
+  
+  Also persist a measured input/output token split: providers that report usage now feed `reviews.input_tokens` / `reviews.output_tokens` (additive nullable columns, `tokens_used` remains authoritative), and the cost footer shows the measured split, falling back to an "estimated 70/30" label when unmeasured.
+- 0ebccde: Add output style calibration: every prose review voice (simple, workflow specialists and synthesis, consensus stances, diagnostic, fan-out lenses) now appends a compact OUTPUT_STYLE_CALIBRATION directive — one-line MESSAGE/SUGGESTION, verdict-first bold SUMMARY, file:line references, zero filler — targeting ~30-40% fewer output tokens. On by default; disable with `--no-compress-output` or `.ghagga.json` `"compressOutput": false` to restore byte-identical prompts. Refuter and contrarian voices stay excluded.
+  
+  Also measure the output-token split for the previously unmeasured modes: simple, diagnostic, and fan-out now report `metadata.outputTokensUsed` (fan-out sums across lenses, contrarians, and refuters), and the cost footer renders the measured split, falling back to the "estimated 70/30" label on providers that report no split (gateway).
+
+### Patch Changes
+
+- d9827d0: Fix wave: 24 backlog items from the day's five SDD 4R reviews. Correctness: spec three-writer reconciliation, extractChangedSymbols tail-fallback reset, staleness NaN fail-closed, per-side token split guards (workflow/consensus/fan-out), watermark clock-skew pin. Resilience: diagram lazy-load error boundary, digest worker lazy forge seam (deleted repo → SKIPPED not 3 attempts), settings scheduler hooks surfaced, reconciler NaN guard. Quality: fixture score-docs, 30-day window cross-refs, GRAPH_STALE_DAYS constant, mermaid-lazy regex tightened, comparePaths deduplicated, double graph load skipped. Investigation: CLI markdown output now renders Blast Radius; GatewayResponse accepts token split (bridge-side pending); semgrep failures surface as errors instead of silent 0-findings; NEEDS_HUMAN_REVIEW added to the reviewer's STATUS menu. Diagram redesigned for legibility: flowchart LR, theme-adaptive palette, 2-segment clusters, test files collapsed into per-cluster summary nodes. Comment format overhauled: top-10 visible findings with the rest collapsed (byte-capped), diagram positioned after Summary, AI summary headings normalized, cost footer honest about partial token measurement.
+- Updated dependencies [d9827d0]
+- Updated dependencies [97ee9af]
+- Updated dependencies [97a5c74]
+- Updated dependencies [07a06f8]
+- Updated dependencies [455967a]
+- Updated dependencies [0ebccde]
+  - ghagga-core@3.8.0
+  - ghagga-forge@3.8.0
+  - ghagga-triage-engine@0.3.4
+
 ## 3.7.1
 
 ### Patch Changes

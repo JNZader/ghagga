@@ -1,5 +1,20 @@
 # @ghagga/server
 
+## 3.2.4
+
+### Patch Changes
+
+- Updated dependencies [d9827d0]
+- Updated dependencies [97ee9af]
+- Updated dependencies [97a5c74]
+- Updated dependencies [07a06f8]
+- Updated dependencies [455967a]
+- Updated dependencies [0ebccde]
+  - ghagga-core@3.8.0
+  - ghagga-db@3.8.0
+  - ghagga-forge@3.8.0
+  - @ghagga/types@3.0.10
+
 ## 3.2.3
 
 ### Patch Changes
