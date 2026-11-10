@@ -365,4 +365,13 @@ export class GitLabForgeAdapter
       'GitLabForgeAdapter.updateDigestIssue: unsupported — the GitLab port exposes MR notes only; digest publication is GitHub-only in v1',
     );
   }
+
+  /** Digest-issue lookup is unsupported on GitLab — see {@link createDigestIssue}. */
+  async findOpenDigestIssue(repo: RepoRef, title: string): Promise<{ number: number } | null> {
+    void repo;
+    void title;
+    throw new Error(
+      'GitLabForgeAdapter.findOpenDigestIssue: unsupported — the GitLab port exposes MR notes only; digest publication is GitHub-only in v1',
+    );
+  }
 }

@@ -222,6 +222,8 @@ export async function reconcileDigestSchedulersForInstallation(
 export interface DigestPublication {
   createDigestIssue(title: string, body: string): Promise<{ number: number }>;
   updateDigestIssue(issueNumber: number, body: string): Promise<void>;
+  /** Adopt-before-create idempotency — see DigestPublicationCapable. */
+  findOpenDigestIssue(title: string): Promise<{ number: number } | null>;
 }
 
 export interface DigestRunDeps {
@@ -272,6 +274,7 @@ async function makeGitHubDigestPublication(
   return {
     createDigestIssue: (title, body) => adapter.createDigestIssue(repoRef, title, body),
     updateDigestIssue: (issueNumber, body) => adapter.updateDigestIssue(repoRef, issueNumber, body),
+    findOpenDigestIssue: (title) => adapter.findOpenDigestIssue(repoRef, title),
   };
 }
 
@@ -372,6 +375,22 @@ export async function runDigestForRepository(
   const body = formatDigestIssue(inputs, trend, fileRisks);
 
   // 5. Publish: update in place, or create (first run / rotated issue).
+  // Adopt-before-create (4R RISK-001/RES-001): a prior attempt may have
+  // CREATED the issue and died before rotateOpenDigest committed — a blind
+  // POST mints an orphan on every retry (BullMQ attempts 3 → up to 3 issues
+  // per night, recurring). Look for an open digest issue first and ADOPT it;
+  // the marker can't be faked into file paths (sanitize strips HTML
+  // comments) and a user who hand-writes the exact title is voluntarily
+  // adopting the digest.
+  const createOrAdopt = async (): Promise<number> => {
+    const existing = await forge.findOpenDigestIssue(DIGEST_ISSUE_TITLE);
+    if (existing) {
+      await forge.updateDigestIssue(existing.number, body);
+      return existing.number;
+    }
+    const created = await forge.createDigestIssue(DIGEST_ISSUE_TITLE, body);
+    return created.number;
+  };
   let issueNumber: number;
   if (open?.issueNumber != null) {
     try {
@@ -379,12 +398,12 @@ export async function runDigestForRepository(
       issueNumber = open.issueNumber;
     } catch (error) {
       if (getErrorStatus(error) === 404) {
-        // Digest issue gone (deleted, or repo transferred): create a fresh one
-        // and rotate the open pointer to it. NOTE: GitHub allows EDITING a
-        // closed issue (200), so "closed" alone keeps the same issue; only a
-        // vanished issue (404) rotates.
-        const created = await forge.createDigestIssue(DIGEST_ISSUE_TITLE, body);
-        issueNumber = created.number;
+        // Digest issue gone (deleted, or repo transferred): rotate to a
+        // fresh one — THROUGH adopt-before-create, so a crashed prior
+        // attempt's orphan is adopted instead of duplicated. NOTE: GitHub
+        // allows EDITING a closed issue (200), so "closed" alone keeps the
+        // same issue; only a vanished issue (404) rotates.
+        issueNumber = await createOrAdopt();
       } else {
         // Permission drift / outage — reject so BullMQ retries, then the failed
         // handler records FAILED (attempts exhausted). Never a silent skip.
@@ -392,8 +411,7 @@ export async function runDigestForRepository(
       }
     }
   } else {
-    const created = await forge.createDigestIssue(DIGEST_ISSUE_TITLE, body);
-    issueNumber = created.number;
+    issueNumber = await createOrAdopt();
   }
 
   // 6. POSTED: rotate the open pointer to this run's row (flip + insert, ONE

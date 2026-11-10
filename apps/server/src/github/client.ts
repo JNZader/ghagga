@@ -582,6 +582,55 @@ export async function createIssue(
 }
 
 /**
+ * Find the repository's first OPEN issue with an exact title match.
+ *
+ * Used by the nightly digest for adopt-before-create idempotency: a prior
+ * run may have CREATED the digest issue and died before recording its
+ * number — the retry looks it up here and ADOPTS it instead of minting a
+ * second issue. Exact-title match over open issues (one page is enough:
+ * the digest title is unique per repo by construction).
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
+ */
+export async function findOpenIssueByTitle(
+  owner: string,
+  repo: string,
+  title: string,
+  token: string,
+): Promise<{ number: number } | null> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100`;
+
+  return githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error listing issues: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const issues = (await response.json()) as Array<{
+      number: number;
+      title: string;
+      pull_request?: unknown;
+    }>;
+    const match = issues.find((issue) => issue.title === title && issue.pull_request === undefined);
+    return match ? { number: match.number } : null;
+  });
+}
+
+/**
  * Update a repository issue in place (title and/or body) via PATCH.
  *
  * Used by the nightly digest to overwrite the digest issue body (marker-headed)

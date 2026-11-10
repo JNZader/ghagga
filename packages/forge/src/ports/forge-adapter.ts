@@ -317,6 +317,13 @@ export interface DigestPublicationCapable {
   createDigestIssue(repo: RepoRef, title: string, body: string): Promise<{ number: number }>;
   /** Overwrite the digest issue body in place by its forge-native number. */
   updateDigestIssue(repo: RepoRef, issueNumber: number, body: string): Promise<void>;
+  /**
+   * Find the repository's OPEN digest issue by exact title; null when none.
+   * Adopt-before-create idempotency for the digest worker: a crashed
+   * attempt that already created the issue must be adopted on retry, not
+   * duplicated (the DB one-open invariant cannot see forge-side orphans).
+   */
+  findOpenDigestIssue(repo: RepoRef, title: string): Promise<{ number: number } | null>;
 }
 
 /**

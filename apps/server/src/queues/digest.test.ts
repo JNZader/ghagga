@@ -97,6 +97,7 @@ function makeForge(overrides: Partial<DigestPublication> = {}): DigestPublicatio
   return {
     createDigestIssue: vi.fn().mockResolvedValue({ number: 42 }),
     updateDigestIssue: vi.fn().mockResolvedValue(undefined),
+    findOpenDigestIssue: vi.fn().mockResolvedValue(null),
     ...overrides,
   };
 }
@@ -286,6 +287,62 @@ describe('runDigestForRepository', () => {
     expect(mockRotateOpenDigest).toHaveBeenCalledWith(
       mockDb,
       expect.objectContaining({ successor: expect.objectContaining({ issueNumber: 99 }) }),
+    );
+  });
+
+  it('RISK-001 adopt-before-create: no open row but an orphan issue exists → ADOPTS it, never creates a second', async () => {
+    // A prior attempt created issue #55 and died before rotateOpenDigest
+    // committed. The retry must find #55, update it in place, and record
+    // it — NOT mint a duplicate digest issue.
+    wireEnabled({ open: null });
+    mockGetReviewsSinceWatermark.mockResolvedValue([reviewRow()]);
+    const forge = makeForge({
+      findOpenDigestIssue: vi.fn().mockResolvedValue({ number: 55 }),
+    });
+    mockRotateOpenDigest.mockResolvedValue(openDigestRow({ id: 21, issueNumber: 55 }));
+
+    const result = await runDigestForRepository(7, makeRunDeps(forge));
+
+    expect(result).toBe('POSTED');
+    expect(forge.findOpenDigestIssue).toHaveBeenCalledTimes(1);
+    expect(forge.createDigestIssue).not.toHaveBeenCalled();
+    expect(forge.updateDigestIssue).toHaveBeenCalledWith(55, expect.any(String));
+    expect(mockRotateOpenDigest).toHaveBeenCalledWith(
+      mockDb,
+      expect.objectContaining({ successor: expect.objectContaining({ issueNumber: 55 }) }),
+    );
+  });
+
+  it("RISK-001 404 path: a crashed attempt's orphan is adopted, not duplicated", async () => {
+    // Open row points at a DEAD issue (deleted). Attempt 1 already rotated:
+    // it 404'd, created #77, and died before committing the rotation.
+    // Attempt 2 re-404s on the dead number, then must ADOPT #77.
+    wireEnabled({ open: openDigestRow() });
+    mockGetReviewsSinceWatermark.mockResolvedValue([reviewRow()]);
+    const gone = Object.assign(new Error('GitHub API error updating issue: 404 Not Found'), {
+      name: 'GitHubApiError',
+      status: 404,
+    });
+    let updateCalls = 0;
+    const forge = makeForge({
+      updateDigestIssue: vi.fn(async (_issueNumber: number) => {
+        updateCalls += 1;
+        if (updateCalls === 1) throw gone; // the dead open-row issue
+        return undefined; // adopting the orphan succeeds
+      }),
+      findOpenDigestIssue: vi.fn().mockResolvedValue({ number: 77 }),
+      createDigestIssue: vi.fn().mockResolvedValue({ number: 42 }),
+    });
+    mockRotateOpenDigest.mockResolvedValue(openDigestRow({ id: 22, issueNumber: 77 }));
+
+    const result = await runDigestForRepository(7, makeRunDeps(forge));
+
+    expect(result).toBe('POSTED');
+    expect(forge.createDigestIssue).not.toHaveBeenCalled();
+    expect(forge.updateDigestIssue).toHaveBeenCalledTimes(2);
+    expect(mockRotateOpenDigest).toHaveBeenCalledWith(
+      mockDb,
+      expect.objectContaining({ successor: expect.objectContaining({ issueNumber: 77 }) }),
     );
   });
 

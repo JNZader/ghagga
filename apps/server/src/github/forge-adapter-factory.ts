@@ -103,6 +103,10 @@ const githubClientPort: GitHubClientPort = {
     if (!('updateIssue' in githubClient)) return undefined;
     return githubClient.updateIssue;
   },
+  get findOpenIssueByTitle() {
+    if (!('findOpenIssueByTitle' in githubClient)) return undefined;
+    return githubClient.findOpenIssueByTitle;
+  },
 };
 
 /** Per-call composition input for {@link makeGitHubAdapter}. */

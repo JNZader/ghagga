@@ -215,6 +215,21 @@ export interface GitHubClientPort {
     issue: { title?: string; body?: string },
     token: string,
   ): Promise<void>;
+
+  /**
+   * Optional digest-issue LOOKUP delegation (nightly-health-digest).
+   * Mirrors `client.ts` `findOpenIssueByTitle` — `GET /repos/{o}/{r}/issues
+   * ?state=open` filtered by exact title match. Returns the first open
+   * issue with the requested title, or null when none exists. Powers the
+   * digest worker's adopt-before-create idempotency (a crashed attempt
+   * that already created the issue must be adopted, not duplicated).
+   */
+  findOpenIssueByTitle?(
+    owner: string,
+    repo: string,
+    title: string,
+    token: string,
+  ): Promise<{ number: number } | null>;
 }
 
 /**

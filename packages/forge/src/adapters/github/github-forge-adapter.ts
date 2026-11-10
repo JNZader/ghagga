@@ -431,6 +431,26 @@ export class GitHubForgeAdapter
     );
   }
 
+  async findOpenDigestIssue(repo: RepoRef, title: string): Promise<{ number: number } | null> {
+    this.#assertDigestRepo(repo);
+    const findOpenIssueByTitle = this.#client.findOpenIssueByTitle;
+    if (!findOpenIssueByTitle) {
+      throw new TypeError('GitHubForgeAdapter digest publication capability is unavailable');
+    }
+    const found = await this.#mapAuth(() =>
+      findOpenIssueByTitle(this.#owner, this.#repo, title, this.#token),
+    );
+    if (found === null) {
+      return null;
+    }
+    if (!Number.isSafeInteger(found?.number) || found.number < 1) {
+      throw new TypeError(
+        'GitHubForgeAdapter.findOpenDigestIssue: client returned an invalid issue number',
+      );
+    }
+    return { number: found.number };
+  }
+
   // ─── Base: reads ───────────────────────────────────────────────
 
   async fetchDiff(ref: ChangeRequestRef): Promise<UnifiedDiff> {
