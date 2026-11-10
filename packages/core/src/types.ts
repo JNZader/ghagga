@@ -229,6 +229,14 @@ export interface ReviewSettings {
 
   /** Enable blast-radius analysis using dependency graph. Default: false. */
   enableBlastRadius?: boolean;
+  /**
+   * Append the OUTPUT_STYLE_CALIBRATION appendix to every prose review
+   * voice (review-output-compression). Default: undefined/true = ON;
+   * explicit `false` removes the block and every prompt becomes
+   * byte-identical to the pre-change baseline. Refuter and contrarian
+   * voices are excluded in both states.
+   */
+  compressOutput?: boolean;
   /** Max files in blast-radius before falling back to full diff. Default: 50. */
   maxBlastRadiusFiles?: number;
   /** Max traversal depth for dependency graph. Default: 3. */

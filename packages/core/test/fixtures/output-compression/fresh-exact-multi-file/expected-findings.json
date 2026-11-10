@@ -1,0 +1,14 @@
+[
+  {
+    "severity": "medium",
+    "category": "maintainability",
+    "file": "src/api.ts",
+    "line": 6
+  },
+  {
+    "severity": "low",
+    "category": "maintainability",
+    "file": "src/util.ts",
+    "line": 16
+  }
+]

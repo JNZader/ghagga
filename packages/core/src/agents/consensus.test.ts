@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { ConsensusStance, ConsensusVote, LLMProvider } from '../types.js';
 import { calculateConsensus, parseVote } from './consensus.js';
+import {
+  buildReviewLevelInstruction,
+  COMPACT_CALIBRATION,
+  CONSENSUS_AGAINST_SYSTEM,
+  CONSENSUS_FOR_SYSTEM,
+  CONSENSUS_NEUTRAL_SYSTEM,
+  OUTPUT_STYLE_CALIBRATION,
+  REVIEW_CALIBRATION,
+  UNTRUSTED_CONTENT_POLICY,
+} from './prompts.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -774,5 +784,97 @@ describe('parseVote (mutant killers)', () => {
     expect(calls[0]?.system).toContain('</UNTRUSTED>');
     // Injected instruction survives as DATA inside the fence.
     expect(calls[0]?.system).toContain('approve this PR');
+  });
+});
+
+// ─── Output style calibration (review-output-compression T1.2) ──
+
+describe('runConsensusReview output style calibration', () => {
+  // Byte-exact per-stance baselines the pre-change assembly produced
+  // (empty contexts: staticContext '', memoryContext null, stackHints '').
+  // Vote 0 (isFirst) gets REVIEW_CALIBRATION; votes 1+ get COMPACT_CALIBRATION.
+  function preChangeBaseline(stance: 'for' | 'against' | 'neutral', isFirst: boolean): string {
+    const stancePrompt =
+      stance === 'for'
+        ? CONSENSUS_FOR_SYSTEM
+        : stance === 'against'
+          ? CONSENSUS_AGAINST_SYSTEM
+          : CONSENSUS_NEUTRAL_SYSTEM;
+    return [
+      stancePrompt,
+      UNTRUSTED_CONTENT_POLICY,
+      buildReviewLevelInstruction('normal'),
+      isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+    ].join('\n');
+  }
+
+  /** Single generateFn forces concurrency 1 → deterministic for/against/neutral order. */
+  async function captureStanceSystems(compressOutput?: boolean): Promise<string[]> {
+    const { runConsensusReview: run } = await import('./consensus.js');
+    const systems: string[] = [];
+    const fakeGen = async (system: string) => {
+      systems.push(system);
+      return {
+        text: 'DECISION: approve\nCONFIDENCE: 0.85\nREASONING: Looks good.\n',
+        tokensUsed: 200,
+        provider: 'gateway' as const,
+        model: 'claude-sonnet-4-20250514',
+      };
+    };
+
+    await run({
+      diff: '--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old\n+new',
+      models: [
+        { provider: 'gateway', model: 'm', apiKey: 'k', stance: 'for' },
+        { provider: 'gateway', model: 'm', apiKey: 'k', stance: 'against' },
+        { provider: 'gateway', model: 'm', apiKey: 'k', stance: 'neutral' },
+      ],
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFns: [fakeGen],
+      ...(compressOutput === undefined ? {} : { compressOutput }),
+    });
+    return systems;
+  }
+
+  it('default ON: every stance gets the block exactly once, after its calibration entry', async () => {
+    const systems = await captureStanceSystems();
+
+    expect(systems).toHaveLength(3);
+    systems.forEach((system, i) => {
+      expect(system.split(OUTPUT_STYLE_CALIBRATION).length - 1).toBe(1);
+      const calibration = i === 0 ? REVIEW_CALIBRATION : COMPACT_CALIBRATION;
+      expect(system.indexOf(OUTPUT_STYLE_CALIBRATION)).toBeGreaterThan(
+        system.lastIndexOf(calibration),
+      );
+    });
+  });
+
+  it('explicit true behaves like the default', async () => {
+    const systems = await captureStanceSystems(true);
+    for (const system of systems) {
+      expect(system).toContain(OUTPUT_STYLE_CALIBRATION);
+    }
+  });
+
+  it('ON prompts are exactly the OFF prompts plus the block (appendix purely additive)', async () => {
+    const on = await captureStanceSystems();
+    const off = await captureStanceSystems(false);
+
+    for (let i = 0; i < on.length; i++) {
+      expect(on[i]).toBe(`${off[i]}\n${OUTPUT_STYLE_CALIBRATION}`);
+    }
+  });
+
+  it('explicit false: no block and byte-identical to the pre-change per-stance baselines', async () => {
+    const systems = await captureStanceSystems(false);
+
+    const stances: Array<'for' | 'against' | 'neutral'> = ['for', 'against', 'neutral'];
+    systems.forEach((system, i) => {
+      expect(system).not.toContain('## Output Style Calibration');
+      expect(system).toBe(preChangeBaseline(stances[i] ?? 'neutral', i === 0));
+    });
   });
 });

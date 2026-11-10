@@ -1,0 +1,3 @@
+security-001: stands
+security-002: refute
+contrarian-001: stands

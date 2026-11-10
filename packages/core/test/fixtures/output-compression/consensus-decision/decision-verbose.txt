@@ -1,0 +1,3 @@
+DECISION: reject
+CONFIDENCE: 0.8
+REASONING: The change adds an unused import in the API surface and grows the utility module with another constant-returning helper. Neither issue is critical in isolation, but both raise maintenance cost without delivering user value, and both are directly visible in the diff, which puts them well above the review confidence bar. Addressing them is cheap, so I recommend fixing them before approval rather than approving with follow-up debt.

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "H1",
+    "confidence": "high",
+    "relatedFiles": ["src/auth/interceptor.ts", "src/auth/token-store.ts"]
+  },
+  {
+    "id": "H2",
+    "confidence": "medium",
+    "relatedFiles": ["src/hooks/use-session.ts"]
+  }
+]

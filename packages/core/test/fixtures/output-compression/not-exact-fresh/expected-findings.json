@@ -1,0 +1,8 @@
+[
+  {
+    "severity": "info",
+    "category": "maintainability",
+    "file": "src/util.ts",
+    "line": null
+  }
+]

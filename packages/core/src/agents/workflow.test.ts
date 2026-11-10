@@ -11,6 +11,7 @@ vi.mock('./prompts.js', () => ({
   WORKFLOW_SYNTHESIS_SYSTEM: 'SYNTHESIS_SYSTEM',
   REVIEW_CALIBRATION: 'REVIEW_CALIBRATION_BLOCK',
   COMPACT_CALIBRATION: 'COMPACT_CALIBRATION_BLOCK',
+  OUTPUT_STYLE_CALIBRATION: 'OUTPUT_STYLE_CALIBRATION_BLOCK',
   UNTRUSTED_CONTENT_POLICY: 'UNTRUSTED_CONTENT_POLICY_BLOCK',
   STATIC_ANALYSIS_UNTRUSTED_LABEL: 'STATIC ANALYSIS OUTPUT (untrusted tool/data)',
   SPECIALIST_OUTPUT_UNTRUSTED_LABEL: 'SPECIALIST OUTPUT (untrusted, model-generated)',
@@ -831,5 +832,71 @@ describe('runWorkflowReview token split aggregation', () => {
     // invent one (tokensUsed itself lives on the parse argument).
     expect(result.metadata.inputTokensUsed).toBeUndefined();
     expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+});
+
+// ─── Output style calibration (review-output-compression T1.2) ──
+
+describe('runWorkflowReview output style calibration', () => {
+  const SENTINEL = 'OUTPUT_STYLE_CALIBRATION_BLOCK';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParseReviewResponse.mockReturnValue(makeParsedResult());
+  });
+
+  /** Run one workflow review and capture all 6 systems (5 specialists + synthesis). */
+  async function captureSystems(compressOutput?: boolean): Promise<string[]> {
+    const { fn, calls } = makeMockGenerateFn();
+    await runWorkflowReview(
+      makeInput({
+        generateFns: [fn],
+        ...(compressOutput === undefined ? {} : { compressOutput }),
+      }),
+    );
+    return calls.map((c) => c.system);
+  }
+
+  it('default ON: every specialist and the synthesis get the block exactly once, after the calibration entry', async () => {
+    const systems = await captureSystems();
+
+    expect(systems).toHaveLength(6);
+    for (const system of systems) {
+      expect(system.split(SENTINEL).length - 1).toBe(1);
+      // Pinned slot: immediately after whichever calibration entry the voice used.
+      const lastCalibrationEnd = Math.max(
+        system.lastIndexOf('REVIEW_CALIBRATION_BLOCK'),
+        system.lastIndexOf('COMPACT_CALIBRATION_BLOCK'),
+      );
+      expect(system.indexOf(SENTINEL)).toBeGreaterThan(lastCalibrationEnd);
+    }
+  });
+
+  it('explicit true behaves like the default', async () => {
+    const systems = await captureSystems(true);
+    for (const system of systems) {
+      expect(system).toContain(SENTINEL);
+    }
+  });
+
+  it('ON prompts are exactly the OFF prompts plus the block (appendix purely additive)', async () => {
+    const on = await captureSystems();
+    const off = await captureSystems(false);
+
+    expect(on).toHaveLength(off.length);
+    for (let i = 0; i < on.length; i++) {
+      expect(on[i]).toBe(`${off[i]}\n${SENTINEL}`);
+    }
+  });
+
+  it('explicit false: no block anywhere and every system ends at its calibration entry', async () => {
+    const systems = await captureSystems(false);
+
+    for (const system of systems) {
+      expect(system).not.toContain(SENTINEL);
+      expect(
+        system.endsWith('REVIEW_CALIBRATION_BLOCK') || system.endsWith('COMPACT_CALIBRATION_BLOCK'),
+      ).toBe(true);
+    }
   });
 });

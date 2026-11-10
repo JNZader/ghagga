@@ -1,0 +1,9 @@
+STATUS: FAILED
+SUMMARY: **Dead import** at src/app.py:7 — `step` is imported but `main` never calls it.
+FINDINGS:
+- SEVERITY: medium
+  CATEGORY: bug
+  FILE: src/app.py
+  LINE: 7
+  MESSAGE: **Dead import** — `step` from `src.other` is never called by `main`.
+  SUGGESTION: Wire `step` into `main` or drop the import.

@@ -8,6 +8,7 @@ import {
   COMPACT_CALIBRATION,
   CONSENSUS_FOR_SYSTEM,
   MEMORY_UNTRUSTED_LABEL,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   SIMPLE_REVIEW_SYSTEM,
   sanitizeUntrusted,
@@ -256,6 +257,62 @@ describe('REVIEW_CALIBRATION', () => {
 
   it('permits STATUS: PASSED with zero findings', () => {
     expect(REVIEW_CALIBRATION).toContain('STATUS: PASSED with zero findings');
+  });
+});
+
+// ─── OUTPUT_STYLE_CALIBRATION (review-output-compression) ───────
+
+describe('OUTPUT_STYLE_CALIBRATION', () => {
+  it('keeps labeled blocks and field names EXACT — compresses prose only', () => {
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('EXACTLY as specified');
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('compress only the prose inside fields');
+  });
+
+  it('directs MESSAGE to one line — defect and trigger condition', () => {
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('MESSAGE: one line');
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('No context restatement');
+  });
+
+  it('directs SUGGESTION to one line — the fix only', () => {
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('SUGGESTION: one line');
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('Do not restate the problem');
+  });
+
+  it('directs SUMMARY verdict-first with **bold** key terms', () => {
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('lead with the verdict');
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('**term**');
+  });
+
+  it('directs compact multi-option comparisons', () => {
+    expect(OUTPUT_STYLE_CALIBRATION).toMatch(/comparisons compactly/);
+  });
+
+  it('directs zero filler', () => {
+    expect(OUTPUT_STYLE_CALIBRATION).toMatch(/Zero filler/);
+  });
+
+  it('prefers file:line references over prose location', () => {
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('Prefer file:line references');
+  });
+
+  it('defers to voice-specific length caps — cap wins, block composes', () => {
+    // Consensus diff-size scaling and the diagnostic hypothesis format keep
+    // composing: the block compresses WITHIN the voice's cap, never past it.
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('that cap wins');
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('compress within it');
+  });
+
+  it('contains NO markdown-table syntax — bold survives sanitization, tables cannot', () => {
+    // sanitizeTableCell escapes pipes/newlines (sanitize.ts): a table inside
+    // MESSAGE/SUGGESTION would render as escaped garbage in the findings
+    // table. The block therefore prescribes bold, never tables.
+    expect(OUTPUT_STYLE_CALIBRATION).not.toContain('|');
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('never as tables');
+    expect(OUTPUT_STYLE_CALIBRATION).toContain('**');
+  });
+
+  it('is a headed appendix block', () => {
+    expect(OUTPUT_STYLE_CALIBRATION.startsWith('## Output Style Calibration')).toBe(true);
   });
 });
 

@@ -172,4 +172,42 @@ describe('cost footer measured split', () => {
     expect(footer).toContain('in ~7K / out 3K, input estimated');
     expect(footer).not.toContain('estimated 70/30');
   });
+
+  // ─── Gap-voice rows (review-output-compression T2.4) ───────────
+  // simple/diagnostic/fan-out now propagate the measured split into
+  // metadata (T2.1-T2.3); the footer's three split states must apply to
+  // them exactly as they already do for workflow/consensus.
+
+  it('gap voices with a measured split render the output side measured (no 70/30 label)', () => {
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4', {
+      inputTokens: 7_000,
+      outputTokens: 3_000,
+    });
+    expect(cost.inputMeasured).toBe(true);
+    expect(cost.outputMeasured).toBe(true);
+    const footer = formatCostFooter(cost);
+    expect(footer).toContain('in 7K / out 3K');
+    expect(footer).not.toContain('estimated 70/30');
+    expect(footer).not.toContain('~');
+  });
+
+  it('one-sided split (input only) is NOT a measured zero for output — partial state renders', () => {
+    // 4R RES-001: the ?? 0 bug would have written outputTokensUsed=0 as
+    // MEASURED, zeroing the output cost. With the per-side fix, an
+    // input-only split must hit the partial-measurement path.
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4', {
+      inputTokens: 7_000,
+      // outputTokens absent — NOT zero
+    });
+    expect(cost.inputMeasured).toBe(true);
+    expect(cost.outputMeasured).toBe(false);
+  });
+
+  it('gap voices on a no-split provider (gateway) fall back to the heuristic with estimated labeling', () => {
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4');
+    expect(cost.inputMeasured).toBe(false);
+    expect(cost.outputMeasured).toBe(false);
+    const footer = formatCostFooter(cost);
+    expect(footer).toContain('in 7K / out 3K, estimated 70/30');
+  });
 });

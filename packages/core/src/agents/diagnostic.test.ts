@@ -8,6 +8,13 @@ vi.mock('../providers/ollama.js', () => ({
 import type { GenerateTextFn } from '../providers/generate-fn.js';
 import { createOllamaGenerateFn } from '../providers/ollama.js';
 import { parseHypotheses, runDiagnosticReview } from './diagnostic.js';
+import {
+  buildReviewLevelInstruction,
+  DIAGNOSTIC_SYSTEM,
+  OUTPUT_STYLE_CALIBRATION,
+  REVIEW_CALIBRATION,
+  UNTRUSTED_CONTENT_POLICY,
+} from './prompts.js';
 
 // ─── parseHypotheses ────────────────────────────────────────────
 
@@ -522,5 +529,141 @@ describe('runDiagnosticReview untrusted framing', () => {
     });
 
     expect(calls[0]?.system).not.toContain('STATIC ANALYSIS OUTPUT');
+  });
+});
+
+// ─── Output style calibration (review-output-compression T1.2) ──
+
+describe('runDiagnosticReview output style calibration', () => {
+  /** The byte-exact prompt the pre-change assembly produced (empty contexts). */
+  const PRE_CHANGE_BASELINE = [
+    DIAGNOSTIC_SYSTEM,
+    UNTRUSTED_CONTENT_POLICY,
+    buildReviewLevelInstruction('normal'),
+    REVIEW_CALIBRATION,
+  ].join('\n');
+
+  function makeCapture(): {
+    calls: Array<{ system: string; prompt: string }>;
+  } {
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const captureFn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+      calls.push({ system, prompt });
+      return {
+        text: 'STATUS: PASSED\nSUMMARY: ok.\nFINDINGS:\n',
+        tokensUsed: 10,
+        provider: 'ollama' as const,
+        model: 'llama3',
+      };
+    });
+    vi.mocked(createOllamaGenerateFn).mockReturnValue(captureFn);
+    return { calls };
+  }
+
+  async function run(calls: Array<{ system: string; prompt: string }>, compressOutput?: boolean) {
+    await runDiagnosticReview({
+      diff: '--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b',
+      provider: 'ollama',
+      model: 'llama3',
+      apiKey: 'k',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      ...(compressOutput === undefined ? {} : { compressOutput }),
+    });
+    return calls;
+  }
+
+  it('default ON: block appears exactly once, immediately after REVIEW_CALIBRATION', async () => {
+    const { calls } = makeCapture();
+    await run(calls);
+
+    const system = calls[0]?.system ?? '';
+    expect((system.match(/## Output Style Calibration/g) ?? []).length).toBe(1);
+    expect(system).toContain(OUTPUT_STYLE_CALIBRATION);
+    expect(system.indexOf(OUTPUT_STYLE_CALIBRATION)).toBeGreaterThan(
+      system.lastIndexOf(REVIEW_CALIBRATION),
+    );
+  });
+
+  it('explicit true behaves like the default', async () => {
+    const { calls } = makeCapture();
+    await run(calls, true);
+    expect((calls[0]?.system.match(/## Output Style Calibration/g) ?? []).length).toBe(1);
+  });
+
+  it('ON prompt is exactly the OFF prompt plus the block (appendix purely additive)', async () => {
+    const onCapture = makeCapture();
+    const onSystem = (await run(onCapture.calls))[0]?.system;
+    const offCapture = makeCapture();
+    const offSystem = (await run(offCapture.calls, false))[0]?.system;
+
+    expect(onSystem).toBe(`${offSystem}\n${OUTPUT_STYLE_CALIBRATION}`);
+  });
+
+  it('explicit false: no block and byte-identical to the pre-change baseline', async () => {
+    const { calls } = makeCapture();
+    await run(calls, false);
+
+    const system = calls[0]?.system ?? '';
+    expect(system).not.toContain('## Output Style Calibration');
+    expect(system).toBe(PRE_CHANGE_BASELINE);
+  });
+});
+
+// ─── Output token split (review-output-compression T2.2) ────────
+
+describe('runDiagnosticReview output token split', () => {
+  function makeCaptureFn(generateOverrides: Partial<Awaited<ReturnType<GenerateTextFn>>> = {}): {
+    calls: Array<{ system: string; prompt: string }>;
+    fn: GenerateTextFn;
+  } {
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const fn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+      calls.push({ system, prompt });
+      return {
+        text: 'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: ok.\nFINDINGS:\n',
+        tokensUsed: 900,
+        provider: 'ollama' as const,
+        model: 'llama3',
+        ...generateOverrides,
+      };
+    });
+    vi.mocked(createOllamaGenerateFn).mockReturnValue(fn);
+    return { calls, fn };
+  }
+
+  async function runSplit() {
+    return runDiagnosticReview({
+      diff: '--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b',
+      provider: 'ollama',
+      model: 'llama3',
+      apiKey: 'k',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+    });
+  }
+
+  it('split-reporting provider (ollama usage) sets outputTokensUsed', async () => {
+    makeCaptureFn({ inputTokens: 600, outputTokens: 300 });
+    const result = await runSplit();
+
+    expect(result.metadata.mode).toBe('diagnostic');
+    expect(result.metadata.tokensUsed).toBe(900);
+    expect(result.metadata.inputTokensUsed).toBe(600);
+    expect(result.metadata.outputTokensUsed).toBe(300);
+  });
+
+  it('provider without a split leaves the fields absent and the review succeeds', async () => {
+    makeCaptureFn();
+    const result = await runSplit();
+
+    expect(result.metadata.mode).toBe('diagnostic');
+    expect(result.metadata.tokensUsed).toBe(900);
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
   });
 });

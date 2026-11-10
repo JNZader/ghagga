@@ -21,6 +21,7 @@ import {
   buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   SIMPLE_REVIEW_SYSTEM,
   STATIC_ANALYSIS_UNTRUSTED_LABEL,
@@ -50,6 +51,14 @@ export interface SimpleReviewInput {
    * ''/absent → no section; the prompt stays byte-identical to baseline.
    */
   graphNeighborhoodContext?: string;
+
+  /**
+   * Append the OUTPUT_STYLE_CALIBRATION appendix (review-output-compression).
+   * Default undefined/true = ON; explicit false = prompts byte-identical
+   * to the pre-change baseline (the empty string is dropped by
+   * `.filter(Boolean)`).
+   */
+  compressOutput?: boolean;
 
   /**
    * Optional backend-agnostic generation function.
@@ -204,6 +213,9 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     input.checklistContext ?? '',
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,
+    // review-output-compression: default ON; explicit false appends ''
+    // which `.filter(Boolean)` drops — prompts stay byte-identical.
+    input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -226,7 +238,7 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
       message: `Review complete — ${result.tokensUsed} tokens, ${(executionTimeMs / 1000).toFixed(1)}s`,
     });
 
-    return parseReviewResponse(
+    const reviewResult = parseReviewResponse(
       result.text,
       result.provider as LLMProvider,
       result.model,
@@ -234,6 +246,20 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
       executionTimeMs,
       memoryContext,
     );
+
+    // review-output-compression T2.1: propagate the measured token split
+    // — each side written only when the provider reported it (4R RES-001:
+    // `?? 0` on a one-sided split wrote a MEASURED ZERO for the missing
+    // side, silently zeroing the ~5x-priced output cost in the footer).
+    // tokensUsed stays the authoritative total.
+    if (result.inputTokens !== undefined) {
+      reviewResult.metadata.inputTokensUsed = result.inputTokens;
+    }
+    if (result.outputTokens !== undefined) {
+      reviewResult.metadata.outputTokensUsed = result.outputTokens;
+    }
+
+    return reviewResult;
   } catch (error) {
     // Groq is a direct provider: a failed call must fail the review (the Action
     // test treats a swallowed NEEDS_HUMAN_REVIEW as a false pass).

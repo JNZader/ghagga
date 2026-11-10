@@ -1,0 +1,18 @@
+STATUS: FAILED
+SUMMARY: The change adds a parallel token-refresh path and reworks the session hook.
+Two defects block the merge: concurrent 401 responses can race the refresh call in the
+interceptor, and the session hook keeps polling the previous account after an account
+switch. Both fixes are local and cheap.
+FINDINGS:
+- SEVERITY: high
+  CATEGORY: bug
+  FILE: src/auth/interceptor.ts
+  LINE: 42
+  MESSAGE: Concurrent 401 responses each trigger their own refresh call because in-flight refreshes are not deduplicated.
+  SUGGESTION: Share one in-flight refresh promise keyed on the request.
+- SEVERITY: medium
+  CATEGORY: bug
+  FILE: src/hooks/use-session.ts
+  LINE: 18
+  MESSAGE: The session hook's effect captures the first-render userId and never re-subscribes after an account switch.
+  SUGGESTION: Add the userId dependency so the interval re-subscribes.

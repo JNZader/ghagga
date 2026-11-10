@@ -733,6 +733,60 @@ describe('golden: baseline & modes', () => {
   });
 });
 
+// ─── Output compression threading (review-output-compression T1.4) ──
+
+describe('golden: output compression threading', () => {
+  it('default (undefined) threads compressOutput: true to every mode runner', async () => {
+    await runGolden(makeInput());
+    expect(runSimpleReview).toHaveBeenCalledWith(expect.objectContaining({ compressOutput: true }));
+
+    await runGolden(makeInput({ mode: 'workflow' }));
+    expect(runWorkflowReview).toHaveBeenCalledWith(
+      expect.objectContaining({ compressOutput: true }),
+    );
+
+    await runGolden(makeInput({ mode: 'consensus' }));
+    expect(runConsensusReview).toHaveBeenCalledWith(
+      expect.objectContaining({ compressOutput: true }),
+    );
+
+    await runGolden(
+      makeInput({ mode: 'diagnostic', provider: 'ollama', model: 'llama3', apiKey: 'ollama-key' }),
+    );
+    expect(runDiagnosticReview).toHaveBeenCalledWith(
+      expect.objectContaining({ compressOutput: true }),
+    );
+
+    await runGolden(makeInput({ mode: 'fan-out' }));
+    expect(runFanOutReview).toHaveBeenCalledWith(expect.objectContaining({ compressOutput: true }));
+  });
+
+  it('settings.compressOutput: false threads an explicit false to every runner', async () => {
+    await runGolden(makeInput({ settings: makeSettings({ compressOutput: false }) }));
+    expect(runSimpleReview).toHaveBeenCalledWith(
+      expect.objectContaining({ compressOutput: false }),
+    );
+
+    await runGolden(
+      makeInput({ mode: 'fan-out', settings: makeSettings({ compressOutput: false }) }),
+    );
+    expect(runFanOutReview).toHaveBeenCalledWith(
+      expect.objectContaining({ compressOutput: false }),
+    );
+  });
+
+  it('default-ON snapshot: threading is invisible to pipeline-observable behavior (the block lives inside the agent prompts)', async () => {
+    // Authored ON-state entry beside the unchanged OFF baseline: with the
+    // agents mocked, the golden must equal the baseline bytes — proving the
+    // default-ON flag adds NO pipeline-observable drift. The block-present-
+    // exactly-once-per-voice contract is pinned by the real-prompt suites
+    // (agents/*.test.ts).
+    const run = await runGolden(makeInput());
+    expect(runSimpleReview).toHaveBeenCalledWith(expect.objectContaining({ compressOutput: true }));
+    expect(run.golden).toMatchSnapshot();
+  });
+});
+
 describe('golden: early returns', () => {
   it('flood-skip: recommendation=skip aborts before any expensive step', async () => {
     (detectFlood as M<typeof detectFlood>).mockReturnValueOnce({

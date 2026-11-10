@@ -34,6 +34,7 @@ import {
   stampFindingLedger,
   validateLens,
 } from './fan-out-lenses.js';
+import { COMPACT_CALIBRATION, OUTPUT_STYLE_CALIBRATION, REVIEW_CALIBRATION } from './prompts.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -1170,5 +1171,222 @@ describe('runFanOutReview graph neighborhood section', () => {
       expect(system).toContain('<UNTRUSTED label="GRAPH NEIGHBORHOOD');
       expect(system).toContain('imported by: src/b.ts');
     }
+  });
+});
+
+// ─── Output style calibration (review-output-compression T1.2) ──
+
+describe('runFanOutReview output style calibration', () => {
+  function makeLocalInput(overrides: Partial<FanOutReviewInput> = {}): FanOutReviewInput {
+    return {
+      diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+      provider: 'gateway',
+      model: 'claude-sonnet-4-20250514',
+      apiKey: 'test-key',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      ...overrides,
+    };
+  }
+
+  function makeCapturingFn(response = PASSED_RESPONSE): { fn: GenerateTextFn; systems: string[] } {
+    const systems: string[] = [];
+    const fn: GenerateTextFn = vi.fn(async (system: string, _prompt: string) => {
+      systems.push(system);
+      return {
+        text: response,
+        tokensUsed: 100,
+        provider: 'gateway',
+        model: 'claude-sonnet-4-20250514',
+      };
+    });
+    return { fn, systems };
+  }
+
+  async function captureLensSystems(compressOutput?: boolean): Promise<string[]> {
+    const { fn, systems } = makeCapturingFn();
+    await runFanOutReview(
+      makeLocalInput({
+        generateFns: [fn],
+        lenses: ['security', 'performance', 'typing'],
+        ...(compressOutput === undefined ? {} : { compressOutput }),
+      }),
+    );
+    return systems;
+  }
+
+  it('default ON: every lens system gets the block exactly once, after its calibration entry', async () => {
+    const systems = await captureLensSystems();
+
+    expect(systems).toHaveLength(3);
+    systems.forEach((system, i) => {
+      expect(system.split(OUTPUT_STYLE_CALIBRATION).length - 1).toBe(1);
+      const calibration = i === 0 ? REVIEW_CALIBRATION : COMPACT_CALIBRATION;
+      expect(system.indexOf(OUTPUT_STYLE_CALIBRATION)).toBeGreaterThan(
+        system.lastIndexOf(calibration),
+      );
+    });
+  });
+
+  it('explicit true behaves like the default', async () => {
+    const systems = await captureLensSystems(true);
+    for (const system of systems) {
+      expect(system).toContain(OUTPUT_STYLE_CALIBRATION);
+    }
+  });
+
+  it('ON lens prompts are exactly the OFF prompts plus the block (appendix purely additive)', async () => {
+    const on = await captureLensSystems();
+    const off = await captureLensSystems(false);
+
+    for (let i = 0; i < on.length; i++) {
+      expect(on[i]).toBe(`${off[i]}\n${OUTPUT_STYLE_CALIBRATION}`);
+    }
+  });
+
+  it('explicit false: no block in any lens system and each ends at its calibration entry', async () => {
+    const systems = await captureLensSystems(false);
+
+    for (const system of systems) {
+      expect(system).not.toContain('## Output Style Calibration');
+      expect(system.endsWith(REVIEW_CALIBRATION) || system.endsWith(COMPACT_CALIBRATION)).toBe(
+        true,
+      );
+    }
+  });
+
+  it('contrarian systems NEVER contain the block in either flag state', async () => {
+    for (const compressOutput of [undefined, true, false] as Array<boolean | undefined>) {
+      const lens = makeCapturingFn();
+      const contrarian = makeCapturingFn();
+      await runFanOutReview(
+        makeLocalInput({
+          generateFns: [lens.fn, contrarian.fn],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+          contrarianCount: 1,
+          ...(compressOutput === undefined ? {} : { compressOutput }),
+        }),
+      );
+
+      // Lens got the ON/OFF behavior; contrarian NEVER does.
+      expect(contrarian.systems).toHaveLength(1);
+      expect(contrarian.systems[0]).not.toContain('## Output Style Calibration');
+      expect(contrarian.systems[0]).not.toContain(OUTPUT_STYLE_CALIBRATION);
+    }
+  });
+
+  it('refuter systems NEVER contain the block in either flag state', async () => {
+    const criticalFinding = FINDING_RESPONSE(
+      'critical',
+      'security',
+      'auth.ts',
+      10,
+      'SQL injection',
+    );
+    for (const compressOutput of [undefined, true, false] as Array<boolean | undefined>) {
+      const lens = makeCapturingFn(criticalFinding);
+      const refuter1 = makeCapturingFn('security-001: stands');
+      const refuter2 = makeCapturingFn('security-001: stands');
+      await runFanOutReview(
+        makeLocalInput({
+          generateFns: [lens.fn, refuter1.fn, refuter2.fn],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+          refuterCount: 2,
+          ...(compressOutput === undefined ? {} : { compressOutput }),
+        }),
+      );
+
+      for (const system of [...refuter1.systems, ...refuter2.systems]) {
+        expect(system).not.toContain('## Output Style Calibration');
+        expect(system).not.toContain(OUTPUT_STYLE_CALIBRATION);
+      }
+    }
+  });
+});
+
+// ─── Output token split aggregation (review-output-compression T2.3) ──
+
+describe('runFanOutReview output token split aggregation', () => {
+  const CRITICAL = FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection');
+
+  function makeUsageFn(
+    response: string,
+    usage: { tokensUsed?: number; inputTokens?: number; outputTokens?: number },
+  ): GenerateTextFn {
+    return vi.fn().mockResolvedValue({
+      text: response,
+      tokensUsed: usage.tokensUsed ?? 100,
+      provider: 'gateway',
+      model: 'claude-sonnet-4-20250514',
+      ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+      ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    });
+  }
+
+  function makeBaseInput(fns: GenerateTextFn[]): FanOutReviewInput {
+    return {
+      diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+      provider: 'gateway',
+      model: 'claude-sonnet-4-20250514',
+      apiKey: 'test-key',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFns: fns,
+      lenses: ['security', 'performance', 'error-handling'],
+      pinLensesToFirst: true,
+      contrarianCount: 1,
+      refuterCount: 2,
+    };
+  }
+
+  it('3 lenses + 1 contrarian + 2 refuters, all split-reporting: outputTokensUsed sums all 6 calls', async () => {
+    // 3 lenses pinned to fn[0] → fn[0] called 3x, contrarian fn[1] 1x,
+    // refuters fn[2]/fn[3] 1x each. All report 70/30 per 100 total.
+    const lensFn = makeUsageFn(CRITICAL, { inputTokens: 70, outputTokens: 30 });
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, { inputTokens: 70, outputTokens: 30 });
+    const refuter1 = makeUsageFn('security-001: stands', { inputTokens: 70, outputTokens: 30 });
+    const refuter2 = makeUsageFn('security-001: stands', { inputTokens: 70, outputTokens: 30 });
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    expect(result.metadata.tokensUsed).toBe(600);
+    expect(result.metadata.inputTokensUsed).toBe(420);
+    expect(result.metadata.outputTokensUsed).toBe(180);
+    expect(lensFn).toHaveBeenCalledTimes(3);
+    expect(contrarianFn).toHaveBeenCalledTimes(1);
+    expect(refuter1).toHaveBeenCalledTimes(1);
+    expect(refuter2).toHaveBeenCalledTimes(1);
+  });
+
+  it('no voice reports a split: both fields absent, tokensUsed grand total unchanged', async () => {
+    const lensFn = makeUsageFn(CRITICAL, {});
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, {});
+    const refuter1 = makeUsageFn('security-001: stands', {});
+    const refuter2 = makeUsageFn('security-001: stands', {});
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    expect(result.metadata.tokensUsed).toBe(600);
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+
+  it('a single split-reporting voice among unmeasured ones marks the run measured (hasSplit semantics)', async () => {
+    const lensFn = makeUsageFn(CRITICAL, {}); // 3 unmeasured lens calls
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, { inputTokens: 80, outputTokens: 20 });
+    const refuter1 = makeUsageFn('security-001: stands', {});
+    const refuter2 = makeUsageFn('security-001: stands', {});
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    expect(result.metadata.tokensUsed).toBe(600);
+    expect(result.metadata.inputTokensUsed).toBe(80);
+    expect(result.metadata.outputTokensUsed).toBe(20);
   });
 });

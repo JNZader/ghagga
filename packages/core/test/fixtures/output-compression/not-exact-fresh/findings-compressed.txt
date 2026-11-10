@@ -1,0 +1,9 @@
+STATUS: NEEDS_HUMAN_REVIEW
+SUMMARY: **Unconsumed export** `helperTwo` in src/util.ts — caller not visible in this diff.
+FINDINGS:
+- SEVERITY: info
+  CATEGORY: maintainability
+  FILE: src/util.ts
+  LINE: N/A
+  MESSAGE: **Unconsumed export** — `helperTwo` has no visible caller in this diff.
+  SUGGESTION: Land it with the change that consumes it.

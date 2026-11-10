@@ -1,0 +1,9 @@
+STATUS: FAILED
+SUMMARY: The application module adds a second import at module scope. Because `main` only calls `run`, the newly imported `step` is never invoked, which both fails the project's lint configuration for unused imports and signals that the intended wiring was forgotten. This is a small, high-confidence fix.
+FINDINGS:
+- SEVERITY: medium
+  CATEGORY: bug
+  FILE: src/app.py
+  LINE: 7
+  MESSAGE: The import of `step` from `src.other` is added but `main` still only calls `run`, so the new step is silently never executed and the import is dead code.
+  SUGGESTION: Either wire `step` into the `main` flow where it was intended to run, or remove the import until the consuming change lands.

@@ -31,6 +31,7 @@ import {
   buildMemoryContext,
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
@@ -465,6 +466,14 @@ export interface FanOutReviewInput {
    * section, prompts byte-identical to baseline.
    */
   graphNeighborhoodContext?: string;
+
+  /**
+   * Append the OUTPUT_STYLE_CALIBRATION appendix (review-output-compression)
+   * to every LENS system. Default undefined/true = ON; explicit false =
+   * prompts byte-identical to the pre-change baseline. Contrarian and
+   * refuter systems NEVER receive the appendix in either state.
+   */
+  compressOutput?: boolean;
 }
 
 /** Unlensed whole-diff voice. Not a specialty lens and not SIMPLE_REVIEW_SYSTEM. */
@@ -709,6 +718,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
         input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+        // review-output-compression: LENSES get the appendix (default ON;
+        // explicit false appends '' which `.filter(Boolean)` drops).
+        // CONTRARIAN_SYSTEM and REFUTER_SYSTEM assemblies below are
+        // deliberately untouched in both flag states — their output is
+        // already maximally terse (design decision 1/6).
+        input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
       ]
         .filter(Boolean)
         .join('\n');
@@ -728,6 +743,8 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
         label: lens.label,
         text: result.text,
         tokensUsed: result.tokensUsed,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
         providerUsed: result.provider,
         modelUsed: result.model,
       };
@@ -741,6 +758,9 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     label: string;
     text: string;
     tokensUsed: number;
+    /** Measured split — undefined when the provider reports none. */
+    inputTokens?: number;
+    outputTokens?: number;
     providerUsed: string;
     modelUsed: string;
   };
@@ -772,6 +792,8 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
           label: `Contrarian ${i + 1}`,
           text: result.text,
           tokensUsed: result.tokensUsed,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
           providerUsed: result.provider,
           modelUsed: result.model,
         };
@@ -788,6 +810,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
   // ── Step 2: Collect findings from all lenses ────────────────
   let totalTokens = 0;
+  // review-output-compression T2.3: measured split aggregated across EVERY
+  // generate call (lenses + contrarian + refuters); set on metadata only
+  // when a voice actually reported one (workflow hasSplit semantics).
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let splitReported = false;
   const allFindings: import('../types.js').ReviewFinding[] = [];
   const modelsUsed: string[] = [];
   const lensStatuses: ReviewStatus[] = [];
@@ -799,6 +827,14 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
+      if (result.value.inputTokens !== undefined) {
+        splitReported = true;
+        totalInputTokens += result.value.inputTokens;
+      }
+      if (result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalOutputTokens += result.value.outputTokens;
+      }
       modelsUsed.push(
         `${result.value.name}:${result.value.providerUsed}/${result.value.modelUsed}`,
       );
@@ -846,6 +882,14 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
+      if (result.value.inputTokens !== undefined) {
+        splitReported = true;
+        totalInputTokens += result.value.inputTokens;
+      }
+      if (result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalOutputTokens += result.value.outputTokens;
+      }
       modelsUsed.push(`${voiceName}:${result.value.providerUsed}/${result.value.modelUsed}`);
 
       const findings = parseFindingsBlock(result.value.text);
@@ -936,6 +980,14 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       for (const result of refuterResults) {
         if (result.status !== 'fulfilled') continue;
         totalTokens += result.value.tokensUsed;
+        if (result.value.inputTokens !== undefined) {
+          splitReported = true;
+          totalInputTokens += result.value.inputTokens;
+        }
+        if (result.value.outputTokens !== undefined) {
+          splitReported = true;
+          totalOutputTokens += result.value.outputTokens;
+        }
         const verdicts = parseRefuterVerdicts(result.value.text);
         for (const candidate of candidates) {
           if (!candidate.id) continue;
@@ -1004,6 +1056,9 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       provider: modelsUsed.length > 0 ? provider : 'none',
       model,
       tokensUsed: totalTokens,
+      ...(splitReported
+        ? { inputTokensUsed: totalInputTokens, outputTokensUsed: totalOutputTokens }
+        : {}),
       executionTimeMs,
       toolsRun: [],
       toolsSkipped: [],

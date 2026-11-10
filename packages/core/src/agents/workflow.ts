@@ -32,6 +32,7 @@ import {
   buildMemoryContext,
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   SPECIALIST_OUTPUT_UNTRUSTED_LABEL,
   STATIC_ANALYSIS_UNTRUSTED_LABEL,
@@ -102,6 +103,13 @@ export interface WorkflowReviewInput {
    * all prompts stay byte-identical to baseline.
    */
   graphNeighborhoodContext?: string;
+
+  /**
+   * Append the OUTPUT_STYLE_CALIBRATION appendix (review-output-compression)
+   * to every specialist and the synthesis call. Default undefined/true = ON;
+   * explicit false = prompts byte-identical to the pre-change baseline.
+   */
+  compressOutput?: boolean;
 }
 
 interface SpecialistConfig {
@@ -244,6 +252,9 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
         input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         hasContext ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+        // review-output-compression: default ON; explicit false appends ''
+        // which `.filter(Boolean)` drops — prompts stay byte-identical.
+        input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
       ]
         .filter(Boolean)
         .join('\n');
@@ -359,6 +370,8 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     UNTRUSTED_CONTENT_POLICY,
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,
+    // review-output-compression: synthesis is a prose voice too.
+    input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
   ]
     .filter(Boolean)
     .join('\n');

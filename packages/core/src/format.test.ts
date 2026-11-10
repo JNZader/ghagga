@@ -1709,9 +1709,53 @@ Found one potential issue in the diff.
   });
 });
 
+// ─── Cost footer measured split for gap voices (review-output-compression T2.4) ──
+
+describe('formatReviewComment cost footer — gap voices', () => {
+  it('simple/diagnostic/fan-out results carrying outputTokensUsed render the measured split', () => {
+    for (const mode of ['simple', 'diagnostic', 'fan-out'] as const) {
+      const result = makeResult({
+        metadata: {
+          mode,
+          provider: 'cli-bridge',
+          model: 'claude-sonnet-4-20250514',
+          tokensUsed: 10_000,
+          inputTokensUsed: 7_000,
+          outputTokensUsed: 3_000,
+          executionTimeMs: 1000,
+          toolsRun: [],
+          toolsSkipped: [],
+        },
+      });
+      const output = formatReviewComment(result);
+      expect(output).toContain('in 7K / out 3K');
+      expect(output).not.toContain('estimated 70/30');
+      expect(output).not.toContain('~');
+    }
+  });
+
+  it('gateway gap-voice result (no split metadata) keeps the heuristic with estimated labeling', () => {
+    const result = makeResult({
+      metadata: {
+        mode: 'simple',
+        provider: 'gateway',
+        model: 'claude-sonnet-4-20250514',
+        tokensUsed: 10_000,
+        executionTimeMs: 1000,
+        toolsRun: [],
+        toolsSkipped: [],
+      },
+    });
+    const output = formatReviewComment(result);
+    expect(output).toContain('in 7K / out 3K, estimated 70/30');
+  });
+});
+
 // ─── AI summary heading demotion (comment-format-signal Fix 3) ──
 
 describe('demoteMarkdownHeadings', () => {
+  // 4R REL-001: this test was deleted by a T2.4 collateral hunk — restored.
+  // It pins the exact PR #479 defect (## inside ### Summary nesting wrong).
   it('demotes ## to ### (the PR #479 defect)', () => {
     expect(demoteMarkdownHeadings('## Review Findings\n\nAll good.')).toBe(
       '### Review Findings\n\nAll good.',

@@ -1,0 +1,15 @@
+STATUS: FAILED
+SUMMARY: **Unused import** at src/api.ts:6 and a **duplicated helper** at src/util.ts:16 — both quick local fixes.
+FINDINGS:
+- SEVERITY: medium
+  CATEGORY: maintainability
+  FILE: src/api.ts
+  LINE: 6
+  MESSAGE: **Unused import** `other` from './other.js' — nothing in this file consumes it.
+  SUGGESTION: Drop the import or land the consuming code with it.
+- SEVERITY: low
+  CATEGORY: maintainability
+  FILE: src/util.ts
+  LINE: 16
+  MESSAGE: **Duplicated helper** — `helperTwo` copy-pastes `helper` to return constant 2.
+  SUGGESTION: Parameterize `helper(n)` instead of one function per constant.
