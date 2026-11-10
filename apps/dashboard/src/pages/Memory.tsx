@@ -103,6 +103,7 @@ function SessionItem({
 
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         'group relative w-full rounded-lg border px-4 py-3 text-left transition-colors',
@@ -129,6 +130,7 @@ function SessionItem({
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-text-muted">{session.observationCount} obs</span>
+          {/* biome-ignore lint/a11y/useSemanticElements: nested inside the session <button>; a real <button> here is invalid HTML nesting. Keyboard activation handled per PRODOPS-008. */}
           <span
             role="button"
             tabIndex={0}
@@ -186,6 +188,7 @@ function SessionItem({
 function TrashIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={cn('h-4 w-4', className)}
       fill="none"
       viewBox="0 0 24 24"
@@ -204,6 +207,7 @@ function TrashIcon({ className }: { className?: string }) {
 function LinkIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={cn('h-4 w-4', className)}
       fill="none"
       viewBox="0 0 24 24"
@@ -222,6 +226,7 @@ function LinkIcon({ className }: { className?: string }) {
 function WarningIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={cn('h-5 w-5', className)}
       fill="none"
       viewBox="0 0 24 24"
@@ -257,6 +262,7 @@ function ObservationCard({
 
   return (
     <Card className="cursor-pointer transition-colors hover:border-primary-500/30">
+      {/* biome-ignore lint/a11y/useSemanticElements: the card body nests a checkbox and a delete <button>; a real <button> here is invalid HTML nesting. Keyboard activation handled per PRODOPS-008. */}
       <div
         className="relative flex items-start gap-3 outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-card"
         onClick={() => onClick(observation)}
@@ -327,6 +333,7 @@ function ObservationCard({
 
         {/* Delete button (top-right) */}
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             onDelete(observation);
@@ -443,7 +450,7 @@ function VirtualizedObservationList({
   selectedIds?: Set<number>;
   onToggleSelect?: (obs: Observation) => void;
 }) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLUListElement>(null);
 
   const shouldVirtualize = observations.length > VIRTUALIZATION_THRESHOLD;
 
@@ -458,14 +465,9 @@ function VirtualizedObservationList({
   // For small lists, render all items directly (also works in jsdom tests)
   if (!shouldVirtualize) {
     return (
-      <div
-        className="space-y-4"
-        data-testid="observation-list"
-        role="list"
-        aria-label="Observations"
-      >
+      <ul className="space-y-4" data-testid="observation-list" aria-label="Observations">
         {observations.map((obs) => (
-          <div key={obs.id} role="listitem">
+          <li key={obs.id}>
             <ObservationCard
               observation={obs}
               onDelete={onDelete}
@@ -474,27 +476,25 @@ function VirtualizedObservationList({
               isSelected={selectedIds?.has(obs.id)}
               onToggleSelect={onToggleSelect}
             />
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     );
   }
 
   return (
-    <div
+    <ul
       ref={parentRef}
       data-testid="virtualized-observation-list"
       className="max-h-[70vh] overflow-y-auto"
-      role="list"
       aria-label="Observations"
     >
       <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const obs = observations[virtualItem.index];
           return (
-            <div
+            <li
               key={obs.id}
-              role="listitem"
               data-index={virtualItem.index}
               ref={virtualizer.measureElement}
               className="absolute left-0 top-0 w-full pb-4"
@@ -508,11 +508,11 @@ function VirtualizedObservationList({
                 isSelected={selectedIds?.has(obs.id)}
                 onToggleSelect={onToggleSelect}
               />
-            </div>
+            </li>
           );
         })}
       </div>
-    </div>
+    </ul>
   );
 }
 
@@ -827,6 +827,7 @@ export function Memory() {
           {/* Clear Memory button (Tier 2) — visible when repo selected */}
           {selectedRepo && (
             <button
+              type="button"
               onClick={() => {
                 setDialogError(null);
                 setShowClearDialog(true);
@@ -910,6 +911,7 @@ export function Memory() {
             <div className="w-72 shrink-0 space-y-2">
               {hasEmptySessions && (
                 <button
+                  type="button"
                   onClick={() => {
                     setDialogError(null);
                     setShowCleanupDialog(true);
@@ -1019,6 +1021,7 @@ export function Memory() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setDialogError(null);
                   setShowPurgeDialog(true);

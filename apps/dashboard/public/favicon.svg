@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>GHAGGA</title>
   <circle cx="50" cy="50" r="48" fill="#1a1a2e"/>
   <text x="50" y="68" font-size="60" text-anchor="middle" font-family="serif">G</text>
   <defs>
