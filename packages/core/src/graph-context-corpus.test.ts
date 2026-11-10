@@ -148,6 +148,12 @@ async function captureSimpleSystemPrompt(
     reviewLevel: 'normal',
     generateFn,
     graphNeighborhoodContext,
+    // review-output-compression: the corpus pins the graph-context delta
+    // in isolation — the expected-prompt-*.txt fixtures were authored with
+    // compression OFF (pre-feature bytes), so the capture stays pinned to
+    // the explicit-false path. The calibration block's own on/off contract
+    // lives in the agents/* suites.
+    compressOutput: false,
   });
   return captured;
 }

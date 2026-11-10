@@ -21,6 +21,7 @@ import {
   buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   SIMPLE_REVIEW_SYSTEM,
   STATIC_ANALYSIS_UNTRUSTED_LABEL,
@@ -212,6 +213,9 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     input.checklistContext ?? '',
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,
+    // review-output-compression: default ON; explicit false appends ''
+    // which `.filter(Boolean)` drops — prompts stay byte-identical.
+    input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
   ]
     .filter(Boolean)
     .join('\n');

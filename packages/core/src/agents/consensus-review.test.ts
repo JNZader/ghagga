@@ -16,6 +16,7 @@ vi.mock('./prompts.js', () => ({
   CONSENSUS_NEUTRAL_SYSTEM: 'CONSENSUS_NEUTRAL_SYSTEM',
   REVIEW_CALIBRATION: 'REVIEW_CALIBRATION_BLOCK',
   COMPACT_CALIBRATION: 'COMPACT_CALIBRATION_BLOCK',
+  OUTPUT_STYLE_CALIBRATION: 'OUTPUT_STYLE_CALIBRATION_BLOCK',
   UNTRUSTED_CONTENT_POLICY: 'UNTRUSTED_CONTENT_POLICY_BLOCK',
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
   buildGraphNeighborhoodSection: vi.fn((ctx: string | null) =>

@@ -32,6 +32,7 @@ import {
   CONSENSUS_AGAINST_SYSTEM,
   CONSENSUS_FOR_SYSTEM,
   CONSENSUS_NEUTRAL_SYSTEM,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
@@ -292,6 +293,9 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
         input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+        // review-output-compression: default ON; explicit false appends ''
+        // which `.filter(Boolean)` drops — prompts stay byte-identical.
+        input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
       ]
         .filter(Boolean)
         .join('\n');

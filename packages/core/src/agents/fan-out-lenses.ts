@@ -31,6 +31,7 @@ import {
   buildMemoryContext,
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
@@ -717,6 +718,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
         input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,
+        // review-output-compression: LENSES get the appendix (default ON;
+        // explicit false appends '' which `.filter(Boolean)` drops).
+        // CONTRARIAN_SYSTEM and REFUTER_SYSTEM assemblies below are
+        // deliberately untouched in both flag states — their output is
+        // already maximally terse (design decision 1/6).
+        input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
       ]
         .filter(Boolean)
         .join('\n');

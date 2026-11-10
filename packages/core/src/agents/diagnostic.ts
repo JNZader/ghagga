@@ -26,6 +26,7 @@ import {
   buildMemoryContext,
   buildReviewLevelInstruction,
   DIAGNOSTIC_SYSTEM,
+  OUTPUT_STYLE_CALIBRATION,
   REVIEW_CALIBRATION,
   STATIC_ANALYSIS_UNTRUSTED_LABEL,
   UNTRUSTED_CONTENT_POLICY,
@@ -176,6 +177,9 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
     input.checklistContext ?? '',
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,
+    // review-output-compression: default ON; explicit false appends ''
+    // which `.filter(Boolean)` drops — prompts stay byte-identical.
+    input.compressOutput !== false ? OUTPUT_STYLE_CALIBRATION : '',
   ]
     .filter(Boolean)
     .join('\n');
