@@ -7,6 +7,10 @@
 
 ---
 
+## Purpose
+
+This spec governs the prompt layer of the review engine: system-prompt calibration, review-level plumbing, memory-context framing, and untrusted-content fencing for injected context sections. It covers `packages/core/src/agents/` and `packages/core/src/memory/`, and constrains prompt changes to be provider-agnostic and contract-preserving.
+
 ## Requirements
 
 ### Requirement: Memory Context Retrieval Limit
@@ -224,8 +228,6 @@ The `SIMPLE_REVIEW_SYSTEM` constant MUST NOT contain the instruction "Check adhe
 - AND the calibration block's prohibition against inventing standards does not conflict with explicitly provided rules
 
 ---
-
-## Non-Functional Requirements
 
 ### Requirement: No Schema or API Changes
 

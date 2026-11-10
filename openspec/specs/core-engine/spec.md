@@ -402,9 +402,6 @@ The `ReviewInput` type MUST be extended with new optional fields to support the 
 - THEN none of the new fields MUST affect the pipeline
 - AND existing behavior MUST be preserved exactly
 
-
-## Backend-Agnostic Generation and Rate-Aware Scheduling
-
 ### Requirement: Backend-Agnostic Text Generation
 
 The review engine MUST expose one asynchronous text-generation contract for AI
