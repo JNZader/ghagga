@@ -462,6 +462,19 @@ describe('isGraphStale', () => {
     const meta = makeValidMetadata({ lastIndexedAt: thirtyDaysAgo.toISOString() });
     expect(isGraphStale(meta)).toBe(true);
   });
+
+  it('returns true (fail-closed) for an unparseable lastIndexedAt', () => {
+    // `new Date(garbage).getTime()` is NaN; `NaN > GRAPH_STALE_DAYS` is false,
+    // which used to fail OPEN — a garbage date passed as fresh. It must be
+    // treated as stale: an unknown indexing time is not evidence of freshness.
+    const meta = makeValidMetadata({ lastIndexedAt: 'not-a-date' });
+    expect(isGraphStale(meta)).toBe(true);
+  });
+
+  it('returns true (fail-closed) for an empty lastIndexedAt string', () => {
+    const meta = makeValidMetadata({ lastIndexedAt: '' });
+    expect(isGraphStale(meta)).toBe(true);
+  });
 });
 
 // ─── Constants ──────────────────────────────────────────────────

@@ -173,6 +173,51 @@ describe('runDigestForRepository', () => {
     expect(mockInsertDigestRun).not.toHaveBeenCalled();
   });
 
+  it('clock-skew guard: DB createdAt AFTER worker runAt → watermark pinned to the max counted createdAt, not runAt', async () => {
+    // Regression: the watermark was stored as runAt (the WORKER clock) while
+    // review rows carry the DB clock (defaultNow()). The window query has no
+    // upper bound, so with the DB clock ahead a counted row created at
+    // 03:00:30 (DB) during a 03:00:00 (worker) run ALSO satisfies the next
+    // run's `createdAt > watermark` filter — double-counted. The stored
+    // watermark must cover every row this run counted.
+    wireEnabled({ open: null });
+    const skewed = new Date('2026-11-10T03:00:30.000Z'); // 30s AHEAD of NOW
+    mockGetReviewsSinceWatermark.mockResolvedValue([reviewRow({ createdAt: skewed })]);
+    const forge = makeForge();
+    mockRotateOpenDigest.mockResolvedValue(openDigestRow({ id: 21 }));
+
+    const result = await runDigestForRepository(7, makeRunDeps(forge));
+
+    expect(result).toBe('POSTED');
+    expect(mockRotateOpenDigest).toHaveBeenCalledWith(mockDb, {
+      repositoryId: 7,
+      successor: {
+        runAt: NOW,
+        issueNumber: 42,
+        watermark: skewed, // max(runAt, latest counted createdAt)
+        findingsCount: 1,
+        score: expect.any(Number),
+      },
+    });
+  });
+
+  it('clock-skew guard: DB createdAt behind worker runAt → watermark stays runAt', async () => {
+    wireEnabled({ open: null });
+    // Normal case: rows created BEFORE the worker fired — no skew adjustment.
+    mockGetReviewsSinceWatermark.mockResolvedValue([reviewRow()]);
+    const forge = makeForge();
+    mockRotateOpenDigest.mockResolvedValue(openDigestRow({ id: 22 }));
+
+    await runDigestForRepository(7, makeRunDeps(forge));
+
+    expect(mockRotateOpenDigest).toHaveBeenCalledWith(
+      mockDb,
+      expect.objectContaining({
+        successor: expect.objectContaining({ watermark: NOW }),
+      }),
+    );
+  });
+
   it('create-then-update marker flow: issue #42 updated in place, create NOT called again, no second open row', async () => {
     wireEnabled({ open: openDigestRow() });
     mockGetReviewsSinceWatermark.mockResolvedValue([reviewRow()]);

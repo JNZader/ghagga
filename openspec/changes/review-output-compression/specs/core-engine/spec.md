@@ -3,7 +3,7 @@
 > **Change**: `review-output-compression`
 > **Base spec**: `openspec/specs/core-engine/spec.md`
 >
-> **Merge seam**: the open change `graph-context-retrieval` also MODIFIES `Requirement: Token Budget Management` (graph-neighborhood budget). This delta is written against the current base text (two scenarios below). Whichever change archives second MUST rebase onto the archived result so both requirement extensions survive — do not archive blind.
+> **Merge seam**: `graph-context-retrieval` (change #471) is ARCHIVED (2026-11-10) — its `Token Budget Management` modifications (graph-neighborhood budget) are already in the base spec. The open change `context-hybrid-ranking` also MODIFIES `Requirement: Token Budget Management` (ranked neighborhood selection), written against that same archived base. Whichever of this change and `context-hybrid-ranking` archives second MUST merge with the other's modifications to this requirement — see `openspec/changes/context-hybrid-ranking/specs/core-engine/spec.md` — so all three requirement extensions survive; do not archive blind.
 
 ## MODIFIED Requirements
 

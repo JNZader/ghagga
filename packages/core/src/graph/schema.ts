@@ -496,5 +496,10 @@ export function isGraphStale(metadata: GraphMetadata): boolean {
   const now = new Date();
   const diffMs = now.getTime() - lastIndexed.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  // Fail CLOSED: an unparseable lastIndexedAt yields NaN, and
+  // `NaN > GRAPH_STALE_DAYS` is false — without this guard a garbage date
+  // would silently pass as fresh. An unknown indexing time is not evidence
+  // of freshness; treat it as stale.
+  if (Number.isNaN(diffDays)) return true;
   return diffDays > GRAPH_STALE_DAYS;
 }

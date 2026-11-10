@@ -290,7 +290,8 @@ async function makeGitHubDigestPublication(
  *     create + rotate; no open row → createDigestIssue.
  *  6. POSTED row via rotateOpenDigest (flip old open + insert successor in ONE
  *     transaction — the one-open invariant never breaks): issueNumber,
- *     issueOpen=true, watermark=runAt, score snapshot.
+ *     issueOpen=true, watermark=max(runAt, latest counted createdAt) (clock-
+ *     skew guard — see step 6 body), score snapshot.
  *
  * Publication failures REJECT so BullMQ retries; the FAILED row is recorded by
  * the worker's failed handler once attempts are exhausted (recordFailedDigestRun).
@@ -416,12 +417,24 @@ export async function runDigestForRepository(
 
   // 6. POSTED: rotate the open pointer to this run's row (flip + insert, ONE
   // transaction). The partial-unique index is the double-schedule blast wall.
+  //
+  // Clock-skew guard: `runAt` is the WORKER clock while review `createdAt`
+  // values come from the DB clock (`defaultNow()`). The aggregation window
+  // has no upper bound, so if the DB clock runs ahead, a counted row with
+  // `createdAt > runAt` would ALSO satisfy the next run's
+  // `createdAt > watermark` filter — double-counted. Pin the stored
+  // watermark to the later of runAt and the max counted `createdAt` (rows
+  // arrive ORDER BY createdAt ASC, so the last row carries the max).
+  const latestCountedAt = rows.length > 0 ? rows[rows.length - 1]?.createdAt : undefined;
+  const watermark =
+    latestCountedAt && latestCountedAt.getTime() > runAt.getTime() ? latestCountedAt : runAt;
+
   const successor = await rotateOpenDigest(db, {
     repositoryId,
     successor: {
       runAt,
       issueNumber,
-      watermark: runAt,
+      watermark,
       findingsCount: inputs.findings.length,
       score,
     },

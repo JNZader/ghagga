@@ -833,6 +833,29 @@ describe('runWorkflowReview token split aggregation', () => {
     expect(result.metadata.inputTokensUsed).toBeUndefined();
     expect(result.metadata.outputTokensUsed).toBeUndefined();
   });
+
+  it('reports only the measured side on a one-sided split (no `?? 0` measured zero)', async () => {
+    // Regression: `?? 0` aggregation wrote outputTokensUsed: 0 — a MEASURED
+    // ZERO — when every voice reported inputTokens but none reported output.
+    let call = 0;
+    const fn: import('../providers/generate-fn.js').GenerateTextFn = vi.fn(
+      async (_system: string, _prompt: string) => {
+        call += 1;
+        return {
+          text: call === 6 ? 'STATUS: PASSED\nSUMMARY: ok\nFINDINGS:\n' : 'SCOPE OUTPUT',
+          tokensUsed: 100,
+          inputTokens: 70,
+          provider: 'gateway',
+          model: 'auto',
+        };
+      },
+    );
+
+    const result = await runWorkflowReview(makeInput({ generateFns: [fn] }));
+
+    expect(result.metadata.inputTokensUsed).toBe(420);
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
 });
 
 // ─── Output style calibration (review-output-compression T1.2) ──

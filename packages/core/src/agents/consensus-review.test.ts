@@ -325,4 +325,21 @@ describe('runConsensusReview token split aggregation', () => {
     expect(result.metadata.inputTokensUsed).toBeUndefined();
     expect(result.metadata.outputTokensUsed).toBeUndefined();
   });
+
+  it('reports only the measured side on a one-sided split (no `?? 0` measured zero)', async () => {
+    // Regression: `?? 0` aggregation wrote outputTokensUsed: 0 — a MEASURED
+    // ZERO — when every vote reported inputTokens but none reported output.
+    const fn: GenerateTextFn = vi.fn(async () => ({
+      text: makeVoteText(),
+      tokensUsed: 50,
+      inputTokens: 35,
+      provider: 'gateway',
+      model: 'auto',
+    }));
+
+    const result = await runConsensusReview({ ...makeInput(), generateFns: [fn] });
+
+    expect(result.metadata.inputTokensUsed).toBe(105);
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
 });

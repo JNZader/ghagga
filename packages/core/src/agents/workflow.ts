@@ -288,8 +288,13 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   let totalTokens = 0;
   // graph-context-retrieval T5.2: measured split aggregated alongside
   // tokensUsed; set on metadata only when a voice actually reported it.
+  // review-output-compression per-side guard: `?? 0` on a one-sided split
+  // wrote a MEASURED ZERO for the missing side — each side is tracked and
+  // summed only when some voice actually reported that side.
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let inputReported = false;
+  let outputReported = false;
   let splitReported = false;
   const specialistOutputs: string[] = [];
   const modelsUsed: string[] = [];
@@ -301,10 +306,15 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
-      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+      if (result.value.inputTokens !== undefined) {
+        inputReported = true;
         splitReported = true;
-        totalInputTokens += result.value.inputTokens ?? 0;
-        totalOutputTokens += result.value.outputTokens ?? 0;
+        totalInputTokens += result.value.inputTokens;
+      }
+      if (result.value.outputTokens !== undefined) {
+        outputReported = true;
+        splitReported = true;
+        totalOutputTokens += result.value.outputTokens;
       }
       specialistOutputs.push(`### ${result.value.label}\n\n${result.value.text}`);
       modelsUsed.push(
@@ -381,10 +391,15 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
     const executionTimeMs = Date.now() - startTime;
     totalTokens += synthesisResult.tokensUsed;
-    if (synthesisResult.inputTokens !== undefined || synthesisResult.outputTokens !== undefined) {
+    if (synthesisResult.inputTokens !== undefined) {
+      inputReported = true;
       splitReported = true;
-      totalInputTokens += synthesisResult.inputTokens ?? 0;
-      totalOutputTokens += synthesisResult.outputTokens ?? 0;
+      totalInputTokens += synthesisResult.inputTokens;
+    }
+    if (synthesisResult.outputTokens !== undefined) {
+      outputReported = true;
+      splitReported = true;
+      totalOutputTokens += synthesisResult.outputTokens;
     }
 
     // Parse the synthesis output using the same parser as simple mode
@@ -400,9 +415,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     // Override mode in metadata
     reviewResult.metadata.mode = 'workflow';
     reviewResult.metadata.modelsUsed = modelsUsed;
+    // Mirror of simple.ts per-side write: a side is exposed as measured only
+    // when at least one voice reported it — never a `?? 0` measured zero.
     if (splitReported) {
-      reviewResult.metadata.inputTokensUsed = totalInputTokens;
-      reviewResult.metadata.outputTokensUsed = totalOutputTokens;
+      if (inputReported) reviewResult.metadata.inputTokensUsed = totalInputTokens;
+      if (outputReported) reviewResult.metadata.outputTokensUsed = totalOutputTokens;
     }
 
     return reviewResult;
@@ -425,9 +442,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     );
     reviewResult.metadata.mode = 'workflow';
     reviewResult.metadata.modelsUsed = modelsUsed;
+    // Mirror of simple.ts per-side write: a side is exposed as measured only
+    // when at least one voice reported it — never a `?? 0` measured zero.
     if (splitReported) {
-      reviewResult.metadata.inputTokensUsed = totalInputTokens;
-      reviewResult.metadata.outputTokensUsed = totalOutputTokens;
+      if (inputReported) reviewResult.metadata.inputTokensUsed = totalInputTokens;
+      if (outputReported) reviewResult.metadata.outputTokensUsed = totalOutputTokens;
     }
     return reviewResult;
   }
