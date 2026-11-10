@@ -10,6 +10,7 @@ import { parseUnifiedDiff } from './diff/parse.js';
 import {
   buildStatsBar,
   categorizeFiles,
+  demoteMarkdownHeadings,
   formatBlastRadiusSection,
   formatFileCategorySummary,
   formatReviewComment,
@@ -1705,5 +1706,103 @@ Found one potential issue in the diff.
 <sub>📊 13K tokens (in 9K / out 4K, estimated 70/30) · $0.0858 · \`claude-sonnet-4\`</sub>
 ---
 *Powered by [GHAGGA](https://github.com/JNZader/ghagga) — AI Code Review* — @octocat`);
+  });
+});
+
+// ─── AI summary heading demotion (comment-format-signal Fix 3) ──
+
+describe('demoteMarkdownHeadings', () => {
+  it('demotes ## to ### (the PR #479 defect)', () => {
+    expect(demoteMarkdownHeadings('## Review Findings\n\nAll good.')).toBe(
+      '### Review Findings\n\nAll good.',
+    );
+  });
+
+  it('demotes # to ##', () => {
+    expect(demoteMarkdownHeadings('# Title\nbody')).toBe('## Title\nbody');
+  });
+
+  it('demotes ### to ####', () => {
+    expect(demoteMarkdownHeadings('### Details\nbody')).toBe('#### Details\nbody');
+  });
+
+  it('caps at ####: h4/h5/h6 headings stay unchanged', () => {
+    expect(demoteMarkdownHeadings('#### stays\n##### deeper\n###### deepest')).toBe(
+      '#### stays\n##### deeper\n###### deepest',
+    );
+  });
+
+  it('leaves heading-free text unchanged', () => {
+    expect(demoteMarkdownHeadings('plain text\n\n- bullet\n| a | b |')).toBe(
+      'plain text\n\n- bullet\n| a | b |',
+    );
+  });
+
+  it('returns empty/whitespace strings unchanged', () => {
+    expect(demoteMarkdownHeadings('')).toBe('');
+    expect(demoteMarkdownHeadings('   ')).toBe('   ');
+  });
+
+  it('does not treat "#nospace" or hash runs without a space as headings', () => {
+    expect(demoteMarkdownHeadings('#5 issue ref\n#nospace')).toBe('#5 issue ref\n#nospace');
+  });
+
+  it('demotes indented headings (up to 3 spaces) preserving the indent', () => {
+    expect(demoteMarkdownHeadings('  ## indented')).toBe('  ### indented');
+    // 4+ spaces is an indented code block, not a heading — untouched.
+    expect(demoteMarkdownHeadings('    ## code block')).toBe('    ## code block');
+  });
+
+  it('does NOT demote heading-like text inside code fences', () => {
+    const text = '## before\n```bash\n## not a heading\n# comment\n```\n## after';
+    expect(demoteMarkdownHeadings(text)).toBe(
+      '### before\n```bash\n## not a heading\n# comment\n```\n### after',
+    );
+  });
+
+  it('handles tilde fences and does not let a ``` line close a ~~~ fence', () => {
+    const text = '~~~\n## inside tilde fence\n```\nstill inside\n~~~\n## after';
+    expect(demoteMarkdownHeadings(text)).toBe(
+      '~~~\n## inside tilde fence\n```\nstill inside\n~~~\n### after',
+    );
+  });
+
+  it('treats an unclosed fence as protecting the remainder (no demotion after it)', () => {
+    expect(demoteMarkdownHeadings('```\n## stays literal')).toBe('```\n## stays literal');
+  });
+
+  it('does not demote an h1 empty heading into h0 (bare # becomes ##)', () => {
+    expect(demoteMarkdownHeadings('#')).toBe('##');
+  });
+});
+
+describe('formatReviewComment — summary heading demotion (Fix 3)', () => {
+  it('nests a ## summary heading as ### under the comment’s ### Summary section', () => {
+    const result = makeResult({
+      summary: '## Review Findings\n\nNo critical issues.',
+    });
+    const output = formatReviewComment(result);
+    expect(output).toContain('### Summary\n### Review Findings\n\nNo critical issues.');
+    // The h2 that used to escape the section is gone.
+    expect(output).not.toContain('\n## Review Findings');
+  });
+
+  it('is byte-identical for a heading-free summary (no demotion side effects)', () => {
+    const plain = formatReviewComment(makeResult({ summary: 'Plain summary. No headings.' }));
+    expect(plain).toContain('### Summary\nPlain summary. No headings.\n');
+    // Deterministic: same input, same bytes.
+    expect(formatReviewComment(makeResult({ summary: 'Plain summary. No headings.' }))).toBe(plain);
+  });
+
+  it('demotes after sanitization without breaking on sanitized content', () => {
+    const result = makeResult({
+      summary: '## Verdict <script>@user\n\nSee `## not a fence` inline.',
+    });
+    const output = formatReviewComment(result);
+    // Heading demoted; < escaped; mention neutralized (zero-width space
+    // after @ — match only up to the @).
+    expect(output).toContain('### Verdict &lt;script>@');
+    // Inline code span content is NOT a heading — untouched.
+    expect(output).toContain('`## not a fence`');
   });
 });

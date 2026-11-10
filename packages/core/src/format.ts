@@ -521,6 +521,69 @@ export function formatBlastRadiusSection(diagram: BlastRadiusDiagram | undefined
   return section;
 }
 
+// ─── AI summary heading normalization (comment-format-signal Fix 3) ──
+
+/**
+ * ATX heading marker: up to 3 leading spaces (GitHub-legal indentation),
+ * 1-6 `#`, then a space or end of line (`#nospace` is not a heading).
+ */
+const ATX_HEADING_RE = /^( {0,3})(#{1,6})(?: |$)/;
+
+/** Code-fence delimiter: up to 3 leading spaces, then 3+ backticks or tildes. */
+const FENCE_DELIM_RE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * Demote every markdown heading in `text` by exactly one level
+ * (`#` → `##`, `##` → `###`, `###` → `####`), capped at `####` — headings
+ * already at `####` or deeper stay unchanged.
+ *
+ * Why (comment-format-signal Fix 3): model summaries regularly open with
+ * their own `## Review Findings`-style headings. Inside the comment those
+ * render ABOVE the bot's own `### Summary` section (h2 > h3), breaking the
+ * comment's outline (PR #479: `## Review Findings` nested inside
+ * `### Summary`). Demoting by exactly one level nests model headings
+ * deterministically under the comment's section hierarchy — pure
+ * post-processing, no prompt changes.
+ *
+ * Fence-aware: heading-like text inside ```/~~~ code fences is never
+ * demoted (it is code, not structure). An unclosed fence protects
+ * everything after it — the conservative direction (no demotion).
+ */
+export function demoteMarkdownHeadings(text: string): string {
+  if (!text) return text;
+
+  const lines = text.split('\n');
+  let fenceChar: '`' | '~' | null = null;
+
+  const demoted = lines.map((line) => {
+    const fence = FENCE_DELIM_RE.exec(line);
+
+    if (fenceChar !== null) {
+      // Inside a fence: lines stay untouched. A run of the SAME marker char
+      // (3+), with nothing but whitespace around it, closes the fence.
+      const marker = fence?.[1] ?? '';
+      if (marker.length >= 3 && marker[0] === fenceChar && line.trim() === marker) {
+        fenceChar = null;
+      }
+      return line;
+    }
+
+    if (fence) {
+      fenceChar = fence[1][0] as '`' | '~';
+      return line;
+    }
+
+    const heading = ATX_HEADING_RE.exec(line);
+    // Cap: #### and deeper stay; #/##/### gain one level.
+    if (heading && heading[2].length <= 3) {
+      return `${heading[1]}#${line.slice(heading[1].length)}`;
+    }
+    return line;
+  });
+
+  return demoted.join('\n');
+}
+
 // ─── Findings rendering (comment-format-signal Fix 1) ───────────
 
 /**
@@ -645,8 +708,11 @@ export function formatReviewComment(
   comment += '\n';
 
   // Summary — raw LLM output derived from the (attacker-controlled) PR diff.
-  // Sanitized to block mention spam, hidden HTML comments, and flooding.
-  comment += `### Summary\n${sanitizeMarkdownText(result.summary, 2000)}\n\n`;
+  // Sanitized to block mention spam, hidden HTML comments, and flooding;
+  // headings demoted one level afterward so model headings nest under the
+  // comment's `### Summary` section instead of escaping it (Fix 3). A
+  // heading-free summary is byte-identical to the pre-Fix-3 output.
+  comment += `### Summary\n${demoteMarkdownHeadings(sanitizeMarkdownText(result.summary, 2000))}\n\n`;
 
   // Blast-radius diagram (blast-radius-diagram, repositioned by
   // comment-format-signal Fix 2): renders zero bytes when the metadata
