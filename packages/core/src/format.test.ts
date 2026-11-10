@@ -1754,6 +1754,14 @@ describe('formatReviewComment cost footer — gap voices', () => {
 // ─── AI summary heading demotion (comment-format-signal Fix 3) ──
 
 describe('demoteMarkdownHeadings', () => {
+  // 4R REL-001: this test was deleted by a T2.4 collateral hunk — restored.
+  // It pins the exact PR #479 defect (## inside ### Summary nesting wrong).
+  it('demotes ## to ### (the PR #479 defect)', () => {
+    expect(demoteMarkdownHeadings('## Review Findings\n\nAll good.')).toBe(
+      '### Review Findings\n\nAll good.',
+    );
+  });
+
   it('demotes # to ##', () => {
     expect(demoteMarkdownHeadings('# Title\nbody')).toBe('## Title\nbody');
   });

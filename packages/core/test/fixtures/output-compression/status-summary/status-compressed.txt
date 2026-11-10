@@ -1,0 +1,15 @@
+STATUS: FAILED
+SUMMARY: **Refresh race** at src/auth/interceptor.ts:42 and **wrong-account polling** at src/hooks/use-session.ts:18 — both local fixes.
+FINDINGS:
+- SEVERITY: high
+  CATEGORY: bug
+  FILE: src/auth/interceptor.ts
+  LINE: 42
+  MESSAGE: **Refresh race** — no in-flight dedup on concurrent 401s.
+  SUGGESTION: Share one refresh promise keyed on the request.
+- SEVERITY: medium
+  CATEGORY: bug
+  FILE: src/hooks/use-session.ts
+  LINE: 18
+  MESSAGE: **Stale closure** — effect never re-subscribes after account switch.
+  SUGGESTION: Add userId to the dep array.

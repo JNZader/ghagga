@@ -1,0 +1,28 @@
+STATUS: NEEDS_HUMAN_REVIEW
+SUMMARY: **Refresh race** (H1) + **stale userId closure** (H2) — verify both before merge.
+
+HYPOTHESIS H1: Concurrent 401s trigger racing token refreshes
+CONDITIONS: **Parallel 401 burst** — both requests enter refreshAuthToken before either completes; no in-flight dedup on dashboard load.
+VERIFICATION: Assert two mocked 401s produce exactly **one** /token call; rerun login e2e with the fix.
+CONFIDENCE: high
+FILES: src/auth/interceptor.ts, src/auth/token-store.ts
+
+HYPOTHESIS H2: Stale closure captures expired userId in session hook
+CONDITIONS: useEffect with **no dep array** reads first-render userId — polls the previous account after a switch.
+VERIFICATION: Switch userId A to B, advance timers, assert polled URL contains **B**.
+CONFIDENCE: medium
+FILES: src/hooks/use-session.ts
+
+FINDINGS:
+- SEVERITY: high
+  CATEGORY: bug
+  FILE: src/auth/interceptor.ts
+  LINE: 42
+  MESSAGE: H1: **Refresh race** — no in-flight dedup on concurrent 401s.
+  SUGGESTION: Share one refresh promise keyed on the request.
+- SEVERITY: medium
+  CATEGORY: bug
+  FILE: src/hooks/use-session.ts
+  LINE: 18
+  MESSAGE: H2: **Stale closure** — effect never re-subscribes after account switch.
+  SUGGESTION: Add userId to the dep array; assert the polled URL in a timer test.

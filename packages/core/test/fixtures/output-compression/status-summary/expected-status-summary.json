@@ -1,0 +1,5 @@
+{
+  "status": "FAILED",
+  "verboseSummary": "The change adds a parallel token-refresh path and reworks the session hook.\nTwo defects block the merge: concurrent 401 responses can race the refresh call in the\ninterceptor, and the session hook keeps polling the previous account after an account\nswitch. Both fixes are local and cheap.",
+  "compressedSummary": "**Refresh race** at src/auth/interceptor.ts:42 and **wrong-account polling** at src/hooks/use-session.ts:18 — both local fixes."
+}

@@ -10,6 +10,11 @@
  *   consensus-decision     — DECISION/CONFIDENCE/REASONING pair
  *   refuter-verdicts       — terse `<id>: stands|refute` (single style —
  *                            proves the terse format needs no calibration)
+ *   diagnostic-hypotheses  — HYPOTHESIS H1/H2 pair through parseHypotheses
+ *                            (REL-002: diagnostic voice had zero fixtures)
+ *   status-summary         — STATUS/SUMMARY pair through parseReviewResponse's
+ *                            structured branch (REL-002: multi-line verbose
+ *                            summary vs one-line compressed summary)
  *
  * CI is model-free/network-free/deterministic: BOTH styles must parse
  * through the UNTOUCHED parsers to identical structural fingerprints —
@@ -26,10 +31,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseVote } from './agents/consensus.js';
+import { parseHypotheses } from './agents/diagnostic.js';
 import { parseRefuterVerdicts } from './agents/fan-out-lenses.js';
-import { parseFindingsBlock } from './agents/simple.js';
+import { parseFindingsBlock, parseReviewResponse } from './agents/simple.js';
 import { formatReviewComment } from './format.js';
-import type { ReviewFinding, ReviewResult } from './types.js';
+import type { Hypothesis, ReviewFinding, ReviewResult } from './types.js';
 
 // ─── Fixture loading ────────────────────────────────────────────
 
@@ -62,15 +68,32 @@ function fingerprint(findings: ReviewFinding[]): ExpectedFinding[] {
 
 const FINDING_CASES = ['fresh-exact-multi-file', 'not-exact-fresh', 'symbol-sparse-python'];
 
+interface ExpectedHypothesis {
+  id: string;
+  confidence: string;
+  relatedFiles: string[];
+}
+
+/** Structural fingerprint — the fields compression MUST NOT change. */
+function hypothesisFingerprint(hypotheses: Hypothesis[]): ExpectedHypothesis[] {
+  return hypotheses.map((h) => ({
+    id: h.id,
+    confidence: h.confidence,
+    relatedFiles: h.relatedFiles,
+  }));
+}
+
 // ─── Tests ──────────────────────────────────────────────────────
 
 describe('output-compression parser-parity corpus', () => {
-  it('corpus has the five authored cases', () => {
+  it('corpus has the seven authored cases', () => {
     expect(readdirSync(CORPUS_DIR).sort()).toEqual([
       'consensus-decision',
+      'diagnostic-hypotheses',
       'fresh-exact-multi-file',
       'not-exact-fresh',
       'refuter-verdicts',
+      'status-summary',
       'symbol-sparse-python',
     ]);
   });
@@ -150,6 +173,94 @@ describe('output-compression parser-parity corpus', () => {
       );
       expect(Object.fromEntries(verdicts)).toEqual(expected);
       expect(verdicts.size).toBe(3);
+    });
+  });
+
+  describe('hypotheses case: diagnostic-hypotheses', () => {
+    const verbose = parseHypotheses(
+      readCorpusFile('diagnostic-hypotheses', 'hypotheses-verbose.txt'),
+    );
+    const compressed = parseHypotheses(
+      readCorpusFile('diagnostic-hypotheses', 'hypotheses-compressed.txt'),
+    );
+    const expected = readJson<ExpectedHypothesis[]>(
+      'diagnostic-hypotheses',
+      'expected-hypotheses.json',
+    );
+
+    it('both styles parse to the identical structural fingerprint (no hypothesis lost, demoted, or reordered)', () => {
+      // Authored pair — a zero-hypotheses parse in EITHER style is a real bug
+      // (silent-drop path), so the count assert fails loudly.
+      expect(verbose.length).toBeGreaterThan(0);
+      expect(compressed.length).toBeGreaterThan(0);
+      expect(hypothesisFingerprint(compressed)).toEqual(hypothesisFingerprint(verbose));
+    });
+
+    it('the shared fingerprint matches expected-hypotheses.json', () => {
+      expect(hypothesisFingerprint(verbose)).toEqual(expected);
+    });
+
+    it('both styles keep TITLE, CONDITIONS and VERIFICATION non-empty', () => {
+      for (const h of [...verbose, ...compressed]) {
+        expect(h.title.trim().length).toBeGreaterThan(0);
+        expect(h.conditions.trim().length).toBeGreaterThan(0);
+        expect(h.verification.trim().length).toBeGreaterThan(0);
+      }
+    });
+
+    it('compressed style is genuinely compressed: one-line prose fields with bold key terms', () => {
+      for (const h of compressed) {
+        expect(h.conditions).not.toContain('\n');
+        expect(h.verification).not.toContain('\n');
+        expect(h.conditions).toContain('**');
+      }
+      // Compression evidence, per hypothesis (matched by id — order already
+      // pinned by the fingerprint assert above).
+      for (const h of compressed) {
+        const counterpart = verbose.find((v) => v.id === h.id);
+        expect(counterpart).toBeDefined();
+        expect(counterpart!.conditions.length).toBeGreaterThan(h.conditions.length);
+        expect(counterpart!.verification.length).toBeGreaterThan(h.verification.length);
+      }
+    });
+  });
+
+  describe('status-summary case: status-summary', () => {
+    const parse = (file: string) =>
+      parseReviewResponse(
+        readCorpusFile('status-summary', file),
+        'ollama',
+        'test-model',
+        0,
+        0,
+        null,
+      );
+    const verbose = parse('status-verbose.txt');
+    const compressed = parse('status-compressed.txt');
+    const expected = readJson<{
+      status: string;
+      verboseSummary: string;
+      compressedSummary: string;
+    }>('status-summary', 'expected-status-summary.json');
+
+    it('both styles yield the identical STATUS and findings fingerprint', () => {
+      expect(compressed.status).toBe(verbose.status);
+      expect(compressed.status).toBe(expected.status);
+      expect(fingerprint(compressed.findings)).toEqual(fingerprint(verbose.findings));
+    });
+
+    it('the structured SUMMARY branch parses both styles exactly (no raw-text fallback)', () => {
+      // Pinning the exact parsed strings proves the SUMMARY regex captured the
+      // verbose MULTI-LINE summary and the compressed ONE-LINE summary through
+      // the structured branch — the fallback path would return the raw text.
+      expect(verbose.summary).toBe(expected.verboseSummary);
+      expect(compressed.summary).toBe(expected.compressedSummary);
+    });
+
+    it('compressed summary is one line with bold key terms, shorter than verbose', () => {
+      expect(compressed.summary).not.toContain('\n');
+      expect(compressed.summary).toContain('**');
+      expect(compressed.summary.length).toBeLessThan(verbose.summary.length);
     });
   });
 

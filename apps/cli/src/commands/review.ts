@@ -1266,6 +1266,17 @@ export function resolveCompressOutputEnabled(
   options: Pick<ReviewOptions, 'compressOutput'>,
   fileConfig: Pick<GhaggaConfig, 'compressOutput'>,
 ): boolean {
+  // 4R RES-003: hard-exit on a non-boolean value (string "false", null,
+  // 0) — the pinLensesToFirst precedent (review.ts:1120). A silent
+  // degrade-to-ON ignored the user's explicit OFF intent.
+  for (const [source, value] of [
+    ['CLI option', options.compressOutput],
+    ['.ghagga.json compressOutput', fileConfig.compressOutput],
+  ] as const) {
+    if (value !== undefined && typeof value !== 'boolean') {
+      throw new Error(`Invalid ${source}: expected boolean, got ${JSON.stringify(value)}`);
+    }
+  }
   if (options.compressOutput === false) return false;
   if (fileConfig.compressOutput === false) return false;
   return true;

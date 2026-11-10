@@ -248,11 +248,15 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
     );
 
     // review-output-compression T2.1: propagate the measured token split
-    // (workflow/consensus hasSplit semantics) — set on metadata only when
-    // the provider reported one; tokensUsed stays the authoritative total.
-    if (result.inputTokens !== undefined || result.outputTokens !== undefined) {
-      reviewResult.metadata.inputTokensUsed = result.inputTokens ?? 0;
-      reviewResult.metadata.outputTokensUsed = result.outputTokens ?? 0;
+    // — each side written only when the provider reported it (4R RES-001:
+    // `?? 0` on a one-sided split wrote a MEASURED ZERO for the missing
+    // side, silently zeroing the ~5x-priced output cost in the footer).
+    // tokensUsed stays the authoritative total.
+    if (result.inputTokens !== undefined) {
+      reviewResult.metadata.inputTokensUsed = result.inputTokens;
+    }
+    if (result.outputTokens !== undefined) {
+      reviewResult.metadata.outputTokensUsed = result.outputTokens;
     }
 
     return reviewResult;

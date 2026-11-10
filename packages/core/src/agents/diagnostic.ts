@@ -251,12 +251,15 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
   // Override mode in metadata
   reviewResult.metadata.mode = 'diagnostic';
 
-  // review-output-compression T2.2: propagate the measured split only when
-  // the provider reported one (hasSplit semantics); tokensUsed stays the
-  // authoritative total either way.
-  if (splitInput !== undefined || splitOutput !== undefined) {
-    reviewResult.metadata.inputTokensUsed = splitInput ?? 0;
-    reviewResult.metadata.outputTokensUsed = splitOutput ?? 0;
+  // review-output-compression T2.2: propagate each measured side only when
+  // the provider reported it (4R RES-001: `?? 0` wrote a measured zero for
+  // a one-sided split, zeroing output cost in the footer); tokensUsed stays
+  // the authoritative total either way.
+  if (splitInput !== undefined) {
+    reviewResult.metadata.inputTokensUsed = splitInput;
+  }
+  if (splitOutput !== undefined) {
+    reviewResult.metadata.outputTokensUsed = splitOutput;
   }
 
   // Parse hypotheses from the response and attach to result

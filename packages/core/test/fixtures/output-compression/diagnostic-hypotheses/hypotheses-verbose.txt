@@ -1,0 +1,28 @@
+STATUS: NEEDS_HUMAN_REVIEW
+SUMMARY: Diagnostic analysis of the session-refresh change produced two ranked hypotheses. The most likely defect is a race between concurrent token refreshes in the request interceptor; the second suspicion is a stale closure in the session hook that keeps polling the previous account. Both are cheap to verify with the steps below before this change merges.
+
+HYPOTHESIS H1: Concurrent 401s trigger racing token refreshes
+CONDITIONS: Two requests fire near-simultaneously after login, both receive a 401, and both enter refreshAuthToken before either call completes. Nothing deduplicates in-flight refreshes, so bursty dashboard traffic can mint several tokens at once and the last writer wins in the token store.
+VERIFICATION: Write a unit test that resolves two fetch spies against one mocked 401 burst and counts calls to /token — a count greater than one confirms the race. Then rerun the flaky login e2e suite with the deduplicating fix applied and confirm it stops flaking.
+CONFIDENCE: high
+FILES: src/auth/interceptor.ts, src/auth/token-store.ts
+
+HYPOTHESIS H2: Stale closure captures expired userId in session hook
+CONDITIONS: The useEffect in the session hook declares no dependency array, so its interval callback keeps reading the userId captured on first render. After an account switch the hook keeps polling the previous account's data until a full remount resets it.
+VERIFICATION: Render the hook with userId A, switch the prop to B, advance timers by one tick, and assert the polled URL contains B. If the URL still contains A the closure is stale.
+CONFIDENCE: medium
+FILES: src/hooks/use-session.ts
+
+FINDINGS:
+- SEVERITY: high
+  CATEGORY: bug
+  FILE: src/auth/interceptor.ts
+  LINE: 42
+  MESSAGE: H1: Concurrent 401 responses each trigger their own refresh call because in-flight refreshes are not deduplicated, so bursty traffic can mint several tokens at once.
+  SUGGESTION: Deduplicate in-flight refreshes by sharing one promise keyed on the request, and keep only the latest token in the store.
+- SEVERITY: medium
+  CATEGORY: bug
+  FILE: src/hooks/use-session.ts
+  LINE: 18
+  MESSAGE: H2: The session hook's effect captures the first-render userId and never re-subscribes, so after an account switch it keeps polling the previous account.
+  SUGGESTION: Add the userId dependency so the interval re-subscribes on account switches, and assert the polled URL in a timer test.

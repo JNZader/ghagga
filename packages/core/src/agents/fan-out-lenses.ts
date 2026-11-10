@@ -827,10 +827,13 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
-      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+      if (result.value.inputTokens !== undefined) {
         splitReported = true;
-        totalInputTokens += result.value.inputTokens ?? 0;
-        totalOutputTokens += result.value.outputTokens ?? 0;
+        totalInputTokens += result.value.inputTokens;
+      }
+      if (result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalOutputTokens += result.value.outputTokens;
       }
       modelsUsed.push(
         `${result.value.name}:${result.value.providerUsed}/${result.value.modelUsed}`,
@@ -879,10 +882,13 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
-      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+      if (result.value.inputTokens !== undefined) {
         splitReported = true;
-        totalInputTokens += result.value.inputTokens ?? 0;
-        totalOutputTokens += result.value.outputTokens ?? 0;
+        totalInputTokens += result.value.inputTokens;
+      }
+      if (result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalOutputTokens += result.value.outputTokens;
       }
       modelsUsed.push(`${voiceName}:${result.value.providerUsed}/${result.value.modelUsed}`);
 
@@ -974,10 +980,13 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       for (const result of refuterResults) {
         if (result.status !== 'fulfilled') continue;
         totalTokens += result.value.tokensUsed;
-        if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+        if (result.value.inputTokens !== undefined) {
           splitReported = true;
-          totalInputTokens += result.value.inputTokens ?? 0;
-          totalOutputTokens += result.value.outputTokens ?? 0;
+          totalInputTokens += result.value.inputTokens;
+        }
+        if (result.value.outputTokens !== undefined) {
+          splitReported = true;
+          totalOutputTokens += result.value.outputTokens;
         }
         const verdicts = parseRefuterVerdicts(result.value.text);
         for (const candidate of candidates) {

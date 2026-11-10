@@ -87,7 +87,7 @@ export function formatGraphNeighborhood(
   for (const hood of neighborhoods) {
     const entry = fileLevel ? formatFileLevelEntry(hood) : formatExactEntry(hood);
     const joinChars = 1; // '\n' between parts
-    if (totalChars + joinChars + entry.length > maxChars) continue;
+    if (totalChars + joinChars + entry.length > maxChars) break;
     entries.push(entry);
     totalChars += joinChars + entry.length;
     renderedFiles += 1;
