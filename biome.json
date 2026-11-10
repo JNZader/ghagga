@@ -1,12 +1,19 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.5/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!.next", "!*.min.js", "!pnpm-lock.yaml", "!packages/db/drizzle/meta"]
+    "includes": [
+      "**",
+      "!.next",
+      "!*.min.js",
+      "!pnpm-lock.yaml",
+      "!packages/db/drizzle/meta",
+      "!**/*.md"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -237,12 +244,6 @@
             "noRestrictedImports": "off"
           }
         }
-      }
-    },
-    {
-      "includes": ["openspec/changes/archive/2026-03-05-reduce-false-positives/verify-report.md"],
-      "formatter": {
-        "enabled": false
       }
     }
   ]
