@@ -7,7 +7,7 @@
  * API contract:
  *   POST /v1/generate
  *   Request:  { prompt, system, provider?, model?, project? }
- *   Response: { text, provider, model, tokensUsed }
+ *   Response: { text, provider, model, tokensUsed, inputTokens?, outputTokens? }
  *
  * When `provider` is set, the bridge short-circuits its model-based routing
  * and selects that provider directly (the model is passed through verbatim).
@@ -69,6 +69,14 @@ export interface GatewayResponse {
   provider: string;
   model: string;
   tokensUsed?: number;
+  /**
+   * Measured prompt-side token count (bridge: OpenAI-compatible
+   * prompt_tokens). Optional — absent while the bridge does not report a
+   * split; ghagga must be ready to receive it before the bridge ships it.
+   */
+  inputTokens?: number;
+  /** Measured completion-side token count (bridge: completion_tokens). */
+  outputTokens?: number;
 }
 
 // ─── SSRF IP-range validation (self-contained) ──────────────────

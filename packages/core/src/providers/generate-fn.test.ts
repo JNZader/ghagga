@@ -240,12 +240,12 @@ describe('createCLIBridgeGenerateFn token split', () => {
   });
 });
 
-describe('createGatewayGenerateFn token split (unmeasured)', () => {
+describe('createGatewayGenerateFn token split', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('carries NO split fields — the gateway protocol reports only tokensUsed', async () => {
+  it('carries NO split fields when the bridge reports only tokensUsed', async () => {
     vi.mocked(generateViaGateway).mockResolvedValue({
       text: 'output',
       provider: 'gateway',
@@ -258,6 +258,40 @@ describe('createGatewayGenerateFn token split (unmeasured)', () => {
 
     expect(result.tokensUsed).toBe(250);
     expect(result.inputTokens).toBeUndefined();
+    expect(result.outputTokens).toBeUndefined();
+  });
+
+  it('wires the bridge-reported split through when present (D3)', async () => {
+    vi.mocked(generateViaGateway).mockResolvedValue({
+      text: 'output',
+      provider: 'gateway',
+      model: 'kimi-k2.7',
+      tokensUsed: 1700,
+      inputTokens: 1500,
+      outputTokens: 200,
+    });
+
+    const fn = createGatewayGenerateFn({ gatewayUrl: 'https://gw.test', gatewayToken: 't' });
+    const result = await fn('system', 'prompt');
+
+    expect(result.tokensUsed).toBe(1700);
+    expect(result.inputTokens).toBe(1500);
+    expect(result.outputTokens).toBe(200);
+  });
+
+  it('keeps a one-sided split one-sided (no invented zero for the missing side)', async () => {
+    vi.mocked(generateViaGateway).mockResolvedValue({
+      text: 'output',
+      provider: 'gateway',
+      model: 'kimi-k2.7',
+      tokensUsed: 1500,
+      inputTokens: 1500,
+    });
+
+    const fn = createGatewayGenerateFn({ gatewayUrl: 'https://gw.test', gatewayToken: 't' });
+    const result = await fn('system', 'prompt');
+
+    expect(result.inputTokens).toBe(1500);
     expect(result.outputTokens).toBeUndefined();
   });
 });

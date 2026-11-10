@@ -91,6 +91,14 @@ function parseReviewResponse(
   const statusMatch = /STATUS:\s*(PASSED|FAILED|NEEDS_HUMAN_REVIEW|SKIPPED|INCONCLUSIVE)/i.exec(
     text,
   );
+  if (!statusMatch) {
+    // The model ignored the STATUS menu — surface the fallback instead of
+    // silently inventing NEEDS_HUMAN_REVIEW (demo investigation D5).
+    // console.warn writes to stderr, so machine output on stdout is unaffected.
+    console.warn(
+      '[ghagga:simple] STATUS line missing or unrecognized — defaulting to NEEDS_HUMAN_REVIEW',
+    );
+  }
   const status: ReviewStatus =
     (statusMatch?.[1]?.toUpperCase() as ReviewStatus) ?? 'NEEDS_HUMAN_REVIEW';
 

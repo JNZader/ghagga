@@ -8,8 +8,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { runTools } from '../../orchestrator.js';
 import type { ExecOptions, ExecutionContext, RawToolOutput } from '../../types.js';
-import { mapSemgrepSeverity, parseSemgrepOutput, semgrepPlugin } from '../semgrep.js';
+import {
+  assertSemgrepSucceeded,
+  mapSemgrepSeverity,
+  parseSemgrepOutput,
+  semgrepPlugin,
+} from '../semgrep.js';
 
 // ─── Mock ExecutionContext helper ───────────────────────────────
 
@@ -100,6 +106,145 @@ describe('semgrepPlugin.run', () => {
     expect(args).toContain('--json');
     expect(args).toContain('--quiet');
     expect(args[args.length - 1]).toBe('/workspace');
+  });
+});
+
+// ─── run() — operational-failure surfacing (demo investigation D4) ──
+
+/**
+ * Mock ctx whose exec dispatches on the call: the scan invocation (args
+ * include --json) returns `scanRaw`; every other call (install/verify)
+ * returns a healthy exit 0 so the plugin's install() passes.
+ */
+function makeScanCtx(scanRaw: RawToolOutput): ExecutionContext {
+  return {
+    exec: vi.fn(async (_command: string, args: string[], _opts: ExecOptions) =>
+      args.includes('--json')
+        ? scanRaw
+        : { stdout: 'semgrep 1.90.0', stderr: '', exitCode: 0, timedOut: false },
+    ),
+    cacheRestore: vi.fn(async () => false),
+    cacheSave: vi.fn(async () => {}),
+    log: vi.fn(),
+  };
+}
+
+describe('semgrepPlugin.run failure surfacing (D4)', () => {
+  it('rejects on exit code >= 2 with malformed stdout (crashed semgrep)', async () => {
+    const ctx = makeScanCtx({
+      stdout: 'Traceback (most recent call last):',
+      stderr: 'semgrep internal error',
+      exitCode: 2,
+      timedOut: false,
+    });
+    await expect(semgrepPlugin.run(ctx, '/workspace', [], 60_000)).rejects.toThrow(
+      /exit 2.*semgrep internal error/s,
+    );
+  });
+
+  it('rejects on valid JSON that reports errors with zero results', async () => {
+    const ctx = makeScanCtx({
+      stdout: JSON.stringify({
+        results: [],
+        errors: [{ message: 'Config parse error in rules.yml' }],
+      }),
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    });
+    await expect(semgrepPlugin.run(ctx, '/workspace', [], 60_000)).rejects.toThrow(
+      'semgrep reported 1 error(s) and 0 results',
+    );
+  });
+
+  it('does NOT reject on exit 1 with valid findings JSON (the normal findings path)', async () => {
+    const ctx = makeScanCtx({
+      stdout: FIXTURE_JSON,
+      stderr: '',
+      exitCode: 1,
+      timedOut: false,
+    });
+    const raw = await semgrepPlugin.run(ctx, '/workspace', [], 60_000);
+    expect(raw.exitCode).toBe(1);
+  });
+
+  it('does NOT reject on errors when results are also present (partial scan still reported)', async () => {
+    const ctx = makeScanCtx({
+      stdout: JSON.stringify({
+        results: [
+          {
+            path: '/workspace/src/a.ts',
+            start: { line: 1 },
+            extra: { severity: 'ERROR', message: 'x' },
+          },
+        ],
+        errors: [{ message: 'one config failed to load' }],
+      }),
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    });
+    const raw = await semgrepPlugin.run(ctx, '/workspace', [], 60_000);
+    expect(raw.exitCode).toBe(0);
+  });
+
+  it('does NOT reject on timeout output (the orchestrator owns timeout → error)', async () => {
+    const raw = { stdout: '', stderr: '', exitCode: -1, timedOut: true };
+    expect(() => assertSemgrepSucceeded(raw)).not.toThrow();
+  });
+
+  it('does NOT reject on malformed stdout with exit 0/1 (legacy parse path)', async () => {
+    const ctx = makeScanCtx(makeRaw('not valid json {{{'));
+    const returned = await semgrepPlugin.run(ctx, '/workspace', [], 60_000);
+    expect(returned.exitCode).toBe(0);
+  });
+});
+
+// ─── Orchestrator integration — failure status actually surfaces ──
+
+describe('runTools surfaces semgrep operational failures (D4)', () => {
+  it('marks semgrep as error — not success (0 findings) — when the binary exits >= 2', async () => {
+    const ctx = makeScanCtx({
+      stdout: 'Traceback (most recent call last):',
+      stderr: 'semgrep internal error',
+      exitCode: 2,
+      timedOut: false,
+    });
+
+    const results = await runTools(
+      ctx,
+      [{ definition: semgrepPlugin, reason: 'always-on' }],
+      '/workspace',
+      [],
+      600_000,
+    );
+
+    expect(results.semgrep?.status).toBe('error');
+    expect(results.semgrep?.findings).toEqual([]);
+    expect(results.semgrep?.error).toContain('exit 2');
+  });
+
+  it('marks semgrep as error when the JSON reports errors with zero results', async () => {
+    const ctx = makeScanCtx({
+      stdout: JSON.stringify({
+        results: [],
+        errors: [{ message: 'Config parse error in rules.yml' }],
+      }),
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    });
+
+    const results = await runTools(
+      ctx,
+      [{ definition: semgrepPlugin, reason: 'always-on' }],
+      '/workspace',
+      [],
+      600_000,
+    );
+
+    expect(results.semgrep?.status).toBe('error');
+    expect(results.semgrep?.error).toContain('1 error(s) and 0 results');
   });
 });
 

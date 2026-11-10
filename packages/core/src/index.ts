@@ -252,6 +252,7 @@ export {
   buildStatsBar,
   categorizeFiles,
   FILE_CATEGORIES,
+  formatBlastRadiusSection,
   formatFileCategorySummary,
   formatReviewComment,
   REVIEW_COMMENT_MARKER,

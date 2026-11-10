@@ -38,6 +38,9 @@ vi.mock('ghagga-core', () => ({
   buildSarif: mockBuildSarif,
   formatReviewComment: vi.fn().mockReturnValue('<!-- ghagga-review -->\nbody'),
   formatBoxSummary: vi.fn().mockReturnValue([]),
+  // The real ui/format.ts imports this from ghagga-core (D2) — stub it or
+  // formatMarkdownResult throws under this whole-module mock.
+  formatBlastRadiusSection: vi.fn().mockReturnValue(''),
   REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
   SqliteMemoryStorage: {
     create: vi.fn().mockResolvedValue({
