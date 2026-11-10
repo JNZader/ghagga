@@ -441,18 +441,27 @@ export {
 // ─── Health ─────────────────────────────────────────────────────
 
 export type {
+  DigestInputs,
+  DigestReviewGroup,
+  FileRisk,
   HealthHistoryEntry,
   HealthRecommendation,
   HealthScore,
   HealthTrend,
+  ReviewRow,
 } from './health/index.js';
 export {
+  aggregateHealth,
   computeHealthScore,
   computeTrend,
   formatTopIssues,
   generateRecommendations,
   getScoreColor,
   loadHistory,
+  MAX_RANKED_FILES,
+  RANKING_WINDOW_DAYS,
+  RECENCY_FULL_DAYS,
+  rankFileRisk,
   SEVERITY_WEIGHTS,
   saveHistory,
 } from './health/index.js';

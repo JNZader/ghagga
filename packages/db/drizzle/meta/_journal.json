@@ -50,6 +50,13 @@
       "when": 1789067000000,
       "tag": "0006_graph_token_split",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794324260214,
+      "tag": "0007_digests",
+      "breakpoints": true
     }
   ]
 }

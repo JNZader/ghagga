@@ -22,6 +22,12 @@ import { logger } from './lib/logger.js';
 import { closeRedis, describeRedisConfig } from './lib/redis.js';
 import { validateEnvironment } from './lib/validate-env.js';
 import { authMiddleware } from './middleware/auth.js';
+import {
+  closeDigestQueue,
+  createDigestWorker,
+  digestQueue,
+  reconcileDigestSchedulers,
+} from './queues/digest.js';
 import { closeExplanationQueue, createExplanationWorker } from './queues/explanation.js';
 import { createPersistedExplanationPublisher } from './queues/explanation-publisher-factory.js';
 import { closeIssueAnalysisQueue } from './queues/issue-analysis.js';
@@ -59,6 +65,18 @@ const db = createDatabaseFromEnv();
 const explanationWorker = createExplanationWorker(1, {
   publisher: createPersistedExplanationPublisher(),
   progressPublisher: createPersistedExplanationPublisher('progress'),
+});
+
+// ─── Nightly Health Digest (in-process worker + scheduler reconciler) ──
+// Worker concurrency 2 (light DB + 1 forge call per nightly run, D3). The
+// reconciler re-registers every opted-in repo's repeatable idempotently at
+// startup (same jobId + cron ⇒ no second schedule, no extra run, D7).
+const digestWorker = createDigestWorker(2);
+void reconcileDigestSchedulers(db, digestQueue).catch((err: unknown) => {
+  logger.error(
+    { err: err instanceof Error ? err.message : String(err) },
+    'digest: startup scheduler reconciliation failed — schedulers refresh on next settings change',
+  );
 });
 
 // ─── App ────────────────────────────────────────────────────────
@@ -330,8 +348,14 @@ function shutdown(): Promise<void> {
     server.close(() => {
       void explanationWorker
         .close()
+        .then(() => digestWorker.close())
         .then(() =>
-          Promise.all([closeReviewQueue(), closeIssueAnalysisQueue(), closeExplanationQueue()]),
+          Promise.all([
+            closeReviewQueue(),
+            closeIssueAnalysisQueue(),
+            closeExplanationQueue(),
+            closeDigestQueue(),
+          ]),
         )
         .then(() => closeRedis())
         .then(() => {

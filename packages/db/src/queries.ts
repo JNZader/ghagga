@@ -17,6 +17,8 @@ import type { Database } from './client.js';
 import {
   type DbProviderChainEntry,
   DEFAULT_REPO_SETTINGS,
+  type DigestStatus,
+  digests,
   explanationInvocations,
   githubUserMappings,
   type IssueDedupMatch,
@@ -178,8 +180,10 @@ export interface EffectiveSettings {
   source: 'global' | 'repo';
 }
 
-export type EffectiveRepoSettings = Omit<RepoSettings, 'explanationsEnabled'> & {
+export type EffectiveRepoSettings = Omit<RepoSettings, 'explanationsEnabled' | 'digestsEnabled'> & {
   explanationsEnabled: boolean;
+  /** Nightly digest opt-in, coalesced to a definite boolean (absent = off). */
+  digestsEnabled: boolean;
 };
 
 function resolveEffectiveRepoSettings(settings: RepoSettings | unknown): EffectiveRepoSettings {
@@ -187,6 +191,7 @@ function resolveEffectiveRepoSettings(settings: RepoSettings | unknown): Effecti
   return {
     ...selectedSettings,
     explanationsEnabled: selectedSettings.explanationsEnabled ?? false,
+    digestsEnabled: selectedSettings.digestsEnabled ?? false,
   };
 }
 
@@ -373,8 +378,149 @@ export async function saveReview(
   },
 ) {
   const [result] = await db.insert(reviews).values(data).returning();
-  // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert/update
+  // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert
   return result!;
+}
+
+// ─── Digests (Nightly Health Digest) ────────────────────────────
+
+/** Ranking window for digest inputs: only the last 30 days of reviews (D2). */
+const DIGEST_RANKING_WINDOW_DAYS = 30;
+
+/**
+ * Review rows feeding one digest run: `findings`/`metadata` jsonb + createdAt,
+ * restricted to the watermark cutoff AND the 30-day ranking window.
+ *
+ * `since` (the last POSTED digest's watermark) excludes already-consumed
+ * reviews STRICTLY (`createdAt > since`); `undefined` means first run (whole
+ * ranking window). The core `aggregateHealth`/`rankFileRisk` functions apply
+ * the same cutoffs — the DB-side filter bounds row volume, it does not replace
+ * the pure functions' contracts.
+ */
+export async function getReviewsSinceWatermark(
+  db: Database,
+  repositoryId: number,
+  since: Date | undefined,
+  now: Date,
+): Promise<Array<{ findings: unknown; metadata: unknown; createdAt: Date }>> {
+  const windowStart = new Date(now.getTime() - DIGEST_RANKING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const conditions = [eq(reviews.repositoryId, repositoryId), gt(reviews.createdAt, windowStart)];
+  if (since) {
+    conditions.push(gt(reviews.createdAt, since));
+  }
+  return db
+    .select({
+      findings: reviews.findings,
+      metadata: reviews.metadata,
+      createdAt: reviews.createdAt,
+    })
+    .from(reviews)
+    .where(and(...conditions))
+    .orderBy(asc(reviews.createdAt));
+}
+
+/** Insert one append-only digest run row and return it. */
+export async function insertDigestRun(
+  db: Database,
+  data: {
+    repositoryId: number;
+    runAt: Date;
+    status: DigestStatus;
+    issueNumber?: number | null;
+    issueOpen?: boolean;
+    watermark?: Date | null;
+    findingsCount?: number;
+    score?: number | null;
+    error?: string | null;
+  },
+): Promise<typeof digests.$inferSelect> {
+  const [result] = await db.insert(digests).values(data).returning();
+  // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert
+  return result!;
+}
+
+/**
+ * The repository's OPEN digest row (`issueOpen = true`) — the run whose digest
+ * issue is updated in place. `undefined` on first run (or after manual row
+ * surgery); the one-open partial unique index guarantees at most one.
+ */
+export async function getOpenDigest(
+  db: Database,
+  repositoryId: number,
+): Promise<typeof digests.$inferSelect | undefined> {
+  const [row] = await db
+    .select()
+    .from(digests)
+    .where(and(eq(digests.repositoryId, repositoryId), eq(digests.issueOpen, true)))
+    .orderBy(desc(digests.runAt))
+    .limit(1);
+  return row;
+}
+
+/**
+ * Rotate the open digest row in ONE transaction (D6 rotate-on-closed/404 path):
+ * flip the old row `issueOpen = false` and insert the successor open row.
+ *
+ * The partial-unique index makes the flip+insert atomic window airtight — a
+ * concurrent second rotation would collide on `uq_digests_open_issue` and roll
+ * back, preserving the one-open invariant.
+ */
+export async function rotateOpenDigest(
+  db: Database,
+  params: {
+    repositoryId: number;
+    successor: {
+      runAt: Date;
+      issueNumber: number;
+      watermark: Date;
+      findingsCount: number;
+      score: number | null;
+    };
+  },
+): Promise<typeof digests.$inferSelect> {
+  const { repositoryId, successor } = params;
+  return db.transaction(async (tx) => {
+    await tx
+      .update(digests)
+      .set({ issueOpen: false, updatedAt: new Date() })
+      .where(and(eq(digests.repositoryId, repositoryId), eq(digests.issueOpen, true)));
+    const [result] = await tx
+      .insert(digests)
+      .values({
+        repositoryId,
+        runAt: successor.runAt,
+        status: 'POSTED',
+        issueNumber: successor.issueNumber,
+        issueOpen: true,
+        watermark: successor.watermark,
+        findingsCount: successor.findingsCount,
+        score: successor.score,
+      })
+      .returning();
+    // biome-ignore lint/style/noNonNullAssertion: drizzle .returning() always returns for insert
+    return result!;
+  });
+}
+
+/**
+ * All active repositories with the columns the digest scheduler reconciler
+ * needs to resolve effective settings (installation-level fallback included).
+ */
+export async function getActiveRepositoriesForScheduling(db: Database) {
+  return db
+    .select({
+      id: repositories.id,
+      installationId: repositories.installationId,
+      fullName: repositories.fullName,
+      isActive: repositories.isActive,
+      useGlobalSettings: repositories.useGlobalSettings,
+      providerChain: repositories.providerChain,
+      aiReviewEnabled: repositories.aiReviewEnabled,
+      reviewMode: repositories.reviewMode,
+      settings: repositories.settings,
+    })
+    .from(repositories)
+    .where(eq(repositories.isActive, true));
 }
 
 // ─── Issue Drafts (Issue-Triage Agent) ──────────────────────────

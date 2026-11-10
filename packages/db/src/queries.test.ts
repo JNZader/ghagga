@@ -412,7 +412,11 @@ describe('getEffectiveRepoSettings', () => {
 
     expect(result.source).toBe('repo');
     expect(result.providerChain).toEqual([]);
-    expect(result.settings).toEqual({ ...DEFAULT_REPO_SETTINGS, explanationsEnabled: false });
+    expect(result.settings).toEqual({
+      ...DEFAULT_REPO_SETTINGS,
+      explanationsEnabled: false,
+      digestsEnabled: false,
+    });
   });
 
   it('should return global settings when useGlobalSettings is true and installation settings exist', async () => {
@@ -475,7 +479,66 @@ describe('getEffectiveRepoSettings', () => {
     expect(result.providerChain).toEqual([]);
     expect(result.aiReviewEnabled).toBe(true);
     expect(result.reviewMode).toBe('simple');
-    expect(result.settings).toEqual({ ...DEFAULT_REPO_SETTINGS, explanationsEnabled: false });
+    expect(result.settings).toEqual({
+      ...DEFAULT_REPO_SETTINGS,
+      explanationsEnabled: false,
+      digestsEnabled: false,
+    });
+  });
+
+  it('coalesces digestsEnabled to false when absent at every level (nightly-health-digest)', async () => {
+    const db = {} as unknown as Database;
+
+    const result = await getEffectiveRepoSettings(db, {
+      installationId: 1,
+      useGlobalSettings: false,
+      providerChain: repoProviderChain,
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: repoSettings, // carries no digestsEnabled
+    });
+
+    expect(result.settings.digestsEnabled).toBe(false);
+  });
+
+  it('resolves digestsEnabled through global settings and per-repo override (nightly-health-digest)', async () => {
+    // Repo A: useGlobalSettings=true → inherits installation digestsEnabled: true.
+    const globalSettings = {
+      id: 1,
+      installationId: 1,
+      providerChain: repoProviderChain,
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { ...DEFAULT_REPO_SETTINGS, digestsEnabled: true },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const mockLimit = vi.fn().mockResolvedValue([globalSettings]);
+    const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    const repoA = await getEffectiveRepoSettings(db, {
+      installationId: 1,
+      useGlobalSettings: true,
+      providerChain: repoProviderChain,
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: repoSettings,
+    });
+    expect(repoA.settings.digestsEnabled).toBe(true);
+
+    // Repo B: useGlobalSettings=false + digestsEnabled: false → per-repo wins.
+    const repoB = await getEffectiveRepoSettings(db, {
+      installationId: 1,
+      useGlobalSettings: false,
+      providerChain: repoProviderChain,
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { ...repoSettings, digestsEnabled: false },
+    });
+    expect(repoB.settings.digestsEnabled).toBe(false);
   });
 });
 

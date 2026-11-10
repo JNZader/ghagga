@@ -99,6 +99,7 @@ export function createInstallationsRouter(db: Database) {
             disabledTools: settings.disabledTools ?? [],
             enableBlastRadius: settings.enableBlastRadius ?? false,
             explanationsEnabled: settings.explanationsEnabled ?? false,
+            digestsEnabled: settings.digestsEnabled ?? false,
             registeredTools: getRegisteredToolsList(),
           },
         });
@@ -122,6 +123,7 @@ export function createInstallationsRouter(db: Database) {
           disabledTools: [],
           enableBlastRadius: false,
           explanationsEnabled: false,
+          digestsEnabled: false,
           registeredTools: getRegisteredToolsList(),
         },
       });
@@ -363,6 +365,10 @@ export function createInstallationsRouter(db: Database) {
           typeof body.explanationsEnabled === 'boolean'
             ? body.explanationsEnabled
             : currentSettings.explanationsEnabled,
+        digestsEnabled:
+          typeof body.digestsEnabled === 'boolean'
+            ? body.digestsEnabled
+            : currentSettings.digestsEnabled,
       };
 
       await upsertInstallationSettings(db, installationId, {
@@ -372,6 +378,24 @@ export function createInstallationsRouter(db: Database) {
         reviewMode: typeof body.reviewMode === 'string' ? body.reviewMode : undefined,
         settings: settingsUpdate,
       });
+
+      // Digest scheduler hook (nightly-health-digest D7): the installation-level
+      // flag affects every repo using global settings — re-reconcile the whole
+      // installation AFTER the successful upsert. Lazy import + fire-and-forget
+      // (never fail an already-persisted settings save on a scheduler hiccup).
+      void (async () => {
+        try {
+          const { digestQueue, reconcileDigestSchedulersForInstallation } = await import(
+            '../../queues/digest.js'
+          );
+          await reconcileDigestSchedulersForInstallation(db, digestQueue, installationId);
+        } catch (err) {
+          logger.warn(
+            { err, installationId },
+            'digest: scheduler reconcile failed after installation settings update (settings saved regardless)',
+          );
+        }
+      })();
 
       logger.info(
         { installationId, user: user.githubLogin, chainLength: mergedChain.length },
