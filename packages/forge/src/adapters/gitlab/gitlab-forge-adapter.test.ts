@@ -423,3 +423,25 @@ describe('GitLabForgeAdapter — auth-error surfacing (401/403 → ForgeAuthErro
     expect(err).toBe(original);
   });
 });
+
+describe('GitLabForgeAdapter — digest verbs throw unsupported (nightly-health-digest T2.1)', () => {
+  it('createDigestIssue throws a clear unsupported error, never a silent no-op', async () => {
+    const adapter = makeAdapter(makeClient());
+    await expect(adapter.createDigestIssue(repo, 'GHAGGA Health Digest', 'body')).rejects.toThrow(
+      /createDigestIssue: unsupported.*MR notes only.*GitHub-only/s,
+    );
+  });
+
+  it('updateDigestIssue throws a clear unsupported error, never a silent no-op', async () => {
+    const adapter = makeAdapter(makeClient());
+    await expect(adapter.updateDigestIssue(repo, 42, 'body')).rejects.toThrow(
+      /updateDigestIssue: unsupported.*MR notes only.*GitHub-only/s,
+    );
+  });
+
+  it('still satisfies the DigestPublicationCapable seam (loud refusal, present verbs)', () => {
+    const adapter = makeAdapter(makeClient());
+    expect('createDigestIssue' in adapter).toBe(true);
+    expect('updateDigestIssue' in adapter).toBe(true);
+  });
+});

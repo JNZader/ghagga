@@ -304,6 +304,22 @@ export interface ExplanationPublicationCapable {
 }
 
 /**
+ * Optional digest-issue publication seam (nightly-health-digest).
+ *
+ * GitHub-only in v1: the GitLab client port exposes MR notes only
+ * (`gitlab-client-port.ts` — no issues API), so `GitLabForgeAdapter` implements
+ * BOTH verbs by throwing an explicit unsupported error rather than silently
+ * no-oping (an invisible publication gap is worse than a loud refusal). The
+ * digest worker treats "verb present and callable" as the GitHub gate.
+ */
+export interface DigestPublicationCapable {
+  /** Create the repository's digest issue; returns its forge-native number. */
+  createDigestIssue(repo: RepoRef, title: string, body: string): Promise<{ number: number }>;
+  /** Overwrite the digest issue body in place by its forge-native number. */
+  updateDigestIssue(repo: RepoRef, issueNumber: number, body: string): Promise<void>;
+}
+
+/**
  * The full adapter type the engine consumes.
  *
  * Base is mandatory; single-method capabilities are `Partial<>`-composed so an
@@ -321,4 +337,5 @@ export type ForgeAdapter = ForgeAdapterBase &
   Partial<InlineCapable> &
   Partial<MarkerExtractable> &
   Partial<ExplanationSnapshotCapable> &
-  Partial<ExplanationPublicationCapable>;
+  Partial<ExplanationPublicationCapable> &
+  Partial<DigestPublicationCapable>;

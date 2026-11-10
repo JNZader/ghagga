@@ -6,7 +6,7 @@
  *
  * ─── FORGE-ADAPTER BOUNDARY (SDD forge-agnostic 1.5/1.6) ─────────
  *
- * The 13 forge-adapter functions in this module are INTERNAL. They are tagged
+ * The 15 forge-adapter functions in this module are INTERNAL. They are tagged
  * `@internal` individually and MUST be consumed via `GitHubForgeAdapter`, built
  * through the composition root at
  * `apps/server/src/github/forge-adapter-factory.ts` (`makeGitHubAdapter`). Do
@@ -17,7 +17,7 @@
  *   fetchPRDiff, fetchPRDetails, getPRFileList, getPRCommitMessages,
  *   postComment, findExistingComment, deleteComment, updateComment,
  *   addCommentReaction, fetchGraphFromBranch, fetchGraphMetadata,
- *   fetchFileContents, searchCode.
+ *   fetchFileContents, searchCode, createIssue, updateIssue.
  *
  * NOT forge-adapter fns (remain directly importable everywhere):
  *   - getInstallationToken — the auth/token-mint seam
@@ -532,6 +532,102 @@ export async function postComment(
 
     const data = (await response.json()) as { id: number };
     return { id: data.id };
+  });
+}
+
+/**
+ * Create a repository issue (nightly health digest publication).
+ *
+ * Follows the `postComment` conventions exactly: circuit breaker, API-version
+ * header, 10s timeout, and typed error mapping — a 403 (permission, e.g. the
+ * App installation lacks Issues write) and a 404 (repo gone) surface as
+ * `GitHubApiError` carrying the HTTP `status`.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
+ */
+export async function createIssue(
+  owner: string,
+  repo: string,
+  { title, body }: { title: string; body: string },
+  token: string,
+): Promise<{ number: number }> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues`;
+
+  return githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({ title, body }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error creating issue: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = (await response.json()) as { number: number };
+    return { number: data.number };
+  });
+}
+
+/**
+ * Update a repository issue in place (title and/or body) via PATCH.
+ *
+ * Used by the nightly digest to overwrite the digest issue body (marker-headed)
+ * on every run. Error mapping matches {@link createIssue}: a 404 (issue no
+ * longer exists — GitHub allows editing a CLOSED issue, so 404 means gone)
+ * surfaces as a typed `GitHubApiError` carrying `status` so the digest worker
+ * can rotate to a fresh issue.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter
+ * (apps/server/src/github/forge-adapter-factory.ts). Do NOT import directly;
+ * the forge-boundary lint enforces this. getInstallationToken/
+ * verifyWebhookSignature are NOT forge-adapter fns and remain directly importable.
+ */
+export async function updateIssue(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  { title, body }: { title?: string; body?: string },
+  token: string,
+): Promise<void> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`;
+
+  await githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({
+        ...(title !== undefined ? { title } : {}),
+        ...(body !== undefined ? { body } : {}),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error updating issue: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    return undefined;
   });
 }
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../lib/logger.js';
 import {
   createExplanationComment,
+  createIssue,
   fetchFileContents,
   fetchGraphFromBranch,
   fetchGraphMetadata,
@@ -19,6 +20,7 @@ import {
   resolveGitHubAppBotAuthorId,
   searchCode,
   updateExplanationComment,
+  updateIssue,
   verifyWebhookSignature,
 } from './client.js';
 
@@ -2377,6 +2379,109 @@ describe('GitHub App bot author resolution and shared JWT minting', () => {
 
       mockFetch.mockResolvedValueOnce(response({ token: 'wrapper-token' }));
       await expect(getInstallationToken(99, appId, privateKeyPem)).resolves.toBe('wrapper-token');
+    },
+  );
+});
+
+// ─── Digest Issue Write Tests (nightly-health-digest T2.2) ─────
+
+describe('createIssue — digest issue write', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('POSTs the exact URL with the exact payload bytes and maps { number }', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ number: 42 }) });
+
+    const result = await createIssue(
+      'octo',
+      'demo',
+      { title: 'GHAGGA Health Digest', body: '<!-- ghagga-digest -->\nbody' },
+      'token',
+    );
+
+    expect(result).toEqual({ number: 42 });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.github.com/repos/octo/demo/issues');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer token',
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    });
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: 'GHAGGA Health Digest',
+      body: '<!-- ghagga-digest -->\nbody',
+    });
+  });
+
+  it.each([403, 404])(
+    'maps HTTP %i to a typed GitHubApiError carrying the status',
+    async (status) => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status, statusText: 'Forbidden/Not Found' });
+
+      const error = await createIssue('octo', 'demo', { title: 't', body: 'b' }, 'token').catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect((error as { name?: string }).name).toBe('GitHubApiError');
+      expect((error as { status?: number }).status).toBe(status);
+      expect((error as Error).message).toContain('creating issue');
+    },
+  );
+});
+
+describe('updateIssue — digest issue write', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('PATCHes the exact issue URL with only the provided fields', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ number: 42 }) });
+
+    await updateIssue('octo', 'demo', 42, { body: '<!-- ghagga-digest -->\nnew' }, 'token');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.github.com/repos/octo/demo/issues/42');
+    expect(init.method).toBe('PATCH');
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer token',
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    });
+    // title omitted entirely when not provided (not faked as null/"")
+    expect(JSON.parse(init.body as string)).toEqual({ body: '<!-- ghagga-digest -->\nnew' });
+  });
+
+  it.each([403, 404])(
+    'maps HTTP %i to a typed GitHubApiError carrying the status',
+    async (status) => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status, statusText: 'Forbidden/Not Found' });
+
+      const error = await updateIssue('octo', 'demo', 42, { body: 'b' }, 'token').catch(
+        (e: unknown) => e,
+      );
+      expect((error as { name?: string }).name).toBe('GitHubApiError');
+      expect((error as { status?: number }).status).toBe(status);
+      expect((error as Error).message).toContain('updating issue');
     },
   );
 });

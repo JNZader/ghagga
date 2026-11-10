@@ -26,6 +26,7 @@
 import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
 import { ForgeAuthError, getErrorStatus } from '../../errors.js';
 import type {
+  DigestPublicationCapable,
   ExplanationCommentLookup,
   ExplanationCommentRef,
   ExplanationPublicationCapable,
@@ -116,7 +117,13 @@ function toNativeCommentId(commentId: CommentId): number {
  * will skip inline publishing cleanly.
  */
 export class GitHubForgeAdapter
-  implements ForgeAdapterBase, ReactionCapable, GraphReadCapable, FileReadCapable, SearchCapable
+  implements
+    ForgeAdapterBase,
+    ReactionCapable,
+    GraphReadCapable,
+    FileReadCapable,
+    SearchCapable,
+    DigestPublicationCapable
 {
   readonly capabilities: ForgeCapabilities = {
     reactions: true,
@@ -377,6 +384,50 @@ export class GitHubForgeAdapter
         body,
         this.#token,
       ),
+    );
+  }
+
+  // ─── Digest publication (nightly-health-digest T2.3) ──────────
+
+  /** Guard: digest verbs are GitHub-native — refuse a non-GitHub RepoRef loudly. */
+  #assertDigestRepo(repo: RepoRef): void {
+    if (repo.kind !== 'github') {
+      throw new TypeError(
+        `GitHubForgeAdapter digest verbs require a github RepoRef (got kind=${String(repo.kind)})`,
+      );
+    }
+  }
+
+  async createDigestIssue(repo: RepoRef, title: string, body: string): Promise<{ number: number }> {
+    this.#assertDigestRepo(repo);
+    const createIssue = this.#client.createIssue;
+    if (!createIssue) {
+      throw new TypeError('GitHubForgeAdapter digest publication capability is unavailable');
+    }
+    const created = await this.#mapAuth(() =>
+      createIssue(this.#owner, this.#repo, { title, body }, this.#token),
+    );
+    if (!Number.isSafeInteger(created?.number)) {
+      throw new TypeError(
+        'GitHubForgeAdapter.createDigestIssue: client returned no numeric issue number',
+      );
+    }
+    return { number: created.number };
+  }
+
+  async updateDigestIssue(repo: RepoRef, issueNumber: number, body: string): Promise<void> {
+    this.#assertDigestRepo(repo);
+    const updateIssue = this.#client.updateIssue;
+    if (!updateIssue) {
+      throw new TypeError('GitHubForgeAdapter digest publication capability is unavailable');
+    }
+    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) {
+      throw new TypeError(
+        `GitHubForgeAdapter.updateDigestIssue: issue number is not a positive integer (${String(issueNumber)})`,
+      );
+    }
+    await this.#mapAuth(() =>
+      updateIssue(this.#owner, this.#repo, issueNumber, { body }, this.#token),
     );
   }
 

@@ -190,6 +190,31 @@ export interface GitHubClientPort {
     body: string,
     token: string,
   ): Promise<void>;
+
+  /**
+   * Optional digest-issue CREATE delegation (nightly-health-digest). Mirrors
+   * `client.ts` `createIssue` (owner/repo/issue/token positional style) —
+   * `POST /repos/{o}/{r}/issues`. Returns the created issue number.
+   */
+  createIssue?(
+    owner: string,
+    repo: string,
+    issue: { title: string; body: string },
+    token: string,
+  ): Promise<{ number: number }>;
+
+  /**
+   * Optional digest-issue UPDATE delegation (nightly-health-digest). Mirrors
+   * `client.ts` `updateIssue` — `PATCH /repos/{o}/{r}/issues/{n}`; only the
+   * provided fields are sent.
+   */
+  updateIssue?(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    issue: { title?: string; body?: string },
+    token: string,
+  ): Promise<void>;
 }
 
 /**
