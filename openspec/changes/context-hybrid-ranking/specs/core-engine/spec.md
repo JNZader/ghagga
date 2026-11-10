@@ -2,7 +2,7 @@
 
 > **Change**: `context-hybrid-ranking`
 > **Base spec**: `openspec/specs/core-engine/spec.md`
-> **Sequencing**: the base for this delta is the MERGED `graph-context-retrieval` text (change #471), which is NOT yet in `openspec/specs/core-engine/spec.md` — that change is un-archived at authoring time. The requirement below is quoted from `openspec/changes/graph-context-retrieval/specs/core-engine/spec.md` ("Token Budget Management") with this change's modification applied on top. Archive order: `graph-context-retrieval` first, then this change; applying this delta to the post-#471 spec yields exactly the text below.
+> **Sequencing**: the base for this delta is the `graph-context-retrieval` text (change #471), now ARCHIVED (2026-11-10) and present in `openspec/specs/core-engine/spec.md`; the requirement below applies this change's modification on top of that base. The open change `review-output-compression` also MODIFIES `Requirement: Token Budget Management` (output-token split reporting). Whichever of this change and `review-output-compression` archives second MUST merge with the other's modifications to this requirement — see `openspec/changes/review-output-compression/specs/core-engine/spec.md` — so both requirement extensions survive; do not archive blind.
 
 ## MODIFIED Requirements
 
