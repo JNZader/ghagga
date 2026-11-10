@@ -143,6 +143,14 @@ export interface ReviewOptions {
    * `.ghagga.json`/auto-detection (see `resolveGraphContextEnabled`).
    */
   graphContext?: boolean;
+  /**
+   * Explicit output style calibration override from
+   * `--no-compress-output` (review-output-compression). `false` removes
+   * the OUTPUT_STYLE_CALIBRATION appendix from every prose voice;
+   * `undefined`/`true` defers to `.ghagga.json`/default-ON (see
+   * `resolveCompressOutputEnabled`).
+   */
+  compressOutput?: boolean;
 }
 
 /**
@@ -225,6 +233,13 @@ interface GhaggaConfig {
    * positive integer; omitted uses the core default (1,200).
    */
   graphContextMaxTokens?: number;
+  /**
+   * Disable the OUTPUT_STYLE_CALIBRATION appendix on review voices
+   * (review-output-compression). Default ON; `false` (or
+   * `--no-compress-output`, which always wins) makes every prompt
+   * byte-identical to the pre-change baseline.
+   */
+  compressOutput?: boolean;
   /** Fail-closed review anchor. Hex SHA or `"auto"`. CLI `--anchor` wins. */
   anchor?: string;
 }
@@ -344,6 +359,11 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     ) {
       settings.graphContextMaxTokens = fileConfig.graphContextMaxTokens;
     }
+
+    // Step 3.4c: Resolve output style calibration (review-output-compression).
+    // Default ON — only an explicit `--no-compress-output` (flag) or
+    // `.ghagga.json` `compressOutput: false` turns it off; the flag wins.
+    settings.compressOutput = resolveCompressOutputEnabled(options, fileConfig);
 
     // Step 3.4.5: Wire the local FilesystemGraphLoader + fs fileReader when
     // blast-radius is enabled (design v2 D3/D4), and surface staleness
@@ -1227,6 +1247,28 @@ export function resolveGraphContextEnabled(
   if (fileConfig.enableGraphContext === false) return false;
   if (fileConfig.enableGraphContext === true) return true;
   return existsSync(join(repoPath, '.ghagga', 'graph.json'));
+}
+
+/**
+ * Resolve whether output style calibration
+ * (review-output-compression) stays ON for this review run.
+ *
+ * Unlike graph-context there is NO environmental precondition (no graph
+ * to detect), so there is no repoPath probe — only flag/config/default.
+ *
+ * Precedence (highest to lowest), inverted from
+ * `resolveGraphContextEnabled` because the default is ON:
+ *   1. `--no-compress-output` (options.compressOutput === false) → OFF
+ *   2. `.ghagga.json` `compressOutput: false` → OFF
+ *   3. ON (default)
+ */
+export function resolveCompressOutputEnabled(
+  options: Pick<ReviewOptions, 'compressOutput'>,
+  fileConfig: Pick<GhaggaConfig, 'compressOutput'>,
+): boolean {
+  if (options.compressOutput === false) return false;
+  if (fileConfig.compressOutput === false) return false;
+  return true;
 }
 
 /**

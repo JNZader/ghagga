@@ -126,6 +126,10 @@ program
     '--no-graph-context',
     'Disable the graph-neighborhood context section (auto-enabled when .ghagga/graph.json exists)',
   )
+  .option(
+    '--no-compress-output',
+    'Disable the output style calibration appendix for review voices (default: on)',
+  )
   .option('-c, --config <path>', 'Path to .ghagga.json config file')
   .option('-v, --verbose', 'Show detailed progress during review')
   .option('--staged', 'Review only staged changes (for pre-commit hooks)')
@@ -477,6 +481,8 @@ interface ReviewCommandOptions {
   blastRadius: boolean;
   /** `--no-graph-context` sets this to `false`; absent flag leaves it `true` (Commander negated-option default). */
   graphContext: boolean;
+  /** `--no-compress-output` sets this to `false`; absent flag leaves it `true` (Commander negated-option default). */
+  compressOutput: boolean;
   memoryBackend?: string;
   config?: string;
   verbose: boolean;
