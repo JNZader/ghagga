@@ -192,6 +192,11 @@ export function extractChangedSymbolsFromDiff(unifiedDiff: string): Map<string, 
     // Detect file path from diff header
     if (line.startsWith('+++ b/')) {
       currentFile = line.slice(6).trim();
+      // File boundary: the previous file's last symbol MUST NOT leak into
+      // this file. Without the reset, a new file whose hunks contain zero
+      // declaration lines would inherit the prior file's symbol via the
+      // tail fallback below and map to a symbol it never contained.
+      currentSymbol = '';
       if (!result.has(currentFile)) {
         result.set(currentFile, new Set());
       }

@@ -355,4 +355,45 @@ describe('extractChangedSymbolsFromDiff', () => {
     const symbols = result.get('src/c.ts');
     expect(symbols).not.toContain('local');
   });
+
+  it('resets the tail-fallback symbol at file boundaries: a second file with no declarations maps to an empty set', () => {
+    const diff = `
+--- a/src/first.ts
++++ b/src/first.ts
+@@ -1,2 +1,2 @@
+-export function alpha() {}
++export function alpha(x: number) {}
+--- a/src/second.ts
++++ b/src/second.ts
+@@ -10,2 +10,2 @@
+-some existing line
++some modified line
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    expect(result.get('src/first.ts')).toContain('alpha');
+    // Regression: currentSymbol used to persist across the file boundary, so
+    // the tail fallback below assigned first.ts's "alpha" to second.ts.
+    expect(result.get('src/second.ts')).toEqual(new Set());
+  });
+
+  it('tail fallback still fires within a file when the LAST file has declarations but no direct matches', () => {
+    const diff = `
+--- a/src/first.ts
++++ b/src/first.ts
+@@ -1,3 +1,3 @@ export function alpha()
+ context line
+-export function alpha() {}
++export function alpha(x: number) {}
+--- a/src/second.ts
++++ b/src/second.ts
+@@ -10,3 +10,3 @@ export function beta()
+ context line
+-some existing line
++some modified line
+`;
+    const result = extractChangedSymbolsFromDiff(diff);
+    expect(result.get('src/first.ts')).toContain('alpha');
+    // beta comes from second.ts's OWN hunk context — not a leak from first.ts.
+    expect(result.get('src/second.ts')).toEqual(new Set(['beta']));
+  });
 });
