@@ -181,7 +181,10 @@ export function renderMermaidDiagram(
     };
   });
 
-  // 3. Edges: path→id, drop dangling, dedupe, sort, cap.
+  // 3. Edges: path→id, drop dangling, dedupe, sort, cap. Ids are this
+  // module's own `n<index>` strings — sort by NUMERIC index, never
+  // lexicographically ('n10' < 'n2' as strings would scramble D7 order).
+  const indexById = new Map<string, number>(kept.map((_, index) => [`n${index}`, index]));
   const edgeSeen = new Set<string>();
   const diagramEdges: BlastRadiusDiagramEdge[] = [];
   for (const edge of edges) {
@@ -193,7 +196,10 @@ export function renderMermaidDiagram(
     edgeSeen.add(key);
     diagramEdges.push({ from, to });
   }
-  diagramEdges.sort((a, b) => comparePaths(a.from, b.from) || comparePaths(a.to, b.to));
+  const numericId = (id: string): number => indexById.get(id) ?? Number.MAX_SAFE_INTEGER;
+  diagramEdges.sort(
+    (a, b) => numericId(a.from) - numericId(b.from) || numericId(a.to) - numericId(b.to),
+  );
 
   let edgeTruncated = false;
   let finalEdges = diagramEdges;

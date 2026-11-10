@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "rootDir": ".",
+  "nodes": {
+    "src/café.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "src/🎉mod.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "src/plain.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["src/café.ts", "src/🎉mod.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "mermaid": "flowchart TD\n  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px\n  classDef dependent fill:#dbeafe,stroke:#2563eb\n  classDef test fill:#dcfce7,stroke:#16a34a\n  subgraph c0[\"lib\"]\n    n0[\"lib/util.ts\"]\n  end\n  subgraph c1[\"src\"]\n    n1[\"src/app1.ts\"]\n    n2[\"src/app2.ts\"]\n    n3[\"src/hub.ts\"]\n  end\n  class n3 changed\n  class n0,n1,n2 dependent\n  n1 --> n3\n  n2 --> n3\n  n3 --> n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "label": "lib/util.ts",
+      "role": "dependent",
+      "cluster": "lib"
+    },
+    {
+      "id": "n1",
+      "label": "src/app1.ts",
+      "role": "dependent",
+      "cluster": "src"
+    },
+    {
+      "id": "n2",
+      "label": "src/app2.ts",
+      "role": "dependent",
+      "cluster": "src"
+    },
+    {
+      "id": "n3",
+      "label": "src/hub.ts",
+      "role": "changed",
+      "cluster": "src"
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n3"
+    },
+    {
+      "from": "n2",
+      "to": "n3"
+    },
+    {
+      "from": "n3",
+      "to": "n0"
+    }
+  ],
+  "meta": {
+    "stale": false,
+    "exceededCap": false,
+    "truncated": false
+  }
+}

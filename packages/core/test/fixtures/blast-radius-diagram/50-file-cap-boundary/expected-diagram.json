@@ -1,0 +1,261 @@
+{
+  "mermaid": "flowchart TD\n  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px\n  classDef dependent fill:#dbeafe,stroke:#2563eb\n  classDef test fill:#dcfce7,stroke:#16a34a\n  subgraph c0[\"(root)\"]\n    n0[\"d01.ts\"]\n    n1[\"d02.ts\"]\n    n2[\"d03.ts\"]\n    n3[\"d04.ts\"]\n    n4[\"d05.ts\"]\n    n5[\"d06.ts\"]\n    n6[\"d07.ts\"]\n    n7[\"d08.ts\"]\n    n8[\"d09.ts\"]\n    n9[\"d10.ts\"]\n    n10[\"d11.ts\"]\n    n11[\"d12.ts\"]\n    n12[\"d13.ts\"]\n    n13[\"d14.ts\"]\n    n14[\"d15.ts\"]\n    n15[\"d16.ts\"]\n    n16[\"d17.ts\"]\n    n17[\"d18.ts\"]\n    n18[\"d19.ts\"]\n    n19[\"d20.ts\"]\n    n20[\"d21.ts\"]\n    n21[\"d22.ts\"]\n    n22[\"d23.ts\"]\n    n23[\"d24.ts\"]\n    n24[\"hub.ts\"]\n  end\n  class n24 changed\n  class n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11,n12,n13,n14,n15,n16,n17,n18,n19,n20,n21,n22,n23 dependent\n  n0 --> n24\n  n1 --> n24\n  n2 --> n24\n  n3 --> n24\n  n4 --> n24\n  n5 --> n24\n  n6 --> n24\n  n7 --> n24\n  n8 --> n24\n  n9 --> n24\n  n10 --> n24\n  n11 --> n24\n  n12 --> n24\n  n13 --> n24\n  n14 --> n24\n  n15 --> n24\n  n16 --> n24\n  n17 --> n24\n  n18 --> n24\n  n19 --> n24\n  n20 --> n24\n  n21 --> n24\n  n22 --> n24\n  n23 --> n24",
+  "nodes": [
+    {
+      "id": "n0",
+      "label": "d01.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n1",
+      "label": "d02.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n2",
+      "label": "d03.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n3",
+      "label": "d04.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n4",
+      "label": "d05.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n5",
+      "label": "d06.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n6",
+      "label": "d07.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n7",
+      "label": "d08.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n8",
+      "label": "d09.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n9",
+      "label": "d10.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n10",
+      "label": "d11.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n11",
+      "label": "d12.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n12",
+      "label": "d13.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n13",
+      "label": "d14.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n14",
+      "label": "d15.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n15",
+      "label": "d16.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n16",
+      "label": "d17.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n17",
+      "label": "d18.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n18",
+      "label": "d19.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n19",
+      "label": "d20.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n20",
+      "label": "d21.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n21",
+      "label": "d22.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n22",
+      "label": "d23.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n23",
+      "label": "d24.ts",
+      "role": "dependent",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n24",
+      "label": "hub.ts",
+      "role": "changed",
+      "cluster": "(root)"
+    }
+  ],
+  "edges": [
+    {
+      "from": "n0",
+      "to": "n24"
+    },
+    {
+      "from": "n1",
+      "to": "n24"
+    },
+    {
+      "from": "n2",
+      "to": "n24"
+    },
+    {
+      "from": "n3",
+      "to": "n24"
+    },
+    {
+      "from": "n4",
+      "to": "n24"
+    },
+    {
+      "from": "n5",
+      "to": "n24"
+    },
+    {
+      "from": "n6",
+      "to": "n24"
+    },
+    {
+      "from": "n7",
+      "to": "n24"
+    },
+    {
+      "from": "n8",
+      "to": "n24"
+    },
+    {
+      "from": "n9",
+      "to": "n24"
+    },
+    {
+      "from": "n10",
+      "to": "n24"
+    },
+    {
+      "from": "n11",
+      "to": "n24"
+    },
+    {
+      "from": "n12",
+      "to": "n24"
+    },
+    {
+      "from": "n13",
+      "to": "n24"
+    },
+    {
+      "from": "n14",
+      "to": "n24"
+    },
+    {
+      "from": "n15",
+      "to": "n24"
+    },
+    {
+      "from": "n16",
+      "to": "n24"
+    },
+    {
+      "from": "n17",
+      "to": "n24"
+    },
+    {
+      "from": "n18",
+      "to": "n24"
+    },
+    {
+      "from": "n19",
+      "to": "n24"
+    },
+    {
+      "from": "n20",
+      "to": "n24"
+    },
+    {
+      "from": "n21",
+      "to": "n24"
+    },
+    {
+      "from": "n22",
+      "to": "n24"
+    },
+    {
+      "from": "n23",
+      "to": "n24"
+    }
+  ],
+  "meta": {
+    "stale": false,
+    "exceededCap": false,
+    "truncated": true,
+    "clusterCounts": {
+      "(root)": 25
+    }
+  }
+}

@@ -1,0 +1,57 @@
+flowchart TD
+  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
+  classDef dependent fill:#dbeafe,stroke:#2563eb
+  classDef test fill:#dcfce7,stroke:#16a34a
+  subgraph c0["(root)"]
+    n0["d01.ts"]
+    n1["d02.ts"]
+    n2["d03.ts"]
+    n3["d04.ts"]
+    n4["d05.ts"]
+    n5["d06.ts"]
+    n6["d07.ts"]
+    n7["d08.ts"]
+    n8["d09.ts"]
+    n9["d10.ts"]
+    n10["d11.ts"]
+    n11["d12.ts"]
+    n12["d13.ts"]
+    n13["d14.ts"]
+    n14["d15.ts"]
+    n15["d16.ts"]
+    n16["d17.ts"]
+    n17["d18.ts"]
+    n18["d19.ts"]
+    n19["d20.ts"]
+    n20["d21.ts"]
+    n21["d22.ts"]
+    n22["d23.ts"]
+    n23["d24.ts"]
+    n24["hub.ts"]
+  end
+  class n24 changed
+  class n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11,n12,n13,n14,n15,n16,n17,n18,n19,n20,n21,n22,n23 dependent
+  n0 --> n24
+  n1 --> n24
+  n2 --> n24
+  n3 --> n24
+  n4 --> n24
+  n5 --> n24
+  n6 --> n24
+  n7 --> n24
+  n8 --> n24
+  n9 --> n24
+  n10 --> n24
+  n11 --> n24
+  n12 --> n24
+  n13 --> n24
+  n14 --> n24
+  n15 --> n24
+  n16 --> n24
+  n17 --> n24
+  n18 --> n24
+  n19 --> n24
+  n20 --> n24
+  n21 --> n24
+  n22 --> n24
+  n23 --> n24

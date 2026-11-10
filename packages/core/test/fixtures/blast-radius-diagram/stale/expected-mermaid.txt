@@ -1,0 +1,11 @@
+flowchart TD
+  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
+  classDef dependent fill:#dbeafe,stroke:#2563eb
+  classDef test fill:#dcfce7,stroke:#16a34a
+  subgraph c0["src"]
+    n0["src/a.ts"]
+    n1["src/b.ts"]
+  end
+  class n0 changed
+  class n1 dependent
+  n1 --> n0

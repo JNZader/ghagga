@@ -1,0 +1,44 @@
+{
+  "mermaid": "flowchart TD\n  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px\n  classDef dependent fill:#dbeafe,stroke:#2563eb\n  classDef test fill:#dcfce7,stroke:#16a34a\n  subgraph c0[\"(root)\"]\n    n0[\"_img src_x_.ts\"]\n    n1[\"a--_b.ts\"]\n    n2[\"evil_label.ts\"]\n    n3[\"head_er.ts\"]\n  end\n  class n0,n1,n2,n3 changed\n  n1 --> n2\n  n3 --> n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "label": "_img src_x_.ts",
+      "role": "changed",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n1",
+      "label": "a--_b.ts",
+      "role": "changed",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n2",
+      "label": "evil_label.ts",
+      "role": "changed",
+      "cluster": "(root)"
+    },
+    {
+      "id": "n3",
+      "label": "head_er.ts",
+      "role": "changed",
+      "cluster": "(root)"
+    }
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "from": "n3",
+      "to": "n0"
+    }
+  ],
+  "meta": {
+    "stale": false,
+    "exceededCap": false,
+    "truncated": false
+  }
+}
