@@ -1308,18 +1308,30 @@ describe('formatBlastRadiusSection + formatReviewComment — blast-radius diagra
     expect(fence).toBe(diagram.mermaid);
   });
 
-  it('S7: section positioned between Files Changed and the cost footer', () => {
-    const comment = formatReviewComment(makeResultWithDiagram(makeDiagram()), {
-      fileList: ['src/a.ts', 'src/b.ts'],
-    });
-    const idxFiles = comment.indexOf('### Files Changed');
+  it('S7: section positioned immediately after Summary, before What-changed/Findings (Fix 2)', () => {
+    const base = makeResultWithDiagram(makeDiagram());
+    const result: ReviewResult = {
+      ...base,
+      findings: [makeFinding({ message: 'a finding' })],
+      semanticDiff: makeSemanticDiff([makeChange({ kind: 'function_added', name: 'foo' })]),
+    };
+    const comment = formatReviewComment(result, { fileList: ['src/a.ts', 'src/b.ts'] });
+    const idxSummary = comment.indexOf('### Summary');
     const idxBlast = comment.indexOf('### Blast Radius');
+    const idxWhatChanged = comment.indexOf('🧬 What changed');
+    const idxFindings = comment.indexOf('### Findings');
+    const idxFiles = comment.indexOf('### Files Changed');
     const idxFooter = comment.indexOf('📊'); // cost footer marker
-    expect(idxFiles).toBeGreaterThan(-1);
+    expect(idxSummary).toBeGreaterThan(-1);
     expect(idxBlast).toBeGreaterThan(-1);
-    expect(idxFooter).toBeGreaterThan(-1);
-    expect(idxFiles).toBeLessThan(idxBlast);
-    expect(idxBlast).toBeLessThan(idxFooter);
+    // Immediately after Summary: nothing renders between the summary text
+    // and the diagram heading.
+    expect(idxBlast).toBeGreaterThan(idxSummary);
+    // And ahead of everything else it used to trail.
+    expect(idxWhatChanged).toBeGreaterThan(idxBlast);
+    expect(idxFindings).toBeGreaterThan(idxBlast);
+    expect(idxFiles).toBeGreaterThan(idxBlast);
+    expect(idxFooter).toBeGreaterThan(idxBlast);
   });
 
   it('S8: counts-only blastRadius metadata → no section, byte-identical to no-metadata output', () => {

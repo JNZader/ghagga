@@ -648,6 +648,14 @@ export function formatReviewComment(
   // Sanitized to block mention spam, hidden HTML comments, and flooding.
   comment += `### Summary\n${sanitizeMarkdownText(result.summary, 2000)}\n\n`;
 
+  // Blast-radius diagram (blast-radius-diagram, repositioned by
+  // comment-format-signal Fix 2): renders zero bytes when the metadata
+  // carries no diagram (counts-only or no graph) — placed immediately after
+  // the Summary, before the What-changed/Findings sections (it was buried
+  // at the end of the comment, after Files Changed). Section content is
+  // unchanged.
+  comment += formatBlastRadiusSection(result.metadata.blastRadius?.diagram);
+
   // "What changed" entity-level section (design D4) — placed between Summary
   // and Findings. Returns '' (silent degradation) when semanticDiff is absent
   // or no non-import entity survives the presentation filters, in which case
@@ -756,11 +764,6 @@ export function formatReviewComment(
   if (options?.fileList && options.fileList.length > 0) {
     comment += formatFileCategorySummary(options.fileList);
   }
-
-  // Blast-radius diagram (blast-radius-diagram): renders zero bytes when
-  // the metadata carries no diagram (counts-only or no graph) — placed
-  // after Files Changed, before the cost footer (design D3).
-  comment += formatBlastRadiusSection(result.metadata.blastRadius?.diagram);
 
   // Cost footer — pass the measured input/output split when the review
   // metadata carries one (graph-context-retrieval T5.5); otherwise the
