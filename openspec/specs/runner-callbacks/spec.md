@@ -6,6 +6,10 @@ This spec defines the **stateless** callback authentication model: secrets are d
 
 ---
 
+## Purpose
+
+This spec defines the stateless authentication model for runner callbacks: the GHAGGA server injects an inline workflow whose runner signs static-analysis results with an HMAC-SHA256 secret derived deterministically from `STATE_SECRET + callbackId`, so callbacks survive server restarts, container redeploys, and horizontal scaling without stored state.
+
 ## Requirements
 
 ### R1 (P0): Stateless Secret Derivation
