@@ -199,6 +199,9 @@ vi.mock('ghagga-core', () => {
     parseDiffFiles: vi.fn().mockReturnValue([]),
     formatReviewComment: vi.fn().mockReturnValue('<!-- ghagga-review -->\nbody'),
     formatBoxSummary: vi.fn().mockReturnValue([]),
+    // The real ui/format.ts imports this from ghagga-core (D2) — stub it or
+    // formatMarkdownResult throws under this whole-module mock.
+    formatBlastRadiusSection: vi.fn().mockReturnValue(''),
     REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
     EngramMemoryStorage: { create: vi.fn() },
     buildSarif: vi.fn().mockReturnValue({
