@@ -12,6 +12,10 @@ All features extend the existing TUI facade pattern — commands never import `c
 
 ---
 
+## Purpose
+
+This spec extends the GHAGGA CLI with five cohesive enhancements: TUI polish (severity coloring, box-drawing summaries, dividers, step progress), structured output formats (JSON, SARIF v2.1.0, Markdown) via `--output`, opt-in AI post-analysis enhancement (`--enhance`), a local `ghagga health` command with scoring and trend tracking, and GitHub issue export (`--issue`). All features extend the existing TUI facade pattern so commands never import output libraries directly.
+
 ## Requirements
 
 ---

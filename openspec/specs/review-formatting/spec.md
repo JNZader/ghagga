@@ -4,6 +4,10 @@
 > **Change**: deduplicate-format-review-comment
 > **Status**: draft
 
+## Purpose
+
+This spec defines the extraction of `formatReviewComment` — the pure function that renders a GitHub-flavored Markdown review comment from a `ReviewResult` — into `packages/core` as the single source of truth, eliminating the byte-for-byte duplication between the server and Action packages.
+
 ## Overview
 
 `formatReviewComment` is a pure function `(ReviewResult) => string` that renders a GitHub-flavored Markdown comment for PR reviews. It is currently duplicated byte-for-byte in `apps/server/src/inngest/review.ts:48-118` and `apps/action/src/index.ts:221-291`. This spec defines the extraction into `packages/core` as the single source of truth.
@@ -14,15 +18,32 @@
 
 `formatReviewComment` MUST be exported from `packages/core/src/format.ts` and re-exported through `packages/core/src/index.ts`. This SHALL be the sole implementation of the function in the monorepo.
 
+#### Scenario: Sole implementation lives in core
+
+- **WHEN** the monorepo is searched for implementations of `formatReviewComment`
+- **THEN** the sole implementation MUST be the one exported from `packages/core/src/format.ts`
+- **AND** it MUST be re-exported through `packages/core/src/index.ts`
+
 ### R2: Behavioral Equivalence
 
 The extracted function MUST produce byte-for-byte identical output to the current implementation in `apps/server/src/inngest/review.ts:48-118` for any valid `ReviewResult` input. No formatting changes, no whitespace changes, no emoji changes.
+
+#### Scenario: Byte-for-byte identical output
+
+- **WHEN** the extracted function is called with any valid `ReviewResult` input
+- **THEN** the output MUST be byte-for-byte identical to the current implementation in `apps/server/src/inngest/review.ts:48-118`
+- **AND** no formatting, whitespace, or emoji changes SHALL be introduced
 
 ### R3: Consumer Migration
 
 Both consumers MUST import `formatReviewComment` from `ghagga-core`:
 - `apps/server/src/inngest/review.ts` — currently defines locally at line 48
 - `apps/action/src/index.ts` — currently defines locally at line 221
+
+#### Scenario: Both consumers import from ghagga-core
+
+- **WHEN** `apps/server/src/inngest/review.ts` and `apps/action/src/index.ts` need `formatReviewComment`
+- **THEN** both MUST import it from `ghagga-core`
 
 ### R4: Constants Co-location
 
@@ -37,6 +58,12 @@ The following helper constants MUST be co-located with `formatReviewComment` in 
 
 `STATUS_EMOJI` and `SEVERITY_EMOJI` MUST be exported for consumers that may need them independently. `SOURCE_LABELS` and `renderOrder` MUST remain function-local as they are implementation details.
 
+#### Scenario: Constants co-located in format.ts
+
+- **WHEN** `packages/core/src/format.ts` is inspected
+- **THEN** `STATUS_EMOJI` and `SEVERITY_EMOJI` MUST be co-located with `formatReviewComment` and exported
+- **AND** `SOURCE_LABELS` and `renderOrder` MUST remain function-local
+
 ### R5: No Dead Code
 
 After migration, the duplicate implementations MUST be completely removed:
@@ -44,6 +71,12 @@ After migration, the duplicate implementations MUST be completely removed:
 - `apps/action/src/index.ts` lines 200-291 (constants + function + JSDoc comment)
 
 No orphaned imports related to these removed definitions SHALL remain.
+
+#### Scenario: Duplicates removed after migration
+
+- **WHEN** the migration completes
+- **THEN** the duplicate implementations in `apps/server/src/inngest/review.ts` and `apps/action/src/index.ts` MUST be completely removed
+- **AND** no orphaned imports related to the removed definitions SHALL remain
 
 ### R6: Test Coverage
 
@@ -54,6 +87,11 @@ Direct unit tests for `formatReviewComment` MUST exist in `packages/core/src/for
 - Pipe (`|`) and newline (`\n`) escaping in finding messages
 - Static analysis summary section (tools run / tools skipped)
 - Footer line
+
+#### Scenario: Unit tests cover formatting behavior
+
+- **WHEN** the unit tests in `packages/core/src/format.test.ts` run
+- **THEN** they MUST cover the findings table with grouped sources, empty findings, all four `ReviewStatus` variants, pipe and newline escaping, the static analysis summary section, and the footer line
 
 ## Cross-cutting Concerns
 

@@ -5,6 +5,10 @@
 > **Type**: FULL (new domain — no prior main spec)  
 > **Status**: Draft  
 
+## Purpose
+
+This spec defines a storage-agnostic memory subsystem for GHAGGA: an abstract `MemoryStorage` interface with SQLite (CLI/Action) and PostgreSQL (SaaS) implementations that persists observations from past reviews and injects relevant context into future reviews, decoupling `packages/core` from `ghagga-db` entirely.
+
 ## Overview
 
 This specification defines a storage-agnostic memory subsystem for GHAGGA. Memory enables progressive review intelligence by persisting observations from past reviews and injecting relevant context into future reviews. Today memory only works in SaaS mode (PostgreSQL via `ghagga-db`). This spec introduces an abstract `MemoryStorage` interface with two implementations — SQLite (via sql.js) for CLI and Action, and PostgreSQL for SaaS — and decouples `packages/core` from `ghagga-db` entirely.
@@ -55,6 +59,12 @@ All consumers of memory operations (currently `packages/core/src/memory/search.t
 
 The `close()` method MUST be called when the consumer is done with the storage instance. For SQLite this flushes to disk and frees WASM memory; for PostgreSQL it is a no-op.
 
+#### Scenario: Consumers depend on the MemoryStorage interface
+
+- **WHEN** `packages/core/src/memory/search.ts` and `packages/core/src/memory/persist.ts` perform memory operations
+- **THEN** they MUST call methods on the `MemoryStorage` interface instead of importing functions from `ghagga-db`
+- **AND** `close()` MUST be called when the consumer is done with the storage instance
+
 ### R2: ReviewInput Type Update
 
 `ReviewInput` in `packages/core/src/types.ts` MUST replace the field:
@@ -70,6 +80,12 @@ memoryStorage?: MemoryStorage;
 ```
 
 The field MUST be typed as `MemoryStorage | undefined`. The old `db` field MUST be removed. All call sites (server, CLI, Action) MUST be updated to use the new field name.
+
+#### Scenario: ReviewInput exposes memoryStorage instead of db
+
+- **WHEN** `ReviewInput` in `packages/core/src/types.ts` is inspected
+- **THEN** the field MUST be `memoryStorage?: MemoryStorage`, typed as `MemoryStorage | undefined`
+- **AND** the old `db` field MUST be removed with all call sites (server, CLI, Action) updated to the new field name
 
 ### R3: SqliteMemoryStorage Implementation
 
@@ -179,6 +195,12 @@ The system MUST provide a `PostgresMemoryStorage` class in `apps/server/src/memo
 The constructor MUST accept the Drizzle `Database` instance (the existing `db` parameter used throughout the server).
 
 The returned `MemoryObservationRow` MUST match the interface shape: `{ id, type, title, content, filePaths }`. The adapter MUST map from the full Drizzle row to this subset.
+
+#### Scenario: Postgres adapter wraps ghagga-db
+
+- **WHEN** `PostgresMemoryStorage` is constructed with the Drizzle `Database` instance
+- **THEN** each interface method MUST delegate to the corresponding `ghagga-db` query function per the mapping table
+- **AND** returned rows MUST match the `MemoryObservationRow` shape `{ id, type, title, content, filePaths }`
 
 ### R5: FTS5 Search Parity & Semantic Union
 
@@ -472,6 +494,12 @@ After this change:
 - `packages/core/package.json` MUST add `"sql.js": "^1.11.0"` as a dependency
 - No file in `packages/core/src/` MUST contain `import ... from 'ghagga-db'`
 - `packages/core` MUST be independently installable without PostgreSQL/Drizzle
+
+#### Scenario: Core package installs without PostgreSQL
+
+- **WHEN** `packages/core/package.json` is inspected after this change
+- **THEN** it MUST NOT list `ghagga-db` and MUST list `"sql.js": "^1.11.0"`
+- **AND** no file in `packages/core/src/` MUST import from `ghagga-db`
 
 ### R10: Backward Compatibility
 

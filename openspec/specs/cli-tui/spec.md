@@ -5,6 +5,10 @@
 > **Status**: draft
 > **Updated**: 2026-03-08 — Merged delta from `extensible-static-analysis` change (--disable-tool/--enable-tool/--list-tools flags, deprecated aliases, config file extension)
 
+## Purpose
+
+This spec defines a TUI (Terminal User Interface) presentation layer that wraps all CLI output through a thin facade backed by `@clack/prompts`: branded headers/footers, animated spinners, structured log methods, and automatic degradation to plain text in non-interactive environments. The change is presentation-only — no command logic, exit codes, argument parsing, or pipeline behavior changes.
+
 ## Overview
 
 The CLI currently outputs all text via raw `console.log`/`console.error` with scattered inline ANSI escape codes, no spinners, and no visual hierarchy. This spec defines a TUI (Terminal User Interface) presentation layer that wraps all CLI output through a thin facade backed by `@clack/prompts`. The layer provides branded headers/footers, animated spinners, structured log methods, and automatic degradation to plain text in non-interactive environments. This is a **presentation-only** change: no command logic, exit codes, argument parsing, or pipeline behavior changes.

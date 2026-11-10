@@ -7,7 +7,11 @@
 
 ---
 
-## Section 1: Database Layer
+## Purpose
+
+This spec defines the unified settings model across the database layer, API, core pipeline, dashboard UI, tool configuration, and CLI bridge: provider chain storage and resolution, installation-level global settings with per-repo overrides, effective settings resolution, and the surfaces that edit them.
+
+## Requirements
 
 ### 1.1 Provider Chain Storage
 
@@ -196,8 +200,6 @@ The system MUST provide a function to resolve the effective settings for a repos
 - Then it returns sensible defaults (empty chain, aiReviewEnabled=true, DEFAULT_REPO_SETTINGS)
 
 ---
-
-## Section 2: API Layer
 
 ### 2.1 Get Repository Settings
 
@@ -453,8 +455,6 @@ The webhook handler MUST resolve effective settings before dispatching to Innges
 
 ---
 
-## Section 3: Core Pipeline Integration
-
 ### 3.1 Static-Only Review Mode
 
 The `reviewPipeline` MUST support running without any LLM calls when AI review is disabled.
@@ -554,8 +554,6 @@ The Inngest `ghagga-review` function MUST read the provider chain from the event
 - AND pass `aiReviewEnabled: false` to `reviewPipeline()`
 
 ---
-
-## Section 4: Dashboard UI
 
 ### 4.1 Static Analysis Section
 
@@ -854,8 +852,6 @@ The existing Settings page MUST show a toggle for global vs custom settings.
 
 ---
 
-## Section 5: Tool Configuration (Added by `extensible-static-analysis`, 2026-03-08)
-
 ### 5.1 enabled_tools JSONB Field
 
 The `repositories` table's `settings` JSONB column MUST support an `enabledTools` field storing the list of explicitly enabled tool names as `string[]`.
@@ -1082,8 +1078,6 @@ The Settings page MUST display a tool grid showing all registered tools with ena
 - AND each tool MUST show an "Inherited" badge
 - AND the state MUST reflect the global settings
 
-
-## Section 6: CLI Bridge Credentials and Model Selection
 
 ### 6.1 Tool and Model Contract
 

@@ -9,7 +9,7 @@ This spec defines the contract for each static analysis tool plugin in the GHAGG
 
 ---
 
-## Section 1: Always-On Tools (Existing — Adapted)
+## Requirements
 
 ### Requirement: Semgrep Plugin (adapted)
 
@@ -103,8 +103,6 @@ The CPD plugin MUST be adapted from the current hardcoded implementation to conf
 - AND findings MUST be parsed from the output normally
 
 ---
-
-## Section 2: Always-On Tools (New)
 
 ### Requirement: Gitleaks Plugin
 
@@ -241,8 +239,6 @@ The system MUST include a Lizard plugin for cyclomatic complexity analysis.
 - THEN it MUST return `status: 'success'` with an empty findings array
 
 ---
-
-## Section 3: Auto-Detect Tools
 
 ### Requirement: Auto-Detect Activation Contract
 
@@ -500,8 +496,6 @@ The system MUST include a Hadolint plugin for Dockerfile linting.
 - THEN Hadolint MUST NOT activate
 
 ---
-
-## Section 4: Cross-Cutting Tool Requirements
 
 ### Requirement: Tool Output Normalization
 

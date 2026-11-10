@@ -148,8 +148,6 @@ The system SHOULD validate commit messages against conventional commit format.
 
 ---
 
-## Extensible Tool Registry (Added by `extensible-static-analysis`, 2026-03-08)
-
 ### Requirement: ToolDefinition Interface
 
 The system MUST define a `ToolDefinition` interface that fully describes a static analysis tool as a self-contained plugin.
