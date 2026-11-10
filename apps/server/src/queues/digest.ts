@@ -228,7 +228,15 @@ export interface DigestPublication {
 
 export interface DigestRunDeps {
   db: Database;
-  forge: DigestPublication;
+  /**
+   * Publication seam FACTORY — runDigestForRepository builds the seam ONLY
+   * after every skip guard passes (resilience B3). Constructing it eagerly
+   * in the worker meant a deleted repo threw DURING seam construction (repo
+   * lookup) instead of reaching the graceful SKIPPED guard: 3 rejected
+   * BullMQ attempts and an FK-rejected FAILED row. Lazy construction also
+   * means disabled/no-findings runs never mint an installation token.
+   */
+  makeForge: () => Promise<DigestPublication>;
   log: {
     info: (obj: unknown, msg?: string) => void;
     warn: (obj: unknown, msg?: string) => void;
@@ -241,7 +249,8 @@ export interface DigestRunDeps {
 /**
  * Build the real GitHub publication seam for one repository: installation
  * token mint + `makeGitHubAdapter` public port verbs (createDigestIssue /
- * updateDigestIssue). Never imported by tests — they inject `forge` instead.
+ * updateDigestIssue). Never invoked by tests — they inject a `makeForge`
+ * factory returning a fake instead.
  */
 async function makeGitHubDigestPublication(
   db: Database,
@@ -300,7 +309,7 @@ export async function runDigestForRepository(
   repositoryId: number,
   deps: DigestRunDeps,
 ): Promise<'POSTED' | 'SKIPPED'> {
-  const { db, forge, log } = deps;
+  const { db, log } = deps;
   const runAt = deps.now();
 
   const repo = await getRepositoryById(db, repositoryId);
@@ -376,6 +385,10 @@ export async function runDigestForRepository(
   const body = formatDigestIssue(inputs, trend, fileRisks);
 
   // 5. Publish: update in place, or create (first run / rotated issue).
+  // The seam is built HERE — after every skip guard — so guard skips (repo
+  // gone, disabled, no new findings) never mint an installation token and
+  // never throw seam-construction errors (B3: guards BEFORE the seam).
+  const forge = await deps.makeForge();
   // Adopt-before-create (4R RISK-001/RES-001): a prior attempt may have
   // CREATED the issue and died before rotateOpenDigest committed — a blind
   // POST mints an orphan on every retry (BullMQ attempts 3 → up to 3 issues
@@ -482,10 +495,12 @@ export function createDigestWorker(concurrency = 2): Worker<DigestJobData, unkno
     DIGEST_QUEUE_NAME,
     async (job) => {
       const db = createDatabaseFromEnv();
-      const forge = await makeGitHubDigestPublication(db, job.data.repositoryId);
       return runDigestForRepository(job.data.repositoryId, {
         db,
-        forge,
+        // Lazy seam (B3): constructed only after the skip guards pass inside
+        // runDigestForRepository — a deleted repo reaches the graceful
+        // SKIPPED instead of throwing here over 3 BullMQ attempts.
+        makeForge: () => makeGitHubDigestPublication(db, job.data.repositoryId),
         log: logger,
         now: () => new Date(),
       });
