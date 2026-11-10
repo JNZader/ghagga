@@ -5183,6 +5183,99 @@ exports[`golden: optional steps ON (isolated) > semantic-ranking ON: findings re
 }
 `;
 
+exports[`golden: output compression threading > default-ON snapshot: threading is invisible to pipeline-observable behavior (the block lives inside the agent prompts) 1`] = `
+{
+  "events": [
+    {
+      "message": "Input validated",
+      "step": "validate",
+    },
+    {
+      "detail": "  src/index.ts",
+      "message": "Parsed 1 files from diff, 1 after filtering (0 blocked, 0 redacted)",
+      "step": "parse-diff",
+    },
+    {
+      "detail": "  typescript",
+      "message": "Detected 1 tech stack(s)",
+      "step": "detect-stacks",
+    },
+    {
+      "message": "Token budget: 140000 tokens for diff, 60000 tokens for context",
+      "step": "token-budget",
+    },
+    {
+      "message": "Running static analysis & memory search...",
+      "step": "static-analysis",
+    },
+    {
+      "detail": "  semgrep: skipped (0 findings)
+  trivy: skipped (0 findings)
+  cpd: skipped (0 findings)
+  memory: disabled
+  code-intel: disabled or unavailable
+  context levels: static=L2, memory=L2",
+      "message": "Static analysis complete (context: static=L2, memory=L2)",
+      "step": "static-results",
+    },
+    {
+      "message": "Running simple agent with gateway/claude-sonnet-4-20250514...",
+      "step": "agent-start",
+    },
+  ],
+  "result": {
+    "coverageComplete": true,
+    "findings": [],
+    "memoryContext": null,
+    "metadata": {
+      "executionTimeMs": 0,
+      "fileList": [
+        "src/index.ts",
+      ],
+      "mode": "simple",
+      "model": "test-model",
+      "provider": "gateway",
+      "tokensUsed": 100,
+      "toolsRun": [],
+      "toolsSkipped": [
+        "semgrep",
+        "trivy",
+        "cpd",
+      ],
+      "totalAdditions": 1,
+      "totalDeletions": 0,
+    },
+    "semanticDiff": {
+      "changes": [],
+      "summary": "no entity-level changes detected",
+    },
+    "staticAnalysis": {
+      "cpd": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "semgrep": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+      "trivy": {
+        "error": "not installed",
+        "executionTimeMs": 0,
+        "findings": [],
+        "status": "skipped",
+      },
+    },
+    "status": "PASSED",
+    "summary": "simple review OK.",
+  },
+  "warns": [],
+}
+`;
+
 exports[`golden: path-protection tiers (B0.5) > blocked (.env) + redacted (.env.example): emits + parse-diff counts pinned 1`] = `
 {
   "events": [

@@ -189,6 +189,11 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
     // every runner; '' keeps each runner's prompt array byte-identical.
     const graphNeighborhoodContext = state.graphNeighborhoodContext;
 
+    // review-output-compression: resolve once, thread an explicit boolean
+    // to every runner (same threading as reviewLevel). Default ON; only an
+    // explicit false removes the OUTPUT_STYLE_CALIBRATION appendix.
+    const compressOutput = input.settings.compressOutput !== false;
+
     try {
       switch (effectiveMode) {
         case 'simple':
@@ -200,6 +205,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
+            compressOutput,
             onProgress: input.onProgress,
             generateFn: generateFns[0],
             // Backward compat fields (not used when generateFn is provided)
@@ -218,6 +224,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
+            compressOutput,
             onProgress: input.onProgress,
             generateFns,
             concurrency: input.settings?.reviewConcurrency,
@@ -240,6 +247,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
+            compressOutput,
             onProgress: input.onProgress,
             generateFns,
             concurrency: input.settings?.reviewConcurrency,
@@ -260,6 +268,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
+            compressOutput,
             onProgress: input.onProgress,
           });
           break;
@@ -282,6 +291,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
+            compressOutput,
             onProgress: input.onProgress,
             generateFns,
             // Forward lens selection from settings (CLI flags > config > defaults)
