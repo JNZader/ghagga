@@ -257,7 +257,9 @@ export {
   REVIEW_COMMENT_MARKER,
   SEVERITY_EMOJI,
   STATUS_EMOJI,
+  sanitizeInlineCodeName,
 } from './format.js';
+export { DIGEST_ISSUE_MARKER, formatDigestIssue } from './format-digest.js';
 export { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 
 // ─── Extensible Tool System ─────────────────────────────────────
