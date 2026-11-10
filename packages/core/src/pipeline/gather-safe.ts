@@ -22,7 +22,7 @@ import {
 import { rankNeighborhoods } from '../graph/neighborhood-rank.js';
 import { collectFileNeighborhoods } from '../graph/neighbors.js';
 import type { DependencyGraph, GraphMetadata } from '../graph/schema.js';
-import { isGraphStale } from '../graph/schema.js';
+import { GRAPH_STALE_DAYS, isGraphStale } from '../graph/schema.js';
 import { searchMemoryForContext } from '../memory/search.js';
 import { runStaticAnalysis } from '../tools/runner.js';
 import type { GraphContextMetadata, ProgressEvent, ReviewInput } from '../types.js';
@@ -305,7 +305,7 @@ export async function gatherGraphContextSafe(
     if (graphMetadata && isGraphStale(graphMetadata)) {
       emit({
         step: 'graph-context',
-        message: `Graph neighborhood: skipped (graph stale beyond ${7}d — re-run ghagga index)`,
+        message: `Graph neighborhood: skipped (graph stale beyond ${GRAPH_STALE_DAYS}d — re-run ghagga index)`,
       });
       return {
         context: '',

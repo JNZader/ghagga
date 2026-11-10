@@ -127,9 +127,10 @@ export function clusterOfPath(path: string): string {
 
 /**
  * Locale-independent, UTF-16 code-unit ordering — stable across runs,
- * machines, and ICU versions (never `localeCompare`).
+ * machines, and ICU versions (never `localeCompare`). Shared with
+ * `diagram-summary.ts` (single comparator — same ordering everywhere).
  */
-function comparePaths(a: string, b: string): number {
+export function comparePaths(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
