@@ -3287,6 +3287,7 @@ Past review: watch the parser.",
       "graphContextMetadata": {
         "filesCovered": 2,
         "freshness": "file-level",
+        "rankingMode": "lexical",
         "truncatedFiles": 0,
       },
       "mode": "simple",
@@ -3551,6 +3552,7 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: exceeded cap fa
       "graphContextMetadata": {
         "filesCovered": 2,
         "freshness": "file-level",
+        "rankingMode": "lexical",
         "truncatedFiles": 0,
       },
       "mode": "simple",
@@ -3722,6 +3724,7 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
       "graphContextMetadata": {
         "filesCovered": 2,
         "freshness": "file-level",
+        "rankingMode": "lexical",
         "truncatedFiles": 0,
       },
       "mode": "simple",
@@ -3895,6 +3898,7 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
       "graphContextMetadata": {
         "filesCovered": 2,
         "freshness": "file-level",
+        "rankingMode": "lexical",
         "truncatedFiles": 0,
       },
       "mode": "simple",

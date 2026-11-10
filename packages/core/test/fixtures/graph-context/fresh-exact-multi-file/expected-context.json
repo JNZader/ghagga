@@ -3,6 +3,7 @@
   "metadata": {
     "filesCovered": 2,
     "truncatedFiles": 0,
-    "freshness": "exact"
+    "freshness": "exact",
+    "rankingMode": "lexical"
   }
 }

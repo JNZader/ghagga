@@ -55,8 +55,17 @@ vi.mock('../graph/neighborhood-format.js', async (importOriginal) => {
   return { ...actual, formatGraphNeighborhood: vi.fn(actual.formatGraphNeighborhood) };
 });
 
+// Partial mock (real impl by default, same pattern): the ranker-throw row
+// forces ONE rankNeighborhoods throw; real ranking stays on for the order
+// assertions (context-hybrid-ranking T1.3).
+vi.mock('../graph/neighborhood-rank.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../graph/neighborhood-rank.js')>();
+  return { ...actual, rankNeighborhoods: vi.fn(actual.rankNeighborhoods) };
+});
+
 import { runSimpleReview } from '../agents/simple.js';
 import { formatGraphNeighborhood } from '../graph/neighborhood-format.js';
+import { rankNeighborhoods } from '../graph/neighborhood-rank.js';
 import type { DependencyGraph, GraphLoader, GraphMetadata, GraphNode } from '../graph/schema.js';
 import { reviewPipeline } from '../pipeline.js';
 import { formatStaticAnalysisContext, runStaticAnalysis } from '../tools/runner.js';
@@ -320,6 +329,7 @@ describe('graph-context degradation ladder', () => {
       filesCovered: 1,
       truncatedFiles: 0,
       freshness: 'exact',
+      rankingMode: 'lexical',
     });
     expect(events.some((e) => e.step === 'graph-context' && /1\/2/.test(e.message))).toBe(true);
   });
@@ -336,6 +346,7 @@ describe('graph-context degradation ladder', () => {
       filesCovered: 1,
       truncatedFiles: 0,
       freshness: 'file-level',
+      rankingMode: 'lexical',
     });
   });
 
@@ -388,5 +399,127 @@ describe('graph-context budget neutrality', () => {
     expect(on.agentArgs.memoryContext).toBe(off.agentArgs.memoryContext);
     expect(on.agentArgs.stackHints).toBe(off.agentArgs.stackHints);
     expect(on.agentArgs.diff).toContain('src/index.ts');
+  });
+});
+
+// ─── Lexical ranking at the gather seam (context-hybrid-ranking T1.3) ──
+
+/**
+ * Two changed files, both in the graph, FIRST in diff order lexically weak:
+ *
+ *   aaa: w1 = 3·|{src,aaa,ts}| = 9, w2 = 0 → 9  (echo floor only)
+ *   bbb: w1 = 9, w2 = 5·|{tweak,bbbfn}| = 10 → 19 (own changed symbol
+ *        `tweak` + export `bbbFn` mentioned in aaa's hunk body)
+ *
+ * Diff order is [aaa, bbb]; score-desc order is [bbb, aaa] — the rendered
+ * section must flip, proving the ranker sits between collect and format.
+ */
+const RANKED_DIFF = `diff --git a/src/aaa.ts b/src/aaa.ts
+--- a/src/aaa.ts
++++ b/src/aaa.ts
+@@ -1,2 +1,3 @@
++out = bbbFn(x)
+diff --git a/src/bbb.ts b/src/bbb.ts
+--- a/src/bbb.ts
++++ b/src/bbb.ts
+@@ -1,2 +1,3 @@
++const tweak = 1
+`;
+
+const RANKED_GRAPH: DependencyGraph = {
+  version: 1,
+  rootDir: '/repo',
+  nodes: {
+    'src/aaa.ts': makeNode({ exports: [] }),
+    'src/bbb.ts': makeNode({ exports: ['bbbFn'] }),
+  },
+};
+
+describe('graph-context lexical ranking', () => {
+  it('exact tier: rendered order is score-desc (bbb before aaa) and metadata reports rankingMode lexical', async () => {
+    const loader = makeGraphLoader(
+      async () => RANKED_GRAPH,
+      async () => makeMetadata(),
+    );
+    const { result, agentArgs } = await run(makeInput({ diff: RANKED_DIFF, graphLoader: loader }));
+
+    expect(result.status).toBe('PASSED');
+    expect(result.metadata.graphContextMetadata).toEqual({
+      filesCovered: 2,
+      truncatedFiles: 0,
+      freshness: 'exact',
+      rankingMode: 'lexical',
+    });
+
+    const context = agentArgs.graphNeighborhoodContext as string;
+    expect(context).toContain('src/bbb.ts');
+    expect(context).toContain('src/aaa.ts');
+    expect(context.indexOf('src/bbb.ts')).toBeLessThan(context.indexOf('src/aaa.ts'));
+  });
+
+  it('file-level tier: same score-desc order, per-tier entry rendering unchanged', async () => {
+    const loader = makeGraphLoader(
+      async () => RANKED_GRAPH,
+      async () => makeMetadata({ lastIndexedCommit: 'b'.repeat(40) }),
+    );
+    const { result, agentArgs } = await run(makeInput({ diff: RANKED_DIFF, graphLoader: loader }));
+
+    expect(result.status).toBe('PASSED');
+    expect(result.metadata.graphContextMetadata).toEqual({
+      filesCovered: 2,
+      truncatedFiles: 0,
+      freshness: 'file-level',
+      rankingMode: 'lexical',
+    });
+
+    const context = agentArgs.graphNeighborhoodContext as string;
+    expect(context.indexOf('src/bbb.ts')).toBeLessThan(context.indexOf('src/aaa.ts'));
+    // File-level entries are paths+counts only — no symbol names leak.
+    expect(context).not.toContain('bbbFn');
+    expect(context).toContain('importer(s)');
+  });
+
+  it('ranker throw: caught by the existing catch → failedStep, no metadata, review continues', async () => {
+    (rankNeighborhoods as MockedFunction<typeof rankNeighborhoods>).mockImplementationOnce(() => {
+      throw new Error('boom: ranker exploded');
+    });
+    const loader = makeGraphLoader(
+      async () => RANKED_GRAPH,
+      async () => makeMetadata(),
+    );
+    const { result, events, agentArgs } = await run(
+      makeInput({ diff: RANKED_DIFF, graphLoader: loader }),
+    );
+
+    expect(['PARTIAL', 'PASSED']).toContain(result.status);
+    expect(result.failedSteps?.some((s) => s.step === 'graph-context')).toBe(true);
+    expect(result.metadata.graphContextMetadata).toBeUndefined();
+    expect(agentArgs.graphNeighborhoodContext).toBe('');
+    expect(events.some((e) => e.step === 'graph-context' && /failed/i.test(e.message))).toBe(true);
+  });
+
+  it.each([
+    {
+      name: 'disabled',
+      input: () => makeInput({ settings: { ...makeInput().settings, enableGraphContext: false } }),
+    },
+    { name: 'no graph (auto)', input: () => makeInput({ graphLoader: undefined }) },
+    {
+      name: 'stale graph (>7d)',
+      input: () =>
+        makeInput({
+          graphLoader: makeGraphLoader(
+            async () => RANKED_GRAPH,
+            async () =>
+              makeMetadata({
+                lastIndexedAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+              }),
+          ),
+        }),
+    },
+  ])('skip path ($name): ranker NEVER invoked, no rankingMode on metadata', async ({ input }) => {
+    await run(input());
+
+    expect(rankNeighborhoods).not.toHaveBeenCalled();
   });
 });

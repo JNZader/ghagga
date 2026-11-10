@@ -174,8 +174,9 @@ afterAll(() => {
 describe('graph-context eval corpus', () => {
   const cases = loadCorpusCases();
 
-  it('corpus has the six ladder cases', () => {
+  it('corpus has the seven ladder cases', () => {
     expect(cases.map((c) => c.name)).toEqual([
+      'budget-cut-ranked',
       'fresh-exact-multi-file',
       'no-graph',
       'not-exact-fresh',
@@ -269,5 +270,76 @@ describe('graph-context eval corpus', () => {
     expect(context).toContain('src/cli.py');
     expect(context).toContain('main'); // exports only
     expect(context).not.toContain('symbol-named');
+  });
+
+  // ─── budget-cut-ranked (context-hybrid-ranking T2.2) ────────────
+  //
+  // 11 changed files at the DEFAULT 1,200-token budget (~7,000 rendered
+  // chars vs the 4,800 cap). Cast by intent: filler-a FIRST in diff order
+  // with zero lexical signal (comment-only hunk, 9 pts echo floor); fillers
+  // b..i each declare a symbol (14 pts); hub has 10 importers but zero
+  // lexical (10 pts); ranker LAST in diff order with both exports called
+  // from filler-i's hunk (19 pts). Expected ranked order: ranker, then the
+  // fvar-declaring fillers in diff order, then hub, then filler-a — the cut
+  // keeps the top 7 and drops filler-h/i, hub, filler-a.
+  describe('case: budget-cut-ranked survival under the DEFAULT budget', () => {
+    const cut = () => cases.find((c) => c.name === 'budget-cut-ranked') as CorpusCase;
+    const DEFAULT_BUDGET_CHARS = 1_200 * 4;
+
+    it('drops filler-a (first in diff) and keeps ranker.ts (last in diff) — relevance beats position', async () => {
+      const { context, metadata } = await assemble(cut());
+      expect(metadata?.filesCovered).toBe(7);
+      expect(metadata?.truncatedFiles).toBe(4);
+
+      // (a) filler-a is NOT rendered despite being first in diff order.
+      expect(context).not.toContain('- src/filler-a.ts');
+      // (b) ranker IS rendered despite being last in diff order.
+      expect(context).toContain('- src/ranker.ts');
+    });
+
+    it('renders score-desc with stable ties — ranker first, then decl-fillers in diff order', async () => {
+      const { context } = await assemble(cut());
+      const order = [
+        'src/ranker.ts', // 19 — w2 from both exports called cross-file
+        'src/filler-b.ts', // 14 — ties keep diff order
+        'src/filler-c.ts',
+        'src/filler-d.ts',
+        'src/filler-e.ts',
+        'src/filler-f.ts',
+        'src/filler-g.ts', // 7th entry — the budget cut lands here
+      ];
+      let prev = -1;
+      for (const file of order) {
+        const at = context.indexOf(`- ${file}`);
+        expect(at).toBeGreaterThan(-1);
+        expect(at).toBeGreaterThan(prev);
+        prev = at;
+      }
+      // The dropped tail never renders.
+      for (const file of ['src/filler-h.ts', 'src/filler-i.ts', 'src/hub.ts']) {
+        expect(context).not.toContain(`- ${file}`);
+      }
+    });
+
+    it('truncation notice counts match the drop, and rendered bytes respect the cap', async () => {
+      const { context, metadata } = await assemble(cut());
+      expect(context).toContain('_(graph neighborhood truncated to fit 1200-token budget');
+      expect(context).toMatch(/7 of 11 file\(s\) shown/);
+      expect(context.length).toBeLessThanOrEqual(DEFAULT_BUDGET_CHARS);
+      expect(metadata?.truncatedFiles).toBe(4);
+    });
+
+    it('metadata reports rankingMode lexical (ranker ran before the cut)', async () => {
+      const { metadata } = await assemble(cut());
+      expect(metadata?.rankingMode).toBe('lexical');
+      expect(metadata?.freshness).toBe('exact');
+    });
+
+    it('repeated assembly is byte-identical (determinism)', async () => {
+      const first = await assemble(cut());
+      const second = await assemble(cut());
+      expect(second.context).toBe(first.context);
+      expect(second.metadata).toEqual(first.metadata);
+    });
   });
 });
