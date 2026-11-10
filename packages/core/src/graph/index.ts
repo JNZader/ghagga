@@ -53,6 +53,18 @@ export {
   MAX_NEIGHBORS_PER_FILE,
 } from './neighbors.js';
 
+// ─── Neighborhood Context Formatter ─────────────────────────────
+
+export type {
+  FormatGraphNeighborhoodOptions,
+  GraphNeighborhoodFormatResult,
+} from './neighborhood-format.js';
+export {
+  DEFAULT_GRAPH_CONTEXT_MAX_TOKENS,
+  formatGraphNeighborhood,
+  formatGraphNeighborhoodContext,
+} from './neighborhood-format.js';
+
 // ─── Graph Loaders ──────────────────────────────────────────────
 
 export {
