@@ -24,7 +24,7 @@
     "release": "turbo build && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.2",
+    "@biomejs/biome": "^2.6.5",
     "@changesets/cli": "^3.0.3",
     "@vitest/coverage-v8": "^5.1.0",
     "turbo": "^2.11.10"
