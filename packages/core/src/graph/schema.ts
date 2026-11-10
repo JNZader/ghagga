@@ -215,6 +215,14 @@ export interface BlastRadiusMetadata {
    * exact-commit-fresh), or found nothing to narrow.
    */
   narrowedDependents?: number;
+
+  /**
+   * Capped, sanitized diagram data for rendering (blast-radius-diagram
+   * change). Additive/optional — readers that predate the field ignore it,
+   * and it is present only when the blast radius fit the cap (an
+   * `exceededCap` result NEVER carries a diagram; counts-only fallback).
+   */
+  diagram?: BlastRadiusDiagram;
 }
 
 // ─── Graph Loader Interface ─────────────────────────────────────
@@ -237,6 +245,87 @@ export const MAX_GRAPH_SIZE_BYTES = 20 * 1024 * 1024;
 
 /** Maximum files in a blast-radius result before falling back to full diff */
 export const MAX_BLAST_RADIUS_FILES = 50;
+
+// ─── Blast-Radius Diagram (blast-radius-diagram) ────────────────
+
+/**
+ * Max nodes persisted (and rendered) in the blast-radius diagram. One cap
+ * for BOTH render and persistence — no divergence possible (design D2).
+ */
+export const MAX_DIAGRAM_NODES = 25;
+
+/** Max edges persisted (and rendered) in the blast-radius diagram (D2). */
+export const MAX_DIAGRAM_EDGES = 40;
+
+/** Max characters in a sanitized diagram node label (D6). */
+export const MAX_DIAGRAM_LABEL_CHARS = 80;
+
+/**
+ * Hard build-time invariant on `JSON.stringify(diagram).length` (D2). The
+ * label cap + generated id scheme make the worst case ~6-8 KB; the builder
+ * throws (and the pipeline degrades to counts-only) rather than persist an
+ * oversized artifact.
+ */
+export const BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS = 10_000;
+
+/** Role of a node in the blast-radius diagram. */
+export type BlastRadiusDiagramNodeRole = 'changed' | 'dependent' | 'test';
+
+export interface BlastRadiusDiagramNode {
+  /**
+   * Generated numeric id (`n0`…`n24`) — the node's index in the sorted
+   * node list. NEVER derived from the file path (injection safety, D6).
+   */
+  id: string;
+  /** Allowlist-sanitized file path (`sanitizeMermaidLabel`, D6). */
+  label: string;
+  role: BlastRadiusDiagramNodeRole;
+  /** Top-level directory (`'(root)'` for root files, D5). */
+  cluster: string;
+}
+
+export interface BlastRadiusDiagramEdge {
+  /** Importer node id (`→` = imports, D1 orientation). */
+  from: string;
+  /** Importee node id. */
+  to: string;
+}
+
+export interface BlastRadiusDiagramMeta {
+  /** Graph older than the 7-day rule when the diagram was built. */
+  stale: boolean;
+  /**
+   * Blast radius exceeded the file cap. NOTE: the pipeline NEVER persists
+   * lists with this flag true (oversize → counts-only, spec-wins
+   * resolution); the field exists so renderers honor it if a legacy or
+   * synthetic payload carries it (review-formatting S11).
+   */
+  exceededCap: boolean;
+  /**
+   * True when the persisted lists were truncated to fit the render caps —
+   * covers BOTH the node cap (25) and the edge cap (40). Node truncation
+   * additionally records `clusterCounts`; edge truncation alone sets this
+   * flag with `clusterCounts` absent.
+   */
+  truncated: boolean;
+  /**
+   * Omitted-per-cluster node counts, present ONLY when nodes were
+   * truncated. Total omitted nodes = sum of values (legend "+N more", D5).
+   */
+  clusterCounts?: Record<string, number>;
+}
+
+/**
+ * Single diagram source for every consumer (comment, persisted metadata
+ * jsonb, dashboard DTO): the mermaid string AND the capped lists it was
+ * built from (D1 — no second render path to drift).
+ */
+export interface BlastRadiusDiagram {
+  mermaid: string;
+  nodes: BlastRadiusDiagramNode[];
+  edges: BlastRadiusDiagramEdge[];
+  meta: BlastRadiusDiagramMeta;
+}
 
 /** Default BFS traversal depth for reverse dependency lookup */
 export const DEFAULT_TRAVERSAL_DEPTH = 3;

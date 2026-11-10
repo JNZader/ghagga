@@ -8,6 +8,11 @@
 // ─── Schema & Types ─────────────────────────────────────────────
 
 export type {
+  BlastRadiusDiagram,
+  BlastRadiusDiagramEdge,
+  BlastRadiusDiagramMeta,
+  BlastRadiusDiagramNode,
+  BlastRadiusDiagramNodeRole,
   BlastRadiusMetadata,
   DependencyGraph,
   GraphLoader,
@@ -19,6 +24,7 @@ export type {
 } from './schema.js';
 
 export {
+  BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS,
   DEFAULT_TRAVERSAL_DEPTH,
   EXCLUDED_DIRS,
   GRAPH_STALE_DAYS,
@@ -27,6 +33,9 @@ export {
   isTestFile,
   LANGUAGE_EXTENSIONS,
   MAX_BLAST_RADIUS_FILES,
+  MAX_DIAGRAM_EDGES,
+  MAX_DIAGRAM_LABEL_CHARS,
+  MAX_DIAGRAM_NODES,
   MAX_GRAPH_SIZE_BYTES,
   REGEX_SUPPORTED_LANGUAGES,
   SCIP_ONLY_LANGUAGES,
@@ -34,6 +43,16 @@ export {
   validateGraph,
   validateMetadata,
 } from './schema.js';
+
+// ─── Blast-Radius Diagram Renderer ──────────────────────────────
+
+export type { MermaidEdgeInput, MermaidMetaInput, MermaidNodeInput } from './diagram.js';
+export {
+  assertDiagramJsonBudget,
+  clusterOfPath,
+  renderMermaidDiagram,
+  sanitizeMermaidLabel,
+} from './diagram.js';
 
 // ─── Blast-Radius Computation ───────────────────────────────────
 
