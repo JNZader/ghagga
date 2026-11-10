@@ -164,9 +164,7 @@ function scanContent(
 ): void {
   const lines = content.split('\n');
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-
+  for (const [i, line] of lines.entries()) {
     // Skip diff header lines
     if (line.startsWith('diff --git') || line.startsWith('---') || line.startsWith('+++')) {
       continue;

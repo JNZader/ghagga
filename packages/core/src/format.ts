@@ -171,11 +171,13 @@ export function categorizeFiles(
   }
 
   // Return in definition order, only non-empty categories
-  return FILE_CATEGORIES.filter((cat) => categorized.has(cat.key)).map((cat) => ({
-    name: cat.name,
-    emoji: cat.emoji,
-    files: categorized.get(cat.key)!,
-  }));
+  return FILE_CATEGORIES.flatMap((cat) => {
+    const files = categorized.get(cat.key);
+    if (!files) {
+      return [];
+    }
+    return [{ name: cat.name, emoji: cat.emoji, files }];
+  });
 }
 
 /**

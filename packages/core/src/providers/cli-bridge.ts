@@ -372,7 +372,7 @@ export function validateCliModel(cliModel: string): void {
     );
   }
 
-  const prefix = cliModel.split('/')[0]!;
+  const prefix = cliModel.split('/')[0] ?? '';
   if (!(prefix in OPENCODE_ENV_BY_PREFIX)) {
     const supported = Object.keys(OPENCODE_ENV_BY_PREFIX).join(', ');
     throw new CLIConfigurationError(
@@ -650,8 +650,11 @@ export function _setAvailabilityOverride(override: Record<string, boolean> | und
 
 /** Resolve whether an adapter is available, honoring the testing override. */
 function isAdapterAvailable(adapter: CLIAdapter): boolean {
-  if (availabilityOverride && adapter.name in availabilityOverride) {
-    return availabilityOverride[adapter.name]!;
+  if (availabilityOverride) {
+    const override = availabilityOverride[adapter.name];
+    if (override !== undefined) {
+      return override;
+    }
   }
   return adapter.available;
 }

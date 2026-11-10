@@ -107,9 +107,12 @@ function decryptV2(payload: string, key: Buffer): string {
     throw new Error('Invalid v2 encrypted data: expected "iv:cipher:authTag"');
   }
 
-  const iv = Buffer.from(parts[0]!, 'base64');
-  const ciphertext = Buffer.from(parts[1]!, 'base64');
-  const authTag = Buffer.from(parts[2]!, 'base64');
+  // Length is 3 (checked above), so the defaults never fire; they only
+  // satisfy noUncheckedIndexedAccess without changing any behavior.
+  const [ivPart = '', ciphertextPart = '', authTagPart = ''] = parts;
+  const iv = Buffer.from(ivPart, 'base64');
+  const ciphertext = Buffer.from(ciphertextPart, 'base64');
+  const authTag = Buffer.from(authTagPart, 'base64');
 
   // SECURITY: enforce exact component lengths. Node's GCM implementation
   // accepts truncated auth tags (e.g. 4 bytes), which would drop forgery

@@ -83,8 +83,8 @@ function extractFindings(text: string): StructuredFinding[] {
   const lines = text.split('\n');
   const findings: StructuredFinding[] = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const finding = parseFinding(lines[i]!, lines[i + 1]);
+  for (const [i, line] of lines.entries()) {
+    const finding = parseFinding(line, lines[i + 1]);
     if (finding) {
       findings.push(finding);
     }

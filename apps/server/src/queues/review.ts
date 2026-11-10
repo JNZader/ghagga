@@ -327,8 +327,8 @@ export async function waitForCallbackResult(
 
 // ─── Queue Configuration ───────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const reviewQueue = new Queue<ReviewJobData, unknown, string>('review', {
+  // biome-ignore lint/suspicious/noExplicitAny: bullmq ConnectionOptions vs our Redis connection shim — accepted cast
   connection: redisConnection as any,
   defaultJobOptions: {
     attempts: 3,
@@ -1092,7 +1092,7 @@ export async function enqueueReview(
  */
 export function createReviewWorker(concurrency = 3): Worker<ReviewJobData, unknown, string> {
   return new Worker<ReviewJobData, unknown, string>('review', processReview, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: bullmq ConnectionOptions vs our Redis connection shim — accepted cast
     connection: redisConnection as any,
     concurrency,
     lockDuration: 300_000, // 5 minutes — CLI bridge reviews can take 100-110s

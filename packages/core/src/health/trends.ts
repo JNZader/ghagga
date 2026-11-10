@@ -96,7 +96,11 @@ export function computeTrend(currentScore: number, history: HealthHistoryEntry[]
     return { previous: null, delta: null, direction: null };
   }
 
-  const last = history[history.length - 1]!;
+  const last = history.at(-1);
+  if (!last) {
+    return { previous: null, delta: null, direction: null };
+  }
+
   const delta = currentScore - last.score;
 
   let direction: HealthTrend['direction'];
