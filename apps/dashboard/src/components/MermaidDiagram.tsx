@@ -36,7 +36,11 @@ function DiagramLegend({ meta }: { meta?: BlastRadiusDiagram['meta'] }) {
   // Defensive default: a corrupt blob without `meta` must render an empty
   // legend, never a TypeError that bricks the page (4R RES-002 — the
   // server guard also shape-checks, this is defense in depth).
-  const m = meta ?? {};
+  const m: BlastRadiusDiagram['meta'] = meta ?? {
+    stale: false,
+    exceededCap: false,
+    truncated: false,
+  };
   const notes: string[] = [];
   if (m.stale) {
     notes.push('Dependency graph is older than 7 days — relationships may be incomplete.');
