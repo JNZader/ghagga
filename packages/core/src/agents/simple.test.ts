@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GenerateTextFn } from '../providers/generate-fn.js';
+import {
+  buildReviewLevelInstruction,
+  OUTPUT_STYLE_CALIBRATION,
+  REVIEW_CALIBRATION,
+  SIMPLE_REVIEW_SYSTEM,
+  UNTRUSTED_CONTENT_POLICY,
+} from './prompts.js';
 import type { SimpleReviewInput } from './simple.js';
 import { parseFindingsBlock, parseReviewResponse, runSimpleReview } from './simple.js';
 
@@ -463,5 +470,86 @@ describe('runSimpleReview graph neighborhood section', () => {
     expect(section).toContain('Do NOT use it as a reason to flag issues');
     expect(section).toContain('Only flag issues you can justify from the code diff itself');
     expect(section).not.toMatch(/flag .* based on the neighborhood/i);
+  });
+});
+
+// ─── Output style calibration (review-output-compression T1.2) ──
+
+describe('runSimpleReview output style calibration', () => {
+  /** The byte-exact prompt the pre-change assembly produced (empty contexts). */
+  const PRE_CHANGE_BASELINE = [
+    SIMPLE_REVIEW_SYSTEM,
+    UNTRUSTED_CONTENT_POLICY,
+    buildReviewLevelInstruction('normal'),
+    REVIEW_CALIBRATION,
+  ].join('\n');
+
+  function makeCapture(compressOutput?: boolean): {
+    input: SimpleReviewInput;
+    calls: Array<{ system: string; prompt: string }>;
+  } {
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const generateFn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+      calls.push({ system, prompt });
+      return {
+        text: 'STATUS: PASSED\nSUMMARY: ok.\nFINDINGS:\n',
+        tokensUsed: 10,
+        provider: 'gateway',
+        model: 'auto',
+      };
+    });
+    const input: SimpleReviewInput = {
+      diff: '--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b',
+      provider: 'gateway',
+      model: 'auto',
+      apiKey: 'k',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFn,
+      ...(compressOutput === undefined ? {} : { compressOutput }),
+    };
+    return { input, calls };
+  }
+
+  it('default undefined is ON: block appears exactly once, immediately after REVIEW_CALIBRATION', async () => {
+    const { input, calls } = makeCapture();
+    await runSimpleReview(input);
+
+    const system = calls[0]?.system ?? '';
+    expect((system.match(/## Output Style Calibration/g) ?? []).length).toBe(1);
+    expect(system).toContain(OUTPUT_STYLE_CALIBRATION);
+    const calibrationEnd = system.indexOf(REVIEW_CALIBRATION);
+    const blockStart = system.indexOf(OUTPUT_STYLE_CALIBRATION);
+    expect(calibrationEnd).toBeGreaterThan(-1);
+    expect(blockStart).toBeGreaterThan(calibrationEnd);
+  });
+
+  it('explicit true behaves like the default', async () => {
+    const { input, calls } = makeCapture(true);
+    await runSimpleReview(input);
+
+    const system = calls[0]?.system ?? '';
+    expect((system.match(/## Output Style Calibration/g) ?? []).length).toBe(1);
+  });
+
+  it('ON prompt is exactly the OFF prompt plus the block (appendix purely additive)', async () => {
+    const on = makeCapture();
+    await runSimpleReview(on.input);
+    const off = makeCapture(false);
+    await runSimpleReview(off.input);
+
+    expect(on.calls[0]?.system).toBe(`${off.calls[0]?.system}\n${OUTPUT_STYLE_CALIBRATION}`);
+  });
+
+  it('explicit false: no block anywhere and the prompt is byte-identical to the pre-change baseline', async () => {
+    const { input, calls } = makeCapture(false);
+    await runSimpleReview(input);
+
+    const system = calls[0]?.system ?? '';
+    expect(system).not.toContain('## Output Style Calibration');
+    expect(system).not.toContain(OUTPUT_STYLE_CALIBRATION);
+    expect(system).toBe(PRE_CHANGE_BASELINE);
   });
 });

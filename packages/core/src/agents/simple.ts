@@ -52,6 +52,14 @@ export interface SimpleReviewInput {
   graphNeighborhoodContext?: string;
 
   /**
+   * Append the OUTPUT_STYLE_CALIBRATION appendix (review-output-compression).
+   * Default undefined/true = ON; explicit false = prompts byte-identical
+   * to the pre-change baseline (the empty string is dropped by
+   * `.filter(Boolean)`).
+   */
+  compressOutput?: boolean;
+
+  /**
    * Optional backend-agnostic generation function.
    * When provided, used instead of createModel + generateTextWithTimeout.
    * When omitted, one is created internally from provider/model/apiKey (backward compat).

@@ -102,6 +102,13 @@ export interface WorkflowReviewInput {
    * all prompts stay byte-identical to baseline.
    */
   graphNeighborhoodContext?: string;
+
+  /**
+   * Append the OUTPUT_STYLE_CALIBRATION appendix (review-output-compression)
+   * to every specialist and the synthesis call. Default undefined/true = ON;
+   * explicit false = prompts byte-identical to the pre-change baseline.
+   */
+  compressOutput?: boolean;
 }
 
 interface SpecialistConfig {

@@ -34,6 +34,7 @@ import {
   stampFindingLedger,
   validateLens,
 } from './fan-out-lenses.js';
+import { COMPACT_CALIBRATION, OUTPUT_STYLE_CALIBRATION, REVIEW_CALIBRATION } from './prompts.js';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -1169,6 +1170,140 @@ describe('runFanOutReview graph neighborhood section', () => {
       expect(system.match(/## Graph Neighborhood/g)).toHaveLength(1);
       expect(system).toContain('<UNTRUSTED label="GRAPH NEIGHBORHOOD');
       expect(system).toContain('imported by: src/b.ts');
+    }
+  });
+});
+
+// ─── Output style calibration (review-output-compression T1.2) ──
+
+describe('runFanOutReview output style calibration', () => {
+  function makeLocalInput(overrides: Partial<FanOutReviewInput> = {}): FanOutReviewInput {
+    return {
+      diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+      provider: 'gateway',
+      model: 'claude-sonnet-4-20250514',
+      apiKey: 'test-key',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      ...overrides,
+    };
+  }
+
+  function makeCapturingFn(response = PASSED_RESPONSE): { fn: GenerateTextFn; systems: string[] } {
+    const systems: string[] = [];
+    const fn: GenerateTextFn = vi.fn(async (system: string, _prompt: string) => {
+      systems.push(system);
+      return {
+        text: response,
+        tokensUsed: 100,
+        provider: 'gateway',
+        model: 'claude-sonnet-4-20250514',
+      };
+    });
+    return { fn, systems };
+  }
+
+  async function captureLensSystems(compressOutput?: boolean): Promise<string[]> {
+    const { fn, systems } = makeCapturingFn();
+    await runFanOutReview(
+      makeLocalInput({
+        generateFns: [fn],
+        lenses: ['security', 'performance', 'typing'],
+        ...(compressOutput === undefined ? {} : { compressOutput }),
+      }),
+    );
+    return systems;
+  }
+
+  it('default ON: every lens system gets the block exactly once, after its calibration entry', async () => {
+    const systems = await captureLensSystems();
+
+    expect(systems).toHaveLength(3);
+    systems.forEach((system, i) => {
+      expect(system.split(OUTPUT_STYLE_CALIBRATION).length - 1).toBe(1);
+      const calibration = i === 0 ? REVIEW_CALIBRATION : COMPACT_CALIBRATION;
+      expect(system.indexOf(OUTPUT_STYLE_CALIBRATION)).toBeGreaterThan(
+        system.lastIndexOf(calibration),
+      );
+    });
+  });
+
+  it('explicit true behaves like the default', async () => {
+    const systems = await captureLensSystems(true);
+    for (const system of systems) {
+      expect(system).toContain(OUTPUT_STYLE_CALIBRATION);
+    }
+  });
+
+  it('ON lens prompts are exactly the OFF prompts plus the block (appendix purely additive)', async () => {
+    const on = await captureLensSystems();
+    const off = await captureLensSystems(false);
+
+    for (let i = 0; i < on.length; i++) {
+      expect(on[i]).toBe(`${off[i]}\n${OUTPUT_STYLE_CALIBRATION}`);
+    }
+  });
+
+  it('explicit false: no block in any lens system and each ends at its calibration entry', async () => {
+    const systems = await captureLensSystems(false);
+
+    for (const system of systems) {
+      expect(system).not.toContain('## Output Style Calibration');
+      expect(system.endsWith(REVIEW_CALIBRATION) || system.endsWith(COMPACT_CALIBRATION)).toBe(
+        true,
+      );
+    }
+  });
+
+  it('contrarian systems NEVER contain the block in either flag state', async () => {
+    for (const compressOutput of [undefined, true, false] as Array<boolean | undefined>) {
+      const lens = makeCapturingFn();
+      const contrarian = makeCapturingFn();
+      await runFanOutReview(
+        makeLocalInput({
+          generateFns: [lens.fn, contrarian.fn],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+          contrarianCount: 1,
+          ...(compressOutput === undefined ? {} : { compressOutput }),
+        }),
+      );
+
+      // Lens got the ON/OFF behavior; contrarian NEVER does.
+      expect(contrarian.systems).toHaveLength(1);
+      expect(contrarian.systems[0]).not.toContain('## Output Style Calibration');
+      expect(contrarian.systems[0]).not.toContain(OUTPUT_STYLE_CALIBRATION);
+    }
+  });
+
+  it('refuter systems NEVER contain the block in either flag state', async () => {
+    const criticalFinding = FINDING_RESPONSE(
+      'critical',
+      'security',
+      'auth.ts',
+      10,
+      'SQL injection',
+    );
+    for (const compressOutput of [undefined, true, false] as Array<boolean | undefined>) {
+      const lens = makeCapturingFn(criticalFinding);
+      const refuter1 = makeCapturingFn('security-001: stands');
+      const refuter2 = makeCapturingFn('security-001: stands');
+      await runFanOutReview(
+        makeLocalInput({
+          generateFns: [lens.fn, refuter1.fn, refuter2.fn],
+          lenses: ['security'],
+          pinLensesToFirst: true,
+          refuterCount: 2,
+          ...(compressOutput === undefined ? {} : { compressOutput }),
+        }),
+      );
+
+      for (const system of [...refuter1.systems, ...refuter2.systems]) {
+        expect(system).not.toContain('## Output Style Calibration');
+        expect(system).not.toContain(OUTPUT_STYLE_CALIBRATION);
+      }
     }
   });
 });

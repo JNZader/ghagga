@@ -85,6 +85,13 @@ export interface ConsensusReviewInput {
    * upstream) — ''/absent → no section, prompts byte-identical to baseline.
    */
   graphNeighborhoodContext?: string;
+
+  /**
+   * Append the OUTPUT_STYLE_CALIBRATION appendix (review-output-compression)
+   * to every stance. Default undefined/true = ON; explicit false = prompts
+   * byte-identical to the pre-change baseline.
+   */
+  compressOutput?: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
