@@ -32,18 +32,22 @@ let mermaidInitialized = false;
  * `meta` is rendered, none silently dropped. Trusted literals + counts
  * only — no file names, no untrusted strings.
  */
-function DiagramLegend({ meta }: { meta: BlastRadiusDiagram['meta'] }) {
+function DiagramLegend({ meta }: { meta?: BlastRadiusDiagram['meta'] }) {
+  // Defensive default: a corrupt blob without `meta` must render an empty
+  // legend, never a TypeError that bricks the page (4R RES-002 — the
+  // server guard also shape-checks, this is defense in depth).
+  const m = meta ?? {};
   const notes: string[] = [];
-  if (meta.stale) {
+  if (m.stale) {
     notes.push('Dependency graph is older than 7 days — relationships may be incomplete.');
   }
-  if (meta.exceededCap) {
+  if (m.exceededCap) {
     notes.push('Blast radius exceeded the file cap — the full diff was reviewed.');
   }
-  if (meta.clusterCounts) {
-    const omitted = Object.values(meta.clusterCounts).reduce((sum, count) => sum + count, 0);
+  if (m.clusterCounts) {
+    const omitted = Object.values(m.clusterCounts).reduce((sum, count) => sum + count, 0);
     if (omitted > 0) notes.push(`+${omitted} more files not shown (render cap).`);
-  } else if (meta.truncated) {
+  } else if (m.truncated) {
     notes.push('Some edges not shown (render cap).');
   }
   if (notes.length === 0) return null;

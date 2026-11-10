@@ -147,4 +147,16 @@ describe('MermaidDiagram — failure fallback', () => {
     expect(await screen.findByTestId('mermaid-fallback')).toBeInTheDocument();
     expect(screen.getByText(/older than 7 days/)).toBeInTheDocument();
   });
+
+  it('missing meta (4R RES-002) renders without crashing — empty legend, no TypeError', async () => {
+    const blobWithoutMeta = { ...makeDiagram(), meta: undefined } as unknown as BlastRadiusDiagram;
+    render(<MermaidDiagram diagram={blobWithoutMeta} />);
+    // Either path (render success or fallback) must mount without
+    // throwing; the legend simply renders nothing.
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('mermaid-container') ?? screen.queryByTestId('mermaid-fallback'),
+      ).toBeInTheDocument();
+    });
+  });
 });

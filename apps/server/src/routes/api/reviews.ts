@@ -172,13 +172,21 @@ function toWireFinding(raw: unknown): Finding {
  */
 /**
  * Structural guard for the `metadata.blastRadius.diagram` jsonb value:
- * object (not array/primitive/null) → project it; anything else → omit
- * the key. Fail-closed on corrupt jsonb without duplicating core's
- * schema validation server-side (the artifact was validated + capped at
- * build time in core).
+ * an object carrying a non-empty `mermaid` string and a `meta` object →
+ * project it; anything else → omit the key. Fail-closed on corrupt jsonb
+ * (the artifact was validated + capped at build time in core; the shape
+ * check covers the two fields the dashboard dereferences so a corrupt
+ * row cannot crash the Reviews page — 4R RES-002).
  */
 function isDiagramObject(value: unknown): value is BlastRadiusDiagram {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const candidate = value as { mermaid?: unknown; meta?: unknown };
+  return (
+    typeof candidate.mermaid === 'string' &&
+    candidate.mermaid.length > 0 &&
+    typeof candidate.meta === 'object' &&
+    candidate.meta !== null
+  );
 }
 
 function toReviewDto(row: ReviewRow, repoFullName: string): Review {

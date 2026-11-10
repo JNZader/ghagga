@@ -292,3 +292,82 @@ describe('buildBlastRadiusDiagramSummary — flags and gates', () => {
     expect(after).toBe(before);
   });
 });
+
+// ─── 4R fix-round regressions ───────────────────────────────────
+
+describe('buildBlastRadiusDiagramSummary — 4R fix-round regressions', () => {
+  it('REL-001: hub edges between survivors survive beyond the neighborhood per-direction cap', () => {
+    // app.ts imports the hub PLUS 12 decoys (hub beyond slice 10 of
+    // app's importees); 12 other files import the hub (app beyond
+    // slice 10 of the hub's importers). Both survive; the internal
+    // app→hub edge must be present — derived from `imports` records,
+    // never from capped hoods.
+    const nodes: Record<string, GraphNode> = {
+      'app.ts': tsNode({
+        imports: [
+          ...Array.from({ length: 12 }, (_, i) => `d${String(i + 1).padStart(2, '0')}/e.ts`),
+          'src/hub.ts',
+        ],
+      }),
+      'src/hub.ts': tsNode({ imports: ['app.ts'] }),
+    };
+    for (let i = 1; i <= 12; i++) {
+      nodes[`d${String(i).padStart(2, '0')}/e.ts`] = tsNode();
+    }
+    for (let i = 1; i <= 12; i++) {
+      nodes[`y${String(i).padStart(2, '0')}/f.ts`] = tsNode({ imports: ['src/hub.ts'] });
+    }
+    const { diagram } = build(makeGraph(nodes), ['app.ts']);
+    expect(diagram).toBeDefined();
+    const labels = diagram!.nodes.map((n) => n.label);
+    expect(labels).toContain('app.ts');
+    expect(labels).toContain('src/hub.ts');
+    const edgePairs = diagram!.edges.map((e) => {
+      const from = diagram!.nodes.find((n) => n.id === e.from)?.label;
+      const to = diagram!.nodes.find((n) => n.id === e.to)?.label;
+      return `${from} -> ${to}`;
+    });
+    expect(edgePairs).toContain('app.ts -> src/hub.ts');
+  });
+
+  it('RES-001: budget overrun degrades to undefined instead of throwing into failedSteps', () => {
+    // 25 survivors (1 changed + 24 dependents), each in a distinct
+    // ~78-char top-level directory: serialized diagram exceeds the 10k
+    // budget with every cap respected. The builder must return
+    // undefined (counts-only fallback), never throw — the old throw
+    // path landed in failedSteps and finalize downgraded PASSED→PARTIAL.
+    const dirName = (i: number) => `pkg${String(i).padStart(2, '0')}${'x'.repeat(70)}`;
+    const nodes: Record<string, GraphNode> = {
+      'app.ts': tsNode(),
+    };
+    const changed = ['app.ts'];
+    for (let i = 1; i <= 24; i++) {
+      const file = `${dirName(i)}/dep.ts`;
+      nodes[file] = tsNode({ imports: ['app.ts'] });
+    }
+    // Dependents discover via radius; ensure the radius covers them.
+    const { diagram } = build(makeGraph(nodes), changed);
+    expect(diagram).toBeUndefined();
+  });
+
+  it('RISK-001: more changed files than the node cap still flags truncation and counts omissions', () => {
+    // 26 changed files (cap 25): the dropped 26th used to vanish without
+    // setting truncated — the legend claimed completeness.
+    const nodes: Record<string, GraphNode> = {};
+    const changed: string[] = [];
+    for (let i = 1; i <= 26; i++) {
+      const file = `c${String(i).padStart(2, '0')}/f.ts`;
+      nodes[file] = tsNode();
+      changed.push(file);
+    }
+    const { diagram } = build(makeGraph(nodes), changed);
+    expect(diagram).toBeDefined();
+    expect(diagram!.nodes).toHaveLength(MAX_DIAGRAM_NODES);
+    expect(diagram!.meta.truncated).toBe(true);
+    const omittedCount = Object.values(diagram!.meta.clusterCounts ?? {}).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    expect(omittedCount).toBeGreaterThanOrEqual(1);
+  });
+});

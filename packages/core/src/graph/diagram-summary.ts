@@ -21,17 +21,26 @@
  *   over the FULL pool before selection (stable ranking regardless of
  *   the cap), from ONE `collectFileNeighborhoods` query with
  *   `maxTotalFiles` raised to the pool size. The default per-direction
- *   cap (10) is accepted for ranking.
+ *   cap (10) is accepted for ranking (approximation only — edges are
+ *   NOT derived from this query; see below).
  * - Edges: internal to the survivor set only (both endpoints survivors),
- *   `from` = importer, `to` = importee. Derived from the same single
- *   neighborhood query — `collectFileNeighborhoods` re-runs
- *   `buildReverseIndex` once (O(V+E) CPU, accepted per design).
+ *   `from` = importer, `to` = importee. Derived DIRECTLY from each
+ *   survivor's `node.imports` record — the importer side always holds
+ *   the complete, unsliced list, so an internal edge can never be
+ *   hidden by a neighborhood per-direction cap (4R REL-001: hub files
+ *   with >10 importers/importees lost survivor↔survivor edges when
+ *   edges were derived from capped hoods). The neighborhood query
+ *   feeds ranking only.
  * - Roles (precedence): changed > test > dependent.
  * - Caps + the 10k JSON invariant are enforced HERE at BUILD time
  *   (renderMermaidDiagram caps defensively; format.ts and the dashboard
- *   are render-only and never truncate). An oversize artifact throws —
- *   the pipeline catches, records a failed step, and keeps counts-only
- *   metadata (review continues).
+ *   are render-only and never truncate). An oversize artifact degrades
+ *   to `undefined` (no diagram, counts-only metadata — same class as
+ *   the exceededCap fallback): a decorative miss must NEVER reach
+ *   `failedSteps`, where finalize would downgrade the review verdict
+ *   (4R RES-001: the old throw path mutated PASSED→PARTIAL for
+ *   wide-directory repos whose in-cap diagram serialized >10k chars
+ *   because the cluster label is counted up to three times).
  * - `exceededCap` result → `undefined` (spec wins over the design's
  *   degradation table: NO node/edge lists when the radius exceeded the
  *   cap — counts-only fallback, prepare-graph never calls the builder
@@ -40,7 +49,6 @@
 
 import type { BlastRadiusResult } from './blast-radius.js';
 import {
-  assertDiagramJsonBudget,
   clusterOfPath,
   type MermaidEdgeInput,
   type MermaidNodeInput,
@@ -48,6 +56,7 @@ import {
 } from './diagram.js';
 import { collectFileNeighborhoods } from './neighbors.js';
 import {
+  BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS,
   type BlastRadiusDiagram,
   type BlastRadiusDiagramNodeRole,
   type DependencyGraph,
@@ -106,15 +115,14 @@ export function buildBlastRadiusDiagramSummary(
 
   const testSet = new Set(result.testFiles);
 
-  // Neighborhood query #2 over the whole pool: feeds BOTH the degree
-  // ranking (full pool) and, filtered to survivors, the edge derivation.
-  // `maxTotalFiles` raised to the pool size so no member is skipped; the
-  // default per-direction cap (10) is accepted — ranking + bounded edges.
-  // Each query re-runs `buildReverseIndex` once (O(V+E) CPU, no I/O —
-  // accepted per design).
+  // Neighborhood query #2 over the whole pool: feeds the DEGREE RANKING
+  // only (edges come from the survivors' own `imports` records — see the
+  // edge block below). `maxTotalFiles` raised to the pool size so no
+  // member is skipped; the default per-direction cap (10) is accepted
+  // for the ranking approximation. The query re-runs `buildReverseIndex`
+  // once (O(V+E) CPU, no I/O — accepted per design).
   const poolFiles = [...pool].filter((f) => graph.nodes[f] !== undefined).sort(comparePaths);
   const hoods = collectFileNeighborhoods(graph, poolFiles, { maxTotalFiles: poolFiles.length });
-  const hoodByFile = new Map(hoods.map((h) => [h.file, h]));
   const degreeByFile = new Map<string, number>();
   for (const hood of hoods) {
     degreeByFile.set(hood.file, hood.importers.length + hood.importees.length);
@@ -127,7 +135,14 @@ export function buildBlastRadiusDiagramSummary(
     .sort((a, b) => (degreeByFile.get(b) ?? 0) - (degreeByFile.get(a) ?? 0) || comparePaths(a, b));
   const survivors = [...changed, ...rest].slice(0, MAX_DIAGRAM_NODES);
   const survivorSet = new Set(survivors);
-  const omitted = rest.slice(Math.max(0, MAX_DIAGRAM_NODES - changed.length));
+  // Everything the selection dropped — changed files beyond the cap
+  // INCLUDED (4R RISK-001: a >25-changed-file PR used to drop them
+  // silently, so `truncated` stayed false and the legend claimed
+  // completeness).
+  const omitted = [
+    ...changed.slice(MAX_DIAGRAM_NODES),
+    ...rest.slice(Math.max(0, MAX_DIAGRAM_NODES - changed.length)),
+  ];
 
   // ── Roles (precedence changed > test > dependent). ─────────────────
   const roleOf = (path: string): BlastRadiusDiagramNodeRole => {
@@ -141,16 +156,16 @@ export function buildBlastRadiusDiagramSummary(
   }));
 
   // ── Edges: internal to survivors, from = importer, to = importee.
-  // An internal edge is visible from BOTH endpoints' records; dedupe at
-  // the renderer. Any edge with an endpoint outside survivors is dropped.
+  // Derived from each survivor's own `imports` record — the importer
+  // side holds the complete list with no per-direction cap, so an
+  // internal edge can never be hidden by neighborhood slicing (4R
+  // REL-001). Each edge is discovered exactly once (importer side
+  // only); the renderer still dedupes defensively.
   const edgeInputs: MermaidEdgeInput[] = [];
   for (const file of survivors) {
-    const hood = hoodByFile.get(file);
-    if (!hood) continue;
-    for (const importer of hood.importers) {
-      if (survivorSet.has(importer)) edgeInputs.push({ from: importer, to: file });
-    }
-    for (const importee of hood.importees) {
+    const node = graph.nodes[file];
+    if (!node) continue;
+    for (const importee of node.imports) {
       if (survivorSet.has(importee)) edgeInputs.push({ from: file, to: importee });
     }
   }
@@ -176,9 +191,21 @@ export function buildBlastRadiusDiagramSummary(
       const cluster = clusterOfPath(file);
       merged[cluster] = (merged[cluster] ?? 0) + 1;
     }
-    diagram.meta.clusterCounts = merged;
+    // Bound the legend payload: one entry per distinct omitted cluster,
+    // keys up to 80 chars, would otherwise grow unbounded with the pool
+    // (4R RES-001: 49 distinct 80-char dirs added ~4k chars alone). Top
+    // 20 by count desc then name asc — deterministic.
+    const entries = Object.entries(merged).sort(
+      ([aName, aCount], [bName, bCount]) => bCount - aCount || comparePaths(aName, bName),
+    );
+    diagram.meta.clusterCounts = Object.fromEntries(entries.slice(0, 20));
   }
 
-  assertDiagramJsonBudget(diagram);
+  // Budget overrun degrades to NO diagram (same class as the exceededCap
+  // counts-only fallback) — it must never throw into `failedSteps`, where
+  // finalize would downgrade the review verdict (4R RES-001).
+  if (JSON.stringify(diagram).length > BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS) {
+    return undefined;
+  }
   return diagram;
 }

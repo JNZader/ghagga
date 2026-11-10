@@ -219,6 +219,17 @@ describe('GET /api/reviews — blastRadiusDiagram projection (T4.2)', () => {
     }
   });
 
+  it('meta-less diagram blobs (4R RES-002) fail closed to key omission', async () => {
+    const json = await listReviews([
+      dbRow({ metadata: { blastRadius: { diagram: {} } } }), // no meta, no mermaid
+      dbRow({ metadata: { blastRadius: { diagram: { mermaid: 'flowchart TD' } } } }), // mermaid, no meta
+      dbRow({ metadata: { blastRadius: { diagram: { meta: {} } } } }), // meta, no mermaid
+    ]);
+    for (const dto of json.data) {
+      expect('blastRadiusDiagram' in dto).toBe(false);
+    }
+  });
+
   it('mixed list response: shape identical elsewhere, key only on the diagram row', async () => {
     const withDiagram = dbRow({
       id: 7,
