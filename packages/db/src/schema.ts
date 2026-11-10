@@ -50,6 +50,10 @@ export interface RepoSettings {
   // ── Blast-radius analysis ──
   /** Enable blast-radius analysis using dependency graph. Default: false. */
   enableBlastRadius?: boolean;
+
+  // ── Nightly health digest ──
+  /** Opt in to the nightly digest issue (03:00 UTC). Absent = off. */
+  digestsEnabled?: boolean;
 }
 
 export const DEFAULT_REPO_SETTINGS: RepoSettings = {
@@ -453,6 +457,55 @@ export const explanationInvocations = pgTable(
       sql`${t.answerPublicationStatus} IN (${sql.raw(
         EXPLANATION_PUBLICATION_STATUSES.map((value) => `'${value}'`).join(', '),
       )})`,
+    ),
+  ],
+);
+
+// ─── Digests (Nightly Health Digest) ────────────────────────────
+// Net-new, additive table (nightly-health-digest D1): ONE row per digest run,
+// append-only history. The `score` snapshot makes this table the server-side
+// health trend source. The partial-unique index (one OPEN digest issue per
+// repository) mirrors the `issue_drafts` one-open-draft precedent — it is the
+// double-schedule blast wall: a second open row is rejected at the DB boundary.
+
+/** Digest run outcomes: published to the digest issue, skipped, or failed. */
+export const DIGEST_STATUSES = ['POSTED', 'SKIPPED', 'FAILED'] as const;
+export type DigestStatus = (typeof DIGEST_STATUSES)[number];
+
+export const digests = pgTable(
+  'digests',
+  {
+    id: serial('id').primaryKey(),
+    repositoryId: integer('repository_id')
+      .references(() => repositories.id, { onDelete: 'cascade' })
+      .notNull(),
+    /** When the nightly run fired (also the watermark anchor for POSTED runs). */
+    runAt: timestamp('run_at').defaultNow().notNull(),
+    status: varchar('status', { length: 20 }).notNull(), // POSTED | SKIPPED | FAILED
+    /** Digest issue number — set when this run published (POSTED). Nullable. */
+    issueNumber: integer('issue_number'),
+    /** TRUE only on the run whose digest issue is THE open one for the repo. */
+    issueOpen: boolean('issue_open').default(false).notNull(),
+    /** Reviews.createdAt cutoff consumed by this run (unchanged on SKIPPED/FAILED). */
+    watermark: timestamp('watermark'),
+    findingsCount: integer('findings_count').default(0).notNull(),
+    /** Health-score snapshot (0-100) — the server-side trend source. Nullable. */
+    score: integer('score'),
+    /** Failure or skip reason text (FAILED/SKIPPED), NULL on clean POSTED. */
+    error: text('error'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (t) => [
+    index('idx_digests_repository').on(t.repositoryId),
+    // At most ONE open digest row per repository (the issue the digest updates
+    // in place). Rotating (issue closed/404) flips this row false and inserts
+    // the successor in ONE transaction, so the invariant never breaks.
+    uniqueIndex('uq_digests_open_issue').on(t.repositoryId).where(sql`${t.issueOpen} = true`),
+    // DB-level CHECK mirroring the exported const union (issue_drafts precedent).
+    check(
+      'chk_digests_status',
+      sql`${t.status} IN (${sql.raw(DIGEST_STATUSES.map((value) => `'${value}'`).join(', '))})`,
     ),
   ],
 );

@@ -41,7 +41,12 @@
 
 import { gitlabCommentId } from '../../comment-id.js';
 import { ForgeAuthError, getErrorStatus, isForgeAuthError } from '../../errors.js';
-import type { ForgeAdapterBase, InlineCapable, InlineComment } from '../../ports/forge-adapter.js';
+import type {
+  DigestPublicationCapable,
+  ForgeAdapterBase,
+  InlineCapable,
+  InlineComment,
+} from '../../ports/forge-adapter.js';
 import type {
   ChangedFile,
   ChangeRequest,
@@ -51,6 +56,7 @@ import type {
   ForgeCapabilities,
   PublishFailure,
   PublishReport,
+  RepoRef,
   UnifiedDiff,
   UpsertSummaryResult,
 } from '../../types.js';
@@ -77,7 +83,9 @@ export interface GitLabForgeAdapterDeps {
  * unused by the CLI v1 path and intentionally absent from the client port) plus
  * {@link InlineCapable}. Deliberately does NOT implement reactions or graph read.
  */
-export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
+export class GitLabForgeAdapter
+  implements ForgeAdapterBase, InlineCapable, DigestPublicationCapable
+{
   readonly capabilities: ForgeCapabilities = {
     reactions: false,
     inlineComments: true,
@@ -329,5 +337,41 @@ export class GitLabForgeAdapter implements ForgeAdapterBase, InlineCapable {
     // Degrade: encode the anchor in the body as a plain note.
     const noteBody = `\`${comment.path}:${comment.line}\`\n\n${comment.body}`;
     return this.#client.createMrNote(this.#projectId, ref.iid, noteBody, this.#token);
+  }
+
+  /**
+   * Digest-issue creation is UNSUPPORTED on GitLab (nightly-health-digest).
+   *
+   * The GitLab client port is MR-notes-only (`gitlab-client-port.ts` — no
+   * issues API), so digest publication is GitHub-only in v1. This THROWS a loud
+   * unsupported error instead of a silent no-op so a mis-routed digest job
+   * surfaces immediately (never an invisible publication gap).
+   */
+  async createDigestIssue(repo: RepoRef, title: string, body: string): Promise<{ number: number }> {
+    void repo;
+    void title;
+    void body;
+    throw new Error(
+      'GitLabForgeAdapter.createDigestIssue: unsupported — the GitLab port exposes MR notes only; digest publication is GitHub-only in v1',
+    );
+  }
+
+  /** Digest-issue update is unsupported on GitLab — see {@link createDigestIssue}. */
+  async updateDigestIssue(repo: RepoRef, issueNumber: number, body: string): Promise<void> {
+    void repo;
+    void issueNumber;
+    void body;
+    throw new Error(
+      'GitLabForgeAdapter.updateDigestIssue: unsupported — the GitLab port exposes MR notes only; digest publication is GitHub-only in v1',
+    );
+  }
+
+  /** Digest-issue lookup is unsupported on GitLab — see {@link createDigestIssue}. */
+  async findOpenDigestIssue(repo: RepoRef, title: string): Promise<{ number: number } | null> {
+    void repo;
+    void title;
+    throw new Error(
+      'GitLabForgeAdapter.findOpenDigestIssue: unsupported — the GitLab port exposes MR notes only; digest publication is GitHub-only in v1',
+    );
   }
 }

@@ -277,8 +277,11 @@ function splitEntityKind(
  * a live mention) render. So we additionally strip every backtick. With
  * backticks gone, link/fence/markup metacharacters that survive (`[`, `]`,
  * `(`, `)`) stay inert literal text inside the code span.
+ *
+ * Exported for the digest formatter (`format-digest.ts`), which renders
+ * attacker-controlled ranked-file paths inside inline-code spans the same way.
  */
-function sanitizeInlineCodeName(name: string): string {
+export function sanitizeInlineCodeName(name: string): string {
   return sanitizeTableCell(name, 200).replace(/`/g, '');
 }
 

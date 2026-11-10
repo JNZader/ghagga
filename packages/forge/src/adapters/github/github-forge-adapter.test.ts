@@ -643,3 +643,77 @@ describe('GitHubForgeAdapter — owner-aware explanation comments (Unit 3 RED)',
     expect('lookupExplanationComment' in missingClientSeam).toBe(false);
   });
 });
+
+describe('GitHubForgeAdapter — digest publication verbs (nightly-health-digest T2.3)', () => {
+  const MARKER_BODY = '<!-- ghagga-digest -->\n\n## Window\n\n- high: 1';
+
+  it('create-then-update flow: CREATE returns { number: 42 }, UPDATE receives the SAME number and SAME marker body', async () => {
+    const client = makeClient({
+      createIssue: vi.fn().mockResolvedValue({ number: 42 }),
+      updateIssue: vi.fn().mockResolvedValue(undefined),
+    });
+    const adapter = makeAdapter(client);
+
+    const created = await adapter.createDigestIssue(repo, 'GHAGGA Health Digest', MARKER_BODY);
+    expect(created).toEqual({ number: 42 });
+    expect(client.createIssue).toHaveBeenCalledWith(
+      OWNER,
+      REPO,
+      { title: 'GHAGGA Health Digest', body: MARKER_BODY },
+      TOKEN,
+    );
+
+    await adapter.updateDigestIssue(repo, 42, MARKER_BODY);
+    expect(client.updateIssue).toHaveBeenCalledWith(OWNER, REPO, 42, { body: MARKER_BODY }, TOKEN);
+  });
+
+  it('port method absent surfaces a TypeError — never swallowed into a fake success', async () => {
+    const client: GitHubClientPort = { ...makeClient() } as GitHubClientPort;
+    delete (client as Partial<GitHubClientPort>).createIssue;
+    delete (client as Partial<GitHubClientPort>).updateIssue;
+    const adapter = makeAdapter(client);
+
+    await expect(adapter.createDigestIssue(repo, 't', 'b')).rejects.toThrow(
+      /digest publication capability is unavailable/,
+    );
+    await expect(adapter.updateDigestIssue(repo, 1, 'b')).rejects.toThrow(
+      /digest publication capability is unavailable/,
+    );
+  });
+
+  it('port throwing surfaces the error (403 permission maps to ForgeAuthError)', async () => {
+    const authError = Object.assign(new Error('GitHub API error creating issue: 403 Forbidden'), {
+      name: 'GitHubApiError',
+      status: 403,
+    });
+    const client = makeClient({
+      createIssue: vi.fn().mockRejectedValue(authError),
+    });
+    const adapter = makeAdapter(client);
+
+    const error = await adapter.createDigestIssue(repo, 't', 'b').catch((e: unknown) => e);
+    expect(isForgeAuthError(error)).toBe(true);
+  });
+
+  it('non-github RepoRef is refused loudly before any client call', async () => {
+    const client = makeClient({ createIssue: vi.fn().mockResolvedValue({ number: 1 }) });
+    const adapter = makeAdapter(client);
+    const gitlabRepo: RepoRef = { kind: 'gitlab', nativeId: '123', path: 'acme/widgets' };
+
+    await expect(adapter.createDigestIssue(gitlabRepo, 't', 'b')).rejects.toThrow(
+      /require a github RepoRef/,
+    );
+    expect(client.createIssue).not.toHaveBeenCalled();
+  });
+
+  it('CREATE without a numeric issue number is rejected (never a fake success)', async () => {
+    const client = makeClient({
+      createIssue: vi.fn().mockResolvedValue({ number: Number.NaN }),
+    });
+    const adapter = makeAdapter(client);
+
+    await expect(adapter.createDigestIssue(repo, 't', 'b')).rejects.toThrow(
+      /no numeric issue number/,
+    );
+  });
+});

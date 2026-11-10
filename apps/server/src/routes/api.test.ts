@@ -137,6 +137,14 @@ vi.mock('../github/runner.js', () => ({
   injectWorkflow: (...args: unknown[]) => mockInjectWorkflow(...args),
 }));
 
+// Mock the digest scheduler hooks (nightly-health-digest): the settings routes
+// lazy-import this module after a successful upsert — keep these tests Redis-free.
+vi.mock('../queues/digest.js', () => ({
+  digestQueue: {},
+  reconcileDigestSchedulerForRepo: vi.fn(),
+  reconcileDigestSchedulersForInstallation: vi.fn(),
+}));
+
 // Mock GitHub client
 const mockGetInstallationToken = vi.fn();
 

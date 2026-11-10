@@ -43,6 +43,7 @@ const RepoSettingsSchema = z
     disabledTools: z.array(z.string()).optional(),
     enableBlastRadius: z.boolean().optional(),
     explanationsEnabled: z.boolean().optional(),
+    digestsEnabled: z.boolean().optional(),
   })
   .strict();
 
@@ -120,6 +121,7 @@ export function createSettingsRouter(db: Database) {
           disabledTools: gSettings.disabledTools ?? [],
           enableBlastRadius: gSettings.enableBlastRadius ?? false,
           explanationsEnabled: gSettings.explanationsEnabled ?? false,
+          digestsEnabled: gSettings.digestsEnabled ?? false,
         };
       }
 
@@ -141,6 +143,7 @@ export function createSettingsRouter(db: Database) {
           disabledTools: settings.disabledTools ?? [],
           enableBlastRadius: settings.enableBlastRadius ?? false,
           explanationsEnabled: settings.explanationsEnabled ?? false,
+          digestsEnabled: settings.digestsEnabled ?? false,
           registeredTools: getRegisteredToolsList(),
           globalSettings,
         },
@@ -186,6 +189,7 @@ export function createSettingsRouter(db: Database) {
       'disabledTools',
       'enableBlastRadius',
       'explanationsEnabled',
+      'digestsEnabled',
     ];
     for (const key of SETTINGS_KEYS) {
       if (key in body) {
@@ -437,6 +441,10 @@ export function createSettingsRouter(db: Database) {
           typeof body.explanationsEnabled === 'boolean'
             ? body.explanationsEnabled
             : currentSettings.explanationsEnabled,
+        digestsEnabled:
+          typeof body.digestsEnabled === 'boolean'
+            ? body.digestsEnabled
+            : currentSettings.digestsEnabled,
       };
 
       // ── Bidirectional translation: old booleans → new arrays ──
@@ -471,6 +479,25 @@ export function createSettingsRouter(db: Database) {
         useGlobalSettings:
           typeof body.useGlobalSettings === 'boolean' ? body.useGlobalSettings : undefined,
       });
+
+      // Digest scheduler hook (nightly-health-digest D7): re-reconcile this
+      // repo's repeatable AFTER the successful upsert. Lazy import + fire-and-
+      // forget: this route module must never construct a Redis-backed queue at
+      // import time, and a scheduler hiccup must never fail an already-persisted
+      // settings save (webhook.ts:910 lazy-import precedent).
+      void (async () => {
+        try {
+          const { digestQueue, reconcileDigestSchedulerForRepo } = await import(
+            '../../queues/digest.js'
+          );
+          await reconcileDigestSchedulerForRepo(db, digestQueue, repo.id);
+        } catch (err) {
+          logger.warn(
+            { err, repositoryId: repo.id },
+            'digest: scheduler reconcile failed after settings update (settings saved regardless)',
+          );
+        }
+      })();
 
       logger.info(
         { repo: repoFullName, user: user.githubLogin, chainLength: mergedChain.length },

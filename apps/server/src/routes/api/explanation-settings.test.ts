@@ -37,6 +37,14 @@ vi.mock('./utils.js', () => ({
   maskApiKey: (value: string) => value,
 }));
 
+// Mock the digest scheduler hooks (nightly-health-digest): the settings routes
+// lazy-import this module after a successful upsert — keep these tests Redis-free.
+vi.mock('../../queues/digest.js', () => ({
+  digestQueue: {},
+  reconcileDigestSchedulerForRepo: vi.fn(),
+  reconcileDigestSchedulersForInstallation: vi.fn(),
+}));
+
 import { createInstallationsRouter } from './installations.js';
 import { createSettingsRouter } from './settings.js';
 
