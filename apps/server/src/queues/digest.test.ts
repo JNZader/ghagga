@@ -653,6 +653,29 @@ describe('reconcileDigestSchedulers', () => {
     expect(result.scheduled).toEqual([]);
     expect(removals).toEqual(['digest:7']);
   });
+
+  it('B5: malformed scheduler id → skipped, never NaN in removed, stale numeric ids still removed', async () => {
+    // Regression: 'digest:foo' parsed to NaN, fell into the removal branch
+    // and pushed NaN into `removed: number[]`.
+    mockGetActiveRepositoriesForScheduling.mockResolvedValue([makeRepo({ id: 7 })]);
+    mockGetEffectiveRepoSettings.mockResolvedValue({
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { digestsEnabled: true },
+      source: 'repo',
+    });
+    const { queue, removals } = makeFakeQueue(['digest:not-a-number', 'digest:9']);
+
+    const result = await reconcileDigestSchedulers(mockDb, queue);
+
+    expect(result.scheduled).toEqual([7]);
+    expect(result.removed).toEqual([9]);
+    expect(result.removed.every((id) => Number.isFinite(id))).toBe(true);
+    // The malformed id encodes no repository — the reconciler leaves it
+    // untouched and only removes the stale NUMERIC scheduler.
+    expect(removals).toEqual(['digest:9']);
+  });
 });
 
 describe('per-repo and per-installation settings hooks', () => {

@@ -172,7 +172,14 @@ export async function reconcileDigestSchedulers(
   }
   for (const id of existing) {
     const repositoryId = Number(id.slice('digest:'.length));
-    if (!Number.isFinite(repositoryId) || !optedIn.has(repositoryId)) {
+    // Malformed scheduler id ('digest:foo' → NaN): it encodes no repository,
+    // so the reconciler makes NO removal decision for it — and it never
+    // pollutes the `removed: number[]` result with NaN (resilience B5).
+    if (!Number.isFinite(repositoryId)) {
+      logger.warn({ schedulerId: id }, 'digest: reconciler skipping malformed scheduler id');
+      continue;
+    }
+    if (!optedIn.has(repositoryId)) {
       await queue.removeJobScheduler(id);
       removed.push(repositoryId);
     }
