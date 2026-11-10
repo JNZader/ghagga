@@ -10,18 +10,37 @@ import { parseUnifiedDiff } from './diff/parse.js';
 import {
   buildStatsBar,
   categorizeFiles,
+  formatBlastRadiusSection,
   formatFileCategorySummary,
   formatReviewComment,
   formatSemanticDiffSection,
   SEVERITY_EMOJI,
   STATUS_EMOJI,
 } from './format.js';
+import { computeBlastRadius } from './graph/blast-radius.js';
+import { renderMermaidDiagram } from './graph/diagram.js';
+import { buildBlastRadiusDiagramSummary } from './graph/diagram-summary.js';
+import type { BlastRadiusDiagram, DependencyGraph, GraphNode } from './graph/schema.js';
+import { GRAPH_VERSION } from './graph/schema.js';
 import {
   type EntityChange,
   extractSemanticDiff,
   type SemanticDiff,
 } from './semantic-diff/index.js';
 import type { FindingSeverity, ReviewFinding, ReviewResult } from './types.js';
+
+/** Minimal graph node for the blast-radius diagram tests. */
+function makeGraphNode(overrides: Partial<GraphNode> = {}): GraphNode {
+  return {
+    hash: 'h',
+    language: 'typescript',
+    imports: [],
+    exports: [],
+    calls: [],
+    isTest: false,
+    ...overrides,
+  };
+}
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -1207,5 +1226,198 @@ describe('formatSemanticDiffSection — extractSemanticDiff end-to-end', () => {
     expect(section).not.toContain('ignored'); // .md gated out
     expect(section.match(/<details>/g) ?? []).toHaveLength(1);
     expect(section.match(/<\/details>/g) ?? []).toHaveLength(1);
+  });
+});
+
+// ─── Blast Radius section (blast-radius-diagram S7–S11) ────────
+
+describe('formatBlastRadiusSection + formatReviewComment — blast-radius diagram', () => {
+  /** 5 nodes (3 changed + 2 dependent), 4 edges — built by the real renderer. */
+  function makeDiagram(
+    metaOverrides: Partial<BlastRadiusDiagram['meta']> = {},
+  ): BlastRadiusDiagram {
+    return renderMermaidDiagram(
+      [
+        { path: 'src/a.ts', role: 'changed' },
+        { path: 'src/b.ts', role: 'changed' },
+        { path: 'src/c.ts', role: 'changed' },
+        { path: 'lib/u.ts', role: 'dependent' },
+        { path: 'lib/v.ts', role: 'dependent' },
+      ],
+      [
+        { from: 'src/a.ts', to: 'lib/u.ts' },
+        { from: 'src/b.ts', to: 'lib/u.ts' },
+        { from: 'src/b.ts', to: 'lib/v.ts' },
+        { from: 'src/c.ts', to: 'lib/v.ts' },
+      ],
+      { stale: false, exceededCap: false, ...metaOverrides },
+    );
+  }
+
+  function makeResultWithDiagram(
+    diagram: BlastRadiusDiagram | undefined,
+    countsOnly = false,
+  ): ReviewResult {
+    return makeResult({
+      metadata: {
+        mode: 'simple',
+        provider: 'gateway',
+        model: 'claude-sonnet-4-20250514',
+        tokensUsed: 1000,
+        executionTimeMs: 2000,
+        toolsRun: [],
+        toolsSkipped: [],
+        ...(countsOnly
+          ? {
+              blastRadius: {
+                enabled: true,
+                graphAvailable: true,
+                totalFiles: 5,
+                blastRadiusFiles: 5,
+              },
+            }
+          : {
+              blastRadius: {
+                enabled: true,
+                graphAvailable: true,
+                totalFiles: 5,
+                blastRadiusFiles: 5,
+                ...(diagram ? { diagram } : {}),
+              },
+            }),
+      },
+    });
+  }
+
+  it('S7: renders exactly one section with one mermaid fence declaring 5 nodes and 4 edges', () => {
+    const diagram = makeDiagram();
+    const comment = formatReviewComment(makeResultWithDiagram(diagram), {
+      fileList: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'lib/u.ts', 'lib/v.ts'],
+    });
+
+    expect(comment.match(/### Blast Radius/g)).toHaveLength(1);
+    expect(comment.match(/```mermaid/g)).toHaveLength(1);
+
+    const fence = comment.split('```mermaid\n')[1]?.split('\n```')[0] ?? '';
+    // 5 declared nodes n0..n4 with double-quoted labels, 4 edges.
+    const nodeDecls = fence.split('\n').filter((l) => /n\d+\["/.test(l));
+    expect(nodeDecls).toHaveLength(5);
+    expect(nodeDecls.every((l) => /n\d+\["[^"]*"\]/.test(l))).toBe(true);
+    expect(fence.split('\n').filter((l) => l.includes('-->'))).toHaveLength(4);
+    // The fence wraps diagram.mermaid UNMODIFIED.
+    expect(fence).toBe(diagram.mermaid);
+  });
+
+  it('S7: section positioned between Files Changed and the cost footer', () => {
+    const comment = formatReviewComment(makeResultWithDiagram(makeDiagram()), {
+      fileList: ['src/a.ts', 'src/b.ts'],
+    });
+    const idxFiles = comment.indexOf('### Files Changed');
+    const idxBlast = comment.indexOf('### Blast Radius');
+    const idxFooter = comment.indexOf('📊'); // cost footer marker
+    expect(idxFiles).toBeGreaterThan(-1);
+    expect(idxBlast).toBeGreaterThan(-1);
+    expect(idxFooter).toBeGreaterThan(-1);
+    expect(idxFiles).toBeLessThan(idxBlast);
+    expect(idxBlast).toBeLessThan(idxFooter);
+  });
+
+  it('S8: counts-only blastRadius metadata → no section, byte-identical to no-metadata output', () => {
+    const withCountsOnly = formatReviewComment(makeResultWithDiagram(undefined, true));
+    const withoutMetadata = formatReviewComment(makeResult());
+    expect(withCountsOnly).not.toContain('### Blast Radius');
+    expect(withCountsOnly).not.toContain('```mermaid');
+    // Zero bytes contributed: counts-only metadata changes nothing.
+    expect(withCountsOnly).toBe(withoutMetadata);
+  });
+
+  it('S8: absent diagram key on metadata → no section either', () => {
+    const comment = formatReviewComment(makeResultWithDiagram(undefined));
+    expect(comment).not.toContain('### Blast Radius');
+    expect(comment).not.toContain('```mermaid');
+  });
+
+  it('S9: injection vectors neutralized end-to-end through the real builder + formatter', () => {
+    const graph: DependencyGraph = {
+      version: GRAPH_VERSION,
+      rootDir: '.',
+      nodes: {
+        'evil"label.ts': makeGraphNode(),
+        'a-->b.ts': makeGraphNode({ imports: ['evil"label.ts'] }),
+        '<img src=x>.ts': makeGraphNode(),
+        'head\ner.ts': makeGraphNode({ imports: ['<img src=x>.ts'] }),
+      },
+    };
+    const blastResult = computeBlastRadius(graph, [
+      'evil"label.ts',
+      'a-->b.ts',
+      '<img src=x>.ts',
+      'head\ner.ts',
+    ]);
+    const diagram = buildBlastRadiusDiagramSummary(graph, blastResult, false);
+    expect(diagram).toBeDefined();
+
+    const comment = formatReviewComment(makeResultWithDiagram(diagram!));
+    const fence = comment.split('```mermaid\n')[1]?.split('\n```')[0] ?? '';
+    const labelLines = fence.split('\n').filter((l) => /n\d+\["/.test(l));
+    expect(labelLines.length).toBeGreaterThanOrEqual(4);
+    for (const line of labelLines) {
+      // Single line, double-quoted, allowlist-only label.
+      expect(line).toMatch(/^ {4}n\d+\["[A-Za-z0-9._/+ -…]*"\]$/);
+    }
+    // No HTML anywhere in the fence (classDefs/edges/ids never carry one).
+    expect(fence).not.toContain('<');
+    // Only the template's own edge lines may carry `-->`.
+    const arrowLines = fence.split('\n').filter((l) => l.includes('-->'));
+    expect(arrowLines.every((l) => /^ {2}n\d+ --> n\d+$/.test(l))).toBe(true);
+    // The block stays structurally renderable: one header, balanced fences.
+    expect(fence.startsWith('flowchart TD')).toBe(true);
+  });
+
+  it('S10: 25-of-40 truncation renders at most 25 nodes and a `+15 more` indicator', () => {
+    // 40 nodes (25 kept + 15 omitted in `d2`), node-truncation meta.
+    const nodes = Array.from({ length: 40 }, (_, i) => ({
+      path: `d${Math.floor(i / 10)}/f${i}.ts`,
+      role: (i < 3 ? 'changed' : 'dependent') as 'changed' | 'dependent',
+    }));
+    const diagram = renderMermaidDiagram(nodes, [], {
+      stale: false,
+      exceededCap: false,
+    });
+    expect(diagram.nodes).toHaveLength(25);
+    expect(diagram.meta.truncated).toBe(true);
+
+    const comment = formatReviewComment(makeResultWithDiagram(diagram));
+    const fence = comment.split('```mermaid\n')[1]?.split('\n```')[0] ?? '';
+    expect(fence.split('\n').filter((l) => /n\d+\["/.test(l))).toHaveLength(25);
+    expect(comment).toContain('+15 more');
+    // Truncated file names never appear in the section.
+    const blastSection = comment.slice(
+      comment.indexOf('### Blast Radius'),
+      comment.indexOf('**Cost:**'),
+    );
+    expect(blastSection).not.toContain('d2/f25.ts');
+    expect(blastSection).not.toContain('d2/f39.ts');
+  });
+
+  it('S11: stale + exceededCap flags both render in the legend, none dropped', () => {
+    const diagram = makeDiagram({ stale: true, exceededCap: true });
+    const comment = formatReviewComment(makeResultWithDiagram(diagram));
+    expect(comment).toContain('older than 7 days');
+    expect(comment).toContain('exceeded the file cap');
+  });
+
+  it('edge-only truncation renders the edge-cap legend note', () => {
+    const diagram = makeDiagram();
+    diagram.meta.truncated = true; // synthetic: edges cut, no node omission
+    const comment = formatReviewComment(makeResultWithDiagram(diagram));
+    expect(comment).toContain('Some edges not shown');
+    expect(comment).not.toContain('more files not shown');
+  });
+
+  it('formatBlastRadiusSection returns empty string for absent/unpopulated input', () => {
+    expect(formatBlastRadiusSection(undefined)).toBe('');
+    expect(formatBlastRadiusSection({ ...makeDiagram(), mermaid: '' })).toBe('');
+    expect(formatBlastRadiusSection({ ...makeDiagram(), nodes: [] })).toBe('');
   });
 });
