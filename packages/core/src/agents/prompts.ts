@@ -41,7 +41,7 @@ export const SIMPLE_REVIEW_SYSTEM = `You are an expert code reviewer performing 
 
 Format your response EXACTLY as:
 
-STATUS: [PASSED or FAILED]
+STATUS: [PASSED | FAILED | NEEDS_HUMAN_REVIEW]
 SUMMARY: [2-3 sentence summary of the review]
 FINDINGS:
 - SEVERITY: [critical|high|medium|low|info]
@@ -52,6 +52,7 @@ FINDINGS:
   SUGGESTION: [specific fix or improvement]
 
 If there are no issues, return STATUS: PASSED with an empty FINDINGS section.
+Use STATUS: NEEDS_HUMAN_REVIEW when findings need human judgment.
 Scale your review depth to the diff size: small changes need brief reviews, large changes need thorough analysis.
 Only report ACTIONABLE findings — skip nitpicks and formatting preferences.
 FAILED if: Any critical issues, or 3+ high issues. PASSED otherwise.`;

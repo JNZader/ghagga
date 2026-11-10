@@ -165,6 +165,14 @@ describe('prompt constants', () => {
     expect(SIMPLE_REVIEW_SYSTEM).toContain('STATUS:');
   });
 
+  it('SIMPLE_REVIEW_SYSTEM STATUS menu offers NEEDS_HUMAN_REVIEW alongside PASSED/FAILED (D5)', () => {
+    // Golden pin: the menu must expose every status the parser accepts.
+    // Before D5 the prompt offered only PASSED/FAILED while the parser
+    // silently defaulted unparseable output to NEEDS_HUMAN_REVIEW.
+    expect(SIMPLE_REVIEW_SYSTEM).toContain('STATUS: [PASSED | FAILED | NEEDS_HUMAN_REVIEW]');
+    expect(SIMPLE_REVIEW_SYSTEM).toContain('Use STATUS: NEEDS_HUMAN_REVIEW when findings need human judgment.');
+  });
+
   it('WORKFLOW_SCOPE_SYSTEM contains scope-related content', () => {
     expect(WORKFLOW_SCOPE_SYSTEM).toContain('scope');
   });

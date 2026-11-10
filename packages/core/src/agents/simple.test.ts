@@ -57,6 +57,29 @@ describe('parseReviewResponse', () => {
     expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
   });
 
+  it('warns on stderr when falling back to the NEEDS_HUMAN_REVIEW default (D5)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      callParse('SUMMARY: Model ignored the format.\nFINDINGS:\n');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ghagga:simple] STATUS line missing or unrecognized — defaulting to NEEDS_HUMAN_REVIEW',
+      );
+
+      // And stays silent when the STATUS line IS parsed.
+      warnSpy.mockClear();
+      callParse('STATUS: PASSED\nSUMMARY: ok.\nFINDINGS:\n');
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('parses a model-issued NEEDS_HUMAN_REVIEW status (now offered in the prompt menu)', () => {
+    const text = 'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: Trade-off needs a human call.\nFINDINGS:\n';
+    const result = callParse(text);
+    expect(result.status).toBe('NEEDS_HUMAN_REVIEW');
+  });
+
   it('extracts summary text', () => {
     const text =
       'STATUS: PASSED\nSUMMARY: The code changes look good. No critical issues found.\nFINDINGS:\n';
