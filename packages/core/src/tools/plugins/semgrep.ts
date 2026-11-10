@@ -78,6 +78,55 @@ export function parseSemgrepOutput(raw: RawToolOutput, repoDir: string): ReviewF
   }
 }
 
+/**
+ * Operational-failure detection for raw semgrep output (demo investigation D4).
+ *
+ * Semgrep exits 0 (clean) or 1 (findings present); exit codes >= 2 mark an
+ * operational failure (bad config, unparsable rules, internal error).
+ * Separately, the JSON `errors` array can be non-empty even on exit 0 — when
+ * it comes with zero `results`, the scan did not actually run.
+ *
+ * Lives in `run` (throwing), NOT in `parse`: the orchestrator's parseSafe
+ * swallows parse throws (pinned behavior — a parse error degrades to zero
+ * findings with status "success"), while a run() throw reaches the
+ * orchestrator's catch and is recorded with status "error". Before this
+ * check, a crashed semgrep resolved with unparseable stdout, parse()
+ * swallowed it, and the review reported "success (0 findings)" for a scan
+ * that never ran.
+ *
+ * @throws {Error} when the scan operationally failed.
+ */
+export function assertSemgrepSucceeded(raw: RawToolOutput): void {
+  // Timeout is the orchestrator's call (raw.timedOut → status "error").
+  if (raw.timedOut) return;
+
+  let failure: string | undefined;
+
+  if (raw.exitCode >= 2) {
+    const detail = raw.stderr.trim() || raw.stdout.trim();
+    failure = `semgrep operational failure (exit ${raw.exitCode})${
+      detail ? `: ${detail.slice(0, 300)}` : ''
+    }`;
+  } else {
+    try {
+      const parsed = JSON.parse(raw.stdout) as {
+        results?: unknown[];
+        errors?: Array<{ message?: string }>;
+      };
+      const errorCount = parsed.errors?.length ?? 0;
+      if (errorCount > 0 && (parsed.results?.length ?? 0) === 0) {
+        const first = parsed.errors?.[0]?.message ?? 'no detail';
+        failure = `semgrep reported ${errorCount} error(s) and 0 results: ${String(first).slice(0, 300)}`;
+      }
+    } catch {
+      // Malformed stdout with exit 0/1 keeps the legacy path: parse()
+      // returns [] and parseSafe's warn log records the parse error.
+    }
+  }
+
+  if (failure) throw new Error(failure);
+}
+
 export const semgrepPlugin: ToolDefinition = {
   name: 'semgrep',
   displayName: 'Semgrep',
@@ -122,10 +171,16 @@ export const semgrepPlugin: ToolDefinition = {
       ctx.log('warn', 'semgrep: bundled semgrep-rules.yml not found, using --config auto only');
     }
 
-    return ctx.exec('semgrep', ['--json', ...configArgs, '--quiet', repoDir], {
+    const raw = await ctx.exec('semgrep', ['--json', ...configArgs, '--quiet', repoDir], {
       timeoutMs: timeout,
       allowExitCodes: [1], // semgrep returns 1 when findings are present
     });
+
+    // Exit >= 2 or an errors-array-only JSON payload is an operational
+    // failure — surface it as a tool error instead of "success (0 findings)".
+    assertSemgrepSucceeded(raw);
+
+    return raw;
   },
 
   parse: parseSemgrepOutput,
