@@ -35,4 +35,43 @@ Branch: `feat/review-output-compression` (base: `main` @ 2ab5112)
 - Aggregation semantics mirror workflow/consensus exactly: `hasSplit = inputTokens !== undefined || outputTokens !== undefined` (either side counts), missing side contributes 0, `tokensUsed` stays the authoritative grand total.
 - Fan-out accumulates across ALL generate calls: lens passes, contrarian passes, AND refuter passes (refuters read the GenerateResult directly; lens/contrarian gained inputTokens/outputTokens passthrough on VoiceCallResult).
 
-## Slice 3 — Parser-parity corpus + A/B protocol + changeset (PENDING)
+## Slice 3 — Parser-parity corpus + A/B protocol + changeset (COMPLETE)
+
+| Task | Commit | Status | Verification |
+| --- | --- | --- | --- |
+| T3.1 parser-parity fixtures | `7b0f24c` (with T3.2) | DONE | 5 case dirs under `packages/core/test/fixtures/output-compression/` — 3 finding pairs (incl. a `LINE: N/A` row), 1 consensus pair, 1 refuter case |
+| T3.2 corpus test (model-free) | `7b0f24c` | DONE | `vitest run src/output-compression-corpus.test.ts` — 17 passed (identical fingerprints both styles, expected-*.json match, zero-findings fails loudly, one-line bold compressed prose, terse refuter verdicts exact, render-parity bold survives `formatReviewComment`, no pipes in prose) |
+| T3.3 A/B protocol template | `cc887f2` | DONE | `ab-run.md` authored — cli-bridge/simple/fresh-exact-multi-file protocol, per-run fields, ≥30% + 0-lost gate, gateway blind spot; TEMPLATE ONLY until the out-of-band run |
+| T3.4 changeset + spec name amendment | `cc887f2` | DONE | `.changeset/review-output-compression.md` (minor, fixed group; `pnpm changeset status` OK); spec delta amended `enableOutputStyleCalibration` → `compressOutput` with the amendment note on the requirement line |
+
+## Final validation (before push)
+
+- FULL `ghagga-core` vitest: **163 files / 4245 passed / 1 skipped** (pre-existing skip)
+- FULL `@ghagga/server` vitest: **46 files / 1178 passed** (token-split persistence suite green)
+- FULL `ghagga` (CLI) vitest: **48 files / 609 passed / 1 skipped**
+- `tsc --noEmit`: core OK, cli OK, server OK
+- `pnpm --filter ghagga-core build`: OK (both after Slice 1 wiring and after Slice 2)
+- `biome check .`: 104 warnings / 3 infos — **byte-identical to `main` baseline** (verified in a clean main worktree): 0 errors, 0 NEW warnings
+
+## Commits (work-unit, single PR)
+
+1. `d8e5ce2` feat(core): add OUTPUT_STYLE_CALIBRATION prompt block constant (T1.1)
+2. `ec2d744` test(core): RED on/off/exclusion matrix (T1.2)
+3. `663e321` feat(core): wire OUTPUT_STYLE_CALIBRATION behind ReviewSettings.compressOutput (T1.3)
+4. `8e82aa5` feat(core): thread compressOutput from settings to every review runner (T1.4)
+5. `d56eac7` feat(cli): --no-compress-output flag with flag-beats-config precedence (T1.5)
+6. `fdb725e` chore(openspec): artifacts + slice 1 progress
+7. `840590d` feat(core): measure output-token split in simple review metadata (T2.1)
+8. `61e8345` feat(core): measure output-token split in diagnostic review metadata (T2.2)
+9. `b07385d` feat(core): aggregate output-token split across all fan-out voices (T2.3)
+10. `61d0145` test(core): pin cost-footer split states for the gap voices (T2.4)
+11. `7b0f24c` test(core): parser-parity corpus (T3.1+T3.2)
+12. `cc887f2` chore: A/B template + changeset + spec amendment (T3.3+T3.4)
+
+## Blockers
+
+None. Known deferred items (by design, not blockers):
+
+- A/B model run is out-of-band (post-Slice-2-merge) — default-ON claim UNVERIFIED until the gate in `ab-run.md` is recorded.
+- Realized diff: **48 files / +2038 −8** vs main — well above the ~600-line "revisit before pre-pr" threshold from tasks.md review forecast. The delta is dominated by authored fixture prose (15 fixture files), the 15-test on/off matrix across 5 suites, the ON-state golden snapshot (+93), and the openspec artifacts themselves (~500 lines). Logic changes (agents wiring + execute threading + CLI + types) are ~120 lines. Flag for pre-pr review routing: full 4R per >400 lines.
+
