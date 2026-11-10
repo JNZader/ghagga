@@ -6,7 +6,14 @@
  *   DELETE /api/reviews/:param  (numeric → single review by ID, non-numeric → by repo full name)
  */
 
-import type { Finding, Review, ReviewFinding, ReviewMode, ReviewStatus } from '@ghagga/types';
+import type {
+  BlastRadiusDiagram,
+  Finding,
+  Review,
+  ReviewFinding,
+  ReviewMode,
+  ReviewStatus,
+} from '@ghagga/types';
 import type { Database } from 'ghagga-db';
 import {
   clearMemoryObservationsByProject,
@@ -154,10 +161,33 @@ function toWireFinding(raw: unknown): Finding {
  * it in at saveReview time — queues/review.ts). It is emitted ONLY when the
  * blob carries a real boolean: rows persisted before the field existed, and
  * SKIPPED reviews (pipeline never ran), simply lack the key on the wire.
+ *
+ * `blastRadiusDiagram` (blast-radius-diagram) rides the same jsonb, at
+ * `metadata.blastRadius.diagram` — projected VERBATIM (the artifact was
+ * capped/sanitized at build time in core; no server-side transformation),
+ * and ONLY when the blob actually carries a diagram object: counts-only
+ * rows, oversize fallbacks, and every pre-change row omit the key
+ * entirely (never `null`/`{}`, same absent-key semantics as
+ * `coverageComplete`).
  */
+/**
+ * Structural guard for the `metadata.blastRadius.diagram` jsonb value:
+ * object (not array/primitive/null) → project it; anything else → omit
+ * the key. Fail-closed on corrupt jsonb without duplicating core's
+ * schema validation server-side (the artifact was validated + capped at
+ * build time in core).
+ */
+function isDiagramObject(value: unknown): value is BlastRadiusDiagram {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function toReviewDto(row: ReviewRow, repoFullName: string): Review {
-  const coverageComplete = (row.metadata as { coverageComplete?: unknown } | null)
-    ?.coverageComplete;
+  const metadata = row.metadata as {
+    coverageComplete?: unknown;
+    blastRadius?: { diagram?: unknown };
+  } | null;
+  const coverageComplete = metadata?.coverageComplete;
+  const blastRadiusDiagram = metadata?.blastRadius?.diagram;
   return {
     id: row.id,
     repo: repoFullName,
@@ -176,6 +206,7 @@ function toReviewDto(row: ReviewRow, repoFullName: string): Review {
       .map(toWireFinding),
     createdAt: row.createdAt.toISOString(),
     ...(typeof coverageComplete === 'boolean' ? { coverageComplete } : {}),
+    ...(isDiagramObject(blastRadiusDiagram) ? { blastRadiusDiagram } : {}),
   };
 }
 
