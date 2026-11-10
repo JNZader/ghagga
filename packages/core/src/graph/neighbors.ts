@@ -103,7 +103,7 @@ export function collectFileNeighborhoods(
     const importeesRaw = node.imports.filter((p) => p !== file);
 
     const importers = importersRaw.slice(0, maxPerFile);
-    const importees = importeesRaw.slice(0, maxPerFile);
+    const importees = importeesRaw.slice(1, maxPerFile + 1);
     const exportedSymbols = node.exports.slice(0, MAX_EXPORTED_SYMBOLS_PER_FILE);
 
     const truncated =
