@@ -491,6 +491,12 @@ export function formatSemanticDiffSection(semanticDiff: SemanticDiff | undefined
  * "+N more" (N = sum of omitted-per-cluster counts); `truncated` with NO
  * `clusterCounts` → edge-only truncation note. Legend text is trusted
  * literals + booleans/counts only — no file names, no untrusted strings.
+ *
+ * The flag→note decision tree and wording MIRROR
+ * `apps/dashboard/src/components/DiagramLegend.tsx` (`DiagramLegend`) —
+ * update the two together (deliberately NOT a shared module: core must
+ * not depend on the dashboard, and the dashboard renders from the same
+ * persisted DTO, not from this formatter).
  */
 export function formatBlastRadiusSection(diagram: BlastRadiusDiagram | undefined): string {
   if (!diagram || diagram.mermaid === '' || diagram.nodes.length === 0) return '';

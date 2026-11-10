@@ -276,12 +276,21 @@ describe('graph-context eval corpus', () => {
   //
   // 11 changed files at the DEFAULT 1,200-token budget (~7,000 rendered
   // chars vs the 4,800 cap). Cast by intent: filler-a FIRST in diff order
-  // with zero lexical signal (comment-only hunk, 9 pts echo floor); fillers
-  // b..i each declare a symbol (14 pts); hub has 10 importers but zero
-  // lexical (10 pts); ranker LAST in diff order with both exports called
-  // from filler-i's hunk (19 pts). Expected ranked order: ranker, then the
-  // fvar-declaring fillers in diff order, then hub, then filler-a — the cut
-  // keeps the top 7 and drops filler-h/i, hub, filler-a.
+  // with zero lexical signal (comment-only hunk); fillers b..i each
+  // declare a symbol (fvarX); hub has 10 importers but zero lexical;
+  // ranker LAST in diff order with both exports called from filler-i's
+  // hunk. Scores per neighborhood-rank.ts (importers capped at 10): every
+  // file's w1 is 36 — own path PLUS importer/importee paths, and every
+  // neighbor here is itself a changed file, so all 12 overlapping path
+  // tokens hit the diff (edges.ts, the one unchanged graph node, never
+  // appears in the diff text). The spread rides w2 and the hub bonus:
+  // ranker 46 (w2 = 10, rankerMain + rankerHelper both called; NO hub
+  // bonus — nothing imports ranker), fillers b..i 42 (w2 = 5 for fvarX
+  // + 1 hub bonus — importers hit the 10 cap), filler-a and hub 37 (w2 =
+  // 0 + 1 hub bonus; the 37-tie keeps diff order, filler-a before hub).
+  // Expected ranked order: ranker, then the fvar-declaring fillers in
+  // diff order, then filler-a, then hub — the cut keeps the top 7 and
+  // drops filler-h/i, filler-a, hub.
   describe('case: budget-cut-ranked survival under the DEFAULT budget', () => {
     const cut = () => cases.find((c) => c.name === 'budget-cut-ranked') as CorpusCase;
     const DEFAULT_BUDGET_CHARS = 1_200 * 4;
@@ -300,8 +309,8 @@ describe('graph-context eval corpus', () => {
     it('renders score-desc with stable ties — ranker first, then decl-fillers in diff order', async () => {
       const { context } = await assemble(cut());
       const order = [
-        'src/ranker.ts', // 19 — w2 from both exports called cross-file
-        'src/filler-b.ts', // 14 — ties keep diff order
+        'src/ranker.ts', // 46 — w2 = 10 (both exports called cross-file), no hub bonus
+        'src/filler-b.ts', // 42 — ties keep diff order
         'src/filler-c.ts',
         'src/filler-d.ts',
         'src/filler-e.ts',

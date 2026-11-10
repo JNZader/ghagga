@@ -10,7 +10,10 @@
  *
  * Mirrors the review comment's legend: every flag on `meta` is rendered,
  * none silently dropped. Trusted literals + counts only — no file names,
- * no untrusted strings.
+ * no untrusted strings. The flag→note decision tree and wording MIRROR
+ * `formatBlastRadiusSection` in `packages/core/src/format.ts` — update
+ * the two together (deliberately NOT a shared module: the dashboard must
+ * not import core; both render from the same persisted diagram DTO).
  */
 
 import type { BlastRadiusDiagram } from '@ghagga/types';

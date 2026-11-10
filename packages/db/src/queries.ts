@@ -384,7 +384,12 @@ export async function saveReview(
 
 // ─── Digests (Nightly Health Digest) ────────────────────────────
 
-/** Ranking window for digest inputs: only the last 30 days of reviews (D2). */
+/**
+ * Ranking window for digest inputs: only the last 30 days of reviews (D2).
+ * MUST match `RANKING_WINDOW_DAYS` in `packages/core/src/health/digest.ts`
+ * (same constant, two homes — deliberately NOT a shared import: db must not
+ * depend on core, nor core on db; change them together).
+ */
 const DIGEST_RANKING_WINDOW_DAYS = 30;
 
 /**
@@ -393,9 +398,12 @@ const DIGEST_RANKING_WINDOW_DAYS = 30;
  *
  * `since` (the last POSTED digest's watermark) excludes already-consumed
  * reviews STRICTLY (`createdAt > since`); `undefined` means first run (whole
- * ranking window). The core `aggregateHealth`/`rankFileRisk` functions apply
- * the same cutoffs — the DB-side filter bounds row volume, it does not replace
- * the pure functions' contracts.
+ * ranking window). The 30-day window is LOAD-BEARING, not a volume-bounding
+ * optimization: core's `aggregateHealth` applies ONLY the watermark cutoff,
+ * so the rows this query returns ARE the digest's finding set
+ * (`severityCounts`/`findings`/`fileBlastRadius`). `rankFileRisk` re-applies
+ * the same window defensively, but only for the risk ranking — changing this
+ * filter changes digest CONTENTS, not just row volume.
  */
 export async function getReviewsSinceWatermark(
   db: Database,

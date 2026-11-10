@@ -321,10 +321,13 @@ function emitMermaid(nodes: BlastRadiusDiagramNode[], edges: BlastRadiusDiagramE
 
 /**
  * Build-time JSON-size invariant (design D2): asserts the serialized
- * diagram fits `BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS`. Called by the
- * Slice-2 builder AFTER capping — with the caps enforced the worst case
- * is ~6-8 KB, so a violation means a bug, and the builder throws so the
- * pipeline can degrade to counts-only (never persist an oversized blob).
+ * diagram fits `BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS`.
+ *
+ * Test-only export — zero production callers since the 4R redesign: the
+ * Slice-2 builder enforces the budget with its own inline check
+ * (`diagram-summary.ts`, degrading to `undefined` on oversize so a
+ * decorative miss never reaches `failedSteps`). Kept exported for
+ * `diagram.test.ts`'s budget pins.
  */
 export function assertDiagramJsonBudget(diagram: BlastRadiusDiagram): void {
   const size = JSON.stringify(diagram).length;

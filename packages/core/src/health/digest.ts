@@ -53,7 +53,12 @@ export interface FileRisk {
 
 const VALID_SEVERITIES: ReadonlySet<string> = new Set(Object.keys(SEVERITY_WEIGHTS));
 
-/** Ranking window: only the last 30 days of reviews contribute (D2). */
+/**
+ * Ranking window: only the last 30 days of reviews contribute (D2).
+ * MUST match `DIGEST_RANKING_WINDOW_DAYS` in `packages/db/src/queries.ts`
+ * (same constant, two homes — deliberately NOT a shared import: core must
+ * not depend on db, nor db on core; change them together).
+ */
 export const RANKING_WINDOW_DAYS = 30;
 /** Recency tier boundary: reviews at most this old score at full weight. */
 export const RECENCY_FULL_DAYS = 7;
