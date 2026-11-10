@@ -21,6 +21,18 @@ Branch: `feat/review-output-compression` (base: `main` @ 2ab5112)
 - **Pre-commit hook**: repo hook runs `turbo run typecheck`, which fails in this environment with `Exec format error (os error 8)` (spawn failure — direct `tsc --noEmit` per package passes). Commits use `--no-verify` with all hook validations (biome + per-package tsc + suites) executed explicitly per task.
 - **Off-state byte-identity**: pinned by exact-baseline assertions in the per-voice tests (OFF prompt deep-equals the assembled pre-change parts), plus `on === off + '\n' + BLOCK` additivity asserts.
 
-## Slice 2 — outputTokens wiring (PENDING)
+## Slice 2 — outputTokens wiring (COMPLETE)
+
+| Task | Commit | Status | Verification |
+| --- | --- | --- | --- |
+| T2.1 simple split wiring | `840590d` | DONE | `vitest run src/agents/simple.test.ts` — 38 passed (split reported → both fields set; gateway undefined → absent, review succeeds) |
+| T2.2 diagnostic split wiring | `61e8345` | DONE | `vitest run src/agents/diagnostic.test.ts` — 32 passed (ollama usage row + no-split row) |
+| T2.3 fan-out split aggregation | `b07385d` | DONE | `vitest run src/agents/fan-out-lenses.test.ts` — 84 passed (3 lens + 1 contrarian + 2 refuter all 70/30 → 420/180 of 600; none → absent; single measured voice → measured) |
+| T2.4 cost-footer regression rows | `61d0145` | DONE | `vitest run src/cost-footer.test.ts src/format.test.ts` — 130 passed; NO footer code change (three split states already render) |
+
+### Notes / decisions during apply
+
+- Aggregation semantics mirror workflow/consensus exactly: `hasSplit = inputTokens !== undefined || outputTokens !== undefined` (either side counts), missing side contributes 0, `tokensUsed` stays the authoritative grand total.
+- Fan-out accumulates across ALL generate calls: lens passes, contrarian passes, AND refuter passes (refuters read the GenerateResult directly; lens/contrarian gained inputTokens/outputTokens passthrough on VoiceCallResult).
 
 ## Slice 3 — Parser-parity corpus + A/B protocol + changeset (PENDING)
