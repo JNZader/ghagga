@@ -2,8 +2,9 @@
 #
 # `provider: groq` calls https://api.groq.com/openai/v1 chat completions with
 # `api-key`. A Groq error fails this job (the Action calls setFailed). Fork
-# PRs do not receive repository secrets, so the review steps are skipped and
-# the job stays green.
+# PRs and Dependabot PRs do not receive repository secrets (Dependabot runs
+# have secrets withheld even though its branches live in this repository), so
+# the review steps are skipped and the job stays green.
 name: Test GHAGGA Action
 
 on:
@@ -24,17 +25,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Skip live review on fork PRs
-        if: github.event.pull_request.head.repo.fork == true
+      # Dependabot's login differs by surface: REST/webhook payloads say
+      # `dependabot[bot]`, GraphQL answers `app/dependabot`. Match both, plus
+      # github.actor as a belt-and-suspenders check.
+      - name: Skip live review on fork and Dependabot PRs
+        if: >-
+          github.event.pull_request.head.repo.fork == true ||
+          contains(fromJSON('["app/dependabot", "dependabot[bot]"]'), github.event.pull_request.user.login) ||
+          github.actor == 'dependabot[bot]'
         run: |
-          echo "Fork PR: GROQ_API_KEY is unavailable. Skipping the live Groq review."
+          echo "Fork or Dependabot PR: GROQ_API_KEY is unavailable. Skipping the live Groq review."
 
       - name: Checkout
-        if: github.event.pull_request.head.repo.fork == false
+        if: >-
+          github.event.pull_request.head.repo.fork == false &&
+          !contains(fromJSON('["app/dependabot", "dependabot[bot]"]'), github.event.pull_request.user.login) &&
+          github.actor != 'dependabot[bot]'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run GHAGGA Review
-        if: github.event.pull_request.head.repo.fork == false
+        if: >-
+          github.event.pull_request.head.repo.fork == false &&
+          !contains(fromJSON('["app/dependabot", "dependabot[bot]"]'), github.event.pull_request.user.login) &&
+          github.actor != 'dependabot[bot]'
         uses: ./
         with:
           provider: groq
