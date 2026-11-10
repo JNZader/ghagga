@@ -200,3 +200,64 @@ describe('GenerateTextFn type compliance', () => {
     expect(typeof gatewayFn).toBe('function');
   });
 });
+
+// ─── Input/Output token split (graph-context-retrieval T5.1) ────
+
+describe('createCLIBridgeGenerateFn token split', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('wires the opencode measured split and sums it into tokensUsed', async () => {
+    vi.mocked(generateViaCLI).mockReturnValue({
+      text: 'output',
+      provider: 'cli-bridge',
+      cli: 'opencode',
+      tokens: { input: 1500, output: 200 },
+    });
+
+    const fn = createCLIBridgeGenerateFn({ preferredCLI: 'opencode' });
+    const result = await fn('system', 'prompt');
+
+    expect(result.tokensUsed).toBe(1700);
+    expect(result.inputTokens).toBe(1500);
+    expect(result.outputTokens).toBe(200);
+  });
+
+  it('stays tokensUsed 0 with NO split when the adapter reports no usage', async () => {
+    vi.mocked(generateViaCLI).mockReturnValue({
+      text: 'output',
+      provider: 'cli-bridge',
+      cli: 'gemini',
+    });
+
+    const fn = createCLIBridgeGenerateFn({ preferredCLI: 'gemini' });
+    const result = await fn('system', 'prompt');
+
+    expect(result.tokensUsed).toBe(0);
+    expect(result.inputTokens).toBeUndefined();
+    expect(result.outputTokens).toBeUndefined();
+  });
+});
+
+describe('createGatewayGenerateFn token split (unmeasured)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('carries NO split fields — the gateway protocol reports only tokensUsed', async () => {
+    vi.mocked(generateViaGateway).mockResolvedValue({
+      text: 'output',
+      provider: 'gateway',
+      model: 'llama-3',
+      tokensUsed: 250,
+    });
+
+    const fn = createGatewayGenerateFn({ gatewayUrl: 'https://gw.test', gatewayToken: 't' });
+    const result = await fn('system', 'prompt');
+
+    expect(result.tokensUsed).toBe(250);
+    expect(result.inputTokens).toBeUndefined();
+    expect(result.outputTokens).toBeUndefined();
+  });
+});

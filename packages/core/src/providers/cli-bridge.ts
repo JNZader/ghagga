@@ -139,12 +139,18 @@ interface CLIAdapter {
   name: string;
   command: string;
   available: boolean;
+  /**
+   * Run one generation. Most adapters return plain text; an adapter that
+   * parses usage events (opencode) returns `{ text, tokens? }` so the
+   * measured input/output split survives to generateViaCLI's caller
+   * (graph-context-retrieval T5.1 — previously discarded).
+   */
   generate: (
     prompt: string,
     systemPrompt?: string,
     cliModel?: string,
     env?: NodeJS.ProcessEnv,
-  ) => string;
+  ) => string | { text: string; tokens?: { input?: number; output?: number } };
 }
 
 /**
@@ -462,7 +468,9 @@ const adapters: CLIAdapter[] = [
           `OpenCode returned no text content in JSON output. Raw preview: ${preview}`,
         );
       }
-      return parsed.text.trim();
+      // Carry the step_finish token split through instead of discarding it
+      // (graph-context-retrieval T5.1).
+      return { text: parsed.text.trim(), tokens: parsed.tokens };
     },
   },
   {
@@ -690,7 +698,13 @@ export function generateViaCLI(
   prompt: string,
   systemPrompt?: string,
   options?: CLIBridgeOptions,
-): { text: string; provider: string; cli: string } {
+): {
+  text: string;
+  provider: string;
+  cli: string;
+  /** Measured input/output split when the adapter reports usage (opencode). */
+  tokens?: { input?: number; output?: number };
+} {
   const { preferredCLI: resolvedCLI, cliModel, credentials } = options ?? {};
 
   // ── Validate cliModel (configuration error = hard fail) ──
@@ -756,8 +770,12 @@ export function generateViaCLI(
         adapter.name === 'opencode' || adapter.name === 'codex' || adapter.name === 'claude'
           ? cliModel
           : undefined;
-      const text = adapter.generate(prompt, systemPrompt, modelArg, subprocessEnv);
-      return { text, provider: 'cli-bridge', cli: adapter.name };
+      const out = adapter.generate(prompt, systemPrompt, modelArg, subprocessEnv);
+      // Plain-string adapters (copilot/gemini/codex/claude) have no usage;
+      // object adapters (opencode) carry the measured split.
+      const text = typeof out === 'string' ? out : out.text;
+      const tokens = typeof out === 'string' ? undefined : out.tokens;
+      return { text, provider: 'cli-bridge', cli: adapter.name, tokens };
     } catch (error) {
       // CLIConfigurationError should NOT be caught — re-throw immediately
       if (error instanceof CLIConfigurationError) {

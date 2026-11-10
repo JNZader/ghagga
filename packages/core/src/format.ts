@@ -594,8 +594,13 @@ export function formatReviewComment(
     comment += formatFileCategorySummary(options.fileList);
   }
 
-  // Cost footer
-  const cost = calculateReviewCost(result.metadata.tokensUsed, result.metadata.model);
+  // Cost footer — pass the measured input/output split when the review
+  // metadata carries one (graph-context-retrieval T5.5); otherwise the
+  // 70/30 heuristic remains the unmeasured fallback.
+  const cost = calculateReviewCost(result.metadata.tokensUsed, result.metadata.model, {
+    inputTokens: result.metadata.inputTokensUsed,
+    outputTokens: result.metadata.outputTokensUsed,
+  });
   comment += formatCostFooter(cost);
 
   comment += `---\n*Powered by [GHAGGA](https://github.com/JNZader/ghagga) \u2014 AI Code Review*`;

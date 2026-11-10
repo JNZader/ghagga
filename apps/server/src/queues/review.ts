@@ -958,6 +958,15 @@ async function processReview(
     summary: reviewResult.summary,
     findings: reviewResult.findings,
     tokensUsed: reviewResult.metadata.tokensUsed,
+    // graph-context-retrieval T5.4: measured input/output split into the new
+    // nullable columns. Absent (older core / unmeasured provider) → keys
+    // omitted → NULL columns; tokens_used stays authoritative either way.
+    ...(reviewResult.metadata.inputTokensUsed !== undefined
+      ? { inputTokens: reviewResult.metadata.inputTokensUsed }
+      : {}),
+    ...(reviewResult.metadata.outputTokensUsed !== undefined
+      ? { outputTokens: reviewResult.metadata.outputTokensUsed }
+      : {}),
     executionTimeMs: reviewResult.metadata.executionTimeMs,
     // The reviews table persists discrete columns + this jsonb blob — NOT the
     // full ReviewResult. `coverageComplete` is top-level on ReviewResult, so

@@ -571,6 +571,16 @@ export interface ReviewMetadata {
   /** Total tokens consumed */
   tokensUsed: number;
 
+  /**
+   * Measured prompt-side token total (graph-context-retrieval T5.2),
+   * summed across every voice alongside `tokensUsed`. Absent when no
+   * provider reported a split (gateway, usage-less CLI adapters) —
+   * `tokensUsed` stays the authoritative total either way.
+   */
+  inputTokensUsed?: number;
+  /** Measured completion-side token total — absent when unmeasured. */
+  outputTokensUsed?: number;
+
   /** Total execution time in milliseconds */
   executionTimeMs: number;
 

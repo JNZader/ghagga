@@ -28,6 +28,11 @@ export function createGroqGenerateFn(model: string, apiKey: string): GenerateTex
     return {
       text: result.text,
       tokensUsed: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
+      // graph-context-retrieval T5.1: carry the measured split when reported.
+      ...(result.usage?.inputTokens !== undefined ? { inputTokens: result.usage.inputTokens } : {}),
+      ...(result.usage?.outputTokens !== undefined
+        ? { outputTokens: result.usage.outputTokens }
+        : {}),
       provider: 'groq',
       model,
     };

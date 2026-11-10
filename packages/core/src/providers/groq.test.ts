@@ -38,6 +38,8 @@ describe('createGroqGenerateFn', () => {
     expect(result).toEqual({
       text: 'STATUS: PASSED\nSUMMARY: ok\n',
       tokensUsed: 7,
+      inputTokens: 3,
+      outputTokens: 4,
       provider: 'groq',
       model: 'openai/gpt-oss-120b',
     });

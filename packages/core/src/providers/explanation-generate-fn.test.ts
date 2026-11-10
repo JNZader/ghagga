@@ -264,6 +264,8 @@ describe('resolved explanation provider invocations', () => {
     await expect(generate?.('system', 'prompt')).resolves.toEqual({
       text: 'local answer',
       tokensUsed: 5,
+      inputTokens: 2,
+      outputTokens: 3,
       provider: 'ollama',
       model: 'fixed-local-model',
     });

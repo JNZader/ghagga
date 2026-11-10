@@ -304,6 +304,8 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
       return {
         vote: parseVote(result.text, result.provider as LLMProvider, result.model, config.stance),
         tokensUsed: result.tokensUsed,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
       };
     };
   });
@@ -313,6 +315,11 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
   // ── Step 2: Collect votes and token usage ──────────────────
   const votes: ConsensusVote[] = [];
   let totalTokens = 0;
+  // graph-context-retrieval T5.2: measured split aggregated alongside
+  // tokensUsed; set on metadata only when a vote actually reported it.
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let splitReported = false;
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
@@ -322,6 +329,11 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
     if (result.status === 'fulfilled') {
       votes.push(result.value.vote);
       totalTokens += result.value.tokensUsed;
+      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalInputTokens += result.value.inputTokens ?? 0;
+        totalOutputTokens += result.value.outputTokens ?? 0;
+      }
       const v = result.value.vote;
       emit({
         step: `vote-${config.stance}`,
@@ -375,6 +387,9 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
       provider: votes[0]?.provider ?? models[0]?.provider,
       model: votes[0]?.model ?? models[0]?.model,
       tokensUsed: totalTokens,
+      ...(splitReported
+        ? { inputTokensUsed: totalInputTokens, outputTokensUsed: totalOutputTokens }
+        : {}),
       executionTimeMs,
       toolsRun: [],
       toolsSkipped: [],

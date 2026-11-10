@@ -778,3 +778,58 @@ describe('runWorkflowReview graph neighborhood subsets', () => {
     }
   });
 });
+
+// ─── Input/output token split aggregation (graph-context-retrieval T5.2) ──
+
+describe('runWorkflowReview token split aggregation', () => {
+  // Local re-seed: this describe sits outside the main one, so the shared
+  // beforeEach does not run here — without this, tests would read whatever
+  // metadata the previous test mutated on a stale mocked-result object.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParseReviewResponse.mockReturnValue(makeParsedResult());
+  });
+
+  it('sums measured input/output tokens across specialists and synthesis', async () => {
+    let call = 0;
+    const fn: import('../providers/generate-fn.js').GenerateTextFn = vi.fn(
+      async (_system: string, _prompt: string) => {
+        call += 1;
+        return {
+          text: call === 6 ? 'STATUS: PASSED\nSUMMARY: ok\nFINDINGS:\n' : 'SCOPE OUTPUT',
+          tokensUsed: 100,
+          inputTokens: 70,
+          outputTokens: 30,
+          provider: 'gateway',
+          model: 'auto',
+        };
+      },
+    );
+
+    const result = await runWorkflowReview(makeInput({ generateFns: [fn] }));
+
+    // 5 specialists + 1 synthesis, each 70/30. tokensUsed travels as the
+    // parseReviewResponse argument (the mocked parser owns the metadata
+    // stub); the split is attached to the result post-parse.
+    expect(mockParseReviewResponse).toHaveBeenCalledWith(
+      'STATUS: PASSED\nSUMMARY: ok\nFINDINGS:\n',
+      expect.any(String),
+      expect.any(String),
+      600,
+      expect.any(Number),
+      null,
+    );
+    expect(result.metadata.inputTokensUsed).toBe(420);
+    expect(result.metadata.outputTokensUsed).toBe(180);
+  });
+
+  it('leaves the split absent when no voice reports one (unmeasured)', async () => {
+    const { fn } = makeMockGenerateFn();
+    const result = await runWorkflowReview(makeInput({ generateFns: [fn] }));
+
+    // The mocked parser stub reports no split and the aggregation must not
+    // invent one (tokensUsed itself lives on the parse argument).
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+});

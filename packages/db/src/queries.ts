@@ -361,6 +361,13 @@ export async function saveReview(
     summary?: string;
     findings?: unknown[];
     tokensUsed?: number;
+    /**
+     * Measured input/output split (graph-context-retrieval T5.3). Absent
+     * → NULL columns (unmeasured); present → tokensUsed MUST already equal
+     * inputTokens + outputTokens (the provider contract).
+     */
+    inputTokens?: number;
+    outputTokens?: number;
     executionTimeMs?: number;
     metadata?: unknown;
   },
@@ -702,6 +709,8 @@ export async function getReviewsByInstallationIds(
         summary: reviews.summary,
         findings: reviews.findings,
         tokensUsed: reviews.tokensUsed,
+        inputTokens: reviews.inputTokens,
+        outputTokens: reviews.outputTokens,
         executionTimeMs: reviews.executionTimeMs,
         metadata: reviews.metadata,
         createdAt: reviews.createdAt,

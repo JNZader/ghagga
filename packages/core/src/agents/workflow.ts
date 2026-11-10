@@ -263,6 +263,8 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
         label: specialist.label,
         text: result.text,
         tokensUsed: result.tokensUsed,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
         providerUsed: result.provider,
         modelUsed: result.model,
       };
@@ -273,6 +275,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
   // ── Step 2: Collect results ────────────────────────────────
   let totalTokens = 0;
+  // graph-context-retrieval T5.2: measured split aggregated alongside
+  // tokensUsed; set on metadata only when a voice actually reported it.
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let splitReported = false;
   const specialistOutputs: string[] = [];
   const modelsUsed: string[] = [];
 
@@ -283,6 +290,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
+      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalInputTokens += result.value.inputTokens ?? 0;
+        totalOutputTokens += result.value.outputTokens ?? 0;
+      }
       specialistOutputs.push(`### ${result.value.label}\n\n${result.value.text}`);
       modelsUsed.push(
         `${result.value.name}:${result.value.providerUsed}/${result.value.modelUsed}`,
@@ -356,6 +368,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
     const executionTimeMs = Date.now() - startTime;
     totalTokens += synthesisResult.tokensUsed;
+    if (synthesisResult.inputTokens !== undefined || synthesisResult.outputTokens !== undefined) {
+      splitReported = true;
+      totalInputTokens += synthesisResult.inputTokens ?? 0;
+      totalOutputTokens += synthesisResult.outputTokens ?? 0;
+    }
 
     // Parse the synthesis output using the same parser as simple mode
     const reviewResult = parseReviewResponse(
@@ -370,6 +387,10 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     // Override mode in metadata
     reviewResult.metadata.mode = 'workflow';
     reviewResult.metadata.modelsUsed = modelsUsed;
+    if (splitReported) {
+      reviewResult.metadata.inputTokensUsed = totalInputTokens;
+      reviewResult.metadata.outputTokensUsed = totalOutputTokens;
+    }
 
     return reviewResult;
   } catch (error) {
@@ -391,6 +412,10 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     );
     reviewResult.metadata.mode = 'workflow';
     reviewResult.metadata.modelsUsed = modelsUsed;
+    if (splitReported) {
+      reviewResult.metadata.inputTokensUsed = totalInputTokens;
+      reviewResult.metadata.outputTokensUsed = totalOutputTokens;
+    }
     return reviewResult;
   }
 }

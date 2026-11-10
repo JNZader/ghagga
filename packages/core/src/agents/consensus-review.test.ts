@@ -291,3 +291,37 @@ describe('runConsensusReview graph neighborhood section', () => {
     }
   });
 });
+
+// ─── Input/output token split aggregation (graph-context-retrieval T5.2) ──
+
+describe('runConsensusReview token split aggregation', () => {
+  it('sums measured input/output tokens across all votes', async () => {
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const fn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+      calls.push({ system, prompt });
+      return {
+        text: makeVoteText(),
+        tokensUsed: 50,
+        inputTokens: 35,
+        outputTokens: 15,
+        provider: 'gateway',
+        model: 'auto',
+      };
+    });
+
+    const result = await runConsensusReview({ ...makeInput(), generateFns: [fn] });
+
+    expect(calls).toHaveLength(3);
+    expect(result.metadata.tokensUsed).toBe(150);
+    expect(result.metadata.inputTokensUsed).toBe(105);
+    expect(result.metadata.outputTokensUsed).toBe(45);
+  });
+
+  it('leaves the split absent when votes report no usage split', async () => {
+    const { fn } = makeMockGenerateFn();
+    const result = await runConsensusReview({ ...makeInput(), generateFns: [fn] });
+
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+});
