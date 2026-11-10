@@ -22,6 +22,7 @@ import type {
   ReviewResult,
 } from '../types.js';
 import {
+  buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
   DIAGNOSTIC_SYSTEM,
@@ -48,6 +49,12 @@ export interface DiagnosticReviewInput {
 
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
+
+  /**
+   * Formatted (unfenced) graph-neighborhood text (graph-context-retrieval).
+   * ''/absent → no section; the prompt stays byte-identical to baseline.
+   */
+  graphNeighborhoodContext?: string;
 }
 
 // ─── Hypothesis Parsing ─────────────────────────────────────────
@@ -158,6 +165,7 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
     fencedStaticContext,
     buildMemoryContext(memoryContext),
     stackHints,
+    buildGraphNeighborhoodSection(input.graphNeighborhoodContext ?? ''),
     input.checklistContext ?? '',
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,

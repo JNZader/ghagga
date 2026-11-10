@@ -28,6 +28,7 @@ import type {
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { calculateRateSchedule } from '../utils/token-budget.js';
 import {
+  buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
@@ -92,6 +93,15 @@ export interface WorkflowReviewInput {
 
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
+
+  /**
+   * Formatted (unfenced) graph-neighborhood text (graph-context-retrieval).
+   * ONE shared capped string — distributed per SPECIALIST_CONTEXT_MAP
+   * (scope/performance/standards receive it; security keeps static-only,
+   * errors stays minimal). ''/absent → no specialist sees a section and
+   * all prompts stay byte-identical to baseline.
+   */
+  graphNeighborhoodContext?: string;
 }
 
 interface SpecialistConfig {
@@ -110,14 +120,23 @@ interface SpecialistConfig {
  * - Scope:      memoryContext (past observations help understand scope)
  * - Standards:  stackHints   (tech-specific naming/formatting conventions)
  * - Errors:     minimal      (focuses purely on the diff)
+ *
+ * graphNeighborhoodContext (graph-context-retrieval): scope/performance/
+ * standards additionally receive the (fenced) neighborhood — their lenses
+ * benefit from cross-file structure. Security keeps its static-only diet
+ * and error-handling stays minimal, per design decision 3.
  */
-type SpecialistContextKey = 'staticContext' | 'memoryContext' | 'stackHints';
+type SpecialistContextKey =
+  | 'staticContext'
+  | 'memoryContext'
+  | 'stackHints'
+  | 'graphNeighborhoodContext';
 
 const SPECIALIST_CONTEXT_MAP: Record<WorkflowSpecialist, SpecialistContextKey[]> = {
   'security-audit': ['staticContext'],
-  'performance-review': ['stackHints'],
-  'scope-analysis': ['memoryContext'],
-  'coding-standards': ['stackHints'],
+  'performance-review': ['stackHints', 'graphNeighborhoodContext'],
+  'scope-analysis': ['memoryContext', 'graphNeighborhoodContext'],
+  'coding-standards': ['stackHints', 'graphNeighborhoodContext'],
   'error-handling': [],
 };
 
@@ -187,12 +206,14 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // Context sources keyed for lookup by the specialist context map.
   // staticContext is attacker-influenceable tool/data → fence as untrusted.
   // memoryContext is fenced inside buildMemoryContext(). stackHints is trusted (static).
+  // graphNeighborhoodContext is fenced inside buildGraphNeighborhoodSection().
   const contextSources: Record<SpecialistContextKey, string> = {
     staticContext: staticContext
       ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext)
       : '',
     memoryContext: buildMemoryContext(memoryContext),
     stackHints,
+    graphNeighborhoodContext: buildGraphNeighborhoodSection(input.graphNeighborhoodContext ?? ''),
   };
 
   // ── Step 1: Run specialists with bounded concurrency ───────

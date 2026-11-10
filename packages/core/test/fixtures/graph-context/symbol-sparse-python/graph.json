@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "rootDir": "/repo",
+  "nodes": {
+    "src/app.py": {
+      "hash": "p1",
+      "language": "python",
+      "imports": ["src/lib.py", "src/other.py"],
+      "exports": ["main"],
+      "calls": [],
+      "isTest": false
+    },
+    "src/lib.py": {
+      "hash": "p2",
+      "language": "python",
+      "imports": [],
+      "exports": ["run"],
+      "calls": [],
+      "isTest": false
+    },
+    "src/other.py": {
+      "hash": "p3",
+      "language": "python",
+      "imports": [],
+      "exports": ["step"],
+      "calls": [],
+      "isTest": false
+    },
+    "src/cli.py": {
+      "hash": "p4",
+      "language": "python",
+      "imports": ["src/app.py"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    }
+  }
+}

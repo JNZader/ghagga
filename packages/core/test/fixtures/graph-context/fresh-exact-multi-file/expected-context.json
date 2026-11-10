@@ -1,0 +1,8 @@
+{
+  "context": "Graph neighborhood (exact-commit graph):\n- src/api.ts\n  imported by: src/client.ts, src/api.test.ts\n  imports: src/util.ts, src/other.ts\n  exports: api, version\n  symbol-named imports from 2 dependency file(s)\n- src/util.ts\n  imported by: src/api.ts\n  exports: helper",
+  "metadata": {
+    "filesCovered": 2,
+    "truncatedFiles": 0,
+    "freshness": "exact"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "context": "Graph neighborhood (exact-commit graph):\n- src/app.py\n  imported by: src/cli.py\n  imports: src/lib.py, src/other.py\n  exports: main",
+  "metadata": {
+    "filesCovered": 1,
+    "truncatedFiles": 0,
+    "freshness": "exact"
+  }
+}

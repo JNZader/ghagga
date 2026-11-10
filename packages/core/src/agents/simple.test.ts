@@ -393,3 +393,75 @@ describe('runSimpleReview untrusted framing', () => {
     expect(calls[0]?.system).not.toContain('STATIC ANALYSIS OUTPUT');
   });
 });
+
+// ─── Graph neighborhood section (graph-context-retrieval T4.1) ──
+
+describe('runSimpleReview graph neighborhood section', () => {
+  const NEIGHBORHOOD =
+    'Graph neighborhood (exact-commit graph):\n- src/a.ts\n  imported by: src/b.ts\n  exports: alpha';
+
+  function makeCapture(): {
+    input: SimpleReviewInput;
+    calls: Array<{ system: string; prompt: string }>;
+  } {
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const generateFn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+      calls.push({ system, prompt });
+      return {
+        text: 'STATUS: PASSED\nSUMMARY: ok.\nFINDINGS:\n',
+        tokensUsed: 10,
+        provider: 'gateway',
+        model: 'auto',
+      };
+    });
+    const input: SimpleReviewInput = {
+      diff: '--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b',
+      provider: 'gateway',
+      model: 'auto',
+      apiKey: 'k',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFn,
+    };
+    return { input, calls };
+  }
+
+  it('absent param and empty string produce byte-identical prompts (feature-off stability)', async () => {
+    const absent = makeCapture();
+    await runSimpleReview(absent.input);
+
+    const empty = makeCapture();
+    empty.input.graphNeighborhoodContext = '';
+    await runSimpleReview(empty.input);
+
+    expect(empty.calls[0]?.system).toBe(absent.calls[0]?.system);
+  });
+
+  it('present context renders exactly one fenced Graph Neighborhood section', async () => {
+    const { input, calls } = makeCapture();
+    input.graphNeighborhoodContext = NEIGHBORHOOD;
+    await runSimpleReview(input);
+
+    const system = calls[0]?.system ?? '';
+    expect(system.match(/## Graph Neighborhood/g)).toHaveLength(1);
+    expect(system).toContain('GRAPH NEIGHBORHOOD (untrusted repo data)');
+    expect(system).toContain('<UNTRUSTED label="GRAPH NEIGHBORHOOD');
+    expect(system).toContain('</UNTRUSTED>');
+    expect(system).toContain('imported by: src/b.ts');
+  });
+
+  it('the framing never encourages findings from the neighborhood over the diff', async () => {
+    const { input, calls } = makeCapture();
+    input.graphNeighborhoodContext = NEIGHBORHOOD;
+    await runSimpleReview(input);
+
+    const sectionStart = calls[0]?.system.indexOf('## Graph Neighborhood') ?? -1;
+    const sectionEnd = calls[0]?.system.indexOf('</UNTRUSTED>', sectionStart) ?? -1;
+    const section = calls[0]?.system.slice(sectionStart, sectionEnd) ?? '';
+    expect(section).toContain('Do NOT use it as a reason to flag issues');
+    expect(section).toContain('Only flag issues you can justify from the code diff itself');
+    expect(section).not.toMatch(/flag .* based on the neighborhood/i);
+  });
+});

@@ -25,6 +25,7 @@ import type {
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { calculateRateSchedule } from '../utils/token-budget.js';
 import {
+  buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
@@ -77,6 +78,13 @@ export interface ConsensusReviewInput {
 
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
+
+  /**
+   * Formatted (unfenced) graph-neighborhood text (graph-context-retrieval).
+   * Every stance receives the SAME shared capped string (≤ graphContextMaxTokens
+   * upstream) — ''/absent → no section, prompts byte-identical to baseline.
+   */
+  graphNeighborhoodContext?: string;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -271,6 +279,9 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
         isFirst ? fencedStaticContext : '',
         isFirst ? buildMemoryContext(memoryContext) : '',
         isFirst ? stackHints : '',
+        // graph-context-retrieval: EVERY stance gets the (capped, fenced)
+        // neighborhood — situational awareness is not a first-vote privilege.
+        buildGraphNeighborhoodSection(input.graphNeighborhoodContext ?? ''),
         input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,

@@ -18,6 +18,9 @@ vi.mock('./prompts.js', () => ({
   COMPACT_CALIBRATION: 'COMPACT_CALIBRATION_BLOCK',
   UNTRUSTED_CONTENT_POLICY: 'UNTRUSTED_CONTENT_POLICY_BLOCK',
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
+  buildGraphNeighborhoodSection: vi.fn((ctx: string | null) =>
+    ctx ? `GRAPH_NEIGHBORHOOD:${ctx}` : '',
+  ),
   buildReviewLevelInstruction: vi.fn((level: string) => `REVIEW_LEVEL:${level}`),
   wrapUntrustedDiff: vi.fn(
     (diff: string) => `<USER_DIFF>\n\`\`\`diff\n${diff}\n\`\`\`\n</USER_DIFF>`,
@@ -254,5 +257,37 @@ describe('runConsensusReview — dead voice validation', () => {
     );
     expect(failedCalls).toHaveLength(1);
     expect(result.metadata.tokensUsed).toBe(300);
+  });
+});
+
+// ─── Graph neighborhood section (graph-context-retrieval T4.1) ──
+
+describe('runConsensusReview graph neighborhood section', () => {
+  const NEIGHBORHOOD =
+    'Graph neighborhood (exact-commit graph):\n- src/a.ts\n  imported by: src/b.ts';
+
+  it('absent param and empty string produce byte-identical stance prompts', async () => {
+    const absent = makeMockGenerateFn();
+    await runConsensusReview({ ...makeInput(), generateFns: [absent.fn] });
+    const empty = makeMockGenerateFn();
+    await runConsensusReview({
+      ...makeInput(),
+      generateFns: [empty.fn],
+      graphNeighborhoodContext: '',
+    });
+    expect(empty.calls.map((c) => c.system)).toEqual(absent.calls.map((c) => c.system));
+  });
+
+  it('every stance receives the capped neighborhood section', async () => {
+    const { fn, calls } = makeMockGenerateFn();
+    await runConsensusReview({
+      ...makeInput(),
+      generateFns: [fn],
+      graphNeighborhoodContext: NEIGHBORHOOD,
+    });
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call.system).toContain(`GRAPH_NEIGHBORHOOD:${NEIGHBORHOOD}`);
+    }
   });
 });

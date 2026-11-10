@@ -27,6 +27,7 @@ import type {
 import { FINDING_LEDGER_STATUS } from '../types.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import {
+  buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
@@ -457,6 +458,13 @@ export interface FanOutReviewInput {
 
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
+
+  /**
+   * Formatted (unfenced) graph-neighborhood text (graph-context-retrieval).
+   * Every lens receives the SAME shared capped string — ''/absent → no
+   * section, prompts byte-identical to baseline.
+   */
+  graphNeighborhoodContext?: string;
 }
 
 /** Unlensed whole-diff voice. Not a specialty lens and not SIMPLE_REVIEW_SYSTEM. */
@@ -695,6 +703,9 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
         isFirst ? fencedStaticContext : '',
         isFirst ? buildMemoryContext(memoryContext) : '',
         isFirst ? stackHints : '',
+        // graph-context-retrieval: EVERY lens gets the (capped, fenced)
+        // neighborhood — situational awareness is not a first-lens privilege.
+        buildGraphNeighborhoodSection(input.graphNeighborhoodContext ?? ''),
         input.checklistContext ?? '',
         buildReviewLevelInstruction(reviewLevel),
         isFirst ? REVIEW_CALIBRATION : COMPACT_CALIBRATION,

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "rootDir": "/repo",
+  "nodes": {
+    "src/api.ts": {
+      "hash": "h1",
+      "language": "typescript",
+      "imports": ["src/util.ts", "src/other.ts"],
+      "importSymbols": { "src/util.ts": ["helper"], "src/other.ts": ["other"] },
+      "exports": ["api", "version"],
+      "calls": [],
+      "isTest": false
+    },
+    "src/util.ts": {
+      "hash": "h2",
+      "language": "typescript",
+      "imports": [],
+      "exports": ["helper"],
+      "calls": [],
+      "isTest": false
+    },
+    "src/other.ts": {
+      "hash": "h3",
+      "language": "typescript",
+      "imports": [],
+      "exports": ["other"],
+      "calls": [],
+      "isTest": false
+    },
+    "src/client.ts": {
+      "hash": "h4",
+      "language": "typescript",
+      "imports": ["src/api.ts"],
+      "importSymbols": { "src/api.ts": ["api"] },
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "src/api.test.ts": {
+      "hash": "h5",
+      "language": "typescript",
+      "imports": ["src/api.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": true
+    }
+  }
+}

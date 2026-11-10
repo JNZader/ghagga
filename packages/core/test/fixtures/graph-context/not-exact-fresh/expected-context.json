@@ -1,0 +1,8 @@
+{
+  "context": "Graph neighborhood (file-level; symbol detail omitted — this data may be from an older commit):\n- src/api.ts: 2 importer(s), 2 import(s)\n- src/util.ts: 1 importer(s), 0 import(s)",
+  "metadata": {
+    "filesCovered": 2,
+    "truncatedFiles": 0,
+    "freshness": "file-level"
+  }
+}
