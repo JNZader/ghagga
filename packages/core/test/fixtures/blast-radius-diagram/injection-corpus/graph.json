@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "rootDir": ".",
+  "nodes": {
+    "evil\"label.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "a-->b.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["evil\"label.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "<img src=x>.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "head\ner.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["<img src=x>.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    }
+  }
+}

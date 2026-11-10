@@ -1,4 +1,5 @@
 export type {
+  BlastRadiusDiagram,
   DayStats,
   Finding,
   Installation,

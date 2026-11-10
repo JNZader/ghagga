@@ -1,0 +1,13 @@
+flowchart TD
+  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
+  classDef dependent fill:#dbeafe,stroke:#2563eb
+  classDef test fill:#dcfce7,stroke:#16a34a
+  subgraph c0["(root)"]
+    n0["_img src_x_.ts"]
+    n1["a--_b.ts"]
+    n2["evil_label.ts"]
+    n3["head_er.ts"]
+  end
+  class n0,n1,n2,n3 changed
+  n1 --> n2
+  n3 --> n0

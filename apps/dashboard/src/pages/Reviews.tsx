@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CoverageIndicator } from '@/components/CoverageIndicator';
@@ -14,6 +14,18 @@ import {
 } from '@/lib/api';
 import { useSelectedRepo } from '@/lib/repo-context';
 import type { Finding, Review, ReviewStatus } from '@/lib/types';
+
+/**
+ * Blast-radius diagram renderer — LAZY-LOADED (blast-radius-diagram
+ * T4.4): the module statically imports mermaid, so this dynamic-import
+ * boundary is what keeps the ~1 MB renderer OUT of the main GitHub
+ * Pages bundle. lazy() loads on first render, and the component is
+ * mounted ONLY when `review.blastRadiusDiagram` exists — reviews without
+ * diagram data never fetch the chunk (dashboard-ui spec). A static
+ * mermaid import anywhere in the entry graph is a spec violation,
+ * pinned by src/components/mermaid-lazy.test.ts.
+ */
+const MermaidDiagram = lazy(() => import('@/components/MermaidDiagram'));
 
 function TrashIcon({ className }: { className?: string }) {
   return (
@@ -80,6 +92,20 @@ function ReviewDetail({ review, onClose }: { review: Review; onClose: () => void
           <h3 className="mb-2 text-sm font-medium text-text-secondary">Summary</h3>
           <p className="whitespace-pre-wrap text-sm text-text-primary">{review.summary}</p>
         </div>
+
+        {/* Blast-radius diagram (blast-radius-diagram T4.4): mounted ONLY
+            when the DTO carries diagram data — no placeholder, no chunk
+            fetch when absent (dashboard-ui "No render and no bundle cost
+            when absent"). Renders the same single source the review
+            comment uses. */}
+        {review.blastRadiusDiagram && (
+          <div className="mb-6">
+            <h3 className="mb-2 text-sm font-medium text-text-secondary">Blast Radius</h3>
+            <Suspense fallback={<div className="h-40 animate-pulse rounded-md bg-surface" />}>
+              <MermaidDiagram diagram={review.blastRadiusDiagram} />
+            </Suspense>
+          </div>
+        )}
 
         {/* Findings */}
         {review.findings.length > 0 && (

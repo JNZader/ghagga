@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "rootDir": ".",
+  "nodes": {
+    "src/hub.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["lib/util.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "lib/util.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "src/app1.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["src/hub.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "src/app2.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["src/hub.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    }
+  }
+}

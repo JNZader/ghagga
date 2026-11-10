@@ -1,0 +1,4 @@
+{
+  "changed": ["evil\"label.ts", "a-->b.ts", "<img src=x>.ts", "head\ner.ts"],
+  "graphStale": false
+}

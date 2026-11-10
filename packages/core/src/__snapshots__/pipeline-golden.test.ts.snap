@@ -848,6 +848,44 @@ exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warnin
     "metadata": {
       "blastRadius": {
         "blastRadiusFiles": 1,
+        "diagram": {
+          "edges": [
+            {
+              "from": "n1",
+              "to": "n0",
+            },
+          ],
+          "mermaid": "flowchart TD
+  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
+  classDef dependent fill:#dbeafe,stroke:#2563eb
+  classDef test fill:#dcfce7,stroke:#16a34a
+  subgraph c0["src"]
+    n0["src/index.ts"]
+    n1["src/utils.ts"]
+  end
+  class n0 changed
+  class n1 dependent
+  n1 --> n0",
+          "meta": {
+            "exceededCap": false,
+            "stale": true,
+            "truncated": false,
+          },
+          "nodes": [
+            {
+              "cluster": "src",
+              "id": "n0",
+              "label": "src/index.ts",
+              "role": "changed",
+            },
+            {
+              "cluster": "src",
+              "id": "n1",
+              "label": "src/utils.ts",
+              "role": "dependent",
+            },
+          ],
+        },
         "enabled": true,
         "graphAvailable": true,
         "graphStale": true,
@@ -3195,6 +3233,43 @@ Past review: watch the parser.",
     "metadata": {
       "blastRadius": {
         "blastRadiusFiles": 2,
+        "diagram": {
+          "edges": [
+            {
+              "from": "n1",
+              "to": "n0",
+            },
+          ],
+          "mermaid": "flowchart TD
+  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
+  classDef dependent fill:#dbeafe,stroke:#2563eb
+  classDef test fill:#dcfce7,stroke:#16a34a
+  subgraph c0["src"]
+    n0["src/index.ts"]
+    n1["src/utils.ts"]
+  end
+  class n0,n1 changed
+  n1 --> n0",
+          "meta": {
+            "exceededCap": false,
+            "stale": false,
+            "truncated": false,
+          },
+          "nodes": [
+            {
+              "cluster": "src",
+              "id": "n0",
+              "label": "src/index.ts",
+              "role": "changed",
+            },
+            {
+              "cluster": "src",
+              "id": "n1",
+              "label": "src/utils.ts",
+              "role": "changed",
+            },
+          ],
+        },
         "enabled": true,
         "graphAvailable": true,
         "graphStale": false,
@@ -3590,6 +3665,44 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
     "metadata": {
       "blastRadius": {
         "blastRadiusFiles": 1,
+        "diagram": {
+          "edges": [
+            {
+              "from": "n1",
+              "to": "n0",
+            },
+          ],
+          "mermaid": "flowchart TD
+  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
+  classDef dependent fill:#dbeafe,stroke:#2563eb
+  classDef test fill:#dcfce7,stroke:#16a34a
+  subgraph c0["src"]
+    n0["src/index.ts"]
+    n1["src/utils.ts"]
+  end
+  class n0 changed
+  class n1 dependent
+  n1 --> n0",
+          "meta": {
+            "exceededCap": false,
+            "stale": false,
+            "truncated": false,
+          },
+          "nodes": [
+            {
+              "cluster": "src",
+              "id": "n0",
+              "label": "src/index.ts",
+              "role": "changed",
+            },
+            {
+              "cluster": "src",
+              "id": "n1",
+              "label": "src/utils.ts",
+              "role": "dependent",
+            },
+          ],
+        },
         "enabled": true,
         "graphAvailable": true,
         "graphStale": false,
@@ -3723,6 +3836,44 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
     "metadata": {
       "blastRadius": {
         "blastRadiusFiles": 1,
+        "diagram": {
+          "edges": [
+            {
+              "from": "n1",
+              "to": "n0",
+            },
+          ],
+          "mermaid": "flowchart TD
+  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
+  classDef dependent fill:#dbeafe,stroke:#2563eb
+  classDef test fill:#dcfce7,stroke:#16a34a
+  subgraph c0["src"]
+    n0["src/index.ts"]
+    n1["src/utils.ts"]
+  end
+  class n0 changed
+  class n1 dependent
+  n1 --> n0",
+          "meta": {
+            "exceededCap": false,
+            "stale": false,
+            "truncated": false,
+          },
+          "nodes": [
+            {
+              "cluster": "src",
+              "id": "n0",
+              "label": "src/index.ts",
+              "role": "changed",
+            },
+            {
+              "cluster": "src",
+              "id": "n1",
+              "label": "src/utils.ts",
+              "role": "dependent",
+            },
+          ],
+        },
         "enabled": true,
         "graphAvailable": true,
         "graphStale": false,

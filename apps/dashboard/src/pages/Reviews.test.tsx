@@ -38,6 +38,23 @@ vi.mock('@/lib/repo-context', () => ({
   useSelectedRepo: () => mockUseSelectedRepo(),
 }));
 
+// MermaidDiagram module mock (blast-radius-diagram T4.4): counts how many
+// times the LAZY chunk's module factory actually ran — the dashboard-ui
+// "No render and no bundle cost when absent" gate. The factory runs only
+// when React.lazy triggers the dynamic import (i.e. the component mounted).
+const { mermaidLazyImports } = vi.hoisted(() => ({ mermaidLazyImports: { count: 0 } }));
+vi.mock('@/components/MermaidDiagram', () => {
+  mermaidLazyImports.count++;
+  return {
+    MermaidDiagram: ({ diagram }: { diagram: { mermaid: string } }) => (
+      <div data-testid="mermaid-diagram-mock">{diagram.mermaid.split('\n')[0]}</div>
+    ),
+    default: ({ diagram }: { diagram: { mermaid: string } }) => (
+      <div data-testid="mermaid-diagram-mock">{diagram.mermaid.split('\n')[0]}</div>
+    ),
+  };
+});
+
 // Import after mocks
 import { Reviews } from './Reviews';
 
@@ -1639,5 +1656,50 @@ describe('Reviews — selection & batch delete', () => {
 
     // Modal should NOT have opened (no summary text visible from modal)
     expect(screen.queryByText('All checks passed')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Blast-radius diagram in the detail modal (blast-radius-diagram T4.4) ──
+
+describe('Reviews — blast-radius diagram embed (T4.4)', () => {
+  beforeEach(() => {
+    mermaidLazyImports.count = 0;
+  });
+
+  function makeDiagramData() {
+    return {
+      mermaid: 'flowchart TD\n  n0["src/a.ts"]',
+      nodes: [{ id: 'n0', label: 'src/a.ts', role: 'changed', cluster: 'src' }],
+      edges: [],
+      meta: { stale: false, exceededCap: false, truncated: false },
+    };
+  }
+
+  it('absent key → component never mounts and the lazy chunk is never imported', () => {
+    mockReviewsData([makeReview()]); // no blastRadiusDiagram key
+    renderReviews();
+
+    fireEvent.click(screen.getByText('acme/app'));
+
+    // Modal is open (summary visible), but no diagram area at all.
+    expect(screen.getByText('All checks passed')).toBeInTheDocument();
+    expect(screen.queryByTestId('mermaid-diagram-mock')).not.toBeInTheDocument();
+    expect(screen.queryByText('Blast Radius')).not.toBeInTheDocument();
+    // The dynamic module factory NEVER ran — no chunk would be fetched.
+    expect(mermaidLazyImports.count).toBe(0);
+  });
+
+  it('present key → diagram mounts with the DTO data (lazy chunk imported)', async () => {
+    mockReviewsData([makeReview({ blastRadiusDiagram: makeDiagramData() })]);
+    renderReviews();
+
+    fireEvent.click(screen.getByText('acme/app'));
+
+    // Suspense resolves the lazy chunk; the mounted component receives the
+    // DTO diagram (mock renders the first mermaid line).
+    expect(await screen.findByTestId('mermaid-diagram-mock')).toBeInTheDocument();
+    expect(screen.getByText('flowchart TD')).toBeInTheDocument();
+    expect(mermaidLazyImports.count).toBe(1);
+    expect(screen.getByText('Blast Radius')).toBeInTheDocument();
   });
 });

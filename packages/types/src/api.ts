@@ -11,9 +11,9 @@
 // enums. Adding a new status/mode to core is automatically reflected in
 // @ghagga/types — no manual sync needed. (ReviewMode previously drifted:
 // core persisted 'diagnostic' reviews while this union lacked it.)
-import type { ReviewFinding, ReviewMode, ReviewStatus } from 'ghagga-core';
+import type { BlastRadiusDiagram, ReviewFinding, ReviewMode, ReviewStatus } from 'ghagga-core';
 
-export type { ReviewFinding, ReviewMode, ReviewStatus };
+export type { BlastRadiusDiagram, ReviewFinding, ReviewMode, ReviewStatus };
 
 /**
  * Supported LLM provider modes.
@@ -64,6 +64,19 @@ export interface Review {
    * carry no value — the server omits the key entirely for those rows.
    */
   coverageComplete?: boolean;
+  /**
+   * Blast-radius diagram data (capped node/edge lists + legend flags +
+   * the pre-rendered mermaid source), projected from the persisted
+   * `metadata.blastRadius.diagram` jsonb (canonical shape:
+   * `BlastRadiusDiagram` in ghagga-core). Optional with absent-key
+   * semantics — present only when the stored metadata carries diagram
+   * lists; NEVER `null` or `{}` (rows without diagram data, including
+   * every pre-change row, simply omit the key, exactly like
+   * `coverageComplete`). `meta.truncated` covers BOTH node-cap and
+   * edge-cap truncation; `meta.clusterCounts` (omitted-per-cluster node
+   * counts) is present only when nodes were truncated.
+   */
+  blastRadiusDiagram?: BlastRadiusDiagram;
 }
 
 /**

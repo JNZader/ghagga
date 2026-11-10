@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "rootDir": ".",
+  "nodes": {
+    "src/a.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": [],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "src/b.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["src/a.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    }
+  }
+}

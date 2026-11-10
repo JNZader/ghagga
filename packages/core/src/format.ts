@@ -6,6 +6,8 @@
  */
 
 import { calculateReviewCost, formatCostFooter } from './cost-footer.js';
+import type { BlastRadiusDiagram } from './graph/schema.js';
+import { MAX_DIAGRAM_EDGES, MAX_DIAGRAM_NODES } from './graph/schema.js';
 import { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 import type { EntityChange, EntityChangeKind, SemanticDiff } from './semantic-diff/index.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
@@ -433,6 +435,66 @@ export function formatSemanticDiffSection(semanticDiff: SemanticDiff | undefined
   return section;
 }
 
+// ─── Blast-Radius Diagram section ──────────────────────────────
+
+/**
+ * Render the `### Blast Radius` mermaid section (blast-radius-diagram
+ * change, review-formatting R7).
+ *
+ * Data-presence gated EXACTLY like `formatSemanticDiffSection`: absent /
+ * unpopulated diagram data → `''` (zero bytes contributed — the comment
+ * stays byte-identical to pre-change output, and the gate therefore
+ * applies identically to all three consumers sharing this function:
+ * server queue, CLI, action).
+ *
+ * The section wraps `diagram.mermaid` UNMODIFIED — the comment never
+ * re-renders or re-sanitizes (single source, no drift between the
+ * persisted artifact and the posted comment; sanitization happened at
+ * build time in `graph/diagram.ts`, D1/D6).
+ *
+ * OPEN section, NO `<details>` (design D3): GitLab's mermaid renderer
+ * refuses to render diagrams inside collapsed elements on self-hosted
+ * instances (gitlab-org/gitlab#386219) — the forge adapters serve those,
+ * so a collapsed diagram would render blank there.
+ *
+ * Legend honesty (R7): every honest-status flag on the diagram meta is
+ * rendered — `stale` (7-day rule note), `exceededCap` (truncation note),
+ * and render-cap truncation: `clusterCounts` present → node truncation
+ * "+N more" (N = sum of omitted-per-cluster counts); `truncated` with NO
+ * `clusterCounts` → edge-only truncation note. Legend text is trusted
+ * literals + booleans/counts only — no file names, no untrusted strings.
+ */
+export function formatBlastRadiusSection(diagram: BlastRadiusDiagram | undefined): string {
+  if (!diagram || diagram.mermaid === '' || diagram.nodes.length === 0) return '';
+
+  const legend: string[] = [];
+  if (diagram.meta.stale) {
+    legend.push('⚠️ Dependency graph is older than 7 days — relationships may be incomplete.');
+  }
+  if (diagram.meta.exceededCap) {
+    legend.push('⚠️ Blast radius exceeded the file cap — the full diff was reviewed.');
+  }
+  const clusterCounts = diagram.meta.clusterCounts;
+  if (clusterCounts) {
+    const omitted = Object.values(clusterCounts).reduce((sum, count) => sum + count, 0);
+    if (omitted > 0) {
+      legend.push(`+${omitted} more files not shown (${MAX_DIAGRAM_NODES}-node render cap).`);
+    }
+  } else if (diagram.meta.truncated) {
+    legend.push(`Some edges not shown (${MAX_DIAGRAM_EDGES}-edge render cap).`);
+  }
+
+  let section = '### Blast Radius\n\n';
+  section += '```mermaid\n';
+  section += `${diagram.mermaid}\n`;
+  section += '```\n';
+  for (const line of legend) {
+    section += `${line}\n`;
+  }
+  section += '\n';
+  return section;
+}
+
 // ─── Format Options ─────────────────────────────────────────────
 
 export interface FormatReviewCommentOptions {
@@ -593,6 +655,11 @@ export function formatReviewComment(
   if (options?.fileList && options.fileList.length > 0) {
     comment += formatFileCategorySummary(options.fileList);
   }
+
+  // Blast-radius diagram (blast-radius-diagram): renders zero bytes when
+  // the metadata carries no diagram (counts-only or no graph) — placed
+  // after Files Changed, before the cost footer (design D3).
+  comment += formatBlastRadiusSection(result.metadata.blastRadius?.diagram);
 
   // Cost footer — pass the measured input/output split when the review
   // metadata carries one (graph-context-retrieval T5.5); otherwise the

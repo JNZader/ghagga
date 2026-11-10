@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "rootDir": ".",
+  "nodes": {
+    "a.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["b.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "b.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["c.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    },
+    "c.ts": {
+      "hash": "h",
+      "language": "typescript",
+      "imports": ["a.ts"],
+      "exports": [],
+      "calls": [],
+      "isTest": false
+    }
+  }
+}

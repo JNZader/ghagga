@@ -20,6 +20,7 @@
 import { computeBlastRadius } from '../graph/blast-radius.js';
 import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from '../graph/call-chain.js';
 import { computeChangedSymbolsComplete } from '../graph/changed-symbols.js';
+import { buildBlastRadiusDiagramSummary } from '../graph/diagram-summary.js';
 import { isExactCommitFresh, narrowBySymbols } from '../graph/narrow-symbols.js';
 import { buildReverseDependencyMap, findDependents } from '../graph/reverse-deps.js';
 import type { BlastRadiusMetadata, DependencyGraph, GraphMetadata } from '../graph/schema.js';
@@ -165,6 +166,26 @@ export async function applyBlastRadius(
             graphStale: stale,
             ...(narrowedDependents > 0 ? { narrowedDependents } : {}),
           };
+
+          // Blast-radius diagram (blast-radius-diagram): built from the
+          // SAME in-hand `graph` loaded once at the top of this step
+          // (single-load rule — the builder is a pure third consumer,
+          // zero additional graph loads) and the UNTOUCHED `blastResult`.
+          // Gated to this in-cap branch by construction: the exceededCap
+          // branch above keeps counts-only metadata, no diagram (spec
+          // resolution). A builder throw degrades to the counts-only
+          // metadata already assembled — the review always continues.
+          try {
+            const diagram = buildBlastRadiusDiagramSummary(graph, blastResult, stale);
+            if (diagram) {
+              blastRadiusMetadata.diagram = diagram;
+            }
+          } catch (error) {
+            failedSteps.push({
+              step: 'blast-radius-diagram',
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       } else {
         emit({ step: 'blast-radius', message: 'Blast radius: skipped (no graph available)' });
