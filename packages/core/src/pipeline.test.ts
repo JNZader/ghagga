@@ -14,9 +14,14 @@ vi.mock('./agents/simple.js', () => ({
   runSimpleReview: vi.fn(),
 }));
 
-vi.mock('./graph/blast-radius.js', () => ({
-  computeBlastRadius: vi.fn(),
-}));
+// Partial mock (graph-context-retrieval): computeBlastRadius stays mocked
+// (blast-radius assertions pin its outputs); buildReverseIndex passes
+// through the REAL implementation — the graph-neighborhood step consumes
+// it (graph/neighbors.ts) and must not see an undefined export.
+vi.mock('./graph/blast-radius.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./graph/blast-radius.js')>();
+  return { ...actual, computeBlastRadius: vi.fn() };
+});
 
 // Partial mock (real impl by default): the warn-only coverage test below
 // forces ONE buildCallChainFromDiff throw via mockImplementationOnce.

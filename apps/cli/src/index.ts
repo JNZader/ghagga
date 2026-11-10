@@ -122,6 +122,10 @@ program
     '--no-blast-radius',
     'Disable blast-radius filtering (auto-enabled when .ghagga/graph.json exists)',
   )
+  .option(
+    '--no-graph-context',
+    'Disable the graph-neighborhood context section (auto-enabled when .ghagga/graph.json exists)',
+  )
   .option('-c, --config <path>', 'Path to .ghagga.json config file')
   .option('-v, --verbose', 'Show detailed progress during review')
   .option('--staged', 'Review only staged changes (for pre-commit hooks)')
@@ -325,6 +329,7 @@ program
       cpd: options.cpd,
       memory: options.memory,
       blastRadius: options.blastRadius,
+      graphContext: options.graphContext,
       memoryBackend: options.memoryBackend as 'sqlite' | 'engram' | undefined,
       config: options.config,
       verbose: options.verbose ?? false,
@@ -470,6 +475,8 @@ interface ReviewCommandOptions {
   memory: boolean;
   /** `--no-blast-radius` sets this to `false`; absent flag leaves it `true` (Commander negated-option default). */
   blastRadius: boolean;
+  /** `--no-graph-context` sets this to `false`; absent flag leaves it `true` (Commander negated-option default). */
+  graphContext: boolean;
   memoryBackend?: string;
   config?: string;
   verbose: boolean;

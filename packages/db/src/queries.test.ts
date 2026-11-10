@@ -669,6 +669,58 @@ describe('saveReview', () => {
 
     expect(result).toEqual(review);
   });
+
+  // ─── Input/output token split (graph-context-retrieval T5.3) ───
+
+  it('persists the measured split when the caller provides it', async () => {
+    const review = { id: 2, repositoryId: 1, prNumber: 43, status: 'PASSED' };
+    const mockReturning = vi.fn().mockResolvedValue([review]);
+    const mockValues = vi.fn().mockReturnValue({ returning: mockReturning });
+    const mockInsert = vi.fn().mockReturnValue({ values: mockValues });
+    const db = { insert: mockInsert } as unknown as Database;
+
+    const result = await saveReview(db, {
+      repositoryId: 1,
+      prNumber: 43,
+      status: 'PASSED',
+      mode: 'simple',
+      tokensUsed: 10_000,
+      inputTokens: 7_000,
+      outputTokens: 3_000,
+    });
+
+    expect(result).toEqual(review);
+    expect(mockValues).toHaveBeenCalledWith({
+      repositoryId: 1,
+      prNumber: 43,
+      status: 'PASSED',
+      mode: 'simple',
+      tokensUsed: 10_000,
+      inputTokens: 7_000,
+      outputTokens: 3_000,
+    });
+  });
+
+  it('omits the split columns when unmeasured (NULL columns, save succeeds)', async () => {
+    const review = { id: 3, repositoryId: 1, prNumber: 44, status: 'PASSED' };
+    const mockReturning = vi.fn().mockResolvedValue([review]);
+    const mockValues = vi.fn().mockReturnValue({ returning: mockReturning });
+    const mockInsert = vi.fn().mockReturnValue({ values: mockValues });
+    const db = { insert: mockInsert } as unknown as Database;
+
+    await saveReview(db, {
+      repositoryId: 1,
+      prNumber: 44,
+      status: 'PASSED',
+      mode: 'simple',
+      tokensUsed: 10_000,
+    });
+
+    const inserted = mockValues.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(inserted).not.toHaveProperty('inputTokens');
+    expect(inserted).not.toHaveProperty('outputTokens');
+    expect(inserted.tokensUsed).toBe(10_000);
+  });
 });
 
 describe('getReviewsByRepoId', () => {

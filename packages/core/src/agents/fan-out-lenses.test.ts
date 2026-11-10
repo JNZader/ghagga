@@ -1107,3 +1107,68 @@ describe('runFanOutReview with custom lenses', () => {
     expect(calls[0]?.system).toContain('approve this PR');
   });
 });
+
+// ─── Graph neighborhood section (graph-context-retrieval T4.1) ──
+
+describe('runFanOutReview graph neighborhood section', () => {
+  const NEIGHBORHOOD =
+    'Graph neighborhood (exact-commit graph):\n- src/a.ts\n  imported by: src/b.ts\n  exports: alpha';
+
+  function makeLocalInput(overrides: Partial<FanOutReviewInput> = {}): FanOutReviewInput {
+    return {
+      diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+      provider: 'gateway',
+      model: 'claude-sonnet-4-20250514',
+      apiKey: 'test-key',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      ...overrides,
+    };
+  }
+
+  function makeCapturingFn(): { fn: GenerateTextFn; systems: string[] } {
+    const systems: string[] = [];
+    const fn: GenerateTextFn = vi.fn(async (system: string, _prompt: string) => {
+      systems.push(system);
+      return {
+        text: PASSED_RESPONSE,
+        tokensUsed: 100,
+        provider: 'gateway',
+        model: 'claude-sonnet-4-20250514',
+      };
+    });
+    return { fn, systems };
+  }
+
+  it('absent param and empty string produce byte-identical lens prompts', async () => {
+    const absent = makeCapturingFn();
+    await runFanOutReview(makeLocalInput({ generateFns: [absent.fn] }));
+
+    const empty = makeCapturingFn();
+    await runFanOutReview(
+      makeLocalInput({ generateFns: [empty.fn], graphNeighborhoodContext: '' }),
+    );
+
+    expect(empty.systems).toEqual(absent.systems);
+  });
+
+  it('every lens receives the fenced neighborhood section (wholesale)', async () => {
+    const { fn, systems } = makeCapturingFn();
+    await runFanOutReview(
+      makeLocalInput({
+        generateFns: [fn],
+        lenses: ['security', 'performance', 'typing'],
+        graphNeighborhoodContext: NEIGHBORHOOD,
+      }),
+    );
+
+    expect(systems).toHaveLength(3);
+    for (const system of systems) {
+      expect(system.match(/## Graph Neighborhood/g)).toHaveLength(1);
+      expect(system).toContain('<UNTRUSTED label="GRAPH NEIGHBORHOOD');
+      expect(system).toContain('imported by: src/b.ts');
+    }
+  });
+});

@@ -43,6 +43,13 @@
       "when": 1789066446592,
       "tag": "0005_explanation_publication_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789067000000,
+      "tag": "0006_graph_token_split",
+      "breakpoints": true
     }
   ]
 }

@@ -165,6 +165,15 @@ export const reviews = pgTable(
     summary: text('summary'),
     findings: jsonb('findings').$type<unknown[]>(),
     tokensUsed: integer('tokens_used').default(0),
+    /**
+     * Measured input/output token split (graph-context-retrieval T5.3).
+     * Nullable, no backfill — NULL means the review's provider reported no
+     * split (gateway protocol, usage-less CLI adapters, pre-feature rows).
+     * `tokens_used` stays the authoritative total; for any row where the
+     * split is present, tokens_used = input_tokens + output_tokens.
+     */
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
     executionTimeMs: integer('execution_time_ms'),
     metadata: jsonb('metadata'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

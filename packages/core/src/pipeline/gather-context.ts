@@ -26,7 +26,12 @@ import { deriveRules, formatRulesForPrompt, loadFeedback } from '../self-improve
 import { formatStaticAnalysisContext } from '../tools/runner.js';
 import { buildProgressiveContext } from '../utils/context-levels.js';
 import { runDegradable } from './degrade.js';
-import { queryCodeIntelSafe, runStaticAnalysisSafe, searchMemorySafe } from './gather-safe.js';
+import {
+  gatherGraphContextSafe,
+  queryCodeIntelSafe,
+  runStaticAnalysisSafe,
+  searchMemorySafe,
+} from './gather-safe.js';
 import type { PipelineStateBase } from './state.js';
 
 /**
@@ -45,17 +50,34 @@ export async function gatherContext(state: PipelineStateBase): Promise<void> {
       ? 'Using precomputed static analysis from runner...'
       : 'Running static analysis & memory search...',
   });
-  const [staticResult, rawMemoryContext, codeIntelOutcome] = await Promise.all([
-    input.precomputedStaticAnalysis
-      ? Promise.resolve(input.precomputedStaticAnalysis)
-      : runStaticAnalysisSafe(fileList, input, failedSteps),
-    aiEnabled ? searchMemorySafe(input, fileList, failedSteps) : Promise.resolve(null),
-    queryCodeIntelSafe(input, fileList, emit, failedSteps),
-  ]);
+  const [staticResult, rawMemoryContext, codeIntelOutcome, graphContextOutcome] = await Promise.all(
+    [
+      input.precomputedStaticAnalysis
+        ? Promise.resolve(input.precomputedStaticAnalysis)
+        : runStaticAnalysisSafe(fileList, input, failedSteps),
+      aiEnabled ? searchMemorySafe(input, fileList, failedSteps) : Promise.resolve(null),
+      queryCodeIntelSafe(input, fileList, emit, failedSteps),
+      gatherGraphContextSafe(
+        input,
+        fileList,
+        state.loadedGraph,
+        state.loadedGraphMetadata,
+        emit,
+        failedSteps,
+      ),
+    ],
+  );
   const codeIntelResults = codeIntelOutcome.results;
   state.staticResult = staticResult;
   state.rawMemoryContext = rawMemoryContext;
   state.codeIntelResults = codeIntelResults;
+  // graph-context-retrieval: '' when skipped/degraded — downstream prompt
+  // builders keep arrays identical via .filter(Boolean). Metadata set only
+  // when the step was materially engaged (see gatherGraphContextSafe).
+  state.graphNeighborhoodContext = graphContextOutcome.context;
+  if (graphContextOutcome.metadata) {
+    state.graphContextMetadata = graphContextOutcome.metadata;
+  }
 
   // ── Step 5.0: Negative examples (optional) ────────────────────
   // Load dismissed findings for the files in this diff and prepend them

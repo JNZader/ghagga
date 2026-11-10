@@ -22,6 +22,14 @@ export interface GenerateResult {
   tokensUsed: number;
   provider: string;
   model: string;
+  /**
+   * Measured prompt token count (AI SDK v5 `usage.inputTokens`),
+   * graph-context-retrieval T5.1. Undefined when the backend does not
+   * report a split (gateway protocol, most CLI adapters).
+   */
+  inputTokens?: number;
+  /** Measured completion token count — undefined when unmeasured. */
+  outputTokens?: number;
 }
 
 /** Generic text generation function — abstracts CLI bridge, gateway, and Ollama */
@@ -32,8 +40,10 @@ export type GenerateTextFn = (system: string, prompt: string) => Promise<Generat
 /**
  * Create a GenerateTextFn backed by the CLI bridge (child_process).
  *
- * Wraps `generateViaCLI`. Returns `tokensUsed: 0` because CLI
- * tools don't report token usage.
+ * Wraps `generateViaCLI`. `tokensUsed` stays 0 for CLIs that report no
+ * usage; when the adapter DOES report a split (opencode's step_finish
+ * events), the split is wired through and the total becomes
+ * input + output (spec: total = inputTokens + outputTokens).
  *
  * @param options - CLI bridge options (preferredCLI, cliModel, credentials)
  */
@@ -44,11 +54,20 @@ export function createCLIBridgeGenerateFn(options: {
 }): GenerateTextFn {
   return async (system, prompt) => {
     const result = generateViaCLI(prompt, system, options);
+    const inputTokens = result.tokens?.input;
+    const outputTokens = result.tokens?.output;
     return {
       text: result.text,
-      tokensUsed: 0, // CLI doesn't report tokens
+      // CLI tools without usage reporting stay 0 (pre-existing behavior);
+      // a measured split upgrades the total to input + output.
+      tokensUsed:
+        inputTokens !== undefined || outputTokens !== undefined
+          ? (inputTokens ?? 0) + (outputTokens ?? 0)
+          : 0,
       provider: 'cli-bridge',
       model: result.cli,
+      ...(inputTokens !== undefined ? { inputTokens } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
     };
   };
 }

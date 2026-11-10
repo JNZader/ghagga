@@ -122,3 +122,32 @@ describe('formatCostFooter', () => {
     expect(footer).toContain('</sub>');
   });
 });
+
+// ─── Measured input/output split (graph-context-retrieval T5.5) ──
+
+describe('cost footer measured split', () => {
+  it('measured row shows the measured split and no estimation marker', () => {
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4', {
+      inputTokens: 7_000,
+      outputTokens: 3_000,
+    });
+    expect(cost.splitMeasured).toBe(true);
+    const footer = formatCostFooter(cost);
+    expect(footer).toContain('in 7K / out 3K');
+    expect(footer).not.toContain('estimated 70/30');
+  });
+
+  it('unmeasured row keeps the heuristic and is labeled "(estimated 70/30)"', () => {
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4');
+    expect(cost.splitMeasured).toBe(false);
+    const footer = formatCostFooter(cost);
+    expect(footer).toContain('in 7K / out 3K');
+    expect(footer).toContain('estimated 70/30');
+  });
+
+  it('partial measurement (input only) still counts as measured for the split label', () => {
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4', { inputTokens: 7_000 });
+    expect(cost.splitMeasured).toBe(true);
+    expect(cost.estimatedOutputTokens).toBe(3_000);
+  });
+});

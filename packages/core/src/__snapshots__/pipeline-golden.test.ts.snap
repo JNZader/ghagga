@@ -823,6 +823,10 @@ exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warnin
       "step": "static-analysis",
     },
     {
+      "message": "Graph neighborhood: skipped (graph stale beyond 7d — re-run ghagga index)",
+      "step": "graph-context",
+    },
+    {
       "detail": "  semgrep: skipped (0 findings)
   trivy: skipped (0 findings)
   cpd: skipped (0 findings)
@@ -854,6 +858,11 @@ exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warnin
         "src/index.ts",
         "src/utils.ts",
       ],
+      "graphContextMetadata": {
+        "filesCovered": 0,
+        "skippedReason": "stale-graph",
+        "truncatedFiles": 0,
+      },
       "mode": "simple",
       "model": "test-model",
       "provider": "gateway",
@@ -2961,6 +2970,10 @@ exports[`golden: kitchen-sink > everything ON: pins the final findings order (en
       "step": "code-intel",
     },
     {
+      "message": "Graph neighborhood: 2/2 changed file(s) covered (file-level tier)",
+      "step": "graph-context",
+    },
+    {
       "message": "Code intelligence: 2/2 files with structural data (Nms)",
       "step": "code-intel",
     },
@@ -3192,6 +3205,11 @@ Past review: watch the parser.",
         "src/index.ts",
         "src/utils.ts",
       ],
+      "graphContextMetadata": {
+        "filesCovered": 2,
+        "freshness": "file-level",
+        "truncatedFiles": 0,
+      },
       "mode": "simple",
       "model": "test-model",
       "provider": "gateway",
@@ -3415,6 +3433,10 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: exceeded cap fa
       "step": "static-analysis",
     },
     {
+      "message": "Graph neighborhood: 2/2 changed file(s) covered (file-level tier)",
+      "step": "graph-context",
+    },
+    {
       "detail": "  semgrep: skipped (0 findings)
   trivy: skipped (0 findings)
   cpd: skipped (0 findings)
@@ -3447,6 +3469,11 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: exceeded cap fa
         "src/index.ts",
         "src/utils.ts",
       ],
+      "graphContextMetadata": {
+        "filesCovered": 2,
+        "freshness": "file-level",
+        "truncatedFiles": 0,
+      },
       "mode": "simple",
       "model": "test-model",
       "provider": "gateway",
@@ -3538,6 +3565,10 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
       "step": "static-analysis",
     },
     {
+      "message": "Graph neighborhood: 2/2 changed file(s) covered (file-level tier)",
+      "step": "graph-context",
+    },
+    {
       "detail": "  semgrep: skipped (0 findings)
   trivy: skipped (0 findings)
   cpd: skipped (0 findings)
@@ -3569,6 +3600,11 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
         "src/index.ts",
         "src/utils.ts",
       ],
+      "graphContextMetadata": {
+        "filesCovered": 2,
+        "freshness": "file-level",
+        "truncatedFiles": 0,
+      },
       "mode": "simple",
       "model": "test-model",
       "provider": "gateway",
@@ -3662,6 +3698,10 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
       "step": "static-analysis",
     },
     {
+      "message": "Graph neighborhood: 2/2 changed file(s) covered (file-level tier)",
+      "step": "graph-context",
+    },
+    {
       "detail": "  semgrep: skipped (0 findings)
   trivy: skipped (0 findings)
   cpd: skipped (0 findings)
@@ -3693,6 +3733,11 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
         "src/index.ts",
         "src/utils.ts",
       ],
+      "graphContextMetadata": {
+        "filesCovered": 2,
+        "freshness": "file-level",
+        "truncatedFiles": 0,
+      },
       "mode": "simple",
       "model": "test-model",
       "provider": "gateway",

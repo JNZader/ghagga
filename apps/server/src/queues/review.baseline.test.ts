@@ -417,7 +417,7 @@ describe('BASELINE: GitHub PR-review observable behavior (forge-rewire regressio
       🔧 **Core**: \`app.ts\`
 
 
-      <sub>📊 13K tokens · $0.0825 · \`claude-sonnet-4\`</sub>
+      <sub>📊 13K tokens (in 9K / out 4K, estimated 70/30) · $0.0825 · \`claude-sonnet-4\`</sub>
       ---
       *Powered by [GHAGGA](https://github.com/JNZader/ghagga) — AI Code Review* — @octocat
       <!-- reviewId: baseline-rev-0001 -->"

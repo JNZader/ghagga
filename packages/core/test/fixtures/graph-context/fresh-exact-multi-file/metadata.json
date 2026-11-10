@@ -1,0 +1,10 @@
+{
+  "lastIndexedCommit": "cafe0000cafe0000cafe0000cafe0000cafe0000cafe0000cafe0000cafe00",
+  "lastIndexedAt": "2026-11-08T00:00:00Z",
+  "schemaVersion": 1,
+  "fileCount": 5,
+  "languages": ["typescript"],
+  "indexDurationMs": 12,
+  "graphVersion": 1,
+  "builtVia": "regex"
+}

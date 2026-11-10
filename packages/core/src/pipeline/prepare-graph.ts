@@ -22,7 +22,7 @@ import { buildCallChainFromDiff, extractChangedSymbolsFromDiff } from '../graph/
 import { computeChangedSymbolsComplete } from '../graph/changed-symbols.js';
 import { isExactCommitFresh, narrowBySymbols } from '../graph/narrow-symbols.js';
 import { buildReverseDependencyMap, findDependents } from '../graph/reverse-deps.js';
-import type { BlastRadiusMetadata, DependencyGraph } from '../graph/schema.js';
+import type { BlastRadiusMetadata, DependencyGraph, GraphMetadata } from '../graph/schema.js';
 import { isGraphStale } from '../graph/schema.js';
 import type { ProgressEvent, ReviewInput } from '../types.js';
 import type { DiffFile } from '../utils/diff.js';
@@ -56,6 +56,13 @@ export interface BlastRadiusOutcome {
    * bespoke catch).
    */
   graph: DependencyGraph | undefined;
+  /**
+   * Metadata of `graph` (graph-context-retrieval): `null` when the graph
+   * loaded but `loadMetadata()` returned null, `undefined` when no graph
+   * was loaded. Needed by the gather-phase graph-context staleness
+   * ladder — threaded here for the same single-load reason as `graph`.
+   */
+  graphMetadata: GraphMetadata | null | undefined;
 }
 
 /**
@@ -70,6 +77,7 @@ export async function applyBlastRadius(
   let { filteredFiles, filteredDiff } = args;
   let blastRadiusMetadata: BlastRadiusMetadata | undefined;
   let loadedGraph: DependencyGraph | undefined;
+  let loadedGraphMetadata: GraphMetadata | null | undefined;
 
   if (input.settings.enableBlastRadius && input.graphLoader) {
     try {
@@ -77,6 +85,7 @@ export async function applyBlastRadius(
       if (graph) {
         loadedGraph = graph;
         const metadata = await input.graphLoader.loadMetadata();
+        loadedGraphMetadata = metadata ?? null;
         const stale = metadata ? isGraphStale(metadata) : false;
 
         if (stale) {
@@ -184,7 +193,13 @@ export async function applyBlastRadius(
     }
   }
 
-  return { filteredFiles, filteredDiff, blastRadiusMetadata, graph: loadedGraph };
+  return {
+    filteredFiles,
+    filteredDiff,
+    blastRadiusMetadata,
+    graph: loadedGraph,
+    graphMetadata: loadedGraphMetadata,
+  };
 }
 
 /**

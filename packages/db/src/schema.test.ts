@@ -34,3 +34,26 @@ describe('DEFAULT_REPO_SETTINGS', () => {
     ]);
   });
 });
+
+// ─── Reviews input/output token split (graph-context-retrieval T5.3) ──
+
+import { getTableColumns } from 'drizzle-orm';
+import { reviews } from './schema.js';
+
+describe('reviews token split columns', () => {
+  it('defines nullable input_tokens / output_tokens with no default (NULL = unmeasured)', () => {
+    const cols = getTableColumns(reviews);
+    expect(cols.inputTokens?.name).toBe('input_tokens');
+    expect(cols.inputTokens?.notNull).toBe(false);
+    expect(cols.inputTokens?.hasDefault).toBe(false);
+    expect(cols.outputTokens?.name).toBe('output_tokens');
+    expect(cols.outputTokens?.notNull).toBe(false);
+    expect(cols.outputTokens?.hasDefault).toBe(false);
+  });
+
+  it('tokens_used keeps its authoritative default (split columns never replace it)', () => {
+    const cols = getTableColumns(reviews);
+    expect(cols.tokensUsed?.name).toBe('tokens_used');
+    expect(cols.tokensUsed?.hasDefault).toBe(true);
+  });
+});

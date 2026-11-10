@@ -15,6 +15,9 @@ vi.mock('./prompts.js', () => ({
   STATIC_ANALYSIS_UNTRUSTED_LABEL: 'STATIC ANALYSIS OUTPUT (untrusted tool/data)',
   SPECIALIST_OUTPUT_UNTRUSTED_LABEL: 'SPECIALIST OUTPUT (untrusted, model-generated)',
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
+  buildGraphNeighborhoodSection: vi.fn((ctx: string | null) =>
+    ctx ? `GRAPH_NEIGHBORHOOD:${ctx}` : '',
+  ),
   buildReviewLevelInstruction: vi.fn((level: string) => `REVIEW_LEVEL:${level}`),
   wrapUntrusted: vi.fn(
     (label: string, content: string) => `<UNTRUSTED label="${label}">\n${content}\n</UNTRUSTED>`,
@@ -713,5 +716,120 @@ describe('runWorkflowReview', () => {
     await runWorkflowReview(makeInput({ generateFns: [fn] }));
 
     expect(calls[5]?.system).toContain('UNTRUSTED_CONTENT_POLICY_BLOCK');
+  });
+});
+
+// ─── Graph neighborhood specialist subsets (graph-context-retrieval T4.3) ──
+
+describe('runWorkflowReview graph neighborhood subsets', () => {
+  const NEIGHBORHOOD =
+    'Graph neighborhood (exact-commit graph):\n- src/a.ts\n  imported by: src/b.ts';
+
+  it('scope/performance/standards receive the section; security and errors do NOT', async () => {
+    const { fn, calls } = makeMockGenerateFn();
+    await runWorkflowReview(
+      makeInput({ generateFns: [fn], graphNeighborhoodContext: NEIGHBORHOOD }),
+    );
+
+    // call order = SPECIALISTS order: scope, standards, errors, security, performance
+    const byIndex: Record<string, string> = {
+      '0': 'scope-analysis',
+      '1': 'coding-standards',
+      '2': 'error-handling',
+      '3': 'security-audit',
+      '4': 'performance-review',
+    };
+    for (const [index, name] of Object.entries(byIndex)) {
+      const system = calls[Number(index)]?.system ?? '';
+      if (
+        name === 'scope-analysis' ||
+        name === 'coding-standards' ||
+        name === 'performance-review'
+      ) {
+        expect(system).toContain(`GRAPH_NEIGHBORHOOD:${NEIGHBORHOOD}`);
+      } else {
+        expect(system).not.toContain('GRAPH_NEIGHBORHOOD:');
+      }
+    }
+    // Synthesis (6th call) never receives the neighborhood.
+    expect(calls[5]?.system ?? '').not.toContain('GRAPH_NEIGHBORHOOD:');
+  });
+
+  it('absent param and empty string produce byte-identical specialist prompts', async () => {
+    const absent = makeMockGenerateFn();
+    await runWorkflowReview(makeInput({ generateFns: [absent.fn] }));
+
+    const empty = makeMockGenerateFn();
+    await runWorkflowReview(makeInput({ generateFns: [empty.fn], graphNeighborhoodContext: '' }));
+
+    expect(empty.calls.map((c) => c.system)).toEqual(absent.calls.map((c) => c.system));
+  });
+
+  it('each specialist section stays within the graphContextMaxTokens cap', async () => {
+    // 30-token cap → the upstream formatter truncates to ≤ 30 tokens
+    // (120 chars of rendered entries). Simulate the capped shared string.
+    const capped = 'a'.repeat(120);
+    const { fn, calls } = makeMockGenerateFn();
+    await runWorkflowReview(makeInput({ generateFns: [fn], graphNeighborhoodContext: capped }));
+
+    for (const call of calls.slice(0, 5)) {
+      const match = /GRAPH_NEIGHBORHOOD:(a*)/.exec(call.system ?? '');
+      expect(match?.[1]?.length ?? 0).toBeLessThanOrEqual(120);
+    }
+  });
+});
+
+// ─── Input/output token split aggregation (graph-context-retrieval T5.2) ──
+
+describe('runWorkflowReview token split aggregation', () => {
+  // Local re-seed: this describe sits outside the main one, so the shared
+  // beforeEach does not run here — without this, tests would read whatever
+  // metadata the previous test mutated on a stale mocked-result object.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParseReviewResponse.mockReturnValue(makeParsedResult());
+  });
+
+  it('sums measured input/output tokens across specialists and synthesis', async () => {
+    let call = 0;
+    const fn: import('../providers/generate-fn.js').GenerateTextFn = vi.fn(
+      async (_system: string, _prompt: string) => {
+        call += 1;
+        return {
+          text: call === 6 ? 'STATUS: PASSED\nSUMMARY: ok\nFINDINGS:\n' : 'SCOPE OUTPUT',
+          tokensUsed: 100,
+          inputTokens: 70,
+          outputTokens: 30,
+          provider: 'gateway',
+          model: 'auto',
+        };
+      },
+    );
+
+    const result = await runWorkflowReview(makeInput({ generateFns: [fn] }));
+
+    // 5 specialists + 1 synthesis, each 70/30. tokensUsed travels as the
+    // parseReviewResponse argument (the mocked parser owns the metadata
+    // stub); the split is attached to the result post-parse.
+    expect(mockParseReviewResponse).toHaveBeenCalledWith(
+      'STATUS: PASSED\nSUMMARY: ok\nFINDINGS:\n',
+      expect.any(String),
+      expect.any(String),
+      600,
+      expect.any(Number),
+      null,
+    );
+    expect(result.metadata.inputTokensUsed).toBe(420);
+    expect(result.metadata.outputTokensUsed).toBe(180);
+  });
+
+  it('leaves the split absent when no voice reports one (unmeasured)', async () => {
+    const { fn } = makeMockGenerateFn();
+    const result = await runWorkflowReview(makeInput({ generateFns: [fn] }));
+
+    // The mocked parser stub reports no split and the aggregation must not
+    // invent one (tokensUsed itself lives on the parse argument).
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
   });
 });

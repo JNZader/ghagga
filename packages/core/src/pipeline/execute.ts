@@ -184,6 +184,11 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
     // Combine stack hints, code intelligence context, and call-chain context for agent prompts
     const combinedStackHints = state.stackHints + state.codeIntelContext + state.callChainContext;
 
+    // graph-context-retrieval: the neighborhood rides its OWN dedicated
+    // param (never the stackHints concat — that channel is unfenced) into
+    // every runner; '' keeps each runner's prompt array byte-identical.
+    const graphNeighborhoodContext = state.graphNeighborhoodContext;
+
     try {
       switch (effectiveMode) {
         case 'simple':
@@ -192,6 +197,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             staticContext: state.staticContext,
             memoryContext: state.memoryContext,
             stackHints: combinedStackHints,
+            graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -209,6 +215,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             staticContext: state.staticContext,
             memoryContext: state.memoryContext,
             stackHints: combinedStackHints,
+            graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -230,6 +237,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             staticContext: state.staticContext,
             memoryContext: state.memoryContext,
             stackHints: combinedStackHints,
+            graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -249,6 +257,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             staticContext: state.staticContext,
             memoryContext: state.memoryContext,
             stackHints: combinedStackHints,
+            graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,
@@ -270,6 +279,7 @@ export async function execute(state: PipelineStateBase): Promise<ReviewResult> {
             staticContext: state.staticContext,
             memoryContext: state.memoryContext,
             stackHints: combinedStackHints,
+            graphNeighborhoodContext,
             checklistContext: state.checklistContext,
             reviewLevel: input.settings.reviewLevel,
             onProgress: input.onProgress,

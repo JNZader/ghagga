@@ -57,6 +57,12 @@ export interface ReviewCost {
   costUSD: number;
   model: string;
   pricingFound: boolean;
+  /**
+   * True when the input/output split comes from MEASURED provider usage
+   * (graph-context-retrieval T5.5); false when it is the 70/30 heuristic
+   * fallback (unmeasured providers — gateway, usage-less CLI adapters).
+   */
+  splitMeasured: boolean;
 }
 
 /**
@@ -73,6 +79,9 @@ export function calculateReviewCost(
 
   const inputTokens = options?.inputTokens ?? Math.round(totalTokens * 0.7);
   const outputTokens = options?.outputTokens ?? Math.round(totalTokens * 0.3);
+  // Measured split only when the caller supplied real provider usage;
+  // the 70/30 heuristic survives solely as the unmeasured fallback.
+  const splitMeasured = options?.inputTokens !== undefined || options?.outputTokens !== undefined;
 
   if (!pricing) {
     return {
@@ -82,6 +91,7 @@ export function calculateReviewCost(
       costUSD: 0,
       model,
       pricingFound: false,
+      splitMeasured,
     };
   }
 
@@ -96,6 +106,7 @@ export function calculateReviewCost(
     costUSD: Math.round(cost * 10000) / 10000,
     model,
     pricingFound: true,
+    splitMeasured,
   };
 }
 
@@ -116,15 +127,21 @@ export function formatCostFooter(cost: ReviewCost): string {
 
   const tokens = formatTokens(cost.totalTokens);
 
+  // graph-context-retrieval T5.5: the split is always shown, labeled with
+  // its provenance — measured usage vs the estimated 70/30 heuristic.
+  const split = cost.splitMeasured
+    ? ` (in ${formatTokens(cost.estimatedInputTokens)} / out ${formatTokens(cost.estimatedOutputTokens)})`
+    : ` (in ${formatTokens(cost.estimatedInputTokens)} / out ${formatTokens(cost.estimatedOutputTokens)}, estimated 70/30)`;
+
   if (!cost.pricingFound) {
-    return `\n<sub>📊 ${tokens} tokens · \`${cost.model}\` · pricing unavailable</sub>\n`;
+    return `\n<sub>📊 ${tokens} tokens${split} · \`${cost.model}\` · pricing unavailable</sub>\n`;
   }
 
   if (cost.costUSD === 0) {
-    return `\n<sub>📊 ${tokens} tokens · \`${cost.model}\` · free tier</sub>\n`;
+    return `\n<sub>📊 ${tokens} tokens${split} · \`${cost.model}\` · free tier</sub>\n`;
   }
 
   const dollars = cost.costUSD >= 1 ? `$${cost.costUSD.toFixed(2)}` : `$${cost.costUSD.toFixed(4)}`;
 
-  return `\n<sub>📊 ${tokens} tokens · ${dollars} · \`${cost.model}\`</sub>\n`;
+  return `\n<sub>📊 ${tokens} tokens${split} · ${dollars} · \`${cost.model}\`</sub>\n`;
 }

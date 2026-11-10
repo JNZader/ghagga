@@ -13,8 +13,9 @@
 import type { ChecklistConfig } from '../checklist/index.js';
 import type { CodeIntelMetadata, CodeIntelResult } from '../code-intel/types.js';
 import type { EnhanceMetadata } from '../enhance/types.js';
-import type { BlastRadiusMetadata } from '../graph/schema.js';
+import type { BlastRadiusMetadata, DependencyGraph, GraphMetadata } from '../graph/schema.js';
 import type {
+  GraphContextMetadata,
   ProgressEvent,
   ReviewFinding,
   ReviewInput,
@@ -65,6 +66,18 @@ export interface PipelineStateBase {
   filteredFiles: DiffFile[];
   filteredDiff: string;
   blastRadiusMetadata?: BlastRadiusMetadata;
+  /**
+   * The dependency graph loaded during prepare (step 2.5's blast-radius
+   * load, or the step-2.5b graph-context load when `enableGraphContext`
+   * is explicitly true and blast-radius did not load one). Consumed by
+   * the gather-phase graph-context step — which NEVER calls the loader
+   * itself (a second `load()` would double-invoke loaders and break
+   * call-count assertions, see BlastRadiusOutcome.graph). `undefined`
+   * is a normal state: no graph in play.
+   */
+  loadedGraph?: DependencyGraph;
+  /** Metadata of `loadedGraph` (null when the graph loaded without metadata). */
+  loadedGraphMetadata?: GraphMetadata | null;
   callChainContext: string;
   stacks: string[];
   stackHints: string;
@@ -86,6 +99,13 @@ export interface PipelineStateBase {
   staticContext: string;
   memoryContext: string | null;
   codeIntelContext: string;
+  // graph-context-retrieval: formatted (UNFENCED, budget-capped)
+  // neighborhood text; '' when the step skipped/degraded. The untrusted
+  // fencing happens per-voice in the agents (prompts.ts), NOT here.
+  graphNeighborhoodContext: string;
+  // Engaged-outcome telemetry → ReviewMetadata.graphContextMetadata
+  // (attached in enrich only when set — see gather-safe.ts).
+  graphContextMetadata?: GraphContextMetadata;
   checklistContext: string;
   resolvedChecklist: ChecklistConfig | null;
   negativeExamplesPrompt: string;

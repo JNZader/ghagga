@@ -18,6 +18,9 @@ vi.mock('./prompts.js', () => ({
   COMPACT_CALIBRATION: 'COMPACT_CALIBRATION_BLOCK',
   UNTRUSTED_CONTENT_POLICY: 'UNTRUSTED_CONTENT_POLICY_BLOCK',
   buildMemoryContext: vi.fn((ctx: string | null) => (ctx ? `MEMORY:${ctx}` : '')),
+  buildGraphNeighborhoodSection: vi.fn((ctx: string | null) =>
+    ctx ? `GRAPH_NEIGHBORHOOD:${ctx}` : '',
+  ),
   buildReviewLevelInstruction: vi.fn((level: string) => `REVIEW_LEVEL:${level}`),
   wrapUntrustedDiff: vi.fn(
     (diff: string) => `<USER_DIFF>\n\`\`\`diff\n${diff}\n\`\`\`\n</USER_DIFF>`,
@@ -254,5 +257,71 @@ describe('runConsensusReview — dead voice validation', () => {
     );
     expect(failedCalls).toHaveLength(1);
     expect(result.metadata.tokensUsed).toBe(300);
+  });
+});
+
+// ─── Graph neighborhood section (graph-context-retrieval T4.1) ──
+
+describe('runConsensusReview graph neighborhood section', () => {
+  const NEIGHBORHOOD =
+    'Graph neighborhood (exact-commit graph):\n- src/a.ts\n  imported by: src/b.ts';
+
+  it('absent param and empty string produce byte-identical stance prompts', async () => {
+    const absent = makeMockGenerateFn();
+    await runConsensusReview({ ...makeInput(), generateFns: [absent.fn] });
+    const empty = makeMockGenerateFn();
+    await runConsensusReview({
+      ...makeInput(),
+      generateFns: [empty.fn],
+      graphNeighborhoodContext: '',
+    });
+    expect(empty.calls.map((c) => c.system)).toEqual(absent.calls.map((c) => c.system));
+  });
+
+  it('every stance receives the capped neighborhood section', async () => {
+    const { fn, calls } = makeMockGenerateFn();
+    await runConsensusReview({
+      ...makeInput(),
+      generateFns: [fn],
+      graphNeighborhoodContext: NEIGHBORHOOD,
+    });
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call.system).toContain(`GRAPH_NEIGHBORHOOD:${NEIGHBORHOOD}`);
+    }
+  });
+});
+
+// ─── Input/output token split aggregation (graph-context-retrieval T5.2) ──
+
+describe('runConsensusReview token split aggregation', () => {
+  it('sums measured input/output tokens across all votes', async () => {
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const fn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+      calls.push({ system, prompt });
+      return {
+        text: makeVoteText(),
+        tokensUsed: 50,
+        inputTokens: 35,
+        outputTokens: 15,
+        provider: 'gateway',
+        model: 'auto',
+      };
+    });
+
+    const result = await runConsensusReview({ ...makeInput(), generateFns: [fn] });
+
+    expect(calls).toHaveLength(3);
+    expect(result.metadata.tokensUsed).toBe(150);
+    expect(result.metadata.inputTokensUsed).toBe(105);
+    expect(result.metadata.outputTokensUsed).toBe(45);
+  });
+
+  it('leaves the split absent when votes report no usage split', async () => {
+    const { fn } = makeMockGenerateFn();
+    const result = await runConsensusReview({ ...makeInput(), generateFns: [fn] });
+
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
   });
 });

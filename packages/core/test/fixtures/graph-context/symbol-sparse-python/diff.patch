@@ -1,0 +1,8 @@
+diff --git a/src/app.py b/src/app.py
+index 1111111..2222222 100644
+--- a/src/app.py
++++ b/src/app.py
+@@ -1,2 +1,3 @@
+ from src.lib import run
++from src.other import step
+ def main(): return run()

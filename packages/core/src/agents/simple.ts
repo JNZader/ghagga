@@ -18,6 +18,7 @@ import type {
   ReviewStatus,
 } from '../types.js';
 import {
+  buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
   REVIEW_CALIBRATION,
@@ -43,6 +44,12 @@ export interface SimpleReviewInput {
 
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
+
+  /**
+   * Formatted (unfenced) graph-neighborhood text (graph-context-retrieval).
+   * ''/absent → no section; the prompt stays byte-identical to baseline.
+   */
+  graphNeighborhoodContext?: string;
 
   /**
    * Optional backend-agnostic generation function.
@@ -185,12 +192,15 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
   // Build the full system prompt with all context layers.
   // staticContext is attacker-influenceable tool/data output → fence as untrusted.
   // memoryContext is fenced inside buildMemoryContext().
+  // graphNeighborhoodContext is fenced inside buildGraphNeighborhoodSection()
+  // (graph-context-retrieval) — pinned AFTER the existing context sections.
   const system = [
     SIMPLE_REVIEW_SYSTEM,
     UNTRUSTED_CONTENT_POLICY,
     staticContext ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext) : '',
     buildMemoryContext(memoryContext),
     stackHints,
+    buildGraphNeighborhoodSection(input.graphNeighborhoodContext ?? ''),
     input.checklistContext ?? '',
     buildReviewLevelInstruction(reviewLevel),
     REVIEW_CALIBRATION,

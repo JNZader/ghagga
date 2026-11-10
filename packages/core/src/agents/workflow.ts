@@ -28,6 +28,7 @@ import type {
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { calculateRateSchedule } from '../utils/token-budget.js';
 import {
+  buildGraphNeighborhoodSection,
   buildMemoryContext,
   buildReviewLevelInstruction,
   COMPACT_CALIBRATION,
@@ -92,6 +93,15 @@ export interface WorkflowReviewInput {
 
   /** Optional SOLID/boundary checklist context for structured review. */
   checklistContext?: string;
+
+  /**
+   * Formatted (unfenced) graph-neighborhood text (graph-context-retrieval).
+   * ONE shared capped string — distributed per SPECIALIST_CONTEXT_MAP
+   * (scope/performance/standards receive it; security keeps static-only,
+   * errors stays minimal). ''/absent → no specialist sees a section and
+   * all prompts stay byte-identical to baseline.
+   */
+  graphNeighborhoodContext?: string;
 }
 
 interface SpecialistConfig {
@@ -110,14 +120,23 @@ interface SpecialistConfig {
  * - Scope:      memoryContext (past observations help understand scope)
  * - Standards:  stackHints   (tech-specific naming/formatting conventions)
  * - Errors:     minimal      (focuses purely on the diff)
+ *
+ * graphNeighborhoodContext (graph-context-retrieval): scope/performance/
+ * standards additionally receive the (fenced) neighborhood — their lenses
+ * benefit from cross-file structure. Security keeps its static-only diet
+ * and error-handling stays minimal, per design decision 3.
  */
-type SpecialistContextKey = 'staticContext' | 'memoryContext' | 'stackHints';
+type SpecialistContextKey =
+  | 'staticContext'
+  | 'memoryContext'
+  | 'stackHints'
+  | 'graphNeighborhoodContext';
 
 const SPECIALIST_CONTEXT_MAP: Record<WorkflowSpecialist, SpecialistContextKey[]> = {
   'security-audit': ['staticContext'],
-  'performance-review': ['stackHints'],
-  'scope-analysis': ['memoryContext'],
-  'coding-standards': ['stackHints'],
+  'performance-review': ['stackHints', 'graphNeighborhoodContext'],
+  'scope-analysis': ['memoryContext', 'graphNeighborhoodContext'],
+  'coding-standards': ['stackHints', 'graphNeighborhoodContext'],
   'error-handling': [],
 };
 
@@ -187,12 +206,14 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
   // Context sources keyed for lookup by the specialist context map.
   // staticContext is attacker-influenceable tool/data → fence as untrusted.
   // memoryContext is fenced inside buildMemoryContext(). stackHints is trusted (static).
+  // graphNeighborhoodContext is fenced inside buildGraphNeighborhoodSection().
   const contextSources: Record<SpecialistContextKey, string> = {
     staticContext: staticContext
       ? wrapUntrusted(STATIC_ANALYSIS_UNTRUSTED_LABEL, staticContext)
       : '',
     memoryContext: buildMemoryContext(memoryContext),
     stackHints,
+    graphNeighborhoodContext: buildGraphNeighborhoodSection(input.graphNeighborhoodContext ?? ''),
   };
 
   // ── Step 1: Run specialists with bounded concurrency ───────
@@ -242,6 +263,8 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
         label: specialist.label,
         text: result.text,
         tokensUsed: result.tokensUsed,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
         providerUsed: result.provider,
         modelUsed: result.model,
       };
@@ -252,6 +275,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
   // ── Step 2: Collect results ────────────────────────────────
   let totalTokens = 0;
+  // graph-context-retrieval T5.2: measured split aggregated alongside
+  // tokensUsed; set on metadata only when a voice actually reported it.
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let splitReported = false;
   const specialistOutputs: string[] = [];
   const modelsUsed: string[] = [];
 
@@ -262,6 +290,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
+      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalInputTokens += result.value.inputTokens ?? 0;
+        totalOutputTokens += result.value.outputTokens ?? 0;
+      }
       specialistOutputs.push(`### ${result.value.label}\n\n${result.value.text}`);
       modelsUsed.push(
         `${result.value.name}:${result.value.providerUsed}/${result.value.modelUsed}`,
@@ -335,6 +368,11 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
 
     const executionTimeMs = Date.now() - startTime;
     totalTokens += synthesisResult.tokensUsed;
+    if (synthesisResult.inputTokens !== undefined || synthesisResult.outputTokens !== undefined) {
+      splitReported = true;
+      totalInputTokens += synthesisResult.inputTokens ?? 0;
+      totalOutputTokens += synthesisResult.outputTokens ?? 0;
+    }
 
     // Parse the synthesis output using the same parser as simple mode
     const reviewResult = parseReviewResponse(
@@ -349,6 +387,10 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     // Override mode in metadata
     reviewResult.metadata.mode = 'workflow';
     reviewResult.metadata.modelsUsed = modelsUsed;
+    if (splitReported) {
+      reviewResult.metadata.inputTokensUsed = totalInputTokens;
+      reviewResult.metadata.outputTokensUsed = totalOutputTokens;
+    }
 
     return reviewResult;
   } catch (error) {
@@ -370,6 +412,10 @@ export async function runWorkflowReview(input: WorkflowReviewInput): Promise<Rev
     );
     reviewResult.metadata.mode = 'workflow';
     reviewResult.metadata.modelsUsed = modelsUsed;
+    if (splitReported) {
+      reviewResult.metadata.inputTokensUsed = totalInputTokens;
+      reviewResult.metadata.outputTokensUsed = totalOutputTokens;
+    }
     return reviewResult;
   }
 }
