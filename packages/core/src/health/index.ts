@@ -1,4 +1,15 @@
 export {
+  aggregateHealth,
+  type DigestInputs,
+  type DigestReviewGroup,
+  type FileRisk,
+  MAX_RANKED_FILES,
+  RANKING_WINDOW_DAYS,
+  RECENCY_FULL_DAYS,
+  type ReviewRow,
+  rankFileRisk,
+} from './digest.js';
+export {
   generateRecommendations,
   type HealthRecommendation,
 } from './recommendations.js';
