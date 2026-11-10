@@ -1,13 +1,17 @@
-flowchart TD
-  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
-  classDef dependent fill:#dbeafe,stroke:#2563eb
-  classDef test fill:#dcfce7,stroke:#16a34a
-  subgraph c0["lib"]
+flowchart LR
+  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff
+  classDef dependent stroke:#64748b
+  classDef test stroke:#94a3b8,stroke-dasharray:5 5
+  subgraph c0["lib/util.ts"]
     n0["lib/util.ts"]
   end
-  subgraph c1["src"]
+  subgraph c1["src/app1.ts"]
     n1["src/app1.ts"]
+  end
+  subgraph c2["src/app2.ts"]
     n2["src/app2.ts"]
+  end
+  subgraph c3["src/hub.ts"]
     n3["src/hub.ts"]
   end
   class n3 changed

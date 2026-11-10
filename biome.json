@@ -12,7 +12,8 @@
       "!*.min.js",
       "!pnpm-lock.yaml",
       "!packages/db/drizzle/meta",
-      "!**/*.md"
+      "!**/*.md",
+      "!.ghagga"
     ]
   },
   "formatter": {

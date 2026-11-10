@@ -1,7 +1,7 @@
 /**
  * Pure Mermaid Renderer + Label Sanitizer (blast-radius-diagram Slice 1)
  *
- * Deterministic, synchronous mermaid `flowchart TD` builder over an
+ * Deterministic, synchronous mermaid `flowchart LR` builder over an
  * explicit node/edge input. NO pipeline dependency — testable standalone.
  *
  * Injection safety (design D6): file names come from the attacker-controlled
@@ -46,6 +46,20 @@ import {
 export interface MermaidNodeInput {
   path: string;
   role: BlastRadiusDiagramNodeRole;
+  /**
+   * Explicit cluster override. When present it is used verbatim for
+   * grouping and the emitted `cluster` field — REQUIRED for summary
+   * nodes, whose synthetic path would otherwise derive a ghost singleton
+   * cluster (4R redesign REL-002). Callers passing real file paths omit
+   * it (the two-segment derivation applies).
+   */
+  cluster?: string;
+  /**
+   * Test-summary nodes are first-class passengers, NOT cap fodder: the
+   * defensive node cap counts REAL files only, so summaries cannot be
+   * silently dropped nor displace real nodes (4R redesign REL-001).
+   */
+  summary?: boolean;
 }
 
 /**
@@ -92,17 +106,21 @@ export function sanitizeMermaidLabel(path: string): string {
 }
 
 /**
- * Top-level directory of a path (first segment) — design D5 cluster
- * granularity. Directory-derived segments are sanitized with the same
- * allowlist as node labels (a hostile top-level dir cannot smuggle quotes
- * or `>` into a subgraph title); the `'(root)'` literal for root files is
- * a trusted module constant and is returned unsanitized (parens are
- * exactly what the legend/subgraph title should show).
+ * Display cluster of a path: its first TWO segments (`packages/core`,
+ * `apps/server` — a single top-level segment does not discriminate in a
+ * monorepo where almost everything shares one root). Directory-derived
+ * segments are sanitized with the same allowlist as node labels (a
+ * hostile directory cannot smuggle quotes or `>` into a subgraph title);
+ * the `'(root)'` literal for root files is a trusted module constant and
+ * is returned unsanitized (parens are exactly what the legend/subgraph
+ * title should show).
  */
 export function clusterOfPath(path: string): string {
-  const slash = path.indexOf('/');
-  if (slash === -1) return MERMAID_ROOT_CLUSTER;
-  return sanitizeMermaidLabel(path.slice(0, slash));
+  const firstSlash = path.indexOf('/');
+  if (firstSlash === -1) return MERMAID_ROOT_CLUSTER;
+  const secondSlash = path.indexOf('/', firstSlash + 1);
+  const prefix = secondSlash === -1 ? path : path.slice(0, secondSlash);
+  return sanitizeMermaidLabel(prefix);
 }
 
 // ─── Deterministic comparison ───────────────────────────────────
@@ -156,14 +174,21 @@ export function renderMermaidDiagram(
   }
   unique.sort((a, b) => comparePaths(a.path, b.path));
 
-  // 2. Defensive node cap — production inputs arrive pre-capped (Slice 2).
+  // 2. Defensive node cap — production inputs arrive pre-capped (Slice 2),
+  //    and the cap counts REAL files only: summary nodes ride along and
+  //    can neither be dropped by the cap nor displace a real node (4R
+  //    redesign REL-001 — synthetic summary paths sort after most real
+  //    paths, so the old shared cap deleted exactly the summaries).
   let nodeTruncated = false;
   const clusterCounts: Record<string, number> = {};
+  const reals = unique.filter((node) => !node.summary);
+  const summaries = unique.filter((node) => node.summary);
   let kept = unique;
-  if (unique.length > MAX_DIAGRAM_NODES) {
+  if (reals.length > MAX_DIAGRAM_NODES) {
     nodeTruncated = true;
-    kept = unique.slice(0, MAX_DIAGRAM_NODES);
-    for (const omitted of unique.slice(MAX_DIAGRAM_NODES)) {
+    const keptReals = reals.slice(0, MAX_DIAGRAM_NODES);
+    kept = [...keptReals, ...summaries];
+    for (const omitted of reals.slice(MAX_DIAGRAM_NODES)) {
       const cluster = clusterOfPath(omitted.path);
       clusterCounts[cluster] = (clusterCounts[cluster] ?? 0) + 1;
     }
@@ -177,7 +202,14 @@ export function renderMermaidDiagram(
       id,
       label: sanitizeMermaidLabel(node.path),
       role: node.role,
-      cluster: clusterOfPath(node.path),
+      // Explicit clusters sanitize at EMISSION — the old "hostile dir
+      // cannot smuggle into a subgraph title" invariant must not rest on
+      // caller discipline now that the field is public API (4R redesign
+      // RISK-001). Derived clusters keep clusterOfPath's output VERBATIM:
+      // it is already sanitized EXCEPT the intentional '(root)' literal
+      // (parens are the point — sanitizing would mangle it to '__root_').
+      cluster:
+        node.cluster !== undefined ? sanitizeMermaidLabel(node.cluster) : clusterOfPath(node.path),
     };
   });
 
@@ -228,11 +260,20 @@ export function renderMermaidDiagram(
 /** Role order for `class` lines: actionable first (changed → dependent → test). */
 const ROLE_ORDER: readonly BlastRadiusDiagramNodeRole[] = ['changed', 'dependent', 'test'];
 
-/** Per-role classDef styles (trusted literals — no untrusted data). */
+/**
+ * Per-role classDef styles (trusted literals — no untrusted data).
+ *
+ * THEME-ADAPTIVE PALETTE: only `changed` overrides the FILL (amber with
+ * white text reads on both GitHub light and dark themes) — the eye goes
+ * straight to what the PR touched. Dependents keep the theme's default
+ * node style (they adapt to light/dark automatically — custom pastel
+ * fills fought the theme and turned the diagram into soup). Tests get a
+ * dashed stroke and no fill: visually present, deliberately muted.
+ */
 const ROLE_CLASS_DEF: Record<BlastRadiusDiagramNodeRole, string> = {
-  changed: 'fill:#fef3c7,stroke:#d97706,stroke-width:2px',
-  dependent: 'fill:#dbeafe,stroke:#2563eb',
-  test: 'fill:#dcfce7,stroke:#16a34a',
+  changed: 'fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff',
+  dependent: 'stroke:#64748b',
+  test: 'stroke:#94a3b8,stroke-dasharray:5 5',
 };
 
 /**
@@ -241,7 +282,8 @@ const ROLE_CLASS_DEF: Record<BlastRadiusDiagramNodeRole, string> = {
  * allowlist-sanitized labels (always double-quoted) and cluster names.
  */
 function emitMermaid(nodes: BlastRadiusDiagramNode[], edges: BlastRadiusDiagramEdge[]): string {
-  const lines: string[] = ['flowchart TD'];
+  // LR (left→right) reads better in a PR comment than a tall TD column.
+  const lines: string[] = ['flowchart LR'];
   for (const role of ROLE_ORDER) {
     lines.push(`  classDef ${role} ${ROLE_CLASS_DEF[role]}`);
   }

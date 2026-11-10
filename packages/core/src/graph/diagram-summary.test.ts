@@ -86,7 +86,7 @@ describe('buildBlastRadiusDiagramSummary — both-direction edges (core-engine s
     }
   });
 
-  it('roles: changed > test > dependent precedence', () => {
+  it('roles: changed > test > dependent precedence (pool tests collapse into summary nodes)', () => {
     const graphWithTest = makeGraph({
       'src/a.ts': tsNode({ imports: ['lib/util.ts'] }),
       'lib/util.ts': tsNode(),
@@ -95,8 +95,20 @@ describe('buildBlastRadiusDiagramSummary — both-direction edges (core-engine s
     const { diagram } = build(graphWithTest, ['src/a.ts']);
     const byLabel = new Map(diagram!.nodes.map((n) => [n.label, n.role]));
     expect(byLabel.get('src/a.ts')).toBe('changed');
-    expect(byLabel.get('src/a.test.ts')).toBe('test');
     expect(byLabel.get('lib/util.ts')).toBe('dependent');
+    // Test files no longer render individually (they do not consume the
+    // node budget): the pool's one test file collapses into a per-cluster
+    // summary node — role 'test', cluster and count folded into the
+    // label ('src/a.test.ts' is its own cluster: single-slash path).
+    expect(byLabel.get('src/a.test.ts')).toBeUndefined();
+    expect(byLabel.get('test files src/a.test.ts x1')).toBe('test');
+    expect(diagram!.nodes).toHaveLength(3); // a.ts + util.ts + test summary
+    // The individual test file never appears as a NODE line (`n<digits>
+    // ["src/a.test.ts"]`) — only the summary label does. The SUBGRAPH
+    // title may still carry the cluster name (`c<digits>["src/a.test.ts"]` —
+    // a root-level test file IS its own cluster), which is correct.
+    expect(diagram!.mermaid).not.toMatch(/\bn\d+\["src\/a\.test\.ts"\]/);
+    expect(diagram!.mermaid).toContain('["test files src/a.test.ts x1"]');
   });
 });
 

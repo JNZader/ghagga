@@ -99,18 +99,24 @@ describe('sanitizeMermaidLabel', () => {
 });
 
 describe('clusterOfPath', () => {
-  it('returns the first path segment', () => {
-    expect(clusterOfPath('src/lib/a.ts')).toBe('src');
+  it('returns the first TWO path segments (monorepo package grouping)', () => {
+    expect(clusterOfPath('packages/core/src/graph/a.ts')).toBe('packages/core');
+    expect(clusterOfPath('apps/cli/src/main.ts')).toBe('apps/cli');
+  });
+
+  it('returns a single-slash path itself (no second segment to cut at)', () => {
+    expect(clusterOfPath('src/a.ts')).toBe('src/a.ts');
   });
 
   it('returns (root) for root files', () => {
     expect(clusterOfPath('README.md')).toBe('(root)');
   });
 
-  it('sanitizes a hostile top-level directory name', () => {
-    // `"` and `>` collapse; `-` survives (allowlisted) but `>` can never
-    // form `-->`, and quotes can never escape the subgraph title.
-    expect(clusterOfPath('we"ird-->x/a.ts')).toBe('we_ird--_x');
+  it('sanitizes a hostile two-segment directory prefix', () => {
+    // `"` and `>` collapse in BOTH segments; `-` survives (allowlisted)
+    // but `>` can never form `-->`, and quotes can never escape the
+    // subgraph title. `/` and space are allowlisted (real dir names).
+    expect(clusterOfPath('we"ird-->x/sub dir/a.ts')).toBe('we_ird--_x/sub dir');
   });
 });
 
@@ -143,12 +149,12 @@ describe('renderMermaidDiagram — shape', () => {
     expect(diagram.nodes.map((n) => n.role)).toEqual(['test', 'changed', 'changed']);
   });
 
-  it('derives clusters: top-level dir, (root) for root files', () => {
+  it('derives clusters: first two segments, (root) for root files', () => {
     const diagram = renderMermaidDiagram(
-      [node('README.md'), node('src/a.ts'), node('lib/u.ts')],
+      [node('README.md'), node('packages/core/src/a.ts'), node('apps/cli/u.ts')],
       [],
     );
-    expect(diagram.nodes.map((n) => n.cluster)).toEqual(['(root)', 'lib', 'src']);
+    expect(diagram.nodes.map((n) => n.cluster)).toEqual(['(root)', 'apps/cli', 'packages/core']);
   });
 
   it('drops dangling and self edges, keeps internal ones', () => {
@@ -183,54 +189,57 @@ describe('renderMermaidDiagram — byte-exact emission (D7 order)', () => {
   it('emits header → classDef → subgraphs → class lines → sorted edges', () => {
     const diagram = renderMermaidDiagram(
       [
-        node('src/a.ts', 'changed'),
-        node('src/b.ts', 'changed'),
-        node('lib/util.ts', 'dependent'),
-        node('src/a.test.ts', 'test'),
+        node('packages/core/src/a.ts', 'changed'),
+        node('packages/core/src/b.ts', 'changed'),
+        node('packages/lib/util.ts', 'dependent'),
+        node('packages/core/src/a.test.ts', 'test'),
       ],
       [
-        edge('src/a.ts', 'lib/util.ts'), // a imports util
-        edge('src/page.ts', 'src/a.ts'), // dangling — dropped
-        edge('src/b.ts', 'src/a.ts'),
-        edge('src/a.test.ts', 'src/a.ts'),
+        edge('packages/core/src/a.ts', 'packages/lib/util.ts'), // a imports util
+        edge('packages/core/src/page.ts', 'packages/core/src/a.ts'), // dangling — dropped
+        edge('packages/core/src/b.ts', 'packages/core/src/a.ts'),
+        edge('packages/core/src/a.test.ts', 'packages/core/src/a.ts'),
       ],
     );
 
-    // Path-asc id assignment: lib/util.ts=n0, src/a.test.ts=n1,
-    // src/a.ts=n2, src/b.ts=n3 ('src/a.test.ts' < 'src/a.ts' — 'e' < 's').
+    // Path-asc id assignment: packages/core/src/a.test.ts=n0,
+    // packages/core/src/a.ts=n1 ('a.test.ts' < 'a.ts' — 'e' < 's'),
+    // packages/core/src/b.ts=n2, packages/lib/util.ts=n3. Clusters are
+    // the first TWO segments: a.test.ts/a.ts/b.ts all land in
+    // packages/core, util.ts in packages/lib.
     expect(diagram.mermaid).toBe(
       [
-        'flowchart TD',
-        '  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px',
-        '  classDef dependent fill:#dbeafe,stroke:#2563eb',
-        '  classDef test fill:#dcfce7,stroke:#16a34a',
-        '  subgraph c0["lib"]',
-        '    n0["lib/util.ts"]',
+        'flowchart LR',
+        '  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff',
+        '  classDef dependent stroke:#64748b',
+        '  classDef test stroke:#94a3b8,stroke-dasharray:5 5',
+        '  subgraph c0["packages/core"]',
+        '    n0["packages/core/src/a.test.ts"]',
+        '    n1["packages/core/src/a.ts"]',
+        '    n2["packages/core/src/b.ts"]',
         '  end',
-        '  subgraph c1["src"]',
-        '    n1["src/a.test.ts"]',
-        '    n2["src/a.ts"]',
-        '    n3["src/b.ts"]',
+        '  subgraph c1["packages/lib"]',
+        '    n3["packages/lib/util.ts"]',
         '  end',
-        '  class n2,n3 changed',
-        '  class n0 dependent',
-        '  class n1 test',
-        '  n1 --> n2',
-        '  n2 --> n0',
-        '  n3 --> n2',
+        '  class n1,n2 changed',
+        '  class n3 dependent',
+        '  class n0 test',
+        '  n0 --> n1',
+        '  n1 --> n3',
+        '  n2 --> n1',
       ].join('\n'),
     );
   });
 
   it('renders (root) files in their own cluster, clusters sorted asc', () => {
     const diagram = renderMermaidDiagram(
-      [node('src/a.ts'), node('README.md'), node('lib/u.ts')],
+      [node('packages/core/src/a.ts'), node('README.md'), node('apps/cli/u.ts')],
       [],
     );
     const lines = diagram.mermaid.split('\n');
     expect(lines).toContain('  subgraph c0["(root)"]');
-    expect(lines).toContain('  subgraph c1["lib"]');
-    expect(lines).toContain('  subgraph c2["src"]');
+    expect(lines).toContain('  subgraph c1["apps/cli"]');
+    expect(lines).toContain('  subgraph c2["packages/core"]');
   });
 
   it('sorts edges by (from-id asc, to-id asc), independent of input order', () => {
@@ -263,19 +272,19 @@ describe('renderMermaidDiagram — byte-exact emission (D7 order)', () => {
 
 describe('renderMermaidDiagram — caps (D2, defensive)', () => {
   function makeNodes(count: number): MermaidNodeInput[] {
-    // 10 per top-level dir → deterministic cluster spread
-    return Array.from({ length: count }, (_, i) => node(`d${Math.floor(i / 10)}/f${i}.ts`));
+    // 10 per two-segment cluster → deterministic cluster spread
+    return Array.from({ length: count }, (_, i) => node(`d${Math.floor(i / 10)}/mod/f${i}.ts`));
   }
 
   it(`caps nodes at ${MAX_DIAGRAM_NODES} with truncated + clusterCounts`, () => {
-    const nodes = makeNodes(30); // 3 dirs × 10
+    const nodes = makeNodes(30); // 3 clusters × 10
     const diagram = renderMermaidDiagram(nodes, []);
     expect(diagram.nodes).toHaveLength(MAX_DIAGRAM_NODES);
     expect(diagram.meta.truncated).toBe(true);
-    expect(diagram.meta.clusterCounts).toEqual({ d2: 5 }); // last 5 omitted
+    expect(diagram.meta.clusterCounts).toEqual({ 'd2/mod': 5 }); // last 5 omitted
     // Omitted file names never reach the mermaid output.
-    expect(diagram.mermaid).not.toContain('d2/f25.ts');
-    expect(diagram.mermaid).not.toContain('d2/f29.ts');
+    expect(diagram.mermaid).not.toContain('d2/mod/f25.ts');
+    expect(diagram.mermaid).not.toContain('d2/mod/f29.ts');
     // Declared node lines: exactly 25 inside subgraphs.
     const declared = diagram.mermaid.split('\n').filter((l) => /^ {4}n\d+\["/.test(l));
     expect(declared).toHaveLength(MAX_DIAGRAM_NODES);
@@ -301,7 +310,86 @@ describe('renderMermaidDiagram — caps (D2, defensive)', () => {
     expect(edgeLines).toHaveLength(MAX_DIAGRAM_EDGES);
   });
 
-  it('satisfies the 10k JSON budget on worst-case input (25×80-char labels + 40 edges)', () => {
+  it('summary nodes survive the cap and never displace real nodes (4R redesign REL-001)', () => {
+    const summary = (label: string, cluster: string): MermaidNodeInput => ({
+      path: label,
+      role: 'test',
+      cluster,
+      summary: true,
+    });
+    const summaries = [
+      summary('test files d0/mod x9', 'd0/mod'),
+      summary('test files d2/mod x3', 'd2/mod'),
+    ];
+
+    // Exactly 25 real nodes + 2 summaries: nothing truncated, summaries ride.
+    const atCap = renderMermaidDiagram([...makeNodes(25), ...summaries], []);
+    expect(atCap.nodes).toHaveLength(27);
+    expect(atCap.meta.truncated).toBe(false);
+    expect(atCap.mermaid).toContain('["test files d0/mod x9"]');
+    expect(atCap.mermaid).toContain('["test files d2/mod x3"]');
+
+    // 30 real nodes + 2 summaries: the cap drops 5 REAL nodes (cluster-
+    // counted honestly) — the summaries stay, explicit clusters group them
+    // into the summarized clusters (no ghost singleton subgraphs).
+    const overCap = renderMermaidDiagram([...makeNodes(30), ...summaries], []);
+    expect(overCap.nodes).toHaveLength(MAX_DIAGRAM_NODES + 2);
+    expect(overCap.meta.truncated).toBe(true);
+    expect(overCap.meta.clusterCounts).toEqual({ 'd2/mod': 5 }); // real omissions only
+    expect(overCap.mermaid).toContain('["test files d0/mod x9"]');
+    expect(overCap.mermaid).toContain('["test files d2/mod x3"]');
+    // The summaries render INSIDE their clusters — pinned at DATA level,
+    // not substring level: the ghost-cluster regression (a summary in its
+    // own singleton subgraph titled by the whole synthetic path) would
+    // leave node.cluster !== 'd2/mod' here while still containing the
+    // 'd2/mod' substring in the mermaid text (4R redesign REA-002 — the
+    // previous substring pin passed with that bug present).
+    const d2Summary = overCap.nodes.find((n) => n.label === 'test files d2/mod x3');
+    expect(d2Summary?.cluster).toBe('d2/mod');
+    const d0Summary = overCap.nodes.find((n) => n.label === 'test files d0/mod x9');
+    expect(d0Summary?.cluster).toBe('d0/mod');
+    // Explicit clusters sanitize at emission (RISK-001 hardening).
+    const hostile = renderMermaidDiagram(
+      [...makeNodes(1), { path: 'sum', role: 'test', cluster: 'evil"quote>dir', summary: true }],
+      [],
+    );
+    expect(hostile.nodes.find((n) => n.label === 'sum')?.cluster).not.toContain('"');
+  });
+
+  it('satisfies the 10k JSON budget on worst-case per-node footprint (25×80-char labels+clusters, one shared cluster)', () => {
+    // Worst case per NODE under the caps: label AND cluster both capped
+    // at 80 chars (a ≥80-char two-segment prefix makes them identical).
+    // With all 25 nodes sharing ONE cluster the serialized diagram
+    // (nodes + edges + mermaid with a single subgraph) still fits.
+    const dir1 = 'x'.repeat(39);
+    const dir2 = 'y'.repeat(40);
+    const nodes: MermaidNodeInput[] = Array.from({ length: MAX_DIAGRAM_NODES }, (_, i) =>
+      node(`${dir1}/${dir2}/f${i}${'z'.repeat(60)}.ts`, i === 0 ? 'changed' : 'dependent'),
+    );
+    const edges: MermaidEdgeInput[] = [];
+    for (let i = 0; i < MAX_DIAGRAM_NODES && edges.length < MAX_DIAGRAM_EDGES; i++) {
+      for (let j = 0; j < MAX_DIAGRAM_NODES && edges.length < MAX_DIAGRAM_EDGES; j++) {
+        if (i !== j) edges.push(edge(nodes[i]!.path, nodes[j]!.path));
+      }
+    }
+    const diagram = renderMermaidDiagram(nodes, edges);
+    for (const n of diagram.nodes) {
+      expect(n.label).toHaveLength(MAX_DIAGRAM_LABEL_CHARS);
+      expect(n.cluster).toHaveLength(MAX_DIAGRAM_LABEL_CHARS);
+    }
+    expect(new Set(diagram.nodes.map((n) => n.cluster)).size).toBe(1);
+    expect(JSON.stringify(diagram).length).toBeLessThanOrEqual(BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS);
+    expect(() => assertDiagramJsonBudget(diagram)).not.toThrow();
+  });
+
+  it('25 DISTINCT 80-char clusters exceed the 10k budget → the guard throws (builder degrades instead)', () => {
+    // Single-slash paths return themselves as the cluster, so 25 such
+    // files produce 25 unique 80-char cluster strings — repeated in the
+    // JSON node records AND as 25 subgraph titles in the mermaid. That
+    // pathological shape blows past the budget at RENDERER level: the
+    // renderer never degrades on its own, the budget guard throws, and
+    // the Slice-2 builder catches the size itself and returns undefined
+    // (pinned as RES-001 in diagram-summary.test.ts).
     const longDir = 'x'.repeat(40);
     const nodes: MermaidNodeInput[] = Array.from({ length: MAX_DIAGRAM_NODES }, (_, i) =>
       node(`${longDir}/n${i}${'y'.repeat(70)}.ts`, i === 0 ? 'changed' : 'dependent'),
@@ -313,9 +401,9 @@ describe('renderMermaidDiagram — caps (D2, defensive)', () => {
       }
     }
     const diagram = renderMermaidDiagram(nodes, edges);
-    const size = JSON.stringify(diagram).length;
-    expect(size).toBeLessThanOrEqual(BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS);
-    expect(() => assertDiagramJsonBudget(diagram)).not.toThrow();
+    expect(new Set(diagram.nodes.map((n) => n.cluster)).size).toBe(MAX_DIAGRAM_NODES);
+    expect(JSON.stringify(diagram).length).toBeGreaterThan(BLAST_RADIUS_DIAGRAM_MAX_JSON_CHARS);
+    expect(() => assertDiagramJsonBudget(diagram)).toThrow(/JSON budget/);
   });
 });
 
