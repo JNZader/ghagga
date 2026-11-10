@@ -10,7 +10,12 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { runTools } from '../../orchestrator.js';
 import type { ExecOptions, ExecutionContext, RawToolOutput } from '../../types.js';
-import { assertSemgrepSucceeded, mapSemgrepSeverity, parseSemgrepOutput, semgrepPlugin } from '../semgrep.js';
+import {
+  assertSemgrepSucceeded,
+  mapSemgrepSeverity,
+  parseSemgrepOutput,
+  semgrepPlugin,
+} from '../semgrep.js';
 
 // ─── Mock ExecutionContext helper ───────────────────────────────
 
@@ -166,7 +171,13 @@ describe('semgrepPlugin.run failure surfacing (D4)', () => {
   it('does NOT reject on errors when results are also present (partial scan still reported)', async () => {
     const ctx = makeScanCtx({
       stdout: JSON.stringify({
-        results: [{ path: '/workspace/src/a.ts', start: { line: 1 }, extra: { severity: 'ERROR', message: 'x' } }],
+        results: [
+          {
+            path: '/workspace/src/a.ts',
+            start: { line: 1 },
+            extra: { severity: 'ERROR', message: 'x' },
+          },
+        ],
         errors: [{ message: 'one config failed to load' }],
       }),
       stderr: '',

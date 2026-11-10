@@ -170,7 +170,9 @@ describe('prompt constants', () => {
     // Before D5 the prompt offered only PASSED/FAILED while the parser
     // silently defaulted unparseable output to NEEDS_HUMAN_REVIEW.
     expect(SIMPLE_REVIEW_SYSTEM).toContain('STATUS: [PASSED | FAILED | NEEDS_HUMAN_REVIEW]');
-    expect(SIMPLE_REVIEW_SYSTEM).toContain('Use STATUS: NEEDS_HUMAN_REVIEW when findings need human judgment.');
+    expect(SIMPLE_REVIEW_SYSTEM).toContain(
+      'Use STATUS: NEEDS_HUMAN_REVIEW when findings need human judgment.',
+    );
   });
 
   it('WORKFLOW_SCOPE_SYSTEM contains scope-related content', () => {
