@@ -13,7 +13,7 @@ import type { EntityChange, EntityChangeKind, SemanticDiff } from './semantic-di
 import { initializeDefaultTools } from './tools/plugins/index.js';
 import { toolRegistry } from './tools/registry.js';
 import { isToolRegistryEnabled } from './tools/runner.js';
-import type { ReviewResult, ReviewStatus } from './types.js';
+import type { ReviewFinding, ReviewResult, ReviewStatus } from './types.js';
 
 // ─── File Stats Types ───────────────────────────────────────────
 
@@ -127,6 +127,31 @@ export const SEVERITY_EMOJI: Record<string, string> = {
 export const REVIEW_COMMENT_MARKER = '<!-- ghagga-review -->';
 
 const STATS_BAR_BLOCKS = 20;
+
+/**
+ * Max findings rendered in the visible table before the rest collapse into a
+ * single `<details>` block (comment-format-signal Fix 1). Whole-repo static
+ * runs can emit hundreds of rows for a one-file PR (PR #479: 286 rows,
+ * 50KB); the top slice by severity stays visible, everything else is one
+ * click away. ≤ this many findings renders EXACTLY the pre-change per-tool
+ * output (byte-identical backward compat for small reviews).
+ */
+const MAX_VISIBLE_FINDINGS = 10;
+/** Cap for findings INSIDE the collapsed details block (byte budget). */
+const MAX_DETAILS_FINDINGS = 40;
+
+/**
+ * Severity rank for the visible-table ordering: critical > high > medium >
+ * low > info — mirrors `SEVERITY_ORDER` in `tools/runner.ts` (the existing
+ * severity sort). Unknown severities rank with `info`.
+ */
+const SEVERITY_RANK: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
 
 /**
  * Build a visual emoji stats bar showing additions vs deletions.
@@ -498,6 +523,137 @@ export function formatBlastRadiusSection(diagram: BlastRadiusDiagram | undefined
   return section;
 }
 
+// ─── AI summary heading normalization (comment-format-signal Fix 3) ──
+
+/**
+ * ATX heading marker: up to 3 leading spaces (GitHub-legal indentation),
+ * 1-6 `#`, then a space or end of line (`#nospace` is not a heading).
+ */
+const ATX_HEADING_RE = /^( {0,3})(#{1,6})(?: |$)/;
+
+/** Code-fence delimiter: up to 3 leading spaces, then 3+ backticks or tildes. */
+const FENCE_DELIM_RE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * Demote every markdown heading in `text` by exactly one level
+ * (`#` → `##`, `##` → `###`, `###` → `####`), capped at `####` — headings
+ * already at `####` or deeper stay unchanged.
+ *
+ * Why (comment-format-signal Fix 3): model summaries regularly open with
+ * their own `## Review Findings`-style headings. Inside the comment those
+ * render ABOVE the bot's own `### Summary` section (h2 > h3), breaking the
+ * comment's outline (PR #479: `## Review Findings` nested inside
+ * `### Summary`). Demoting by exactly one level nests model headings
+ * deterministically under the comment's section hierarchy — pure
+ * post-processing, no prompt changes.
+ *
+ * Fence-aware: heading-like text inside ```/~~~ code fences is never
+ * demoted (it is code, not structure). An unclosed fence protects
+ * everything after it — the conservative direction (no demotion).
+ */
+export function demoteMarkdownHeadings(text: string): string {
+  if (!text) return text;
+
+  const lines = text.split('\n');
+  let fenceChar: '`' | '~' | null = null;
+
+  const demoted = lines.map((line) => {
+    const fence = FENCE_DELIM_RE.exec(line);
+
+    if (fenceChar !== null) {
+      // Inside a fence: lines stay untouched. A run of the SAME marker char
+      // (3+), with nothing but whitespace around it, closes the fence.
+      const marker = fence?.[1] ?? '';
+      if (marker.length >= 3 && marker[0] === fenceChar && line.trim() === marker) {
+        fenceChar = null;
+      }
+      return line;
+    }
+
+    if (fence) {
+      fenceChar = fence[1][0] as '`' | '~';
+      return line;
+    }
+
+    const heading = ATX_HEADING_RE.exec(line);
+    // Cap: #### and deeper stay; #/##/### gain one level.
+    if (heading && heading[2].length <= 3) {
+      return `${heading[1]}#${line.slice(heading[1].length)}`;
+    }
+    return line;
+  });
+
+  return demoted.join('\n');
+}
+
+// ─── Findings rendering (comment-format-signal Fix 1) ───────────
+
+/**
+ * Render one sanitized finding-table row (the exact per-row format the
+ * comment has always used). ALL finding fields are LLM/tool-derived (and
+ * ultimately derived from the attacker-controlled PR diff) — sanitize every
+ * cell, not just the message.
+ */
+function renderFindingRow(finding: ReviewFinding): string {
+  const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
+  const severity = sanitizeTableCell(String(finding.severity));
+  const category = sanitizeTableCell(String(finding.category));
+  const location = sanitizeTableCell(
+    finding.line ? `${finding.file}:${finding.line}` : finding.file,
+  );
+  const message = sanitizeTableCell(finding.message);
+  return `| ${emoji} ${severity} | ${category} | ${location} | ${message} |\n`;
+}
+
+/**
+ * Render findings as per-tool grouped tables — the comment's original
+ * findings format (group label + count, table header, rows, blank line).
+ *
+ * Used verbatim for ≤ `MAX_VISIBLE_FINDINGS` findings (byte-identical to
+ * the pre-Fix-1 output) and for the collapsed remainder when collapsing
+ * (grouping headers stay in today's format, just inside `<details>`).
+ *
+ * `sourceLabels` values are trusted literals; unknown sources come from
+ * finding.source (LLM/tool output) and must be sanitized — the fallback
+ * does that here.
+ */
+function renderFindingGroups(
+  grouped: Map<string, ReviewFinding[]>,
+  renderOrder: string[],
+  sourceLabels: Record<string, string>,
+): string {
+  let out = '';
+  for (const src of renderOrder) {
+    const findings = grouped.get(src);
+    if (!findings || findings.length === 0) continue;
+
+    const label = sourceLabels[src] ?? sanitizeTableCell(src);
+    out += `**${label} (${findings.length})**\n`;
+    out += `| Severity | Category | File | Message |\n`;
+    out += `|----------|----------|------|----------|\n`;
+    for (const finding of findings) {
+      out += renderFindingRow(finding);
+    }
+    out += '\n';
+  }
+  return out;
+}
+
+/** Group findings by source, preserving first-seen source and finding order. */
+function groupFindingsBySource(findings: ReviewFinding[]): Map<string, ReviewFinding[]> {
+  const grouped = new Map<string, ReviewFinding[]>();
+  for (const finding of findings) {
+    const src = finding.source ?? 'ai';
+    const bucket = grouped.get(src);
+    if (bucket) {
+      bucket.push(finding);
+    } else {
+      grouped.set(src, [finding]);
+    }
+  }
+  return grouped;
+}
+
 // ─── Format Options ─────────────────────────────────────────────
 
 export interface FormatReviewCommentOptions {
@@ -554,8 +710,19 @@ export function formatReviewComment(
   comment += '\n';
 
   // Summary — raw LLM output derived from the (attacker-controlled) PR diff.
-  // Sanitized to block mention spam, hidden HTML comments, and flooding.
-  comment += `### Summary\n${sanitizeMarkdownText(result.summary, 2000)}\n\n`;
+  // Sanitized to block mention spam, hidden HTML comments, and flooding;
+  // headings demoted one level afterward so model headings nest under the
+  // comment's `### Summary` section instead of escaping it (Fix 3). A
+  // heading-free summary is byte-identical to the pre-Fix-3 output.
+  comment += `### Summary\n${demoteMarkdownHeadings(sanitizeMarkdownText(result.summary, 2000))}\n\n`;
+
+  // Blast-radius diagram (blast-radius-diagram, repositioned by
+  // comment-format-signal Fix 2): renders zero bytes when the metadata
+  // carries no diagram (counts-only or no graph) — placed immediately after
+  // the Summary, before the What-changed/Findings sections (it was buried
+  // at the end of the comment, after Files Changed). Section content is
+  // unchanged.
+  comment += formatBlastRadiusSection(result.metadata.blastRadius?.diagram);
 
   // "What changed" entity-level section (design D4) — placed between Summary
   // and Findings. Returns '' (silent degradation) when semanticDiff is absent
@@ -568,12 +735,7 @@ export function formatReviewComment(
     comment += `### Findings (${result.findings.length})\n\n`;
 
     // Group findings by source
-    const grouped = new Map<string, typeof result.findings>();
-    for (const finding of result.findings) {
-      const src = finding.source ?? 'ai';
-      if (!grouped.has(src)) grouped.set(src, []);
-      grouped.get(src)?.push(finding);
-    }
+    const grouped = groupFindingsBySource(result.findings);
 
     // Render order: static tools first, then AI
     // Generate SOURCE_LABELS dynamically from registry when available
@@ -605,31 +767,57 @@ export function formatReviewComment(
     }
     renderOrder.push('ai');
 
-    for (const src of renderOrder) {
-      const findings = grouped.get(src);
-      if (!findings || findings.length === 0) continue;
+    if (result.findings.length <= MAX_VISIBLE_FINDINGS) {
+      // Small reviews: EXACTLY the historical per-tool output (byte-identical
+      // backward compat — comment-format-signal Fix 1 hard rule).
+      comment += renderFindingGroups(grouped, renderOrder, SOURCE_LABELS);
+    } else {
+      // Fix 1: top slice by severity stays visible (merged across tools, with
+      // a Source column since the per-tool headers no longer sit next to
+      // every row); ALL remaining findings collapse into ONE details block,
+      // still grouped per tool in today's format.
+      const ranked = [...result.findings].sort(
+        (a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4),
+      );
+      const visible = ranked.slice(0, MAX_VISIBLE_FINDINGS);
+      const rest = ranked.slice(MAX_VISIBLE_FINDINGS);
 
-      // Registry labels are trusted literals; unknown sources come from
-      // finding.source (LLM/tool output) and must be sanitized.
-      const label = SOURCE_LABELS[src] ?? sanitizeTableCell(src);
-      comment += `**${label} (${findings.length})**\n`;
-      comment += `| Severity | Category | File | Message |\n`;
-      comment += `|----------|----------|------|----------|\n`;
-
-      for (const finding of findings) {
+      comment += `**\ud83c\udfaf Top ${visible.length} findings (by severity)**\n`;
+      comment += `| Severity | Source | Category | File | Message |\n`;
+      comment += `|----------|--------|----------|------|----------|\n`;
+      for (const finding of visible) {
         const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
-        // ALL finding fields are LLM/tool-derived (and ultimately derived
-        // from the attacker-controlled PR diff) — sanitize every cell, not
-        // just the message.
         const severity = sanitizeTableCell(String(finding.severity));
+        // Same trusted-literal-or-sanitized label as the group headers.
+        const src = finding.source ?? 'ai';
+        const sourceLabel = SOURCE_LABELS[src] ?? sanitizeTableCell(src);
         const category = sanitizeTableCell(String(finding.category));
         const location = sanitizeTableCell(
           finding.line ? `${finding.file}:${finding.line}` : finding.file,
         );
         const message = sanitizeTableCell(finding.message);
-        comment += `| ${emoji} ${severity} | ${category} | ${location} | ${message} |\n`;
+        comment += `| ${emoji} ${severity} | ${sourceLabel} | ${category} | ${location} | ${message} |\n`;
       }
       comment += '\n';
+
+      comment += `<details>\n`;
+      // CAP the details block too: the whole comment must stay far from
+      // GitHub's 65,536-char limit — collapsing alone hides bytes visually
+      // but the body still carries them. 40 more inside, the remainder
+      // counted but suppressed.
+      const detailsFindings = rest.slice(0, MAX_DETAILS_FINDINGS);
+      const suppressed = rest.length - detailsFindings.length;
+      const detailsLabel =
+        suppressed > 0
+          ? `\ud83d\udcca +${rest.length} more findings (all severities; ${suppressed} lowest-severity suppressed for comment size)`
+          : `\ud83d\udcca +${rest.length} more findings (all severities)`;
+      comment += `<summary>${detailsLabel}</summary>\n\n`;
+      comment += renderFindingGroups(
+        groupFindingsBySource(detailsFindings),
+        renderOrder,
+        SOURCE_LABELS,
+      );
+      comment += `</details>\n\n`;
     }
   }
 
@@ -658,11 +846,6 @@ export function formatReviewComment(
   if (options?.fileList && options.fileList.length > 0) {
     comment += formatFileCategorySummary(options.fileList);
   }
-
-  // Blast-radius diagram (blast-radius-diagram): renders zero bytes when
-  // the metadata carries no diagram (counts-only or no graph) — placed
-  // after Files Changed, before the cost footer (design D3).
-  comment += formatBlastRadiusSection(result.metadata.blastRadius?.diagram);
 
   // Cost footer — pass the measured input/output split when the review
   // metadata carries one (graph-context-retrieval T5.5); otherwise the

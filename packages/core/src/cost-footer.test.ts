@@ -123,31 +123,53 @@ describe('formatCostFooter', () => {
   });
 });
 
-// ─── Measured input/output split (graph-context-retrieval T5.5) ──
+// ─── Measured input/output split (graph-context-retrieval T5.5,
+//     honest partial labeling per comment-format-signal Fix 4) ──
 
 describe('cost footer measured split', () => {
-  it('measured row shows the measured split and no estimation marker', () => {
+  it('fully-measured row shows the measured split and no estimation marker', () => {
     const cost = calculateReviewCost(10_000, 'claude-sonnet-4', {
       inputTokens: 7_000,
       outputTokens: 3_000,
     });
-    expect(cost.splitMeasured).toBe(true);
+    expect(cost.inputMeasured).toBe(true);
+    expect(cost.outputMeasured).toBe(true);
     const footer = formatCostFooter(cost);
     expect(footer).toContain('in 7K / out 3K');
-    expect(footer).not.toContain('estimated 70/30');
+    expect(footer).not.toContain('~');
+    expect(footer).not.toContain('estimated');
   });
 
   it('unmeasured row keeps the heuristic and is labeled "(estimated 70/30)"', () => {
     const cost = calculateReviewCost(10_000, 'claude-sonnet-4');
-    expect(cost.splitMeasured).toBe(false);
+    expect(cost.inputMeasured).toBe(false);
+    expect(cost.outputMeasured).toBe(false);
     const footer = formatCostFooter(cost);
     expect(footer).toContain('in 7K / out 3K');
     expect(footer).toContain('estimated 70/30');
+    expect(footer).not.toContain('~');
   });
 
-  it('partial measurement (input only) still counts as measured for the split label', () => {
+  it('partial measurement (input only) marks the output as estimated (REA-003)', () => {
+    // The PR #479 defect: a partially-measured split rendered identically to
+    // a measured one. Now the estimated side carries ~ and the trailing tag
+    // names WHICH side is estimated.
     const cost = calculateReviewCost(10_000, 'claude-sonnet-4', { inputTokens: 7_000 });
-    expect(cost.splitMeasured).toBe(true);
-    expect(cost.estimatedOutputTokens).toBe(3_000);
+    expect(cost.inputMeasured).toBe(true);
+    expect(cost.outputMeasured).toBe(false);
+    expect(cost.estimatedOutputTokens).toBe(3_000); // 70/30 heuristic fallback
+    const footer = formatCostFooter(cost);
+    expect(footer).toContain('in 7K / out ~3K, output estimated');
+    expect(footer).not.toContain('estimated 70/30');
+  });
+
+  it('partial measurement (output only) marks the input as estimated', () => {
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4', { outputTokens: 3_000 });
+    expect(cost.inputMeasured).toBe(false);
+    expect(cost.outputMeasured).toBe(true);
+    expect(cost.estimatedInputTokens).toBe(7_000); // 70/30 heuristic fallback
+    const footer = formatCostFooter(cost);
+    expect(footer).toContain('in ~7K / out 3K, input estimated');
+    expect(footer).not.toContain('estimated 70/30');
   });
 });
