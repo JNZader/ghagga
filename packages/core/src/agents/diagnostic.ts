@@ -198,11 +198,19 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
 
   let responseText: string;
   let tokensUsed: number;
+  // review-output-compression T2.2: measured split from the mode's single
+  // generate call — kept undefined when the provider reports none.
+  let splitInput: number | undefined;
+  let splitOutput: number | undefined;
 
   try {
     const callResult = await generateFn(system, prompt);
     responseText = callResult.text;
     tokensUsed = callResult.tokensUsed;
+    if (callResult.inputTokens !== undefined || callResult.outputTokens !== undefined) {
+      splitInput = callResult.inputTokens ?? 0;
+      splitOutput = callResult.outputTokens ?? 0;
+    }
   } catch (_err) {
     const executionTimeMs = Date.now() - startTime;
     emit({
@@ -242,6 +250,14 @@ export async function runDiagnosticReview(input: DiagnosticReviewInput): Promise
 
   // Override mode in metadata
   reviewResult.metadata.mode = 'diagnostic';
+
+  // review-output-compression T2.2: propagate the measured split only when
+  // the provider reported one (hasSplit semantics); tokensUsed stays the
+  // authoritative total either way.
+  if (splitInput !== undefined || splitOutput !== undefined) {
+    reviewResult.metadata.inputTokensUsed = splitInput ?? 0;
+    reviewResult.metadata.outputTokensUsed = splitOutput ?? 0;
+  }
 
   // Parse hypotheses from the response and attach to result
   reviewResult.hypotheses = parseHypotheses(responseText);

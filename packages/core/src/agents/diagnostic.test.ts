@@ -611,3 +611,59 @@ describe('runDiagnosticReview output style calibration', () => {
     expect(system).toBe(PRE_CHANGE_BASELINE);
   });
 });
+
+// ─── Output token split (review-output-compression T2.2) ────────
+
+describe('runDiagnosticReview output token split', () => {
+  function makeCaptureFn(generateOverrides: Partial<Awaited<ReturnType<GenerateTextFn>>> = {}): {
+    calls: Array<{ system: string; prompt: string }>;
+    fn: GenerateTextFn;
+  } {
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const fn: GenerateTextFn = vi.fn(async (system: string, prompt: string) => {
+      calls.push({ system, prompt });
+      return {
+        text: 'STATUS: NEEDS_HUMAN_REVIEW\nSUMMARY: ok.\nFINDINGS:\n',
+        tokensUsed: 900,
+        provider: 'ollama' as const,
+        model: 'llama3',
+        ...generateOverrides,
+      };
+    });
+    vi.mocked(createOllamaGenerateFn).mockReturnValue(fn);
+    return { calls, fn };
+  }
+
+  async function runSplit() {
+    return runDiagnosticReview({
+      diff: '--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b',
+      provider: 'ollama',
+      model: 'llama3',
+      apiKey: 'k',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+    });
+  }
+
+  it('split-reporting provider (ollama usage) sets outputTokensUsed', async () => {
+    makeCaptureFn({ inputTokens: 600, outputTokens: 300 });
+    const result = await runSplit();
+
+    expect(result.metadata.mode).toBe('diagnostic');
+    expect(result.metadata.tokensUsed).toBe(900);
+    expect(result.metadata.inputTokensUsed).toBe(600);
+    expect(result.metadata.outputTokensUsed).toBe(300);
+  });
+
+  it('provider without a split leaves the fields absent and the review succeeds', async () => {
+    makeCaptureFn();
+    const result = await runSplit();
+
+    expect(result.metadata.mode).toBe('diagnostic');
+    expect(result.metadata.tokensUsed).toBe(900);
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+});
