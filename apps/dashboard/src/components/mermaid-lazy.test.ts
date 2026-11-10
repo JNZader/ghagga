@@ -6,8 +6,11 @@
  * import of mermaid anywhere in the entry graph is a spec violation)".
  *
  * Reads the dashboard sources and asserts:
- *   1. `from 'mermaid'` appears ONLY inside `src/components/MermaidDiagram.tsx`
- *      (the module that IS the lazy chunk);
+ *   1. any import of the mermaid package — `from 'mermaid'` (static),
+ *      bare `import 'mermaid'` (side-effect), `import('mermaid')`
+ *      (dynamic), or a deep specifier like `mermaid/dist/…` — appears
+ *      ONLY inside `src/components/MermaidDiagram.tsx` (the module that
+ *      IS the lazy chunk);
  *   2. `pages/Reviews.tsx` references that module ONLY via
  *      `lazy(() => import(…))` — never a static import.
  *
@@ -22,7 +25,7 @@ import { describe, expect, it } from 'vitest';
 
 const SRC_DIR = join(import.meta.dirname, '..'); // src/ — this test lives in src/components
 
-/** Recursively collect dashboard source files (.ts/.tsx, tests excluded). */
+/** Recursively collect dashboard source files (.ts/.tsx/.js/.jsx, tests excluded). */
 function collectSources(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir).sort()) {
@@ -31,8 +34,8 @@ function collectSources(dir: string): string[] {
       files.push(...collectSources(full));
       continue;
     }
-    if (!/\.(ts|tsx)$/.test(entry)) continue;
-    if (/\.(test|spec)\.(ts|tsx)$/.test(entry)) continue;
+    if (!/\.(ts|tsx|js|jsx)$/.test(entry)) continue;
+    if (/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(entry)) continue;
     files.push(full);
   }
   return files;
@@ -49,8 +52,12 @@ describe('mermaid lazy-loading discipline (dashboard-ui spec)', () => {
     const offenders: string[] = [];
     for (const file of sources) {
       const content = readFileSync(file, 'utf-8');
-      // Any import/export-from specifier resolving to the mermaid package.
-      const importsMermaid = /(?:from\s+|import\s*\(\s*)['"]mermaid['"]/.test(content);
+      // Any import form resolving to the mermaid package: static
+      // `… from 'mermaid'`, bare side-effect `import 'mermaid'`, dynamic
+      // `import('mermaid')`, and deep specifiers (`'mermaid/dist/…'`) —
+      // all bundle the package into whatever chunk statically reaches them.
+      const importsMermaid =
+        /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"]mermaid(?:\/[^'"]*)?['"]/.test(content);
       if (!importsMermaid) continue;
       if (file.endsWith(join('components', 'MermaidDiagram.tsx'))) continue;
       offenders.push(file);

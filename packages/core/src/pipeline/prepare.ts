@@ -251,11 +251,21 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
   // step 2.6, see BlastRadiusOutcome.graph). Auto mode (setting undefined)
   // reuses whatever blast-radius loaded — it never triggers a load, so a
   // no-graph review stays byte-identical to the pre-feature behavior.
-  // Only an EXPLICIT enableGraphContext: true with blast-radius unable to
-  // supply a graph performs its own (single) load.
+  // Only an EXPLICIT enableGraphContext: true with blast-radius NOT having
+  // attempted a load itself (disabled, or no loader) performs its own
+  // (single) load — a loader that already returned null (oversize/malformed
+  // — deterministic for the run) or threw is NEVER retried: a retry would
+  // only duplicate the loader's warnings and I/O (FilesystemGraphLoader
+  // has no cache) and cannot change the outcome.
+  const blastAttemptedGraphLoad = Boolean(input.settings.enableBlastRadius) && !!input.graphLoader;
   let loadedGraph = blast.graph;
   let loadedGraphMetadata = blast.graphMetadata;
-  if (input.settings.enableGraphContext === true && !loadedGraph && input.graphLoader) {
+  if (
+    input.settings.enableGraphContext === true &&
+    !loadedGraph &&
+    input.graphLoader &&
+    !blastAttemptedGraphLoad
+  ) {
     try {
       const graph = await input.graphLoader.load();
       if (graph) {
