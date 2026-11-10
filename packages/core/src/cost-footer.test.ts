@@ -172,4 +172,32 @@ describe('cost footer measured split', () => {
     expect(footer).toContain('in ~7K / out 3K, input estimated');
     expect(footer).not.toContain('estimated 70/30');
   });
+
+  // ─── Gap-voice rows (review-output-compression T2.4) ───────────
+  // simple/diagnostic/fan-out now propagate the measured split into
+  // metadata (T2.1-T2.3); the footer's three split states must apply to
+  // them exactly as they already do for workflow/consensus.
+
+  it('gap voices with a measured split render the output side measured (no 70/30 label)', () => {
+    for (const _mode of ['simple', 'diagnostic', 'fan-out'] as const) {
+      const cost = calculateReviewCost(10_000, 'claude-sonnet-4', {
+        inputTokens: 7_000,
+        outputTokens: 3_000,
+      });
+      expect(cost.inputMeasured).toBe(true);
+      expect(cost.outputMeasured).toBe(true);
+      const footer = formatCostFooter(cost);
+      expect(footer).toContain('in 7K / out 3K');
+      expect(footer).not.toContain('estimated 70/30');
+      expect(footer).not.toContain('~');
+    }
+  });
+
+  it('gap voices on a no-split provider (gateway) fall back to the heuristic with estimated labeling', () => {
+    const cost = calculateReviewCost(10_000, 'claude-sonnet-4');
+    expect(cost.inputMeasured).toBe(false);
+    expect(cost.outputMeasured).toBe(false);
+    const footer = formatCostFooter(cost);
+    expect(footer).toContain('in 7K / out 3K, estimated 70/30');
+  });
 });
