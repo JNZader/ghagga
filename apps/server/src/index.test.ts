@@ -312,6 +312,9 @@ function installLifecycleHarness(closeWorker: () => Promise<void>): LifecycleHar
   const createWorker = vi.fn();
   class FakeWorker {
     readonly close = closeWorkerSpy;
+    // Workers register event handlers (the digest worker listens for 'failed');
+    // record but ignore them.
+    readonly on = vi.fn();
 
     constructor(...args: unknown[]) {
       createWorker(...args);
@@ -446,10 +449,10 @@ describe('Explanation worker lifecycle', () => {
     return harness;
   }
 
-  it('starts exactly one explanation worker during entrypoint import', async () => {
+  it('starts exactly one explanation worker and one digest worker during entrypoint import', async () => {
     const harness = await importEntrypoint(async () => {});
 
-    expect(harness.createWorker).toHaveBeenCalledOnce();
+    expect(harness.createWorker).toHaveBeenCalledTimes(2);
     expect(harness.createWorker).toHaveBeenCalledWith(
       'explanation',
       expect.any(Function),
@@ -458,18 +461,35 @@ describe('Explanation worker lifecycle', () => {
         concurrency: 1,
       }),
     );
+    // Nightly digest worker (nightly-health-digest D3/D8): in-process, no env gate.
+    expect(harness.createWorker).toHaveBeenCalledWith(
+      'digest',
+      expect.any(Function),
+      expect.objectContaining({
+        connection: expect.any(Object),
+        concurrency: 2,
+      }),
+    );
     expect(harness.closeWorker).not.toHaveBeenCalled();
     expect(harness.getSignalHandler()).toEqual(expect.any(Function));
     expect(harness.getUnexpectedFetchCalls()).toBe(0);
-    expect(harness.getRedisConstructionCalls()).toBe(4);
+    // 4 pre-digest clients (review queue, issue-analysis queue, explanation
+    // worker, shared) + the digest queue connection.
+    expect(harness.getRedisConstructionCalls()).toBe(5);
   });
 
   it('waits for worker closure before exiting successfully', async () => {
+    // Every worker's close gate must be released by one signal (explanation +
+    // digest workers share the harness close fn).
+    const closeResolvers: Array<() => void> = [];
     let resolveClose: (() => void) | undefined;
     const harness = await importEntrypoint(
       () =>
         new Promise<void>((resolve) => {
-          resolveClose = resolve;
+          closeResolvers.push(resolve);
+          resolveClose = () => {
+            for (const r of closeResolvers) r();
+          };
         }),
     );
 
@@ -479,11 +499,15 @@ describe('Explanation worker lifecycle', () => {
     expect(harness.exit).not.toHaveBeenCalledWith(0);
 
     resolveClose?.();
+    // Drain the extra shutdown-chain stages (explanation → digest → queues →
+    // redis → exit): each advance flushes one round of pending microtasks.
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(harness.closeWorker).toHaveBeenCalledOnce();
+    // Explanation worker + digest worker both close before the queues/exit.
+    expect(harness.closeWorker).toHaveBeenCalledTimes(2);
     expect(harness.exit).toHaveBeenCalledWith(0);
-    expect(harness.getRedisQuitCalls()).toBe(4);
+    expect(harness.getRedisQuitCalls()).toBe(5);
     expect(harness.getRedisDisconnectCalls()).toBe(0);
   });
 
@@ -498,7 +522,7 @@ describe('Explanation worker lifecycle', () => {
     harness.getSignalHandler()?.();
     await vi.runAllTicks();
 
-    expect(harness.closeWorker).toHaveBeenCalledOnce();
+    expect(harness.closeWorker).toHaveBeenCalledTimes(2);
     expect(harness.exit).not.toHaveBeenCalledWith(0);
     expect(unhandledRejections).toEqual([]);
     process.removeListener('unhandledRejection', onUnhandledRejection);
@@ -511,7 +535,7 @@ describe('Explanation worker lifecycle', () => {
     await vi.advanceTimersByTimeAsync(30_000);
 
     expect(harness.closeServer).toHaveBeenCalledOnce();
-    expect(harness.closeWorker).toHaveBeenCalledOnce();
+    expect(harness.closeWorker).toHaveBeenCalledTimes(2);
     expect(harness.exit).toHaveBeenCalledWith(1);
     expect(harness.exit).not.toHaveBeenCalledWith(0);
   });

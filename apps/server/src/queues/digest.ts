@@ -195,7 +195,7 @@ export async function reconcileDigestSchedulerForRepo(
   repositoryId: number,
 ): Promise<void> {
   const repo = await getRepositoryById(db, repositoryId);
-  if (!repo || !repo.isActive) return;
+  if (!repo?.isActive) return;
   await applyDigestSchedulerForRepo(db, queue, repo);
 }
 

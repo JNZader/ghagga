@@ -191,8 +191,9 @@ describe('runDigestForRepository', () => {
     // SAME issue number updated in place with the SAME marker-headed body.
     const update = forge.updateDigestIssue as ReturnType<typeof vi.fn>;
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update.mock.calls[0]?.[0]).toBe(42);
-    expect((update.mock.calls[0]?.[1] as string).startsWith('<!-- ghagga-digest -->')).toBe(true);
+    const updateCall = update.mock.calls[0] as [number, string];
+    expect(updateCall[0]).toBe(42);
+    expect(updateCall[1].startsWith('<!-- ghagga-digest -->')).toBe(true);
     expect(forge.createDigestIssue).not.toHaveBeenCalled();
     // The successor row is inserted via rotate — never a second open row.
     expect(mockRotateOpenDigest).toHaveBeenCalledWith(

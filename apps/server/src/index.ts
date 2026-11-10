@@ -346,9 +346,7 @@ function shutdown(): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = new Promise((resolve) => {
     server.close(() => {
-      void explanationWorker
-        .close()
-        .then(() => digestWorker.close())
+      void Promise.all([explanationWorker.close(), digestWorker.close()])
         .then(() =>
           Promise.all([
             closeReviewQueue(),
