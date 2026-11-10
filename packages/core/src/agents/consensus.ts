@@ -328,8 +328,13 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
   let totalTokens = 0;
   // graph-context-retrieval T5.2: measured split aggregated alongside
   // tokensUsed; set on metadata only when a vote actually reported it.
+  // review-output-compression per-side guard: `?? 0` on a one-sided split
+  // wrote a MEASURED ZERO for the missing side — each side is tracked and
+  // summed only when some vote actually reported that side.
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let inputReported = false;
+  let outputReported = false;
   let splitReported = false;
 
   for (let i = 0; i < results.length; i++) {
@@ -340,10 +345,15 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
     if (result.status === 'fulfilled') {
       votes.push(result.value.vote);
       totalTokens += result.value.tokensUsed;
-      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+      if (result.value.inputTokens !== undefined) {
+        inputReported = true;
         splitReported = true;
-        totalInputTokens += result.value.inputTokens ?? 0;
-        totalOutputTokens += result.value.outputTokens ?? 0;
+        totalInputTokens += result.value.inputTokens;
+      }
+      if (result.value.outputTokens !== undefined) {
+        outputReported = true;
+        splitReported = true;
+        totalOutputTokens += result.value.outputTokens;
       }
       const v = result.value.vote;
       emit({
@@ -398,8 +408,13 @@ export async function runConsensusReview(input: ConsensusReviewInput): Promise<R
       provider: votes[0]?.provider ?? models[0]?.provider,
       model: votes[0]?.model ?? models[0]?.model,
       tokensUsed: totalTokens,
+      // Mirror of simple.ts per-side write: a side is exposed as measured only
+      // when at least one vote reported it — never a `?? 0` measured zero.
       ...(splitReported
-        ? { inputTokensUsed: totalInputTokens, outputTokensUsed: totalOutputTokens }
+        ? {
+            ...(inputReported ? { inputTokensUsed: totalInputTokens } : {}),
+            ...(outputReported ? { outputTokensUsed: totalOutputTokens } : {}),
+          }
         : {}),
       executionTimeMs,
       toolsRun: [],
