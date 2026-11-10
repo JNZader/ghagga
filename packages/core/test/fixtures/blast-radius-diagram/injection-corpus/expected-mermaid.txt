@@ -1,7 +1,7 @@
-flowchart TD
-  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
-  classDef dependent fill:#dbeafe,stroke:#2563eb
-  classDef test fill:#dcfce7,stroke:#16a34a
+flowchart LR
+  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff
+  classDef dependent stroke:#64748b
+  classDef test stroke:#94a3b8,stroke-dasharray:5 5
   subgraph c0["(root)"]
     n0["_img src_x_.ts"]
     n1["a--_b.ts"]

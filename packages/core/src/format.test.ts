@@ -1371,7 +1371,7 @@ describe('formatBlastRadiusSection + formatReviewComment — blast-radius diagra
     const arrowLines = fence.split('\n').filter((l) => l.includes('-->'));
     expect(arrowLines.every((l) => /^ {2}n\d+ --> n\d+$/.test(l))).toBe(true);
     // The block stays structurally renderable: one header, balanced fences.
-    expect(fence.startsWith('flowchart TD')).toBe(true);
+    expect(fence.startsWith('flowchart LR')).toBe(true);
   });
 
   it('S10: 25-of-40 truncation renders at most 25 nodes and a `+15 more` indicator', () => {

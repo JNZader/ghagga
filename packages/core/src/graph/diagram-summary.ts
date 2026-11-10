@@ -129,20 +129,68 @@ export function buildBlastRadiusDiagramSummary(
   }
 
   // ── Survivor selection (D5): changed first (path asc), then the rest
-  // by (degree desc, path asc) — degree over the FULL pool. ───────────
+  // by (degree desc, path asc) — degree over the FULL pool. TEST files
+  // do NOT consume the node budget: they render as one summary node per
+  // cluster ("test files packages/core x9") instead of individual nodes
+  // — in test-heavy repos they drowned the production graph (the demo PR
+  // showed 16 of 25 nodes as tests). Changed files that ARE tests keep
+  // their own node (role precedence changed > test). ──────────────────
   const rest = poolFiles
     .filter((f) => !changedSet.has(f))
     .sort((a, b) => (degreeByFile.get(b) ?? 0) - (degreeByFile.get(a) ?? 0) || comparePaths(a, b));
-  const survivors = [...changed, ...rest].slice(0, MAX_DIAGRAM_NODES);
+  const prodRest = rest.filter((f) => !testSet.has(f));
+  const testRest = rest.filter((f) => testSet.has(f));
+  const survivors = [...changed, ...prodRest].slice(0, MAX_DIAGRAM_NODES);
   const survivorSet = new Set(survivors);
   // Everything the selection dropped — changed files beyond the cap
   // INCLUDED (4R RISK-001: a >25-changed-file PR used to drop them
   // silently, so `truncated` stayed false and the legend claimed
-  // completeness).
+  // completeness). Tests are never cap-omitted (they are summarized, not
+  // individually rendered).
   const omitted = [
     ...changed.slice(MAX_DIAGRAM_NODES),
-    ...rest.slice(Math.max(0, MAX_DIAGRAM_NODES - changed.length)),
+    ...prodRest.slice(Math.max(0, MAX_DIAGRAM_NODES - changed.length)),
   ];
+
+  // ── Test summary nodes: one per cluster, top 5 by (count desc, cluster
+  // asc) — beyond 5 clusters the rest fold into one paren-free
+  // "N more clusters" summary (parens are outside the sanitizer allowlist
+  // and would mangle to underscores — 4R redesign REL-002). Synthetic
+  // paths (never graph nodes, never edge endpoints — the edge loop skips
+  // files absent from `graph.nodes`), sorted deterministically after the
+  // real files. ───────────────────────────────────────────────────────
+  const testCountByCluster = new Map<string, number>();
+  for (const file of testRest) {
+    const cluster = clusterOfPath(file);
+    testCountByCluster.set(cluster, (testCountByCluster.get(cluster) ?? 0) + 1);
+  }
+  const clustersByCount = [...testCountByCluster.entries()].sort(
+    ([aName, aCount], [bName, bCount]) => bCount - aCount || comparePaths(aName, bName),
+  );
+  const testSummaryInputs: MermaidNodeInput[] = clustersByCount
+    .slice(0, 5)
+    .map(([cluster, count]) => ({
+      path: `test files ${cluster} x${count}`,
+      role: 'test' as const,
+      // First-class summary: render INSIDE the cluster it summarizes
+      // (never a ghost singleton) and survive the renderer's cap.
+      cluster,
+      summary: true,
+    }));
+  const foldedClusters = Math.max(0, clustersByCount.length - 5);
+  const dominantCluster = clustersByCount[0]?.[0];
+  if (foldedClusters > 0 && dominantCluster !== undefined) {
+    const foldedCount = clustersByCount.slice(5).reduce((sum, [, count]) => sum + count, 0);
+    // No parens in the label — the sanitizer's allowlist would mangle
+    // them into underscores (4R redesign REL-002). The folded summary
+    // rides with the dominant cluster (first by count).
+    testSummaryInputs.push({
+      path: `test files ${foldedClusters} more clusters x${foldedCount}`,
+      role: 'test' as const,
+      cluster: dominantCluster,
+      summary: true,
+    });
+  }
 
   // ── Roles (precedence changed > test > dependent). ─────────────────
   const roleOf = (path: string): BlastRadiusDiagramNodeRole => {
@@ -150,10 +198,10 @@ export function buildBlastRadiusDiagramSummary(
     if (testSet.has(path)) return 'test';
     return 'dependent';
   };
-  const nodeInputs: MermaidNodeInput[] = survivors.map((path) => ({
-    path,
-    role: roleOf(path),
-  }));
+  const nodeInputs: MermaidNodeInput[] = [
+    ...survivors.map((path) => ({ path, role: roleOf(path) })),
+    ...testSummaryInputs,
+  ];
 
   // ── Edges: internal to survivors, from = importer, to = importee.
   // Derived from each survivor's own `imports` record — the importer

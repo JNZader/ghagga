@@ -1,29 +1,29 @@
 {
-  "mermaid": "flowchart TD\n  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px\n  classDef dependent fill:#dbeafe,stroke:#2563eb\n  classDef test fill:#dcfce7,stroke:#16a34a\n  subgraph c0[\"lib\"]\n    n0[\"lib/util.ts\"]\n  end\n  subgraph c1[\"src\"]\n    n1[\"src/app1.ts\"]\n    n2[\"src/app2.ts\"]\n    n3[\"src/hub.ts\"]\n  end\n  class n3 changed\n  class n0,n1,n2 dependent\n  n1 --> n3\n  n2 --> n3\n  n3 --> n0",
+  "mermaid": "flowchart LR\n  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff\n  classDef dependent stroke:#64748b\n  classDef test stroke:#94a3b8,stroke-dasharray:5 5\n  subgraph c0[\"lib/util.ts\"]\n    n0[\"lib/util.ts\"]\n  end\n  subgraph c1[\"src/app1.ts\"]\n    n1[\"src/app1.ts\"]\n  end\n  subgraph c2[\"src/app2.ts\"]\n    n2[\"src/app2.ts\"]\n  end\n  subgraph c3[\"src/hub.ts\"]\n    n3[\"src/hub.ts\"]\n  end\n  class n3 changed\n  class n0,n1,n2 dependent\n  n1 --> n3\n  n2 --> n3\n  n3 --> n0",
   "nodes": [
     {
       "id": "n0",
       "label": "lib/util.ts",
       "role": "dependent",
-      "cluster": "lib"
+      "cluster": "lib/util.ts"
     },
     {
       "id": "n1",
       "label": "src/app1.ts",
       "role": "dependent",
-      "cluster": "src"
+      "cluster": "src/app1.ts"
     },
     {
       "id": "n2",
       "label": "src/app2.ts",
       "role": "dependent",
-      "cluster": "src"
+      "cluster": "src/app2.ts"
     },
     {
       "id": "n3",
       "label": "src/hub.ts",
       "role": "changed",
-      "cluster": "src"
+      "cluster": "src/hub.ts"
     }
   ],
   "edges": [

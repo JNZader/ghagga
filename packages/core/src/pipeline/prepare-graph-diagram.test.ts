@@ -147,7 +147,14 @@ describe('applyBlastRadius — diagram wiring (blast-radius-diagram T2.3)', () =
     expect(labels).toContain('src/a.ts');
     expect(labels).toContain('lib/util.ts');
     expect(labels).toContain('src/page.ts');
-    expect(meta!.diagram!.mermaid).toContain('flowchart TD');
+    // New diagram contract: LR header, theme-adaptive amber classDef, and
+    // the first-two-segments cluster rule (these single-slash fixture
+    // paths are therefore their own clusters — cluster == label).
+    expect(meta!.diagram!.mermaid).toContain('flowchart LR');
+    expect(meta!.diagram!.mermaid).toContain(
+      'classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff',
+    );
+    expect(meta!.diagram!.nodes.map((n) => n.cluster)).toEqual(labels);
     // SINGLE-GRAPH rule: the graph loads ONCE per review — the diagram
     // builder is a pure consumer of the in-hand instance.
     expect(loader.loadCalls).toBe(1);

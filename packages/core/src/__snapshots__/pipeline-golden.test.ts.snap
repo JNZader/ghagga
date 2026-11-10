@@ -855,12 +855,14 @@ exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warnin
               "to": "n0",
             },
           ],
-          "mermaid": "flowchart TD
-  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
-  classDef dependent fill:#dbeafe,stroke:#2563eb
-  classDef test fill:#dcfce7,stroke:#16a34a
-  subgraph c0["src"]
+          "mermaid": "flowchart LR
+  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff
+  classDef dependent stroke:#64748b
+  classDef test stroke:#94a3b8,stroke-dasharray:5 5
+  subgraph c0["src/index.ts"]
     n0["src/index.ts"]
+  end
+  subgraph c1["src/utils.ts"]
     n1["src/utils.ts"]
   end
   class n0 changed
@@ -873,13 +875,13 @@ exports[`golden: blast-radius edges (B0.5) > stale graph: emits staleness warnin
           },
           "nodes": [
             {
-              "cluster": "src",
+              "cluster": "src/index.ts",
               "id": "n0",
               "label": "src/index.ts",
               "role": "changed",
             },
             {
-              "cluster": "src",
+              "cluster": "src/utils.ts",
               "id": "n1",
               "label": "src/utils.ts",
               "role": "dependent",
@@ -3240,12 +3242,14 @@ Past review: watch the parser.",
               "to": "n0",
             },
           ],
-          "mermaid": "flowchart TD
-  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
-  classDef dependent fill:#dbeafe,stroke:#2563eb
-  classDef test fill:#dcfce7,stroke:#16a34a
-  subgraph c0["src"]
+          "mermaid": "flowchart LR
+  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff
+  classDef dependent stroke:#64748b
+  classDef test stroke:#94a3b8,stroke-dasharray:5 5
+  subgraph c0["src/index.ts"]
     n0["src/index.ts"]
+  end
+  subgraph c1["src/utils.ts"]
     n1["src/utils.ts"]
   end
   class n0,n1 changed
@@ -3257,13 +3261,13 @@ Past review: watch the parser.",
           },
           "nodes": [
             {
-              "cluster": "src",
+              "cluster": "src/index.ts",
               "id": "n0",
               "label": "src/index.ts",
               "role": "changed",
             },
             {
-              "cluster": "src",
+              "cluster": "src/utils.ts",
               "id": "n1",
               "label": "src/utils.ts",
               "role": "changed",
@@ -3672,12 +3676,14 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
               "to": "n0",
             },
           ],
-          "mermaid": "flowchart TD
-  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
-  classDef dependent fill:#dbeafe,stroke:#2563eb
-  classDef test fill:#dcfce7,stroke:#16a34a
-  subgraph c0["src"]
+          "mermaid": "flowchart LR
+  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff
+  classDef dependent stroke:#64748b
+  classDef test stroke:#94a3b8,stroke-dasharray:5 5
+  subgraph c0["src/index.ts"]
     n0["src/index.ts"]
+  end
+  subgraph c1["src/utils.ts"]
     n1["src/utils.ts"]
   end
   class n0 changed
@@ -3690,13 +3696,13 @@ exports[`golden: optional steps ON (isolated) > blast-radius ON: graph available
           },
           "nodes": [
             {
-              "cluster": "src",
+              "cluster": "src/index.ts",
               "id": "n0",
               "label": "src/index.ts",
               "role": "changed",
             },
             {
-              "cluster": "src",
+              "cluster": "src/utils.ts",
               "id": "n1",
               "label": "src/utils.ts",
               "role": "dependent",
@@ -3843,12 +3849,14 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
               "to": "n0",
             },
           ],
-          "mermaid": "flowchart TD
-  classDef changed fill:#fef3c7,stroke:#d97706,stroke-width:2px
-  classDef dependent fill:#dbeafe,stroke:#2563eb
-  classDef test fill:#dcfce7,stroke:#16a34a
-  subgraph c0["src"]
+          "mermaid": "flowchart LR
+  classDef changed fill:#d97706,stroke:#92400e,stroke-width:2px,color:#ffffff
+  classDef dependent stroke:#64748b
+  classDef test stroke:#94a3b8,stroke-dasharray:5 5
+  subgraph c0["src/index.ts"]
     n0["src/index.ts"]
+  end
+  subgraph c1["src/utils.ts"]
     n1["src/utils.ts"]
   end
   class n0 changed
@@ -3861,13 +3869,13 @@ exports[`golden: optional steps ON (isolated) > call-chain + reverse-deps ON: co
           },
           "nodes": [
             {
-              "cluster": "src",
+              "cluster": "src/index.ts",
               "id": "n0",
               "label": "src/index.ts",
               "role": "changed",
             },
             {
-              "cluster": "src",
+              "cluster": "src/utils.ts",
               "id": "n1",
               "label": "src/utils.ts",
               "role": "dependent",
