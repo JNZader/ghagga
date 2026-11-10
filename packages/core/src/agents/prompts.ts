@@ -278,6 +278,41 @@ export const REVIEW_CALIBRATION = `## Review Calibration
 - Do NOT flag hypothetical edge cases that are unlikely in practice.
 - If the diff is small and clean, it is OK to return STATUS: PASSED with zero findings.`;
 
+// ─── Output Style Calibration (review-output-compression) ───────
+//
+// ONE shared appendix appended immediately after the calibration entry
+// (REVIEW_CALIBRATION or COMPACT_CALIBRATION) of every PROSE voice:
+// simple, workflow specialists + synthesis, consensus stances,
+// diagnostic, and fan-out lenses. Refuter and contrarian voices are
+// EXCLUDED: their output is already maximally terse (single-line
+// verdicts, 1-2 sentence summaries) and the block cannot pay for
+// itself there.
+//
+// Break-even math (design decision 6): the block costs ≈110-140 input
+// tokens per voice. At the typical 1:4 input:output price ratio, 120
+// input tokens cost ≈30 output tokens, so break-even is 30 divided by
+// the baseline output — 2-5% on the 600-1,500-token prose voices it
+// targets. The 30-40% target on a 1,000-token voice saves 300-400
+// output tokens (≈1,200-1,600 input-equivalents) for 120 spent: ~10x
+// net positive. A refuter emits ~50-160 output tokens total — a 40%
+// cut saves ≈160 input-equivalents, at or below the block cost. That
+// margin is exactly why the terse voices are excluded.
+//
+// No tables anywhere in the block: sanitizeTableCell escapes pipes and
+// newlines (sanitize.ts), so a markdown table inside MESSAGE/SUGGESTION
+// would render as escaped garbage in the findings table. Bold survives
+// sanitization — the block says bold, never tables.
+
+export const OUTPUT_STYLE_CALIBRATION = `## Output Style Calibration
+- Keep every labeled block and field name EXACTLY as specified; compress only the prose inside fields.
+- MESSAGE: one line — the defect and its trigger condition. No context restatement.
+- SUGGESTION: one line — the fix. Do not restate the problem.
+- SUMMARY: lead with the verdict; bold the key terms (**term**).
+- Render multi-option comparisons compactly on one line per option, never as tables.
+- Prefer file:line references over describing the location in prose.
+- Zero filler: no diff restatement, no pleasantries, no "it is worth noting".
+- Where this voice specifies a length cap ("2-3 sentences max"), that cap wins; compress within it.`;
+
 /**
  * Build a review-level-specific calibration instruction.
  *
