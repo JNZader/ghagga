@@ -743,6 +743,8 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
         label: lens.label,
         text: result.text,
         tokensUsed: result.tokensUsed,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
         providerUsed: result.provider,
         modelUsed: result.model,
       };
@@ -756,6 +758,9 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     label: string;
     text: string;
     tokensUsed: number;
+    /** Measured split — undefined when the provider reports none. */
+    inputTokens?: number;
+    outputTokens?: number;
     providerUsed: string;
     modelUsed: string;
   };
@@ -787,6 +792,8 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
           label: `Contrarian ${i + 1}`,
           text: result.text,
           tokensUsed: result.tokensUsed,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
           providerUsed: result.provider,
           modelUsed: result.model,
         };
@@ -803,6 +810,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
   // ── Step 2: Collect findings from all lenses ────────────────
   let totalTokens = 0;
+  // review-output-compression T2.3: measured split aggregated across EVERY
+  // generate call (lenses + contrarian + refuters); set on metadata only
+  // when a voice actually reported one (workflow hasSplit semantics).
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let splitReported = false;
   const allFindings: import('../types.js').ReviewFinding[] = [];
   const modelsUsed: string[] = [];
   const lensStatuses: ReviewStatus[] = [];
@@ -814,6 +827,11 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
+      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalInputTokens += result.value.inputTokens ?? 0;
+        totalOutputTokens += result.value.outputTokens ?? 0;
+      }
       modelsUsed.push(
         `${result.value.name}:${result.value.providerUsed}/${result.value.modelUsed}`,
       );
@@ -861,6 +879,11 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
+      if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+        splitReported = true;
+        totalInputTokens += result.value.inputTokens ?? 0;
+        totalOutputTokens += result.value.outputTokens ?? 0;
+      }
       modelsUsed.push(`${voiceName}:${result.value.providerUsed}/${result.value.modelUsed}`);
 
       const findings = parseFindingsBlock(result.value.text);
@@ -951,6 +974,11 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       for (const result of refuterResults) {
         if (result.status !== 'fulfilled') continue;
         totalTokens += result.value.tokensUsed;
+        if (result.value.inputTokens !== undefined || result.value.outputTokens !== undefined) {
+          splitReported = true;
+          totalInputTokens += result.value.inputTokens ?? 0;
+          totalOutputTokens += result.value.outputTokens ?? 0;
+        }
         const verdicts = parseRefuterVerdicts(result.value.text);
         for (const candidate of candidates) {
           if (!candidate.id) continue;
@@ -1019,6 +1047,9 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       provider: modelsUsed.length > 0 ? provider : 'none',
       model,
       tokensUsed: totalTokens,
+      ...(splitReported
+        ? { inputTokensUsed: totalInputTokens, outputTokensUsed: totalOutputTokens }
+        : {}),
       executionTimeMs,
       toolsRun: [],
       toolsSkipped: [],

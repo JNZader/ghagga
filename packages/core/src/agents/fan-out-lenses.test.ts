@@ -1307,3 +1307,86 @@ describe('runFanOutReview output style calibration', () => {
     }
   });
 });
+
+// ─── Output token split aggregation (review-output-compression T2.3) ──
+
+describe('runFanOutReview output token split aggregation', () => {
+  const CRITICAL = FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection');
+
+  function makeUsageFn(
+    response: string,
+    usage: { tokensUsed?: number; inputTokens?: number; outputTokens?: number },
+  ): GenerateTextFn {
+    return vi.fn().mockResolvedValue({
+      text: response,
+      tokensUsed: usage.tokensUsed ?? 100,
+      provider: 'gateway',
+      model: 'claude-sonnet-4-20250514',
+      ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+      ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    });
+  }
+
+  function makeBaseInput(fns: GenerateTextFn[]): FanOutReviewInput {
+    return {
+      diff: '--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+      provider: 'gateway',
+      model: 'claude-sonnet-4-20250514',
+      apiKey: 'test-key',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFns: fns,
+      lenses: ['security', 'performance', 'error-handling'],
+      pinLensesToFirst: true,
+      contrarianCount: 1,
+      refuterCount: 2,
+    };
+  }
+
+  it('3 lenses + 1 contrarian + 2 refuters, all split-reporting: outputTokensUsed sums all 6 calls', async () => {
+    // 3 lenses pinned to fn[0] → fn[0] called 3x, contrarian fn[1] 1x,
+    // refuters fn[2]/fn[3] 1x each. All report 70/30 per 100 total.
+    const lensFn = makeUsageFn(CRITICAL, { inputTokens: 70, outputTokens: 30 });
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, { inputTokens: 70, outputTokens: 30 });
+    const refuter1 = makeUsageFn('security-001: stands', { inputTokens: 70, outputTokens: 30 });
+    const refuter2 = makeUsageFn('security-001: stands', { inputTokens: 70, outputTokens: 30 });
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    expect(result.metadata.tokensUsed).toBe(600);
+    expect(result.metadata.inputTokensUsed).toBe(420);
+    expect(result.metadata.outputTokensUsed).toBe(180);
+    expect(lensFn).toHaveBeenCalledTimes(3);
+    expect(contrarianFn).toHaveBeenCalledTimes(1);
+    expect(refuter1).toHaveBeenCalledTimes(1);
+    expect(refuter2).toHaveBeenCalledTimes(1);
+  });
+
+  it('no voice reports a split: both fields absent, tokensUsed grand total unchanged', async () => {
+    const lensFn = makeUsageFn(CRITICAL, {});
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, {});
+    const refuter1 = makeUsageFn('security-001: stands', {});
+    const refuter2 = makeUsageFn('security-001: stands', {});
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    expect(result.metadata.tokensUsed).toBe(600);
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+
+  it('a single split-reporting voice among unmeasured ones marks the run measured (hasSplit semantics)', async () => {
+    const lensFn = makeUsageFn(CRITICAL, {}); // 3 unmeasured lens calls
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, { inputTokens: 80, outputTokens: 20 });
+    const refuter1 = makeUsageFn('security-001: stands', {});
+    const refuter2 = makeUsageFn('security-001: stands', {});
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    expect(result.metadata.tokensUsed).toBe(600);
+    expect(result.metadata.inputTokensUsed).toBe(80);
+    expect(result.metadata.outputTokensUsed).toBe(20);
+  });
+});
