@@ -481,29 +481,36 @@ export function createSettingsRouter(db: Database) {
       });
 
       // Digest scheduler hook (nightly-health-digest D7): re-reconcile this
-      // repo's repeatable AFTER the successful upsert. Lazy import + fire-and-
-      // forget: this route module must never construct a Redis-backed queue at
-      // import time, and a scheduler hiccup must never fail an already-persisted
-      // settings save (webhook.ts:910 lazy-import precedent).
-      void (async () => {
-        try {
-          const { digestQueue, reconcileDigestSchedulerForRepo } = await import(
-            '../../queues/digest.js'
-          );
-          await reconcileDigestSchedulerForRepo(db, digestQueue, repo.id);
-        } catch (err) {
-          logger.warn(
-            { err, repositoryId: repo.id },
-            'digest: scheduler reconcile failed after settings update (settings saved regardless)',
-          );
-        }
-      })();
+      // repo's repeatable AFTER the successful upsert. Lazy import keeps this
+      // route module free of an import-time Redis-backed queue (webhook.ts:910
+      // lazy-import precedent). The reconcile is AWAITED (one fast
+      // upsertJobScheduler call) so a Redis outage during the PUT surfaces
+      // instead of vanishing fire-and-forget — digest enabled in the DB but
+      // never scheduled. It still NEVER fails the already-persisted save:
+      // failure only logs error and stamps a warning header on the 200.
+      let schedulerReconcileFailed = false;
+      try {
+        const { digestQueue, reconcileDigestSchedulerForRepo } = await import(
+          '../../queues/digest.js'
+        );
+        await reconcileDigestSchedulerForRepo(db, digestQueue, repo.id);
+      } catch (err) {
+        schedulerReconcileFailed = true;
+        logger.error(
+          { err, repositoryId: repo.id },
+          'digest: scheduler reconcile failed after settings update (settings saved regardless)',
+        );
+      }
 
       logger.info(
         { repo: repoFullName, user: user.githubLogin, chainLength: mergedChain.length },
         'Settings updated',
       );
-      return c.json({ data: { message: 'Settings updated' } });
+      const response = c.json({ data: { message: 'Settings updated' } });
+      if (schedulerReconcileFailed) {
+        response.headers.set('X-Ghagga-Warning', 'digest-scheduler-reconcile-failed');
+      }
+      return response;
     } catch (err) {
       const errorId = generateErrorId();
       logger.error(

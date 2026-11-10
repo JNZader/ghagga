@@ -57,6 +57,7 @@ vi.mock('./utils.js', () => ({
 
 import { createInstallationsRouter } from './installations.js';
 import { createSettingsRouter } from './settings.js';
+import { logger } from './utils.js';
 
 const mockDb = {} as never;
 const user = { githubUserId: 1, githubLogin: 'maintainer', installationIds: [100] };
@@ -281,5 +282,103 @@ describe('digestsEnabled settings plumbing', () => {
 
     expect(response.status).toBe(400);
     expect(mockUpdateRepoSettings).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Scheduler reconcile failure surfacing (resilience B4) ───────
+//
+// Regression: the hook was fire-and-forget, so Redis being down during the
+// PUT returned a plain 200 with the digest enabled in the DB but never
+// scheduled — zero signal. The reconcile is now AWAITED; on failure the
+// save still succeeds (200, setting persisted) but the failure is logged
+// at error level and surfaced via a warning header.
+
+describe('scheduler reconcile failure surfacing (resilience B4)', () => {
+  it('repo PUT: rejecting reconcile → 200, setting persisted, error logged + warning header', async () => {
+    mockGetRepoByFullName.mockResolvedValue(repo());
+    wireEffective(true);
+    mockScheduleReconcileForRepo.mockRejectedValueOnce(new Error('redis unreachable'));
+
+    const response = await createApp().request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'acme/app',
+        providerChain: [],
+        digestsEnabled: true,
+      }),
+    });
+
+    // The save IS persisted — a scheduler hiccup never fails the PUT.
+    expect(response.status).toBe(200);
+    expect(mockUpdateRepoSettings).toHaveBeenCalledWith(
+      mockDb,
+      7,
+      expect.objectContaining({
+        settings: expect.objectContaining({ digestsEnabled: true }),
+      }),
+    );
+    // ...but the failure is visible: error log + warning header on the 200.
+    expect(response.headers.get('X-Ghagga-Warning')).toBe('digest-scheduler-reconcile-failed');
+    expect(logger.error as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({ repositoryId: 7 }),
+      expect.stringContaining('scheduler reconcile failed'),
+    );
+  });
+
+  it('repo PUT: healthy reconcile → 200 with NO warning header', async () => {
+    mockGetRepoByFullName.mockResolvedValue(repo());
+    wireEffective(true);
+
+    const response = await createApp().request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'acme/app',
+        providerChain: [],
+        digestsEnabled: true,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Ghagga-Warning')).toBeNull();
+  });
+
+  it('installation PUT: rejecting reconcile → 200, upsert persisted, error logged + warning header', async () => {
+    mockGetInstallationSettings.mockResolvedValue({
+      id: 1,
+      installationId: 100,
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { ...DEFAULT_REPO_SETTINGS },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockScheduleReconcileForInstallation.mockRejectedValueOnce(new Error('redis unreachable'));
+
+    const response = await createApp().request('/api/installation-settings?installation_id=100', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        installationId: 100,
+        providerChain: [],
+        digestsEnabled: true,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockUpsertInstallationSettings).toHaveBeenCalledWith(
+      mockDb,
+      100,
+      expect.objectContaining({
+        settings: expect.objectContaining({ digestsEnabled: true }),
+      }),
+    );
+    expect(response.headers.get('X-Ghagga-Warning')).toBe('digest-scheduler-reconcile-failed');
+    expect(logger.error as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({ installationId: 100 }),
+      expect.stringContaining('scheduler reconcile failed'),
+    );
   });
 });

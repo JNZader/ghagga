@@ -3,7 +3,8 @@
  * (nightly-health-digest T3.3/T3.4).
  *
  * Offline: `ghagga-db` is mocked via vi.mock (issue-draft-reaper.test.ts:12-23
- * precedent), forge verbs are INJECTED, the clock is a fake `now` seam, and the
+ * precedent), forge verbs are INJECTED via the lazy `makeForge` seam, the
+ * clock is a fake `now` seam, and the
  * scheduler surface is a fake queue — no live Redis, no network, no real time
  * waits. The module-level `digestQueue` connection is inert here: these tests
  * exercise runDigestForRepository / recordFailedDigestRun / the schedule hooks
@@ -103,7 +104,7 @@ function makeForge(overrides: Partial<DigestPublication> = {}): DigestPublicatio
 }
 
 function makeRunDeps(forge: DigestPublication) {
-  return { db: mockDb, forge, log: silentLog, now };
+  return { db: mockDb, makeForge: () => Promise.resolve(forge), log: silentLog, now };
 }
 
 /** One well-formed review row inside the window (AFTER the stored watermark). */
@@ -454,6 +455,89 @@ describe('runDigestForRepository', () => {
   });
 });
 
+// ─── Lazy seam construction (resilience B3) ─────────────────────
+//
+// Regression: the worker built the GitHub seam BEFORE calling
+// runDigestForRepository, so a repo deleted after scheduling threw during
+// seam construction (repo lookup) — 3 rejected BullMQ attempts and an
+// FK-rejected FAILED row — instead of reaching the graceful SKIPPED guard.
+// The seam is now a factory built only after every skip guard passes.
+
+describe('runDigestForRepository — seam construction laziness (B3)', () => {
+  it('repo deleted after scheduling → SKIPPED, seam factory NEVER called (no rejected attempts)', async () => {
+    mockGetRepositoryById.mockResolvedValue(null);
+    const forgeFactory = vi.fn();
+
+    const result = await runDigestForRepository(404, {
+      db: mockDb,
+      makeForge: forgeFactory,
+      log: silentLog,
+      now,
+    });
+
+    expect(result).toBe('SKIPPED');
+    expect(forgeFactory).not.toHaveBeenCalled();
+    expect(mockInsertDigestRun).not.toHaveBeenCalled();
+    expect(silentLog.warn).toHaveBeenCalled();
+  });
+
+  it('digests disabled at fire time → SKIPPED, seam factory never called (no token minted)', async () => {
+    mockGetRepositoryById.mockResolvedValue(makeRepo());
+    mockGetEffectiveRepoSettings.mockResolvedValue({
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { digestsEnabled: false },
+      source: 'repo',
+    });
+    mockGetOpenDigest.mockResolvedValue(openDigestRow());
+    const forgeFactory = vi.fn();
+
+    const result = await runDigestForRepository(7, {
+      db: mockDb,
+      makeForge: forgeFactory,
+      log: silentLog,
+      now,
+    });
+
+    expect(result).toBe('SKIPPED');
+    expect(forgeFactory).not.toHaveBeenCalled();
+  });
+
+  it('zero new findings → SKIPPED, seam factory never called', async () => {
+    wireEnabled({ open: openDigestRow() });
+    mockGetReviewsSinceWatermark.mockResolvedValue([]);
+    const forgeFactory = vi.fn();
+
+    const result = await runDigestForRepository(7, {
+      db: mockDb,
+      makeForge: forgeFactory,
+      log: silentLog,
+      now,
+    });
+
+    expect(result).toBe('SKIPPED');
+    expect(forgeFactory).not.toHaveBeenCalled();
+  });
+
+  it('POSTED path builds the seam exactly once', async () => {
+    wireEnabled({ open: null });
+    mockGetReviewsSinceWatermark.mockResolvedValue([reviewRow()]);
+    mockRotateOpenDigest.mockResolvedValue(openDigestRow({ id: 31 }));
+    const forgeFactory = vi.fn().mockResolvedValue(makeForge());
+
+    const result = await runDigestForRepository(7, {
+      db: mockDb,
+      makeForge: forgeFactory,
+      log: silentLog,
+      now,
+    });
+
+    expect(result).toBe('POSTED');
+    expect(forgeFactory).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ─── Scheduler registration (T3.4) ──────────────────────────────
 
 /** Fake scheduler queue recording upserts/removals — no Redis. */
@@ -568,6 +652,29 @@ describe('reconcileDigestSchedulers', () => {
 
     expect(result.scheduled).toEqual([]);
     expect(removals).toEqual(['digest:7']);
+  });
+
+  it('B5: malformed scheduler id → skipped, never NaN in removed, stale numeric ids still removed', async () => {
+    // Regression: 'digest:foo' parsed to NaN, fell into the removal branch
+    // and pushed NaN into `removed: number[]`.
+    mockGetActiveRepositoriesForScheduling.mockResolvedValue([makeRepo({ id: 7 })]);
+    mockGetEffectiveRepoSettings.mockResolvedValue({
+      providerChain: [],
+      aiReviewEnabled: true,
+      reviewMode: 'simple',
+      settings: { digestsEnabled: true },
+      source: 'repo',
+    });
+    const { queue, removals } = makeFakeQueue(['digest:not-a-number', 'digest:9']);
+
+    const result = await reconcileDigestSchedulers(mockDb, queue);
+
+    expect(result.scheduled).toEqual([7]);
+    expect(result.removed).toEqual([9]);
+    expect(result.removed.every((id) => Number.isFinite(id))).toBe(true);
+    // The malformed id encodes no repository — the reconciler leaves it
+    // untouched and only removes the stale NUMERIC scheduler.
+    expect(removals).toEqual(['digest:9']);
   });
 });
 

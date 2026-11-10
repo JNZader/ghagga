@@ -381,27 +381,34 @@ export function createInstallationsRouter(db: Database) {
 
       // Digest scheduler hook (nightly-health-digest D7): the installation-level
       // flag affects every repo using global settings — re-reconcile the whole
-      // installation AFTER the successful upsert. Lazy import + fire-and-forget
-      // (never fail an already-persisted settings save on a scheduler hiccup).
-      void (async () => {
-        try {
-          const { digestQueue, reconcileDigestSchedulersForInstallation } = await import(
-            '../../queues/digest.js'
-          );
-          await reconcileDigestSchedulersForInstallation(db, digestQueue, installationId);
-        } catch (err) {
-          logger.warn(
-            { err, installationId },
-            'digest: scheduler reconcile failed after installation settings update (settings saved regardless)',
-          );
-        }
-      })();
+      // installation AFTER the successful upsert. Lazy import keeps this route
+      // module free of an import-time Redis-backed queue. The reconcile is
+      // AWAITED so a Redis outage during the PUT surfaces instead of vanishing
+      // fire-and-forget, but it still NEVER fails the already-persisted save:
+      // failure only logs error and stamps a warning header on the 200.
+      let schedulerReconcileFailed = false;
+      try {
+        const { digestQueue, reconcileDigestSchedulersForInstallation } = await import(
+          '../../queues/digest.js'
+        );
+        await reconcileDigestSchedulersForInstallation(db, digestQueue, installationId);
+      } catch (err) {
+        schedulerReconcileFailed = true;
+        logger.error(
+          { err, installationId },
+          'digest: scheduler reconcile failed after installation settings update (settings saved regardless)',
+        );
+      }
 
       logger.info(
         { installationId, user: user.githubLogin, chainLength: mergedChain.length },
         'Installation settings updated',
       );
-      return c.json({ data: { message: 'Installation settings updated' } });
+      const response = c.json({ data: { message: 'Installation settings updated' } });
+      if (schedulerReconcileFailed) {
+        response.headers.set('X-Ghagga-Warning', 'digest-scheduler-reconcile-failed');
+      }
+      return response;
     } catch (err) {
       const errorId = generateErrorId();
       logger.error(

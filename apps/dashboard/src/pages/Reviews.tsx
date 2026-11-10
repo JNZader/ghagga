@@ -1,7 +1,9 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import type { BlastRadiusDiagram } from '@ghagga/types';
+import { Component, lazy, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { Card } from '@/components/Card';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CoverageIndicator } from '@/components/CoverageIndicator';
+import { DiagramLegend } from '@/components/DiagramLegend';
 import { SeverityBadge } from '@/components/SeverityBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
@@ -26,6 +28,75 @@ import type { Finding, Review, ReviewStatus } from '@/lib/types';
  * pinned by src/components/mermaid-lazy.test.ts.
  */
 const MermaidDiagram = lazy(() => import('@/components/MermaidDiagram'));
+
+interface DiagramLoadBoundaryProps {
+  /** The diagram DTO — the fallback shows its mermaid source (already on the wire). */
+  diagram: BlastRadiusDiagram;
+  /**
+   * Identity of the mount (review id): a CHANGE clears a cached error, so
+   * one failed chunk load never poisons the next review the user opens.
+   * (Within the same key the error stays — React.lazy caches the rejected
+   * payload at module level, so remounting the same chunk would rethrow
+   * anyway; the reset only guarantees a clean slate for a NEW mount.)
+   */
+  resetKey: number | string;
+  children: ReactNode;
+}
+
+interface DiagramLoadBoundaryState {
+  error: Error | null;
+  resetKey: number | string;
+}
+
+/**
+ * LOCAL lazy-chunk failure boundary (resilience B2). React.lazy CACHES a
+ * rejected dynamic import: after a deploy invalidates chunk hashes (stale
+ * HTML → 404 on the hashed chunk URL), every mount of the lazy diagram
+ * renderer rethrows. Without a boundary HERE the error escalates to the
+ * app-level boundary, which replaces the ENTIRE page including nav. This
+ * class boundary keeps the blast radius at the Blast Radius card and
+ * renders the same fenced-source fallback the renderer's own
+ * render-failure path shows — the mermaid source is already on the DTO,
+ * so no extra data is needed. (Error boundaries require class components;
+ * there is no hook equivalent.)
+ */
+export class DiagramLoadBoundary extends Component<
+  DiagramLoadBoundaryProps,
+  DiagramLoadBoundaryState
+> {
+  state: DiagramLoadBoundaryState = { error: null, resetKey: this.props.resetKey };
+
+  static getDerivedStateFromError(error: Error): Partial<DiagramLoadBoundaryState> {
+    return { error };
+  }
+
+  static getDerivedStateFromProps(
+    props: DiagramLoadBoundaryProps,
+    state: DiagramLoadBoundaryState,
+  ): Partial<DiagramLoadBoundaryState> | null {
+    if (props.resetKey !== state.resetKey) {
+      return { error: null, resetKey: props.resetKey };
+    }
+    return null;
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div data-testid="mermaid-fallback">
+          <p className="mb-2 text-xs text-text-secondary">
+            diagram renderer failed to load — showing the mermaid source instead:
+          </p>
+          <pre className="max-h-64 overflow-auto rounded-md bg-surface p-3 text-xs">
+            <code>{this.props.diagram.mermaid}</code>
+          </pre>
+          <DiagramLegend meta={this.props.diagram.meta} />
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function TrashIcon({ className }: { className?: string }) {
   return (
@@ -97,13 +168,16 @@ function ReviewDetail({ review, onClose }: { review: Review; onClose: () => void
             when the DTO carries diagram data — no placeholder, no chunk
             fetch when absent (dashboard-ui "No render and no bundle cost
             when absent"). Renders the same single source the review
-            comment uses. */}
+            comment uses. The load boundary (B2) contains a rejected lazy
+            chunk to this card instead of the whole page. */}
         {review.blastRadiusDiagram && (
           <div className="mb-6">
             <h3 className="mb-2 text-sm font-medium text-text-secondary">Blast Radius</h3>
-            <Suspense fallback={<div className="h-40 animate-pulse rounded-md bg-surface" />}>
-              <MermaidDiagram diagram={review.blastRadiusDiagram} />
-            </Suspense>
+            <DiagramLoadBoundary diagram={review.blastRadiusDiagram} resetKey={review.id}>
+              <Suspense fallback={<div className="h-40 animate-pulse rounded-md bg-surface" />}>
+                <MermaidDiagram diagram={review.blastRadiusDiagram} />
+              </Suspense>
+            </DiagramLoadBoundary>
           </div>
         )}
 
