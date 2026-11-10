@@ -813,8 +813,13 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   // review-output-compression T2.3: measured split aggregated across EVERY
   // generate call (lenses + contrarian + refuters); set on metadata only
   // when a voice actually reported one (workflow hasSplit semantics).
+  // R2-N01: inputReported/outputReported track each side independently —
+  // the metadata spread must expose ONLY reported sides, never a measured
+  // zero for a side no voice reported.
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let inputReported = false;
+  let outputReported = false;
   let splitReported = false;
   const allFindings: import('../types.js').ReviewFinding[] = [];
   const modelsUsed: string[] = [];
@@ -828,10 +833,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
       if (result.value.inputTokens !== undefined) {
+        inputReported = true;
         splitReported = true;
         totalInputTokens += result.value.inputTokens;
       }
       if (result.value.outputTokens !== undefined) {
+        outputReported = true;
         splitReported = true;
         totalOutputTokens += result.value.outputTokens;
       }
@@ -883,10 +890,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
     if (result.status === 'fulfilled') {
       totalTokens += result.value.tokensUsed;
       if (result.value.inputTokens !== undefined) {
+        inputReported = true;
         splitReported = true;
         totalInputTokens += result.value.inputTokens;
       }
       if (result.value.outputTokens !== undefined) {
+        outputReported = true;
         splitReported = true;
         totalOutputTokens += result.value.outputTokens;
       }
@@ -981,10 +990,12 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
         if (result.status !== 'fulfilled') continue;
         totalTokens += result.value.tokensUsed;
         if (result.value.inputTokens !== undefined) {
+          inputReported = true;
           splitReported = true;
           totalInputTokens += result.value.inputTokens;
         }
         if (result.value.outputTokens !== undefined) {
+          outputReported = true;
           splitReported = true;
           totalOutputTokens += result.value.outputTokens;
         }
@@ -1056,8 +1067,13 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       provider: modelsUsed.length > 0 ? provider : 'none',
       model,
       tokensUsed: totalTokens,
+      // R2-N01: spread only the reported sides — a one-sided split must not
+      // write a measured zero for the side no voice reported.
       ...(splitReported
-        ? { inputTokensUsed: totalInputTokens, outputTokensUsed: totalOutputTokens }
+        ? {
+            ...(inputReported ? { inputTokensUsed: totalInputTokens } : {}),
+            ...(outputReported ? { outputTokensUsed: totalOutputTokens } : {}),
+          }
         : {}),
       executionTimeMs,
       toolsRun: [],

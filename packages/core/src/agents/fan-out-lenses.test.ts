@@ -1389,4 +1389,32 @@ describe('runFanOutReview output token split aggregation', () => {
     expect(result.metadata.inputTokensUsed).toBe(80);
     expect(result.metadata.outputTokensUsed).toBe(20);
   });
+
+  it('R2-N01: one-sided split (input only) exposes inputTokensUsed and leaves outputTokensUsed ABSENT', async () => {
+    // Regression: the metadata spread wrote BOTH sides under splitReported,
+    // so an input-only split produced outputTokensUsed: 0 — a measured zero.
+    const lensFn = makeUsageFn(CRITICAL, { inputTokens: 70 });
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, { inputTokens: 80 });
+    const refuter1 = makeUsageFn('security-001: stands', { inputTokens: 70 });
+    const refuter2 = makeUsageFn('security-001: stands', { inputTokens: 70 });
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    // 3 lenses × 70 + contrarian × 80 + 2 refuters × 70 = 430
+    expect(result.metadata.inputTokensUsed).toBe(430);
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+
+  it('R2-N01: one-sided split (output only) exposes outputTokensUsed and leaves inputTokensUsed ABSENT', async () => {
+    const lensFn = makeUsageFn(CRITICAL, { outputTokens: 30 });
+    const contrarianFn = makeUsageFn(PASSED_RESPONSE, { outputTokens: 20 });
+    const refuter1 = makeUsageFn('security-001: stands', { outputTokens: 30 });
+    const refuter2 = makeUsageFn('security-001: stands', { outputTokens: 30 });
+
+    const result = await runFanOutReview(makeBaseInput([lensFn, contrarianFn, refuter1, refuter2]));
+
+    // 3 lenses × 30 + contrarian × 20 + 2 refuters × 30 = 170
+    expect(result.metadata.outputTokensUsed).toBe(170);
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+  });
 });
