@@ -71,10 +71,11 @@ export function generateRecommendations(
 
   for (const finding of findings) {
     const category = SOURCE_CATEGORY[finding.source] ?? 'quality';
-    if (!categories.has(category)) {
-      categories.set(category, { findings: [], impact: 0 });
+    let cat = categories.get(category);
+    if (!cat) {
+      cat = { findings: [], impact: 0 };
+      categories.set(category, cat);
     }
-    const cat = categories.get(category)!;
     cat.findings.push(finding);
     cat.impact += IMPACT_WEIGHTS[finding.severity] ?? 0;
   }

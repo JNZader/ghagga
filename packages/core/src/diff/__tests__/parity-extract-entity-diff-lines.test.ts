@@ -128,6 +128,7 @@ function baselineOldM9(diffContent: string, symbol: SymbolInfo): string[] {
   const lines = diffContent.split('\n');
   const result: string[] = [];
   let currentNewLine = 0;
+  // biome-ignore lint/correctness/noUnusedVariables: write-only legacy counter kept verbatim — this baseline is FROZEN ("DO NOT EDIT ANYTHING ELSE")
   let currentOldLine = 0;
   let inHunk = false;
 

@@ -75,11 +75,17 @@ export async function rankFindings(
     const texts = [HIGH_PRIORITY_REF, ...findings.map(findingToText)];
     const embeddings = await embeddingProvider.embedBatch(texts);
 
-    const refEmbedding = embeddings[0]!;
+    const refEmbedding = embeddings[0];
+    if (!refEmbedding) {
+      throw new Error('embedBatch returned no embeddings');
+    }
     const findingEmbeddings = embeddings.slice(1);
 
     const scored = findings.map((finding, i) => {
-      const embedding = findingEmbeddings[i]!;
+      const embedding = findingEmbeddings[i];
+      if (!embedding) {
+        throw new Error(`embedBatch returned no embedding for finding ${i}`);
+      }
       const similarity = cosineSimilarity(refEmbedding, embedding);
       const boost = hasContextBoost(finding.file) ? CONTEXT_BOOST : 0;
       const relevance = Math.min(1, similarity + boost);

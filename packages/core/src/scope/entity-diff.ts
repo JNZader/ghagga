@@ -275,7 +275,7 @@ function lcsLength(a: string, b: string): number {
       } else {
         const fromTop = prev[j];
         const fromLeft = curr[j - 1];
-        curr[j] = fromTop >= fromLeft ? fromTop : fromLeft;
+        curr[j] = Math.max(fromTop, fromLeft);
       }
     }
     const swap = prev;

@@ -112,8 +112,7 @@ export class SearchIndexer {
 
     // Build term frequency and position maps for this document
     const termPositions = new Map<string, number[]>();
-    for (let i = 0; i < tokens.length; i++) {
-      const token = tokens[i]!;
+    for (const [i, token] of tokens.entries()) {
       const positions = termPositions.get(token);
       if (positions) {
         positions.push(i);

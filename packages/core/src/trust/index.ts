@@ -63,12 +63,12 @@ export async function computeAuthorTrustScore(
         .map(Number)
         .sort((a, b) => a - b);
 
-      if (timestamps.length > 0) {
+      const first = timestamps.at(0);
+      const last = timestamps.at(-1);
+      if (first !== undefined && last !== undefined) {
         const nowSec = Date.now() / 1000;
-        firstSeenDaysAgo = Math.floor((nowSec - timestamps[0]!) / (60 * 60 * 24));
-        lastSeenDaysAgo = Math.floor(
-          (nowSec - timestamps[timestamps.length - 1]!) / (60 * 60 * 24),
-        );
+        firstSeenDaysAgo = Math.floor((nowSec - first) / (60 * 60 * 24));
+        lastSeenDaysAgo = Math.floor((nowSec - last) / (60 * 60 * 24));
       }
     }
   } catch {

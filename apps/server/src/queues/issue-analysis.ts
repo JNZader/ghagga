@@ -162,7 +162,7 @@ export interface IssueAnalysisJobData {
 export const issueAnalysisQueue = new Queue<IssueAnalysisJobData, unknown, string>(
   'issue-analysis',
   {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: bullmq ConnectionOptions vs our Redis connection shim — accepted cast
     connection: redisConnection as any,
     defaultJobOptions: {
       attempts: 3,
@@ -728,7 +728,7 @@ export function createIssueAnalysisWorker(
   concurrency = 3,
 ): Worker<IssueAnalysisJobData, unknown, string> {
   return new Worker<IssueAnalysisJobData, unknown, string>('issue-analysis', processIssueAnalysis, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: bullmq ConnectionOptions vs our Redis connection shim — accepted cast
     connection: redisConnection as any,
     concurrency,
     lockDuration: 300_000, // 5 min — CLI-bridge triage can take ~100s

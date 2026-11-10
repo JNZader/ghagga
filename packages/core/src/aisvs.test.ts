@@ -27,6 +27,7 @@ describe('AISVS_CHECKS', () => {
 
 describe('scanContentForAISVS', () => {
   it('detects user input in system prompt', () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: fixture — the code under test deliberately embeds ${...} in a plain string
     const code = 'const systemPrompt = `You are helpful. User said: ${req.body.message}`';
     const findings = scanContentForAISVS(code, 'api.ts');
     expect(findings.some((f) => f.category === 'prompt-injection')).toBe(true);
@@ -62,6 +63,7 @@ describe('scanContentForAISVS', () => {
   });
 
   it('detects API key in prompt context', () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: fixture — the code under test deliberately embeds ${...} in a plain string
     const code = 'const prompt = `System context: api_key = ${process.env.KEY}`';
     const findings = scanContentForAISVS(code, 'llm.ts');
     expect(findings.some((f) => f.category === 'credential-handling')).toBe(true);
@@ -119,6 +121,7 @@ describe('formatAISVSReport', () => {
   it('groups findings by category', () => {
     const findings = [
       ...scanContentForAISVS('eval(result.text)', 'a.ts'),
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: fixture — the code under test deliberately embeds ${...} in a plain string
       ...scanContentForAISVS('const systemPrompt = `User: ${req.body.message}`', 'b.ts'),
     ];
     const report = buildAISVSReport(findings, 2);

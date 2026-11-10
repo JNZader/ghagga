@@ -95,7 +95,7 @@ export function authMiddleware(db: Database) {
   return createMiddleware(async (c, next) => {
     const authHeader = c.req.header('Authorization');
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return c.json({ error: 'Missing or invalid Authorization header' }, 401);
     }
 
