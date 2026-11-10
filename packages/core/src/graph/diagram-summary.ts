@@ -50,6 +50,7 @@
 import type { BlastRadiusResult } from './blast-radius.js';
 import {
   clusterOfPath,
+  comparePaths,
   type MermaidEdgeInput,
   type MermaidNodeInput,
   renderMermaidDiagram,
@@ -62,11 +63,6 @@ import {
   type DependencyGraph,
   MAX_DIAGRAM_NODES,
 } from './schema.js';
-
-/** Locale-independent ordering — same comparator as the renderer (D7). */
-function comparePaths(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
 
 /**
  * Build the capped, sanitized blast-radius diagram.

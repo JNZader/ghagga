@@ -69,11 +69,11 @@ export interface PipelineStateBase {
   /**
    * The dependency graph loaded during prepare (step 2.5's blast-radius
    * load, or the step-2.5b graph-context load when `enableGraphContext`
-   * is explicitly true and blast-radius did not load one). Consumed by
-   * the gather-phase graph-context step — which NEVER calls the loader
-   * itself (a second `load()` would double-invoke loaders and break
-   * call-count assertions, see BlastRadiusOutcome.graph). `undefined`
-   * is a normal state: no graph in play.
+   * is explicitly true and blast-radius did not already attempt a load).
+   * Consumed by the gather-phase graph-context step — which NEVER calls
+   * the loader itself (a second `load()` would double-invoke loaders and
+   * break call-count assertions, see BlastRadiusOutcome.graph).
+   * `undefined` is a normal state: no graph in play.
    */
   loadedGraph?: DependencyGraph;
   /** Metadata of `loadedGraph` (null when the graph loaded without metadata). */
