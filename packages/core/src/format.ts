@@ -137,6 +137,8 @@ const STATS_BAR_BLOCKS = 20;
  * output (byte-identical backward compat for small reviews).
  */
 const MAX_VISIBLE_FINDINGS = 10;
+/** Cap for findings INSIDE the collapsed details block (byte budget). */
+const MAX_DETAILS_FINDINGS = 40;
 
 /**
  * Severity rank for the visible-table ordering: critical > high > medium >
@@ -799,8 +801,22 @@ export function formatReviewComment(
       comment += '\n';
 
       comment += `<details>\n`;
-      comment += `<summary>\ud83d\udcca +${rest.length} more findings (all severities)</summary>\n\n`;
-      comment += renderFindingGroups(groupFindingsBySource(rest), renderOrder, SOURCE_LABELS);
+      // CAP the details block too: the whole comment must stay far from
+      // GitHub's 65,536-char limit — collapsing alone hides bytes visually
+      // but the body still carries them. 40 more inside, the remainder
+      // counted but suppressed.
+      const detailsFindings = rest.slice(0, MAX_DETAILS_FINDINGS);
+      const suppressed = rest.length - detailsFindings.length;
+      const detailsLabel =
+        suppressed > 0
+          ? `\ud83d\udcca +${rest.length} more findings (all severities; ${suppressed} lowest-severity suppressed for comment size)`
+          : `\ud83d\udcca +${rest.length} more findings (all severities)`;
+      comment += `<summary>${detailsLabel}</summary>\n\n`;
+      comment += renderFindingGroups(
+        groupFindingsBySource(detailsFindings),
+        renderOrder,
+        SOURCE_LABELS,
+      );
       comment += `</details>\n\n`;
     }
   }
