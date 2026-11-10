@@ -1,0 +1,67 @@
+diff --git a/src/filler-a.ts b/src/filler-a.ts
+index 1111111..2222222 100644
+--- a/src/filler-a.ts
++++ b/src/filler-a.ts
+@@ -1,1 +1,2 @@
++// filler-a routine comment
+diff --git a/src/filler-b.ts b/src/filler-b.ts
+index 1111111..2222222 100644
+--- a/src/filler-b.ts
++++ b/src/filler-b.ts
+@@ -1,1 +1,2 @@
++export const fvarB = 1
+diff --git a/src/filler-c.ts b/src/filler-c.ts
+index 1111111..2222222 100644
+--- a/src/filler-c.ts
++++ b/src/filler-c.ts
+@@ -1,1 +1,2 @@
++export const fvarC = 1
+diff --git a/src/filler-d.ts b/src/filler-d.ts
+index 1111111..2222222 100644
+--- a/src/filler-d.ts
++++ b/src/filler-d.ts
+@@ -1,1 +1,2 @@
++export const fvarD = 1
+diff --git a/src/filler-e.ts b/src/filler-e.ts
+index 1111111..2222222 100644
+--- a/src/filler-e.ts
++++ b/src/filler-e.ts
+@@ -1,1 +1,2 @@
++export const fvarE = 1
+diff --git a/src/filler-f.ts b/src/filler-f.ts
+index 1111111..2222222 100644
+--- a/src/filler-f.ts
++++ b/src/filler-f.ts
+@@ -1,1 +1,2 @@
++export const fvarF = 1
+diff --git a/src/filler-g.ts b/src/filler-g.ts
+index 1111111..2222222 100644
+--- a/src/filler-g.ts
++++ b/src/filler-g.ts
+@@ -1,1 +1,2 @@
++export const fvarG = 1
+diff --git a/src/filler-h.ts b/src/filler-h.ts
+index 1111111..2222222 100644
+--- a/src/filler-h.ts
++++ b/src/filler-h.ts
+@@ -1,1 +1,2 @@
++export const fvarH = 1
+diff --git a/src/filler-i.ts b/src/filler-i.ts
+index 1111111..2222222 100644
+--- a/src/filler-i.ts
++++ b/src/filler-i.ts
+@@ -1,1 +1,3 @@
++export const fvarI = 1
++use(rankerMain(rankerHelper(input)))
+diff --git a/src/hub.ts b/src/hub.ts
+index 1111111..2222222 100644
+--- a/src/hub.ts
++++ b/src/hub.ts
+@@ -1,1 +1,2 @@
++// hub routine comment
+diff --git a/src/ranker.ts b/src/ranker.ts
+index 1111111..2222222 100644
+--- a/src/ranker.ts
++++ b/src/ranker.ts
+@@ -1,1 +1,2 @@
++// ranker entry point touched

@@ -1,0 +1,510 @@
+{
+  "version": 1,
+  "rootDir": "/repo",
+  "nodes": {
+    "src/edges.ts": {
+      "hash": "h1",
+      "language": "typescript",
+      "imports": [
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/filler-a.ts": ["namedDepSymbolX01"],
+        "src/filler-b.ts": ["namedDepSymbolX01"],
+        "src/filler-c.ts": ["namedDepSymbolX01"],
+        "src/filler-d.ts": ["namedDepSymbolX01"],
+        "src/filler-e.ts": ["namedDepSymbolX01"],
+        "src/filler-f.ts": ["namedDepSymbolX01"],
+        "src/filler-g.ts": ["namedDepSymbolX01"],
+        "src/filler-h.ts": ["namedDepSymbolX01"],
+        "src/filler-i.ts": ["namedDepSymbolX01"],
+        "src/hub.ts": ["namedDepSymbolX01"]
+      },
+      "exports": [
+        "edgesExportSymbol01",
+        "edgesExportSymbol02",
+        "edgesExportSymbol03",
+        "edgesExportSymbol04",
+        "edgesExportSymbol05",
+        "edgesExportSymbol06",
+        "edgesExportSymbol07",
+        "edgesExportSymbol08",
+        "edgesExportSymbol09",
+        "edgesExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-a.ts": {
+      "hash": "h2",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-b.ts": {
+      "hash": "h3",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-c.ts": {
+      "hash": "h4",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-d.ts": {
+      "hash": "h5",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-e.ts": {
+      "hash": "h6",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-f.ts": {
+      "hash": "h7",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-g.ts": {
+      "hash": "h8",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-h.ts": {
+      "hash": "h9",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-i.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-i.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/filler-i.ts": {
+      "hash": "h10",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/hub.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolF01"],
+        "src/filler-a.ts": ["namedDepSymbolF01"],
+        "src/filler-b.ts": ["namedDepSymbolF01"],
+        "src/filler-c.ts": ["namedDepSymbolF01"],
+        "src/filler-d.ts": ["namedDepSymbolF01"],
+        "src/filler-e.ts": ["namedDepSymbolF01"],
+        "src/filler-f.ts": ["namedDepSymbolF01"],
+        "src/filler-g.ts": ["namedDepSymbolF01"],
+        "src/filler-h.ts": ["namedDepSymbolF01"],
+        "src/hub.ts": ["namedDepSymbolF01"]
+      },
+      "exports": [
+        "fillerExportSymbol01",
+        "fillerExportSymbol02",
+        "fillerExportSymbol03",
+        "fillerExportSymbol04",
+        "fillerExportSymbol05",
+        "fillerExportSymbol06",
+        "fillerExportSymbol07",
+        "fillerExportSymbol08",
+        "fillerExportSymbol09",
+        "fillerExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/hub.ts": {
+      "hash": "h11",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolX01"],
+        "src/filler-a.ts": ["namedDepSymbolX01"],
+        "src/filler-b.ts": ["namedDepSymbolX01"],
+        "src/filler-c.ts": ["namedDepSymbolX01"],
+        "src/filler-d.ts": ["namedDepSymbolX01"],
+        "src/filler-e.ts": ["namedDepSymbolX01"],
+        "src/filler-f.ts": ["namedDepSymbolX01"],
+        "src/filler-g.ts": ["namedDepSymbolX01"],
+        "src/filler-h.ts": ["namedDepSymbolX01"],
+        "src/filler-i.ts": ["namedDepSymbolX01"]
+      },
+      "exports": [
+        "hubExportSymbol01",
+        "hubExportSymbol02",
+        "hubExportSymbol03",
+        "hubExportSymbol04",
+        "hubExportSymbol05",
+        "hubExportSymbol06",
+        "hubExportSymbol07",
+        "hubExportSymbol08",
+        "hubExportSymbol09",
+        "hubExportSymbol010"
+      ],
+      "calls": [],
+      "isTest": false
+    },
+    "src/ranker.ts": {
+      "hash": "h12",
+      "language": "typescript",
+      "imports": [
+        "src/edges.ts",
+        "src/filler-a.ts",
+        "src/filler-b.ts",
+        "src/filler-c.ts",
+        "src/filler-d.ts",
+        "src/filler-e.ts",
+        "src/filler-f.ts",
+        "src/filler-g.ts",
+        "src/filler-h.ts",
+        "src/filler-i.ts"
+      ],
+      "importSymbols": {
+        "src/edges.ts": ["namedDepSymbolX01"],
+        "src/filler-a.ts": ["namedDepSymbolX01"],
+        "src/filler-b.ts": ["namedDepSymbolX01"],
+        "src/filler-c.ts": ["namedDepSymbolX01"],
+        "src/filler-d.ts": ["namedDepSymbolX01"],
+        "src/filler-e.ts": ["namedDepSymbolX01"],
+        "src/filler-f.ts": ["namedDepSymbolX01"],
+        "src/filler-g.ts": ["namedDepSymbolX01"],
+        "src/filler-h.ts": ["namedDepSymbolX01"],
+        "src/filler-i.ts": ["namedDepSymbolX01"]
+      },
+      "exports": [
+        "rankerMain",
+        "rankerHelper",
+        "rankerExportExtra01",
+        "rankerExportExtra02",
+        "rankerExportExtra03",
+        "rankerExportExtra04",
+        "rankerExportExtra05",
+        "rankerExportExtra06",
+        "rankerExportExtra07",
+        "rankerExportExtra08"
+      ],
+      "calls": [],
+      "isTest": false
+    }
+  }
+}
