@@ -19,6 +19,7 @@ import {
   DEFAULT_GRAPH_CONTEXT_MAX_TOKENS,
   formatGraphNeighborhood,
 } from '../graph/neighborhood-format.js';
+import { rankNeighborhoods } from '../graph/neighborhood-rank.js';
 import { collectFileNeighborhoods } from '../graph/neighbors.js';
 import type { DependencyGraph, GraphMetadata } from '../graph/schema.js';
 import { isGraphStale } from '../graph/schema.js';
@@ -319,8 +320,11 @@ export async function gatherGraphContextSafe(
       : ('file-level' as const);
 
     const neighborhoods = collectFileNeighborhoods(graph, fileList);
+    // Order-only lexical+structural ranking INSIDE the existing try — a
+    // ranker throw rides the catch below (failedStep, review continues).
+    const ranked = rankNeighborhoods(neighborhoods, input.diff, graph);
     const maxTokens = input.settings.graphContextMaxTokens ?? DEFAULT_GRAPH_CONTEXT_MAX_TOKENS;
-    const { context, renderedFiles } = formatGraphNeighborhood(neighborhoods, {
+    const { context, renderedFiles } = formatGraphNeighborhood(ranked, {
       maxTokens,
       freshness,
     });
@@ -333,7 +337,7 @@ export async function gatherGraphContextSafe(
 
     return {
       context,
-      metadata: { filesCovered: renderedFiles, truncatedFiles, freshness },
+      metadata: { filesCovered: renderedFiles, truncatedFiles, freshness, rankingMode: 'lexical' },
     };
   } catch (error) {
     // Rung: formatter/query throw → failedStep + continue without context.

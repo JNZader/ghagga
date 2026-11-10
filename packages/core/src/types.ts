@@ -564,6 +564,14 @@ export interface GraphContextMetadata {
   truncatedFiles: number;
   /** Staleness tier of the rendered content (absent when skipped). */
   freshness?: 'exact' | 'file-level';
+  /**
+   * Ranking mode that ordered the rendered entries (context-hybrid-ranking).
+   * Present ONLY on the rendered path — absent ≙ the ranker did not run
+   * (step disabled, no graph, or stale beyond tolerance; skip-path metadata
+   * stays byte-identical to the pre-ranking shape). `'hybrid'` is reserved
+   * for Phase 2 and is not a current value.
+   */
+  rankingMode?: 'lexical';
 }
 
 export interface ReviewMetadata {
