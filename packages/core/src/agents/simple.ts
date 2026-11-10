@@ -238,7 +238,7 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
       message: `Review complete — ${result.tokensUsed} tokens, ${(executionTimeMs / 1000).toFixed(1)}s`,
     });
 
-    return parseReviewResponse(
+    const reviewResult = parseReviewResponse(
       result.text,
       result.provider as LLMProvider,
       result.model,
@@ -246,6 +246,16 @@ export async function runSimpleReview(input: SimpleReviewInput): Promise<ReviewR
       executionTimeMs,
       memoryContext,
     );
+
+    // review-output-compression T2.1: propagate the measured token split
+    // (workflow/consensus hasSplit semantics) — set on metadata only when
+    // the provider reported one; tokensUsed stays the authoritative total.
+    if (result.inputTokens !== undefined || result.outputTokens !== undefined) {
+      reviewResult.metadata.inputTokensUsed = result.inputTokens ?? 0;
+      reviewResult.metadata.outputTokensUsed = result.outputTokens ?? 0;
+    }
+
+    return reviewResult;
   } catch (error) {
     // Groq is a direct provider: a failed call must fail the review (the Action
     // test treats a swallowed NEEDS_HUMAN_REVIEW as a false pass).

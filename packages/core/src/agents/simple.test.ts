@@ -553,3 +553,50 @@ describe('runSimpleReview output style calibration', () => {
     expect(system).toBe(PRE_CHANGE_BASELINE);
   });
 });
+
+// ─── Output token split (review-output-compression T2.1) ────────
+
+describe('runSimpleReview output token split', () => {
+  function makeSplitInput(generateOverrides: Partial<Awaited<ReturnType<GenerateTextFn>>> = {}): {
+    input: SimpleReviewInput;
+  } {
+    const generateFn: GenerateTextFn = vi.fn(async () => ({
+      text: 'STATUS: PASSED\nSUMMARY: ok.\nFINDINGS:\n',
+      tokensUsed: 1000,
+      provider: 'gateway',
+      model: 'auto',
+      ...generateOverrides,
+    }));
+    const input: SimpleReviewInput = {
+      diff: '--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b',
+      provider: 'gateway',
+      model: 'auto',
+      apiKey: 'k',
+      staticContext: '',
+      memoryContext: null,
+      stackHints: '',
+      reviewLevel: 'normal',
+      generateFn,
+    };
+    return { input };
+  }
+
+  it('split-reporting provider sets outputTokensUsed (and the input side)', async () => {
+    const { input } = makeSplitInput({ inputTokens: 700, outputTokens: 300 });
+    const result = await runSimpleReview(input);
+
+    expect(result.metadata.tokensUsed).toBe(1000);
+    expect(result.metadata.inputTokensUsed).toBe(700);
+    expect(result.metadata.outputTokensUsed).toBe(300);
+  });
+
+  it('gateway-style result (no split reported) leaves the fields absent and the review succeeds', async () => {
+    const { input } = makeSplitInput();
+    const result = await runSimpleReview(input);
+
+    expect(result.status).toBe('PASSED');
+    expect(result.metadata.tokensUsed).toBe(1000);
+    expect(result.metadata.inputTokensUsed).toBeUndefined();
+    expect(result.metadata.outputTokensUsed).toBeUndefined();
+  });
+});
