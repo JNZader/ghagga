@@ -49,7 +49,12 @@ vi.mock('./agents/fan-out-lenses.js', () => ({
   runFanOutReview: vi.fn(),
   loadLensesFromDir: vi.fn(),
 }));
-vi.mock('./graph/blast-radius.js', () => ({ computeBlastRadius: vi.fn() }));
+// Partial mock (graph-context-retrieval): buildReverseIndex passes through
+// the real implementation for the graph-neighborhood step (graph/neighbors.js).
+vi.mock('./graph/blast-radius.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./graph/blast-radius.js')>();
+  return { ...actual, computeBlastRadius: vi.fn() };
+});
 vi.mock('./memory/search.js', () => ({ searchMemoryForContext: vi.fn() }));
 vi.mock('./memory/persist.js', () => ({ persistReviewObservations: vi.fn() }));
 vi.mock('./tools/plugins/index.js', () => ({ initializeDefaultTools: vi.fn() }));

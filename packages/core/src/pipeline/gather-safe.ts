@@ -14,9 +14,17 @@
  */
 
 import type { CodeIntelResult } from '../code-intel/types.js';
+import { isExactCommitFresh } from '../graph/narrow-symbols.js';
+import {
+  DEFAULT_GRAPH_CONTEXT_MAX_TOKENS,
+  formatGraphNeighborhood,
+} from '../graph/neighborhood-format.js';
+import { collectFileNeighborhoods } from '../graph/neighbors.js';
+import type { DependencyGraph, GraphMetadata } from '../graph/schema.js';
+import { isGraphStale } from '../graph/schema.js';
 import { searchMemoryForContext } from '../memory/search.js';
 import { runStaticAnalysis } from '../tools/runner.js';
-import type { ReviewInput } from '../types.js';
+import type { GraphContextMetadata, ProgressEvent, ReviewInput } from '../types.js';
 
 /**
  * Run static analysis with graceful degradation.
@@ -230,5 +238,114 @@ export async function queryCodeIntelSafe(
     });
     emit({ step: 'code-intel', message: 'Code intelligence: failed — continuing without' });
     return { results: [], filesFailed: fileList.length, durationMs: Date.now() - startTime };
+  }
+}
+
+// ─── Graph Neighborhood Context (graph-context-retrieval) ────────
+
+/** Outcome of the graph-context gather step. */
+export interface GraphContextOutcome {
+  /** Formatted (UNFENCED) neighborhood text — '' when skipped/degraded. */
+  context: string;
+  /** Engaged-outcome telemetry; undefined when the step was not engaged. */
+  metadata?: GraphContextMetadata;
+}
+
+/**
+ * Assemble the graph-neighborhood context with graceful degradation
+ * (design decision 4 staleness ladder):
+ *
+ *   disabled            → silent skip ('' + no metadata — the review is
+ *                         byte-identical to the pre-feature behavior)
+ *   no loaded graph     → silent skip in auto mode (the NORMAL state for
+ *                         repos without a graph); explicit `true` gets a
+ *                         visible 'no-graph' skip
+ *   stale (> 7 days)    → skip, visible via skippedReason 'stale-graph'
+ *   not exact-fresh     → file-level tier (paths+counts, no symbols)
+ *   exact-fresh         → full per-file detail
+ *   formatter/query throw → caught, failedStep, review continues
+ *
+ * Absence is normal, never a failedStep (except the throw row). The
+ * graph comes from prepare (state.loadedGraph) — this step NEVER calls
+ * the loader (single-load rule, see BlastRadiusOutcome.graph).
+ */
+export async function gatherGraphContextSafe(
+  input: ReviewInput,
+  fileList: string[],
+  graph: DependencyGraph | undefined,
+  graphMetadata: GraphMetadata | null | undefined,
+  emit: (event: ProgressEvent) => void,
+  failedSteps: { step: string; error: string }[],
+): Promise<GraphContextOutcome> {
+  // Disabled → feature fully off: no emit, no metadata, no context.
+  if (input.settings.enableGraphContext === false) {
+    return { context: '' };
+  }
+
+  // No loaded graph. Auto mode (undefined) treats this as the normal
+  // no-graph repo state and stays silent — prompts AND metadata remain
+  // byte-identical to the pre-feature behavior (spec: fail-closed, no
+  // error surfaced). An explicit true makes the skip visible.
+  if (!graph) {
+    if (input.settings.enableGraphContext === true) {
+      emit({ step: 'graph-context', message: 'Graph neighborhood: skipped (no graph loaded)' });
+      return {
+        context: '',
+        metadata: { skippedReason: 'no-graph', filesCovered: 0, truncatedFiles: 0 },
+      };
+    }
+    return { context: '' };
+  }
+
+  try {
+    // Staleness ladder rung 1: >7d → NO section at all. Null metadata
+    // cannot be evaluated and follows the blast-radius precedent
+    // (applyBlastRadius: `metadata ? isGraphStale(metadata) : false`).
+    if (graphMetadata && isGraphStale(graphMetadata)) {
+      emit({
+        step: 'graph-context',
+        message: `Graph neighborhood: skipped (graph stale beyond ${7}d — re-run ghagga index)`,
+      });
+      return {
+        context: '',
+        metadata: { skippedReason: 'stale-graph', filesCovered: 0, truncatedFiles: 0 },
+      };
+    }
+
+    // Rung 2: symbol claims fail closed — only an exact-commit-fresh
+    // graph (same pillars as narrowBySymbols) renders symbol detail.
+    const freshness = isExactCommitFresh(graphMetadata ?? null, input.currentHead)
+      ? ('exact' as const)
+      : ('file-level' as const);
+
+    const neighborhoods = collectFileNeighborhoods(graph, fileList);
+    const maxTokens = input.settings.graphContextMaxTokens ?? DEFAULT_GRAPH_CONTEXT_MAX_TOKENS;
+    const { context, renderedFiles } = formatGraphNeighborhood(neighborhoods, {
+      maxTokens,
+      freshness,
+    });
+    const truncatedFiles = neighborhoods.length - renderedFiles;
+
+    emit({
+      step: 'graph-context',
+      message: `Graph neighborhood: ${renderedFiles}/${fileList.length} changed file(s) covered (${freshness} tier)`,
+    });
+
+    return {
+      context,
+      metadata: { filesCovered: renderedFiles, truncatedFiles, freshness },
+    };
+  } catch (error) {
+    // Rung: formatter/query throw → failedStep + continue without context.
+    console.warn(
+      '[ghagga] Graph neighborhood assembly failed (degrading gracefully):',
+      error instanceof Error ? error.message : String(error),
+    );
+    failedSteps.push({
+      step: 'graph-context',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    emit({ step: 'graph-context', message: 'Graph neighborhood: failed — continuing without' });
+    return { context: '' };
   }
 }

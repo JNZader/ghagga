@@ -245,6 +245,33 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
   filteredDiff = blast.filteredDiff;
   const blastRadiusMetadata = blast.blastRadiusMetadata;
 
+  // ── Step 2.5b: Graph-context load (optional) ──────────────
+  // The gather-phase graph-context step consumes the graph loaded here in
+  // prepare and NEVER calls the loader itself (same single-load rule as
+  // step 2.6, see BlastRadiusOutcome.graph). Auto mode (setting undefined)
+  // reuses whatever blast-radius loaded — it never triggers a load, so a
+  // no-graph review stays byte-identical to the pre-feature behavior.
+  // Only an EXPLICIT enableGraphContext: true with blast-radius unable to
+  // supply a graph performs its own (single) load.
+  let loadedGraph = blast.graph;
+  let loadedGraphMetadata = blast.graphMetadata;
+  if (input.settings.enableGraphContext === true && !loadedGraph && input.graphLoader) {
+    try {
+      const graph = await input.graphLoader.load();
+      if (graph) {
+        loadedGraph = graph;
+        loadedGraphMetadata = (await input.graphLoader.loadMetadata()) ?? null;
+      }
+    } catch (error) {
+      // Fail closed — no neighborhood context, never a failed review
+      // (spec: "Fail-closed when the graph is missing").
+      console.warn(
+        '[ghagga] Graph-context load failed (degrading gracefully):',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   // ── Step 2.6: Call-chain + reverse-deps (optional, runs when blast-radius enabled) ──
   const callChainContext = await buildCallChainContext({
     input,
@@ -293,6 +320,8 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
     filteredFiles,
     filteredDiff,
     blastRadiusMetadata,
+    loadedGraph,
+    loadedGraphMetadata,
     callChainContext,
     stacks,
     stackHints,
@@ -307,6 +336,7 @@ export async function prepare(input: ReviewInput): Promise<PrepareOutcome> {
     staticContext: '',
     memoryContext: null,
     codeIntelContext: '',
+    graphNeighborhoodContext: '',
     checklistContext: '',
     resolvedChecklist: null,
     negativeExamplesPrompt: '',

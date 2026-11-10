@@ -116,6 +116,14 @@ export async function enrich(state: PipelineState): Promise<void> {
     result.metadata.blastRadius = state.blastRadiusMetadata;
   }
 
+  // Add graph-neighborhood context metadata (if applicable) — set only
+  // when the step was materially engaged (graph loaded, not disabled);
+  // absent entirely for the normal no-graph/disabled states so those
+  // results stay byte-identical to the pre-feature behavior.
+  if (state.graphContextMetadata) {
+    result.metadata.graphContextMetadata = state.graphContextMetadata;
+  }
+
   // Add code intelligence metadata (if applicable)
   if (state.codeIntelMetadata) {
     result.codeIntelMetadata = state.codeIntelMetadata;

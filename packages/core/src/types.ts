@@ -283,6 +283,20 @@ export interface ReviewSettings {
   codeIntelTimeout?: number;
   /** Max tokens for code intelligence context. Default: 1500. */
   codeIntelMaxTokens?: number;
+  /**
+   * Enable the graph-neighborhood context step (graph-context-retrieval).
+   * Default: undefined = auto-ON when a graph is loaded (the blast-radius
+   * step's loaded graph, or an explicit `true` triggers its own load).
+   * `false` disables the step entirely — prompts and metadata stay
+   * byte-identical to the pre-feature behavior.
+   */
+  enableGraphContext?: boolean;
+  /**
+   * Max tokens for the graph-neighborhood context sidecar. Default: 1200
+   * (DEFAULT_GRAPH_CONTEXT_MAX_TOKENS). The budget is dedicated — it is
+   * never carved from the 70/30 diff/context split.
+   */
+  graphContextMaxTokens?: number;
   /** Max concurrent LLM calls in workflow/consensus modes. Default: 2. */
   reviewConcurrency?: number;
   /** Delay in ms between sequential LLM call batches. Default: 0. */
@@ -525,6 +539,25 @@ export interface ReviewFinding {
   usageDetail?: import('./exploitability/types.js').UsageDetail;
 }
 
+/**
+ * Graph-neighborhood context step results (graph-context-retrieval).
+ * Mirrors the CORE-INTEL-003 visibility pattern: `skippedReason` explains
+ * an engaged-but-empty outcome; `freshness` names the staleness ladder
+ * tier the rendered context used. Absent from the metadata entirely when
+ * the step was disabled or no graph was loaded (the normal, non-error
+ * state — see ReviewMetadata.graphContextMetadata).
+ */
+export interface GraphContextMetadata {
+  /** Why the step produced no context despite being engaged. */
+  skippedReason?: 'no-graph' | 'stale-graph';
+  /** Neighborhood entries rendered into the context (post-budget). */
+  filesCovered: number;
+  /** Entries dropped by the token budget (the overflow ladder row). */
+  truncatedFiles: number;
+  /** Staleness tier of the rendered content (absent when skipped). */
+  freshness?: 'exact' | 'file-level';
+}
+
 export interface ReviewMetadata {
   /** Review mode used */
   mode: ReviewMode;
@@ -549,6 +582,15 @@ export interface ReviewMetadata {
 
   /** Blast-radius analysis results (present when enableBlastRadius is true). */
   blastRadius?: import('./graph/schema.js').BlastRadiusMetadata;
+
+  /**
+   * Graph-neighborhood context results (graph-context-retrieval). Present
+   * only when the step was materially engaged: a graph was loaded and the
+   * setting was not disabled. Absence is the normal no-graph/disabled
+   * state — deliberately indistinguishable from the pre-feature behavior
+   * (spec: "same result shape as before this change").
+   */
+  graphContextMetadata?: GraphContextMetadata;
 
   /** Total additions across all diff files. */
   totalAdditions?: number;

@@ -136,6 +136,13 @@ export interface ReviewOptions {
    * defers to `.ghagga.json`/auto-detection (see `resolveBlastRadiusEnabled`).
    */
   blastRadius?: boolean;
+  /**
+   * Explicit graph-neighborhood context override from
+   * `--no-graph-context` (graph-context-retrieval). `false` forces the
+   * step off regardless of graph presence / config; `undefined` defers to
+   * `.ghagga.json`/auto-detection (see `resolveGraphContextEnabled`).
+   */
+  graphContext?: boolean;
 }
 
 /**
@@ -207,6 +214,17 @@ interface GhaggaConfig {
    * over this config key.
    */
   enableBlastRadius?: boolean;
+  /**
+   * Enable the graph-neighborhood context step (graph-context-retrieval).
+   * Same precedence as `enableBlastRadius`: `--no-graph-context` wins,
+   * then this key, then auto-detection (`.ghagga/graph.json` presence).
+   */
+  enableGraphContext?: boolean;
+  /**
+   * Max tokens for the graph-neighborhood context sidecar. Optional
+   * positive integer; omitted uses the core default (1,200).
+   */
+  graphContextMaxTokens?: number;
   /** Fail-closed review anchor. Hex SHA or `"auto"`. CLI `--anchor` wins. */
   anchor?: string;
 }
@@ -316,6 +334,17 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     // against repoPath (the review target), not process.cwd() (CRITICAL-2).
     settings.enableBlastRadius = resolveBlastRadiusEnabled(repoPath, options, fileConfig);
 
+    // Step 3.4b: Resolve graph-neighborhood context auto-ON
+    // (graph-context-retrieval) — same precedence/auto-detection as
+    // blast-radius, so `ghagga index` + `ghagga review` lights both up.
+    settings.enableGraphContext = resolveGraphContextEnabled(repoPath, options, fileConfig);
+    if (
+      typeof fileConfig.graphContextMaxTokens === 'number' &&
+      fileConfig.graphContextMaxTokens > 0
+    ) {
+      settings.graphContextMaxTokens = fileConfig.graphContextMaxTokens;
+    }
+
     // Step 3.4.5: Wire the local FilesystemGraphLoader + fs fileReader when
     // blast-radius is enabled (design v2 D3/D4), and surface staleness
     // (D2) + partial-language-coverage (D8) as advisory warnings — never
@@ -337,7 +366,12 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     // symbol-precise blast-radius narrowing (scip-symbol-exclusion D0).
     let currentHead: string | undefined;
 
-    if (settings.enableBlastRadius) {
+    // Graph-context (graph-context-retrieval): when ONLY graph-context is
+    // enabled (e.g. `--no-blast-radius` with a graph present), the loader
+    // is still wired — prepare's step 2.5b loads the graph for the
+    // neighborhood step, and the staleness/coverage advisories below stay
+    // accurate for either consumer.
+    if (settings.enableBlastRadius || settings.enableGraphContext) {
       const filesystemGraphLoader = new FilesystemGraphLoader(repoPath, {
         onOversize: (bytes, max) => {
           tui.log.warn(
@@ -1168,6 +1202,30 @@ export function resolveBlastRadiusEnabled(
   if (options.blastRadius === false) return false;
   if (fileConfig.enableBlastRadius === false) return false;
   if (fileConfig.enableBlastRadius === true) return true;
+  return existsSync(join(repoPath, '.ghagga', 'graph.json'));
+}
+
+/**
+ * Resolve whether the graph-neighborhood context step should be enabled
+ * for this review run (graph-context-retrieval) — mirrors
+ * `resolveBlastRadiusEnabled` exactly.
+ *
+ * Precedence (highest to lowest):
+ *   1. `--no-graph-context` (options.graphContext === false) → OFF
+ *   2. `.ghagga.json` `enableGraphContext` (explicit true/false) → that value
+ *   3. Auto-ON when `<repoPath>/.ghagga/graph.json` exists
+ *   4. OFF (no graph, no override)
+ *
+ * Same repoPath-relative existence check as blast-radius (CRITICAL-2).
+ */
+export function resolveGraphContextEnabled(
+  repoPath: string,
+  options: Pick<ReviewOptions, 'graphContext'>,
+  fileConfig: Pick<GhaggaConfig, 'enableGraphContext'>,
+): boolean {
+  if (options.graphContext === false) return false;
+  if (fileConfig.enableGraphContext === false) return false;
+  if (fileConfig.enableGraphContext === true) return true;
   return existsSync(join(repoPath, '.ghagga', 'graph.json'));
 }
 
