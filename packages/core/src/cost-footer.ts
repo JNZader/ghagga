@@ -58,17 +58,22 @@ export interface ReviewCost {
   model: string;
   pricingFound: boolean;
   /**
-   * True when the input/output split comes from MEASURED provider usage
+   * True when `estimatedInputTokens` is MEASURED provider usage
    * (graph-context-retrieval T5.5); false when it is the 70/30 heuristic
    * fallback (unmeasured providers — gateway, usage-less CLI adapters).
    */
-  splitMeasured: boolean;
+  inputMeasured: boolean;
+  /** True when `estimatedOutputTokens` is measured provider usage. */
+  outputMeasured: boolean;
 }
 
 /**
  * Estimate cost from total token count and model.
  * When only total tokens are known (no input/output split),
  * we estimate 70% input / 30% output based on typical review patterns.
+ * Each side is tracked separately: a provider may report only one of the
+ * two, in which case the other side falls back to the heuristic and the
+ * footer labels it as estimated (comment-format-signal Fix 4).
  */
 export function calculateReviewCost(
   totalTokens: number,
@@ -77,11 +82,10 @@ export function calculateReviewCost(
 ): ReviewCost {
   const pricing = getModelPricing(model);
 
+  const inputMeasured = options?.inputTokens !== undefined;
+  const outputMeasured = options?.outputTokens !== undefined;
   const inputTokens = options?.inputTokens ?? Math.round(totalTokens * 0.7);
   const outputTokens = options?.outputTokens ?? Math.round(totalTokens * 0.3);
-  // Measured split only when the caller supplied real provider usage;
-  // the 70/30 heuristic survives solely as the unmeasured fallback.
-  const splitMeasured = options?.inputTokens !== undefined || options?.outputTokens !== undefined;
 
   if (!pricing) {
     return {
@@ -91,7 +95,8 @@ export function calculateReviewCost(
       costUSD: 0,
       model,
       pricingFound: false,
-      splitMeasured,
+      inputMeasured,
+      outputMeasured,
     };
   }
 
@@ -106,7 +111,8 @@ export function calculateReviewCost(
     costUSD: Math.round(cost * 10000) / 10000,
     model,
     pricingFound: true,
-    splitMeasured,
+    inputMeasured,
+    outputMeasured,
   };
 }
 
@@ -127,11 +133,24 @@ export function formatCostFooter(cost: ReviewCost): string {
 
   const tokens = formatTokens(cost.totalTokens);
 
-  // graph-context-retrieval T5.5: the split is always shown, labeled with
-  // its provenance — measured usage vs the estimated 70/30 heuristic.
-  const split = cost.splitMeasured
-    ? ` (in ${formatTokens(cost.estimatedInputTokens)} / out ${formatTokens(cost.estimatedOutputTokens)})`
-    : ` (in ${formatTokens(cost.estimatedInputTokens)} / out ${formatTokens(cost.estimatedOutputTokens)}, estimated 70/30)`;
+  // graph-context-retrieval T5.5 + comment-format-signal Fix 4: the split is
+  // always shown, labeled with its HONEST provenance. A partially-measured
+  // split must not render identically to a measured one (REA-003): the
+  // estimated figure carries a `~` and the trailing tag names WHICH side is
+  // estimated.
+  const inTokens = formatTokens(cost.estimatedInputTokens);
+  const outTokens = formatTokens(cost.estimatedOutputTokens);
+
+  let split: string;
+  if (cost.inputMeasured && cost.outputMeasured) {
+    split = ` (in ${inTokens} / out ${outTokens})`;
+  } else if (cost.inputMeasured) {
+    split = ` (in ${inTokens} / out ~${outTokens}, output estimated)`;
+  } else if (cost.outputMeasured) {
+    split = ` (in ~${inTokens} / out ${outTokens}, input estimated)`;
+  } else {
+    split = ` (in ${inTokens} / out ${outTokens}, estimated 70/30)`;
+  }
 
   if (!cost.pricingFound) {
     return `\n<sub>📊 ${tokens} tokens${split} · \`${cost.model}\` · pricing unavailable</sub>\n`;
