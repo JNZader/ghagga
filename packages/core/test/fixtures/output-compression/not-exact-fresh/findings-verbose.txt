@@ -1,0 +1,9 @@
+STATUS: NEEDS_HUMAN_REVIEW
+SUMMARY: The utility module grows a second exported function while the consuming API module does not change its call sites in this diff, so the blast radius of the new export cannot be confirmed from what is shown here. A human should confirm whether any caller outside this diff was meant to pick up `helperTwo`.
+FINDINGS:
+- SEVERITY: info
+  CATEGORY: maintainability
+  FILE: src/util.ts
+  LINE: N/A
+  MESSAGE: The new `helperTwo` export has no visible consumer in this diff, and the module-level impact of widening the public surface cannot be verified from the changed files alone.
+  SUGGESTION: Confirm the intended caller exists in this change set, or gate the new export behind the follow-up change that consumes it.

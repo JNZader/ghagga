@@ -1,0 +1,8 @@
+[
+  {
+    "severity": "medium",
+    "category": "bug",
+    "file": "src/app.py",
+    "line": 7
+  }
+]

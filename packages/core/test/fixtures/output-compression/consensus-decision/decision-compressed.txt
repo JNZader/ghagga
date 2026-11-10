@@ -1,0 +1,3 @@
+DECISION: reject
+CONFIDENCE: 0.8
+REASONING: **Reject**: unused import (src/api.ts:6) + duplicated helper (src/util.ts:16) — cheap to fix, no user value delivered.
