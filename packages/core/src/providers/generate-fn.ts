@@ -25,7 +25,8 @@ export interface GenerateResult {
   /**
    * Measured prompt token count (AI SDK v5 `usage.inputTokens`),
    * graph-context-retrieval T5.1. Undefined when the backend does not
-   * report a split (gateway protocol, most CLI adapters).
+   * report a split (most CLI adapters; the gateway only when the bridge
+   * sends prompt_tokens/completion_tokens through).
    */
   inputTokens?: number;
   /** Measured completion token count — undefined when unmeasured. */
@@ -91,11 +92,20 @@ export function createGatewayGenerateFn(options: {
 }): GenerateTextFn {
   return async (system, prompt) => {
     const result = await generateViaGateway(prompt, system, options);
+    // Split fields are optional in the gateway protocol: a bridge that does
+    // not report them leaves the GenerateResult split undefined (measured
+    // total only); one that does (OpenAI-compatible prompt_tokens /
+    // completion_tokens) flows the split through untouched. tokensUsed stays
+    // the gateway-reported total either way.
+    const inputTokens = result.inputTokens;
+    const outputTokens = result.outputTokens;
     return {
       text: result.text,
       tokensUsed: result.tokensUsed ?? 0,
       provider: result.provider,
       model: result.model,
+      ...(inputTokens !== undefined ? { inputTokens } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
     };
   };
 }
