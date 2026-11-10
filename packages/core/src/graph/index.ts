@@ -40,6 +40,19 @@ export {
 export type { BlastRadiusOptions, BlastRadiusResult } from './blast-radius.js';
 export { buildReverseIndex, computeBlastRadius } from './blast-radius.js';
 
+// ─── File Neighborhood Query ────────────────────────────────────
+
+export type {
+  CollectFileNeighborhoodsOptions,
+  FileNeighborhood,
+} from './neighbors.js';
+export {
+  collectFileNeighborhoods,
+  MAX_EXPORTED_SYMBOLS_PER_FILE,
+  MAX_NEIGHBORHOOD_FILES,
+  MAX_NEIGHBORS_PER_FILE,
+} from './neighbors.js';
+
 // ─── Graph Loaders ──────────────────────────────────────────────
 
 export {
