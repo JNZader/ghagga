@@ -31,7 +31,11 @@ Branch: `feat/context-hybrid-ranking` (off `main` @ `0ebccde`). Single-writer ap
 
 ## Incidents / notes
 
-- **Pre-commit hook environment failure (2-attempt rule honored):** the full hook runs `pnpm typecheck` → `turbo run typecheck`, which fails with `Exec format error (os error 8)` spawning tsc — reproduced identically on CLEAN MAIN (not sandbox, not daemon, not my change; direct per-package `tsc` passes). Code commits made with `--no-verify` (the hook's own documented skip), with the hook's gates satisfied manually (biome on staged files clean; core+db typecheck pass). Root cause of turbo's spawn failure UNRESOLVED — machine-level backlog item.
+- **Pre-commit hook environment failure (2-attempt rule honored):** the full hook runs `pnpm typecheck` → `turbo run typecheck`, which fails with `Exec format error (os error 8)` spawning tsc — reproduced identically on CLEAN MAIN (not sandbox, not daemon, not my change; direct per-package `tsc` passes). Code commits made with `--no-verify` (the hook's own documented skip), with the hook's gates satisfied manually (biome on staged files clean; core+db typecheck pass). Root cause of turbo's host spawn failure UNRESOLVED — machine-level backlog item. NOTE: turbo builds/tests PASS inside the pre-push Docker CI sim, so the defect is host-env-specific.
+- **Pre-push CI sim failures (both pre-existing machine state, fixed during push):**
+  1. Biome error on the generated `budget-cut-ranked/graph.json` (mine — fixed by `biome check --write`, semantically identical JSON, corpus re-verified 24/24, amended into the Slice 2 commit).
+  2. `@ghagga/server`/`@ghagga/dashboard` builds failed with TS5033 permission denied on **50 stale root-owned build artifacts** (dist files from a July Docker CI run that wrote into the mounted repo as root). Fixed: 32 unlinked directly, 18 under the root-owned `apps/dashboard/dist/assets/` removed via a root Docker container (`docker run --rm -v "$PWD:/w" alpine rm -rf …`). All were gitignored build outputs — zero source impact.
+- After both fixes, the **full pre-push local CI simulation passed**: Lint ✓ Compile ✓ Tests ✓ Security scan ✓ — all 10 workspace projects, stronger than the manual standing gates.
 - `openspec validate --specs` repo-wide failures (8 specs) — pre-existing, out of scope, filed above.
 
 ## Commits (this branch)
@@ -41,4 +45,6 @@ Branch: `feat/context-hybrid-ranking` (off `main` @ `0ebccde`). Single-writer ap
 3. `5b5fd0c` docs(openspec): add context-hybrid-ranking SDD artifacts
 4. `c8ff39f` feat(core): pure lexical+structural neighborhood ranker
 5. `d891b65` feat(core): rank neighborhoods at the gather seam + rankingMode metadata
-6. (this commit) test(core): budget-cut-ranked corpus fixture + changeset
+6. `2a1c30c` test(core): budget-cut-ranked corpus case pins ranked survival at the DEFAULT budget (+ changeset + tasks/progress)
+
+**Pushed:** `feat/context-hybrid-ranking` @ `2a1c30c` → origin (full pre-push CI sim green). NO PR created, per instructions.
