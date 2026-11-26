@@ -55,6 +55,7 @@ import {
 import * as githubClient from '../github/client.js';
 import { makeGitHubAdapter } from '../github/forge-adapter-factory.js';
 import { deriveCallbackSecret, dispatchWorkflow, injectWorkflow } from '../github/runner.js';
+import { publishSecuritySignal } from '../github/security-signal.js';
 import { logger as rootLogger } from '../lib/logger.js';
 import { callbackResultKey, createRedisClient, redis } from '../lib/redis.js';
 import { validateOutboundUrl } from '../lib/safe-url.js';
@@ -277,6 +278,8 @@ export interface ReviewJobData {
     enabledTools?: string[];
     disabledTools?: string[];
     enableBlastRadius?: boolean;
+    /** Absent means critical. */
+    securityCheckThreshold?: 'critical' | 'high' | 'medium' | 'low';
   };
 }
 
@@ -990,7 +993,8 @@ async function processReview(
   // guarantees this token outlives the postback (BUDGET_SECONDS), or re-mints
   // PROACTIVELY if the cache has aged out during a long poll loop.
   const freshToken = await tokenSource.getToken();
-  let adapter2 = makeGitHubAdapter({ owner, repo, token: freshToken });
+  let postbackToken = freshToken;
+  let adapter2 = makeGitHubAdapter({ owner, repo, token: postbackToken });
   let commentBody = formatReviewComment(reviewResult, {
     fileStats:
       reviewResult.metadata.totalAdditions !== undefined
@@ -1037,7 +1041,8 @@ async function processReview(
     );
     tokenSource.invalidate();
     const retryToken = await tokenSource.getToken();
-    adapter2 = makeGitHubAdapter({ owner, repo, token: retryToken });
+    postbackToken = retryToken;
+    adapter2 = makeGitHubAdapter({ owner, repo, token: postbackToken });
     // The retry is UNGUARDED: if it ALSO throws (auth or otherwise) it propagates
     // and fails the job. This is the bound — exactly one retry, never a loop.
     upsertResult = await adapter2.upsertSummaryComment(changeRef, commentBody, REVIEW_MARKER);
@@ -1045,6 +1050,45 @@ async function processReview(
   // BOX the GitHub-native numeric id review.ts-LOCAL (R-COMMENTID).
   const postedCommentId = githubCommentId(upsertResult.created);
   log.info({ commentId: postedCommentId.raw }, 'Review comment posted');
+
+  // ghagga/security check run + code-scanning SARIF. Optional on the client
+  // so a test double that does not implement the checks API is unchanged.
+  // A failure here does not fail the review or remove the summary comment.
+  if (
+    'listCheckRunsByName' in githubClient &&
+    'createCheckRun' in githubClient &&
+    'updateCheckRun' in githubClient &&
+    typeof githubClient.listCheckRunsByName === 'function' &&
+    typeof githubClient.createCheckRun === 'function' &&
+    typeof githubClient.updateCheckRun === 'function'
+  ) {
+    try {
+      await publishSecuritySignal({
+        client: {
+          listCheckRunsByName: githubClient.listCheckRunsByName,
+          createCheckRun: githubClient.createCheckRun,
+          updateCheckRun: githubClient.updateCheckRun,
+          ...('uploadSarif' in githubClient && typeof githubClient.uploadSarif === 'function'
+            ? { uploadSarif: githubClient.uploadSarif }
+            : {}),
+        },
+        owner,
+        repo,
+        token: postbackToken,
+        headSha: job.data.headSha,
+        prNumber,
+        status: reviewResult.status,
+        findings: reviewResult.findings ?? [],
+        threshold: job.data.settings.securityCheckThreshold,
+        onSarifError: (error) => {
+          log.warn({ error: String(error) }, 'SARIF upload to code scanning failed');
+        },
+      });
+    } catch (error) {
+      log.warn({ error: String(error) }, 'ghagga/security check run was not published');
+    }
+  }
+
   await job.updateProgress(90);
 
   // Step 7: React with rocket to the trigger comment

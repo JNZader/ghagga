@@ -303,6 +303,15 @@ export type {
   SarifRule,
 } from './sarif/index.js';
 export { buildSarif } from './sarif/index.js';
+export type { SecurityCheckDecision, SecurityCheckThreshold } from './security/check-decision.js';
+export {
+  DEFAULT_SECURITY_CHECK_THRESHOLD,
+  decideSecurityCheck,
+  normalizeSecurityCheckThreshold,
+  SECURITY_CHECK_THRESHOLDS,
+  securityFindingsAtThreshold,
+  shouldUpdateSecurityCheck,
+} from './security/check-decision.js';
 
 // ─── Checklist ─────────────────────────────────────────────────
 
