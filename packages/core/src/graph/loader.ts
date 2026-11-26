@@ -84,13 +84,12 @@ export class GitHubApiGraphLoader implements GraphLoader {
       if (onDefault.ok) return onDefault.json();
       if (onDefault.status !== 404) return null;
     }
-    const branchResponse = await fetch(
-      `${repoUrl}/branches/${encodeURIComponent('ghagga/graph')}`,
-      {
-        headers: jsonHeaders,
-        signal: AbortSignal.timeout(5_000),
-      },
-    );
+    // Raw slash: GitHub treats /branches/ghagga/graph as that branch name.
+    // encodeURIComponent would turn the slash into %2F and miss the branch.
+    const branchResponse = await fetch(`${repoUrl}/branches/ghagga/graph`, {
+      headers: jsonHeaders,
+      signal: AbortSignal.timeout(5_000),
+    });
     let graphBranchProtected: boolean | null = null;
     if (branchResponse.ok) {
       const branch = (await branchResponse.json()) as { protected?: unknown };

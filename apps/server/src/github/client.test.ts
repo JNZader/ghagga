@@ -2,6 +2,7 @@ import { createHmac, createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../lib/logger.js';
 import {
+  clearTrustedGraphCache,
   createExplanationComment,
   createIssue,
   fetchFileContents,
@@ -385,6 +386,7 @@ describe('fetchGraphFromBranch', () => {
   const mockFetch = vi.fn();
 
   beforeEach(() => {
+    clearTrustedGraphCache();
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
   });
@@ -469,7 +471,30 @@ describe('fetchGraphFromBranch', () => {
     const result = await fetchGraphFromBranch('owner', 'repo', 'token');
     expect(result?.version).toBe(1);
     const urls = mockFetch.mock.calls.map((call) => String(call[0]));
-    expect(urls.some((url) => url.includes('ref=ghagga'))).toBe(true);
+    // Path segment keeps the slash. The ref query param is percent-encoded.
+    expect(urls).toContain('https://api.github.com/repos/owner/repo/branches/ghagga/graph');
+    expect(urls).toContain(
+      'https://api.github.com/repos/owner/repo/contents/.ghagga/graph.json?ref=ghagga%2Fgraph',
+    );
+    expect(urls).not.toContain('https://api.github.com/repos/owner/repo/branches/ghagga%2Fgraph');
+  });
+
+  it('reuses the cached default branch and skips a second repo metadata request', async () => {
+    routeFetch(VALID_GRAPH);
+    const repoUrl = 'https://api.github.com/repos/owner/repo';
+
+    await fetchGraphFromBranch('owner', 'repo', 'token');
+    const firstRepoCalls = mockFetch.mock.calls.filter((call) => call[0] === repoUrl).length;
+    expect(firstRepoCalls).toBe(1);
+
+    mockFetch.mockClear();
+    await fetchGraphMetadata('owner', 'repo', 'token');
+    const secondRepoCalls = mockFetch.mock.calls.filter((call) => call[0] === repoUrl).length;
+    expect(secondRepoCalls).toBe(0);
+    const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain(
+      'https://api.github.com/repos/owner/repo/contents/.ghagga/metadata.json?ref=main',
+    );
   });
 
   it('returns null when ghagga/graph exists but is not protected', async () => {

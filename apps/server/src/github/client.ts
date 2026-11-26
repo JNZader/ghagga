@@ -1231,12 +1231,37 @@ export async function fetchGraphMetadata(
   }
 }
 
+/** How long a resolved default branch is reused for one owner/repo. */
+const DEFAULT_BRANCH_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface DefaultBranchCacheEntry {
+  branch: string | undefined;
+  expiresAt: number;
+}
+
+/**
+ * Default branch per `owner/repo`. The name is a property of the repository,
+ * so installations that can read the same repo share it. Failures are not
+ * cached. `fetchGraphFromBranch` and `fetchGraphMetadata` both call
+ * {@link fetchTrustedGraphFile}, and this avoids a second repo-metadata GET.
+ */
+const defaultBranchCache = new Map<string, DefaultBranchCacheEntry>();
+
+/** Test seam. Production callers rely on the TTL. */
+export function clearTrustedGraphCache(): void {
+  defaultBranchCache.clear();
+}
+
 /**
  * Read one `.ghagga` graph file from a trusted ref.
  *
  * The default branch is preferred. `ghagga/graph` is used only when that
  * branch is protected. An unprotected orphan branch is ignored: a push to
  * it would otherwise become part of the review prompt.
+ *
+ * `?ref=` is percent-encoded (`ghagga/graph` → `ghagga%2Fgraph`). The branch
+ * path keeps the slash (`/branches/ghagga/graph`): GitHub treats that as the
+ * branch name, and encoding the slash makes the path a different resource.
  */
 async function fetchTrustedGraphFile(
   owner: string,
@@ -1255,14 +1280,24 @@ async function fetchTrustedGraphFile(
     'X-GitHub-Api-Version': '2022-11-28',
   };
   const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-
-  const repoResponse = await githubCircuitBreaker.execute(() =>
-    fetch(repoUrl, { headers: jsonHeaders, signal: AbortSignal.timeout(5_000) }),
-  );
-  if (!repoResponse.ok) return null;
-  const repoBody = (await repoResponse.json()) as { default_branch?: unknown };
-  const defaultBranch =
-    typeof repoBody.default_branch === 'string' ? repoBody.default_branch : undefined;
+  const cacheKey = `${owner}/${repo}`;
+  const cached = defaultBranchCache.get(cacheKey);
+  let defaultBranch: string | undefined;
+  if (cached && cached.expiresAt > Date.now()) {
+    defaultBranch = cached.branch;
+  } else {
+    const repoResponse = await githubCircuitBreaker.execute(() =>
+      fetch(repoUrl, { headers: jsonHeaders, signal: AbortSignal.timeout(5_000) }),
+    );
+    if (!repoResponse.ok) return null;
+    const repoBody = (await repoResponse.json()) as { default_branch?: unknown };
+    defaultBranch =
+      typeof repoBody.default_branch === 'string' ? repoBody.default_branch : undefined;
+    defaultBranchCache.set(cacheKey, {
+      branch: defaultBranch,
+      expiresAt: Date.now() + DEFAULT_BRANCH_CACHE_TTL_MS,
+    });
+  }
 
   if (defaultBranch) {
     const onDefault = await githubCircuitBreaker.execute(() =>
@@ -1277,7 +1312,7 @@ async function fetchTrustedGraphFile(
 
   let graphBranchProtected: boolean | null = null;
   const branchResponse = await githubCircuitBreaker.execute(() =>
-    fetch(`${repoUrl}/branches/${encodeURIComponent('ghagga/graph')}`, {
+    fetch(`${repoUrl}/branches/ghagga/graph`, {
       headers: jsonHeaders,
       signal: AbortSignal.timeout(5_000),
     }),
