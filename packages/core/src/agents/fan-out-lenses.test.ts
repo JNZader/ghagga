@@ -100,6 +100,13 @@ describe('Lens Registry', () => {
     ]);
   });
 
+  it('security lens asks for reachability and exploitability', () => {
+    expect(LENS_SECURITY.system).toContain('REACHABILITY: [external|internal|unreachable]');
+    expect(LENS_SECURITY.system).toContain(
+      'EXPLOITABILITY: [trivial|moderate|difficult|theoretical]',
+    );
+  });
+
   it('getLens returns built-in lenses by name', () => {
     expect(getLens('security')).toBe(LENS_SECURITY);
     expect(getLens('performance')).toBe(LENS_PERFORMANCE);

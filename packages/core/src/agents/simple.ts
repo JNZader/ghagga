@@ -10,13 +10,16 @@ import type { GenerateTextFn } from '../providers/generate-fn.js';
 import type {
   FindingSeverity,
   FindingSource,
+  LensExploitability,
   LLMProvider,
   ProgressCallback,
+  Reachability,
   ReviewFinding,
   ReviewLevel,
   ReviewResult,
   ReviewStatus,
 } from '../types.js';
+import { LENS_EXPLOITABILITY_VALUES, REACHABILITY_VALUES } from '../types.js';
 import {
   buildGraphNeighborhoodSection,
   buildMemoryContext,
@@ -155,7 +158,7 @@ function parseFindingsBlock(text: string): ReviewFinding[] {
 
   // Match each finding block
   const findingPattern =
-    /- SEVERITY:\s*(\S+)\s*\n\s*CATEGORY:\s*(\S+)\s*\n\s*FILE:\s*(.+?)\s*\n\s*LINE:\s*(.+?)\s*\n\s*MESSAGE:\s*(.+?)\s*\n\s*SUGGESTION:\s*(.+?)(?=\n\s*- SEVERITY:|\n*$)/gis;
+    /- SEVERITY:\s*(\S+)\s*\n\s*CATEGORY:\s*(\S+)\s*\n\s*FILE:\s*(.+?)\s*\n\s*LINE:\s*(.+?)\s*\n\s*MESSAGE:\s*(.+?)\s*\n\s*SUGGESTION:\s*(.+?)(?:\s*\n\s*REACHABILITY:\s*(\S+))?(?:\s*\n\s*EXPLOITABILITY:\s*(\S+))?(?=\n\s*- SEVERITY:|\n*$)/gis;
 
   let match = findingPattern.exec(text);
   while (match !== null) {
@@ -165,6 +168,17 @@ function parseFindingsBlock(text: string): ReviewFinding[] {
     const lineStr = match[4]?.trim();
     const line = lineStr === 'N/A' ? undefined : parseInt(lineStr, 10) || undefined;
 
+    const rawReachability = match[7]?.trim().toLowerCase();
+    const rawLensExploitability = match[8]?.trim().toLowerCase();
+    const reachability = (REACHABILITY_VALUES as readonly string[]).includes(rawReachability ?? '')
+      ? (rawReachability as Reachability)
+      : undefined;
+    const lensExploitability = (LENS_EXPLOITABILITY_VALUES as readonly string[]).includes(
+      rawLensExploitability ?? '',
+    )
+      ? (rawLensExploitability as LensExploitability)
+      : undefined;
+
     findings.push({
       severity,
       category: match[2]?.trim().toLowerCase(),
@@ -173,6 +187,8 @@ function parseFindingsBlock(text: string): ReviewFinding[] {
       message: match[5]?.trim(),
       suggestion: match[6]?.trim(),
       source: 'ai' as FindingSource,
+      ...(reachability ? { reachability } : {}),
+      ...(lensExploitability ? { lensExploitability } : {}),
     });
     match = findingPattern.exec(text);
   }

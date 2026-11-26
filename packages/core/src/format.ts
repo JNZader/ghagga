@@ -601,7 +601,30 @@ export function demoteMarkdownHeadings(text: string): string {
  * ultimately derived from the attacker-controlled PR diff) — sanitize every
  * cell, not just the message.
  */
-function renderFindingRow(finding: ReviewFinding): string {
+/**
+ * Exploitability cell: the security-lens axis when the lens classified it,
+ * otherwise the existing Trivy CVE label (`exploitable`,
+ * `potentially-exploitable`, `not-exploitable`).
+ */
+function exploitabilityCell(finding: ReviewFinding): string {
+  return finding.lensExploitability ?? finding.exploitability ?? '';
+}
+
+function hasRiskAxis(findings: readonly ReviewFinding[]): boolean {
+  return findings.some(
+    (finding) =>
+      finding.reachability != null ||
+      finding.lensExploitability != null ||
+      finding.exploitability != null,
+  );
+}
+
+function axisCell(value: string | undefined): string {
+  if (!value) return '—';
+  return sanitizeTableCell(value);
+}
+
+function renderFindingRow(finding: ReviewFinding, withAxes: boolean): string {
   const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
   const severity = sanitizeTableCell(String(finding.severity));
   const category = sanitizeTableCell(String(finding.category));
@@ -609,7 +632,10 @@ function renderFindingRow(finding: ReviewFinding): string {
     finding.line ? `${finding.file}:${finding.line}` : finding.file,
   );
   const message = sanitizeTableCell(finding.message);
-  return `| ${emoji} ${severity} | ${category} | ${location} | ${message} |\n`;
+  const axes = withAxes
+    ? `| ${axisCell(finding.reachability)} | ${axisCell(exploitabilityCell(finding))} `
+    : '';
+  return `| ${emoji} ${severity} | ${category} ${axes}| ${location} | ${message} |\n`;
 }
 
 /**
@@ -635,11 +661,13 @@ function renderFindingGroups(
     if (!findings || findings.length === 0) continue;
 
     const label = sourceLabels[src] ?? sanitizeTableCell(src);
+    const withAxes = hasRiskAxis(findings);
     out += `**${label} (${findings.length})**\n`;
-    out += `| Severity | Category | File | Message |\n`;
-    out += `|----------|----------|------|----------|\n`;
+    out += withAxes
+      ? `| Severity | Category | Reachability | Exploitability | File | Message |\n|----------|----------|--------------|----------------|------|----------|\n`
+      : `| Severity | Category | File | Message |\n|----------|----------|------|----------|\n`;
     for (const finding of findings) {
-      out += renderFindingRow(finding);
+      out += renderFindingRow(finding, withAxes);
     }
     out += '\n';
   }
@@ -822,9 +850,11 @@ export function formatReviewComment(
       const visible = ranked.slice(0, MAX_VISIBLE_FINDINGS);
       const rest = ranked.slice(MAX_VISIBLE_FINDINGS);
 
+      const withAxes = hasRiskAxis(visible);
       comment += `**\ud83c\udfaf Top ${visible.length} findings (by severity)**\n`;
-      comment += `| Severity | Source | Category | File | Message |\n`;
-      comment += `|----------|--------|----------|------|----------|\n`;
+      comment += withAxes
+        ? `| Severity | Source | Category | Reachability | Exploitability | File | Message |\n|----------|--------|----------|--------------|----------------|------|----------|\n`
+        : `| Severity | Source | Category | File | Message |\n|----------|--------|----------|------|----------|\n`;
       for (const finding of visible) {
         const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
         const severity = sanitizeTableCell(String(finding.severity));
@@ -836,7 +866,10 @@ export function formatReviewComment(
           finding.line ? `${finding.file}:${finding.line}` : finding.file,
         );
         const message = sanitizeTableCell(finding.message);
-        comment += `| ${emoji} ${severity} | ${sourceLabel} | ${category} | ${location} | ${message} |\n`;
+        const axes = withAxes
+          ? `| ${axisCell(finding.reachability)} | ${axisCell(exploitabilityCell(finding))} `
+          : '';
+        comment += `| ${emoji} ${severity} | ${sourceLabel} | ${category} ${axes}| ${location} | ${message} |\n`;
       }
       comment += '\n';
 

@@ -96,6 +96,12 @@ FINDINGS:
   LINE: [line number or "N/A"]
   MESSAGE: [clear description of the security issue]
   SUGGESTION: [specific security fix]
+  REACHABILITY: [external|internal|unreachable]
+  EXPLOITABILITY: [trivial|moderate|difficult|theoretical]
+
+REACHABILITY: external = an untrusted caller can reach the issue across a trust boundary; internal = only an already-authenticated principal inside the boundary can reach it; unreachable = no plausible caller.
+EXPLOITABILITY: trivial = no special conditions; moderate = a common precondition; difficult = rare conditions or a bug chain; theoretical = no practical path.
+Always include both lines on every security finding.
 
 FAILED if: Any critical or high security issues. PASSED otherwise.
 Report ONLY security findings you are 90%+ confident about.`,
