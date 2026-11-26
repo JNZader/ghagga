@@ -2,6 +2,7 @@ import { createHmac, createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../lib/logger.js';
 import {
+  clearTrustedGraphCache,
   createExplanationComment,
   createIssue,
   fetchFileContents,
@@ -385,6 +386,7 @@ describe('fetchGraphFromBranch', () => {
   const mockFetch = vi.fn();
 
   beforeEach(() => {
+    clearTrustedGraphCache();
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
   });
@@ -409,19 +411,99 @@ describe('fetchGraphFromBranch', () => {
     },
   };
 
-  it('returns graph on 200 with valid JSON', async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(VALID_GRAPH),
-      }),
-    );
+  function routeFetch(
+    fileBody: unknown,
+    options: { fileOnDefault?: boolean; protected?: boolean; repoFails?: boolean } = {},
+  ) {
+    mockFetch.mockImplementation((url: string) => {
+      if (options.repoFails) return Promise.reject(new Error('network timeout'));
+      if (url === 'https://api.github.com/repos/owner/repo') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ default_branch: 'main' }),
+        });
+      }
+      if (url.includes('ref=main')) {
+        if (options.fileOnDefault === false) {
+          return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(fileBody),
+        });
+      }
+      if (url.includes('/branches/')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ protected: options.protected === true }),
+        });
+      }
+      if (url.includes('ref=ghagga')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(fileBody),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+    });
+  }
+
+  it('reads the graph from the default branch and does not touch ghagga/graph', async () => {
+    routeFetch(VALID_GRAPH);
 
     const result = await fetchGraphFromBranch('owner', 'repo', 'token');
-    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).not.toBeNull();
     expect(result?.version).toBe(1);
+    const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes('ref=main'))).toBe(true);
+    expect(urls.some((url) => url.includes('/branches/') || url.includes('ref=ghagga'))).toBe(
+      false,
+    );
+  });
+
+  it('uses a protected ghagga/graph branch when the default branch has no graph', async () => {
+    routeFetch(VALID_GRAPH, { fileOnDefault: false, protected: true });
+
+    const result = await fetchGraphFromBranch('owner', 'repo', 'token');
+    expect(result?.version).toBe(1);
+    const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+    // Path segment keeps the slash. The ref query param is percent-encoded.
+    expect(urls).toContain('https://api.github.com/repos/owner/repo/branches/ghagga/graph');
+    expect(urls).toContain(
+      'https://api.github.com/repos/owner/repo/contents/.ghagga/graph.json?ref=ghagga%2Fgraph',
+    );
+    expect(urls).not.toContain('https://api.github.com/repos/owner/repo/branches/ghagga%2Fgraph');
+  });
+
+  it('reuses the cached default branch and skips a second repo metadata request', async () => {
+    routeFetch(VALID_GRAPH);
+    const repoUrl = 'https://api.github.com/repos/owner/repo';
+
+    await fetchGraphFromBranch('owner', 'repo', 'token');
+    const firstRepoCalls = mockFetch.mock.calls.filter((call) => call[0] === repoUrl).length;
+    expect(firstRepoCalls).toBe(1);
+
+    mockFetch.mockClear();
+    await fetchGraphMetadata('owner', 'repo', 'token');
+    const secondRepoCalls = mockFetch.mock.calls.filter((call) => call[0] === repoUrl).length;
+    expect(secondRepoCalls).toBe(0);
+    const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain(
+      'https://api.github.com/repos/owner/repo/contents/.ghagga/metadata.json?ref=main',
+    );
+  });
+
+  it('returns null when ghagga/graph exists but is not protected', async () => {
+    routeFetch(VALID_GRAPH, { fileOnDefault: false, protected: false });
+
+    const result = await fetchGraphFromBranch('owner', 'repo', 'token');
+    expect(result).toBeNull();
+    const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes('ref=ghagga'))).toBe(false);
   });
 
   it('returns null on 404', async () => {
@@ -432,20 +514,14 @@ describe('fetchGraphFromBranch', () => {
   });
 
   it('returns null on timeout/network error', async () => {
-    mockFetch.mockImplementation(() => Promise.reject(new Error('network timeout')));
+    routeFetch(VALID_GRAPH, { repoFails: true });
 
     const result = await fetchGraphFromBranch('owner', 'repo', 'token');
     expect(result).toBeNull();
   });
 
   it('returns null on invalid JSON', async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ invalid: true }),
-      }),
-    );
+    routeFetch({ invalid: true });
 
     const result = await fetchGraphFromBranch('owner', 'repo', 'token');
     expect(result).toBeNull();
@@ -476,14 +552,21 @@ describe('fetchGraphMetadata', () => {
     indexDurationMs: 500,
   };
 
-  it('returns metadata on 200 with valid JSON', async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve({
+  it('returns metadata on 200 with valid JSON from the default branch', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === 'https://api.github.com/repos/owner/repo') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ default_branch: 'main' }),
+        });
+      }
+      return Promise.resolve({
         ok: true,
         status: 200,
         json: () => Promise.resolve(VALID_METADATA),
-      }),
-    );
+      });
+    });
 
     const result = await fetchGraphMetadata('owner', 'repo', 'token');
     expect(result).not.toBeNull();

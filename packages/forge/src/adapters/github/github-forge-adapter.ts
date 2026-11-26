@@ -13,9 +13,9 @@
  *   new GitHubForgeAdapter({ client, token, owner, repo })
  *
  * CAPABILITIES: reactions ✅, graphRead ✅ (both methods co-present),
- * inlineComments ❌ (GitHub inline review is deferred — no `publishInline`).
- * The `capabilities` field is a HINT only (R-CAPABILITY): callers guard optional
- * methods by method-presence, never by these flags.
+ * inlineComments ✅ only when the injected client implements
+ * `listPullReviewComments` and `createPullReviewComment`. Callers guard by
+ * method-presence (`publishInline` in adapter), never by the capability flag.
  *
  * COMMENT IDs: this adapter returns PLAIN GitHub-native numeric ids (number /
  * number[]). Boxing into {@link CommentId} happens caller-LOCAL in review.ts.
@@ -24,6 +24,7 @@
  */
 
 import type { DependencyGraph, GraphMetadata } from 'ghagga-core';
+import { githubCommentId } from '../../comment-id.js';
 import { ForgeAuthError, getErrorStatus } from '../../errors.js';
 import type {
   DigestPublicationCapable,
@@ -34,6 +35,8 @@ import type {
   FileReadCapable,
   ForgeAdapterBase,
   GraphReadCapable,
+  InlineCapable,
+  InlineComment,
   ReactionCapable,
   ReactionKind,
   SearchCapable,
@@ -47,6 +50,8 @@ import type {
   CommentMarker,
   Commit,
   ForgeCapabilities,
+  PublishFailure,
+  PublishReport,
   RepoRef,
   UnifiedDiff,
   UpsertSummaryResult,
@@ -112,9 +117,10 @@ function toNativeCommentId(commentId: CommentId): number {
  * GitHub implementation of the forge adapter.
  *
  * Implements the mandatory base plus the reaction and graph-read capabilities.
- * Deliberately does NOT implement {@link InlineCapable} (GitHub inline review
- * deferred), so `publishInline` is ABSENT — callers guarding by method-presence
- * will skip inline publishing cleanly.
+ * {@link InlineCapable.publishInline} is attached only when the client can
+ * list and create pull-review comments. Critical and high selection happens
+ * in the caller; this method posts the batch it is given and skips a comment
+ * whose marker is already on the pull request.
  */
 export class GitHubForgeAdapter
   implements
@@ -125,11 +131,7 @@ export class GitHubForgeAdapter
     SearchCapable,
     DigestPublicationCapable
 {
-  readonly capabilities: ForgeCapabilities = {
-    reactions: true,
-    inlineComments: false,
-    graphRead: true,
-  };
+  readonly capabilities: ForgeCapabilities;
 
   readonly #client: GitHubClientPort;
   readonly #token: string;
@@ -145,6 +147,8 @@ export class GitHubForgeAdapter
   declare readonly createExplanationComment?: ExplanationPublicationCapable['createExplanationComment'];
   /** Present only when all exact-owner publication delegates are available. */
   declare readonly updateExplanationComment?: ExplanationPublicationCapable['updateExplanationComment'];
+  /** Present only when the client can list and create pull-review comments. */
+  declare readonly publishInline?: InlineCapable['publishInline'];
 
   constructor(deps: GitHubForgeAdapterDeps) {
     this.#client = deps.client;
@@ -152,6 +156,18 @@ export class GitHubForgeAdapter
     this.#owner = deps.owner;
     this.#repo = deps.repo;
     this.#explanationBinding = deps.explanationBinding;
+
+    const inlineReady =
+      typeof this.#client.listPullReviewComments === 'function' &&
+      typeof this.#client.createPullReviewComment === 'function';
+    this.capabilities = {
+      reactions: true,
+      inlineComments: inlineReady,
+      graphRead: true,
+    };
+    if (inlineReady) {
+      this.publishInline = (ref, comments) => this.#publishInline(ref, comments);
+    }
 
     if (this.#explanationBinding && this.#client.fetchRevisionPinnedSnapshot) {
       this.fetchExplanationSnapshot = (identity, ref) =>
@@ -591,6 +607,75 @@ export class GitHubForgeAdapter
     }
 
     return { created: existing.latestId, deleted };
+  }
+
+  /**
+   * Post inline review comments. A comment whose marker is already on the
+   * pull request is counted as posted and not created again. A failure of
+   * one comment (including GitHub 422 when the line is outside the diff)
+   * is recorded and the rest of the batch continues. The summary comment
+   * is a separate call and is not touched here.
+   */
+  async #publishInline(ref: ChangeRequestRef, comments: InlineComment[]): Promise<PublishReport> {
+    const list = this.#client.listPullReviewComments;
+    const create = this.#client.createPullReviewComment;
+    if (!list || !create) {
+      throw new TypeError('GitHubForgeAdapter.publishInline requires inline client methods');
+    }
+
+    const posted: PublishReport['posted'] = [];
+    const failed: PublishFailure[] = [];
+
+    let existing: Array<{ id: number; body: string }> = [];
+    try {
+      existing = await this.#mapAuth(() => list(this.#owner, this.#repo, ref.iid, this.#token));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        posted,
+        failed: comments.map((_, index) => ({ index, error: message })),
+      };
+    }
+
+    for (let index = 0; index < comments.length; index++) {
+      const comment = comments[index];
+      if (!comment) continue;
+      const marker = comment.body.match(/<!-- ghagga-inline:[^>]*-->/)?.[0];
+      const already = marker ? existing.find((item) => item.body.includes(marker)) : undefined;
+      if (already) {
+        posted.push(githubCommentId(already.id));
+        continue;
+      }
+      const commitId = comment.commitSha ?? comment.position?.headSha;
+      if (!commitId) {
+        failed.push({ index, error: 'inline comment is missing commitSha' });
+        continue;
+      }
+      try {
+        const created = await create(
+          this.#owner,
+          this.#repo,
+          ref.iid,
+          { body: comment.body, commitId, path: comment.path, line: comment.line },
+          this.#token,
+        );
+        if (created?.id == null) {
+          throw new TypeError('inline post returned no id (expected { id: number })');
+        }
+        posted.push(githubCommentId(created.id));
+      } catch (error) {
+        const status = getErrorStatus(error);
+        const authFailure = status === 401 || status === 403;
+        failed.push({
+          index,
+          error: error instanceof Error ? error.message : String(error),
+          ...(status != null ? { status } : {}),
+          ...(authFailure ? { authFailure: true } : {}),
+        });
+      }
+    }
+
+    return { posted, failed };
   }
 
   // ─── ReactionCapable ───────────────────────────────────────────
