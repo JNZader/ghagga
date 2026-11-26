@@ -1935,3 +1935,33 @@ describe('formatReviewComment — refuted findings', () => {
     expect(output).not.toContain('Refuted findings');
   });
 });
+
+describe('formatReviewComment — fixed since last review', () => {
+  it('renders a section for findings that disappeared and omits it when empty', () => {
+    const result = makeResult({
+      findings: [makeFinding({ file: 'src/still.ts', line: 2, message: 'still open' })],
+    });
+    const withFixed = formatReviewComment(result, {
+      fixedSince: [
+        makeFinding({
+          severity: 'high',
+          file: 'src/gone.ts',
+          line: 9,
+          category: 'security',
+          message: 'Removed the unsafe call',
+        }),
+      ],
+    });
+    expect(withFixed).toContain('### Fixed since last review (1)');
+    expect(withFixed).toContain('src/gone.ts:9');
+    expect(withFixed).toContain('Removed the unsafe call');
+    expect(withFixed.indexOf('### Findings')).toBeLessThan(
+      withFixed.indexOf('### Fixed since last review'),
+    );
+
+    const unchanged = formatReviewComment(result);
+    const explicitEmpty = formatReviewComment(result, { fixedSince: [] });
+    expect(explicitEmpty).toBe(unchanged);
+    expect(unchanged).not.toContain('Fixed since last review');
+  });
+});

@@ -803,6 +803,26 @@ export async function findStaleApprovedDrafts(
     .limit(100);
 }
 
+/**
+ * Findings of the most recent review for this pull request, or null when
+ * the PR has never been reviewed. Callers compare this with the review
+ * about to be saved so a disappeared finding can be marked fixed.
+ */
+export async function getLatestReviewFindings(
+  db: Database,
+  repositoryId: number,
+  prNumber: number,
+): Promise<unknown[] | null> {
+  const [row] = await db
+    .select({ findings: reviews.findings })
+    .from(reviews)
+    .where(and(eq(reviews.repositoryId, repositoryId), eq(reviews.prNumber, prNumber)))
+    .orderBy(desc(reviews.createdAt))
+    .limit(1);
+  if (!row || !Array.isArray(row.findings)) return null;
+  return row.findings;
+}
+
 export async function getReviewsByRepoId(
   db: Database,
   repositoryId: number,

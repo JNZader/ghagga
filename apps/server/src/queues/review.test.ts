@@ -77,6 +77,9 @@ vi.mock('ghagga-core', async (importOriginal) => {
     reviewPipeline: (...args: unknown[]) => mockReviewPipeline(...args),
     formatReviewComment: (...args: unknown[]) => mockFormatReviewComment(...args),
     REVIEW_COMMENT_MARKER: '<!-- ghagga-review -->',
+    findingsFixedSince: actual.findingsFixedSince,
+    selectInlineFindings: actual.selectInlineFindings,
+    buildInlineCommentBody: actual.buildInlineCommentBody,
     validateProviderChain: actual.validateProviderChain,
     fetchGatewayModels: (...args: unknown[]) => mockFetchGatewayModels(...args),
     fetchGatewayProviders: (...args: unknown[]) => mockFetchGatewayProviders(...args),
@@ -94,6 +97,7 @@ const mockGetEffectiveRepoSettings = vi.fn();
 vi.mock('ghagga-db', () => ({
   decrypt: (v: string) => mockDecrypt(v),
   saveReview: (...args: unknown[]) => mockSaveReview(...args),
+  getLatestReviewFindings: vi.fn().mockResolvedValue(null),
   createDatabaseFromEnv: () => mockCreateDatabaseFromEnv(),
   getRepositoryById: (...args: unknown[]) => mockGetRepositoryById(...args),
   getEffectiveRepoSettings: (...args: unknown[]) => mockGetEffectiveRepoSettings(...args),

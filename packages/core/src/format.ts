@@ -8,6 +8,7 @@
 import { calculateReviewCost, formatCostFooter } from './cost-footer.js';
 import type { BlastRadiusDiagram } from './graph/schema.js';
 import { MAX_DIAGRAM_EDGES, MAX_DIAGRAM_NODES } from './graph/schema.js';
+import { findingLocationKey } from './review-comment-ux.js';
 import { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 import type { EntityChange, EntityChangeKind, SemanticDiff } from './semantic-diff/index.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
@@ -695,6 +696,33 @@ function formatRefutedSection(findings: readonly ReviewFinding[]): string {
   return out;
 }
 
+/**
+ * "Fixed since last review" — previous findings whose location is gone.
+ * Empty input renders zero bytes so comments without a previous review
+ * stay unchanged.
+ */
+function formatFixedSinceSection(fixed: ReviewFinding[] | undefined): string {
+  if (!fixed || fixed.length === 0) return '';
+  let out = `### Fixed since last review (${fixed.length})\n\n`;
+  out += `| Severity | File | Message |\n`;
+  out += `|----------|------|----------|\n`;
+  const seen = new Set<string>();
+  for (const finding of fixed) {
+    const key = findingLocationKey(finding);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
+    const severity = sanitizeTableCell(String(finding.severity));
+    const location = sanitizeTableCell(
+      finding.line ? `${finding.file}:${finding.line}` : finding.file,
+    );
+    const message = sanitizeTableCell(finding.message);
+    out += `| ${emoji} ${severity} | ${location} | ${message} |\n`;
+  }
+  out += '\n';
+  return out;
+}
+
 /** Group findings by source, preserving first-seen source and finding order. */
 function groupFindingsBySource(findings: ReviewFinding[]): Map<string, ReviewFinding[]> {
   const grouped = new Map<string, ReviewFinding[]>();
@@ -722,6 +750,12 @@ export interface FormatReviewCommentOptions {
    * so GitHub sends a notification to the author when the review is posted.
    */
   prAuthor?: string;
+  /**
+   * Findings that were in the previous review and are absent now.
+   * Rendered as their own section. Omitted (and the comment stays
+   * byte-identical) when missing or empty.
+   */
+  fixedSince?: ReviewFinding[];
 }
 
 // ─── Formatting ─────────────────────────────────────────────────
@@ -891,6 +925,7 @@ export function formatReviewComment(
     }
   }
 
+  comment += formatFixedSinceSection(options?.fixedSince);
   comment += formatRefutedSection(refutedFindings);
 
   // Static analysis summary.

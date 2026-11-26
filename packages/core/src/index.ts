@@ -265,6 +265,15 @@ export {
   sanitizeInlineCodeName,
 } from './format.js';
 export { DIGEST_ISSUE_MARKER, formatDigestIssue } from './format-digest.js';
+export {
+  buildInlineCommentBody,
+  findingLocationKey,
+  findingsFixedSince,
+  INLINE_SEVERITIES,
+  inlineCommentMarker,
+  MAX_INLINE_COMMENTS,
+  selectInlineFindings,
+} from './review-comment-ux.js';
 export { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 
 // ─── Extensible Tool System ─────────────────────────────────────

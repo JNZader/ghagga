@@ -95,6 +95,29 @@ export interface GitHubClientPort {
   /** Delete a comment by its GitHub-native numeric id. */
   deleteComment(owner: string, repo: string, commentId: number, token: string): Promise<void>;
 
+  /**
+   * Optional inline-comment LIST. When present together with
+   * {@link createPullReviewComment}, the adapter advertises `publishInline`.
+   */
+  listPullReviewComments?(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    token: string,
+  ): Promise<Array<{ id: number; body: string }>>;
+
+  /**
+   * Optional inline-comment CREATE. `line` must be part of the diff or
+   * GitHub responds 422; the adapter records that as a per-comment failure.
+   */
+  createPullReviewComment?(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    comment: { body: string; commitId: string; path: string; line: number },
+    token: string,
+  ): Promise<{ id: number }>;
+
   /** Update a comment in place by its GitHub-native numeric id. */
   updateComment(
     owner: string,
