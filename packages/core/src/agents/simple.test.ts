@@ -330,6 +330,33 @@ describe('parseFindingsBlock', () => {
     expect(findings[0]?.source).toBe('ai');
   });
 
+  it('parses a security trace of file and line for each hop', () => {
+    const text = [
+      'FINDINGS:',
+      '- SEVERITY: critical',
+      '  CATEGORY: security',
+      '  FILE: src/auth.ts',
+      '  LINE: 42',
+      '  MESSAGE: SQL injection vulnerability in query builder',
+      '  SUGGESTION: Use parameterized queries instead',
+      '  REACHABILITY: external',
+      '  EXPLOITABILITY: trivial',
+      '  SOURCE: src/req.ts:4',
+      '  PATH: src/auth.ts:20',
+      '  MISSING_GUARD: src/auth.ts:21',
+      '  SINK: src/db.ts:8',
+    ].join('\n');
+
+    const findings = parseFindingsBlock(text);
+    expect(findings[0]?.securityTrace).toEqual({
+      source: { file: 'src/req.ts', line: 4 },
+      path: { file: 'src/auth.ts', line: 20 },
+      missingGuard: { file: 'src/auth.ts', line: 21 },
+      sink: { file: 'src/db.ts', line: 8 },
+    });
+    expect(findings[0]?.suggestion).toBe('Use parameterized queries instead');
+  });
+
   it('parses security-lens REACHABILITY and EXPLOITABILITY', () => {
     const text = [
       'FINDINGS:',

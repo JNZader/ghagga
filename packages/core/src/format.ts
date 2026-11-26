@@ -675,6 +675,28 @@ function renderFindingGroups(
 }
 
 /**
+ * Refuted findings stay in the comment, collapsed, with the reason.
+ * Empty input renders zero bytes.
+ */
+function formatRefutedSection(findings: readonly ReviewFinding[]): string {
+  if (findings.length === 0) return '';
+  let out = `<details>\n<summary>Refuted findings (${findings.length})</summary>\n\n`;
+  out += `| Severity | File | Reason |\n`;
+  out += `|----------|------|--------|\n`;
+  for (const finding of findings) {
+    const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
+    const severity = sanitizeTableCell(String(finding.severity));
+    const location = sanitizeTableCell(
+      finding.line ? `${finding.file}:${finding.line}` : finding.file,
+    );
+    const reason = sanitizeTableCell(finding.refuteReason ?? 'refuted');
+    out += `| ${emoji} ${severity} | ${location} | ${reason} |\n`;
+  }
+  out += `\n</details>\n\n`;
+  return out;
+}
+
+/**
  * "Fixed since last review" — previous findings whose location is gone.
  * Empty input renders zero bytes so comments without a previous review
  * stay unchanged.
@@ -798,12 +820,21 @@ export function formatReviewComment(
   // the comment stays byte-identical to having no section at all.
   comment += formatSemanticDiffSection(result.semanticDiff);
 
+  // Refuted findings leave the open table and are listed, with the reason,
+  // in one collapsed block. No refuted findings → the same array, so the
+  // open table stays byte-identical.
+  const refutedFindings = result.findings.filter((finding) => finding.ledgerStatus === 'refuted');
+  const openFindings =
+    refutedFindings.length === 0
+      ? result.findings
+      : result.findings.filter((finding) => finding.ledgerStatus !== 'refuted');
+
   // Findings grouped by source
-  if (result.findings.length > 0) {
-    comment += `### Findings (${result.findings.length})\n\n`;
+  if (openFindings.length > 0) {
+    comment += `### Findings (${openFindings.length})\n\n`;
 
     // Group findings by source
-    const grouped = groupFindingsBySource(result.findings);
+    const grouped = groupFindingsBySource(openFindings);
 
     // Render order: static tools first, then AI
     // Generate SOURCE_LABELS dynamically from registry when available
@@ -835,7 +866,7 @@ export function formatReviewComment(
     }
     renderOrder.push('ai');
 
-    if (result.findings.length <= MAX_VISIBLE_FINDINGS) {
+    if (openFindings.length <= MAX_VISIBLE_FINDINGS) {
       // Small reviews: EXACTLY the historical per-tool output (byte-identical
       // backward compat — comment-format-signal Fix 1 hard rule).
       comment += renderFindingGroups(grouped, renderOrder, SOURCE_LABELS);
@@ -844,7 +875,7 @@ export function formatReviewComment(
       // a Source column since the per-tool headers no longer sit next to
       // every row); ALL remaining findings collapse into ONE details block,
       // still grouped per tool in today's format.
-      const ranked = [...result.findings].sort(
+      const ranked = [...openFindings].sort(
         (a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4),
       );
       const visible = ranked.slice(0, MAX_VISIBLE_FINDINGS);
@@ -895,6 +926,7 @@ export function formatReviewComment(
   }
 
   comment += formatFixedSinceSection(options?.fixedSince);
+  comment += formatRefutedSection(refutedFindings);
 
   // Static analysis summary.
   // toolsRun / toolsSkipped originate from the runner-callback payload

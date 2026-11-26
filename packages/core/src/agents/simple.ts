@@ -18,6 +18,7 @@ import type {
   ReviewLevel,
   ReviewResult,
   ReviewStatus,
+  SecurityTrace,
 } from '../types.js';
 import { LENS_EXPLOITABILITY_VALUES, REACHABILITY_VALUES } from '../types.js';
 import {
@@ -153,12 +154,45 @@ function parseReviewResponse(
  *     MESSAGE: SQL injection vulnerability
  *     SUGGESTION: Use parameterized queries
  */
+/** `file:line` where line is a positive integer. The file may contain colons (drive-less paths use the last colon). */
+function parseTracePoint(raw: string | undefined): { file: string; line: number } | undefined {
+  if (!raw) return undefined;
+  const match = /^(.*):(\d+)$/.exec(raw.trim());
+  if (!match?.[1] || !match[2]) return undefined;
+  const line = Number(match[2]);
+  if (!Number.isInteger(line) || line <= 0) return undefined;
+  const file = match[1].trim();
+  if (!file) return undefined;
+  return { file, line };
+}
+
+function parseSecurityTrace(
+  source: string | undefined,
+  path: string | undefined,
+  missingGuard: string | undefined,
+  sink: string | undefined,
+): SecurityTrace | undefined {
+  const parsed = {
+    source: parseTracePoint(source),
+    path: parseTracePoint(path),
+    missingGuard: parseTracePoint(missingGuard),
+    sink: parseTracePoint(sink),
+  };
+  if (!parsed.source || !parsed.path || !parsed.missingGuard || !parsed.sink) return undefined;
+  return {
+    source: parsed.source,
+    path: parsed.path,
+    missingGuard: parsed.missingGuard,
+    sink: parsed.sink,
+  };
+}
+
 function parseFindingsBlock(text: string): ReviewFinding[] {
   const findings: ReviewFinding[] = [];
 
   // Match each finding block
   const findingPattern =
-    /- SEVERITY:\s*(\S+)\s*\n\s*CATEGORY:\s*(\S+)\s*\n\s*FILE:\s*(.+?)\s*\n\s*LINE:\s*(.+?)\s*\n\s*MESSAGE:\s*(.+?)\s*\n\s*SUGGESTION:\s*(.+?)(?:\s*\n\s*REACHABILITY:\s*(\S+))?(?:\s*\n\s*EXPLOITABILITY:\s*(\S+))?(?=\n\s*- SEVERITY:|\n*$)/gis;
+    /- SEVERITY:\s*(\S+)\s*\n\s*CATEGORY:\s*(\S+)\s*\n\s*FILE:\s*(.+?)\s*\n\s*LINE:\s*(.+?)\s*\n\s*MESSAGE:\s*(.+?)\s*\n\s*SUGGESTION:\s*(.+?)(?:\s*\n\s*REACHABILITY:\s*(\S+))?(?:\s*\n\s*EXPLOITABILITY:\s*(\S+))?(?:\s*\n\s*SOURCE:\s*(\S+))?(?:\s*\n\s*PATH:\s*(\S+))?(?:\s*\n\s*MISSING_GUARD:\s*(\S+))?(?:\s*\n\s*SINK:\s*(\S+))?(?=\n\s*- SEVERITY:|\n*$)/gis;
 
   let match = findingPattern.exec(text);
   while (match !== null) {
@@ -178,6 +212,7 @@ function parseFindingsBlock(text: string): ReviewFinding[] {
     )
       ? (rawLensExploitability as LensExploitability)
       : undefined;
+    const securityTrace = parseSecurityTrace(match[9], match[10], match[11], match[12]);
 
     findings.push({
       severity,
@@ -189,6 +224,7 @@ function parseFindingsBlock(text: string): ReviewFinding[] {
       source: 'ai' as FindingSource,
       ...(reachability ? { reachability } : {}),
       ...(lensExploitability ? { lensExploitability } : {}),
+      ...(securityTrace ? { securityTrace } : {}),
     });
     match = findingPattern.exec(text);
   }

@@ -1903,6 +1903,39 @@ describe('formatReviewComment — reachability and exploitability columns', () =
   });
 });
 
+describe('formatReviewComment — refuted findings', () => {
+  it('moves refuted findings into a collapsed block with the reason', () => {
+    const output = formatReviewComment(
+      makeResult({
+        findings: [
+          makeFinding({ severity: 'high', file: 'src/open.ts', line: 2, message: 'Still open' }),
+          makeFinding({
+            severity: 'critical',
+            file: 'src/old.ts',
+            line: 9,
+            message: 'Already handled',
+            ledgerStatus: 'refuted',
+            refuteReason: 'mitigated',
+          }),
+        ],
+      }),
+    );
+    expect(output).toContain('### Findings (1)');
+    expect(output).toContain('Still open');
+    expect(output).not.toContain('| 🔴 critical | security | src/old.ts:9 |');
+    expect(output).toContain('<summary>Refuted findings (1)</summary>');
+    expect(output).toContain('src/old.ts:9');
+    expect(output).toContain('mitigated');
+  });
+
+  it('omits the refuted block when nothing was refuted', () => {
+    const output = formatReviewComment(
+      makeResult({ findings: [makeFinding({ message: 'Only open' })] }),
+    );
+    expect(output).not.toContain('Refuted findings');
+  });
+});
+
 describe('formatReviewComment — fixed since last review', () => {
   it('renders a section for findings that disappeared and omits it when empty', () => {
     const result = makeResult({
