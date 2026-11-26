@@ -98,6 +98,7 @@ export function createInstallationsRouter(db: Database) {
             enabledTools: settings.enabledTools ?? [],
             disabledTools: settings.disabledTools ?? [],
             enableBlastRadius: settings.enableBlastRadius ?? false,
+            securityCheckThreshold: settings.securityCheckThreshold ?? 'critical',
             explanationsEnabled: settings.explanationsEnabled ?? false,
             digestsEnabled: settings.digestsEnabled ?? false,
             registeredTools: getRegisteredToolsList(),
@@ -122,6 +123,7 @@ export function createInstallationsRouter(db: Database) {
           enabledTools: [],
           disabledTools: [],
           enableBlastRadius: false,
+          securityCheckThreshold: 'critical',
           explanationsEnabled: false,
           digestsEnabled: false,
           registeredTools: getRegisteredToolsList(),
@@ -361,6 +363,13 @@ export function createInstallationsRouter(db: Database) {
           typeof body.enableBlastRadius === 'boolean'
             ? body.enableBlastRadius
             : currentSettings.enableBlastRadius,
+        securityCheckThreshold:
+          body.securityCheckThreshold === 'critical' ||
+          body.securityCheckThreshold === 'high' ||
+          body.securityCheckThreshold === 'medium' ||
+          body.securityCheckThreshold === 'low'
+            ? body.securityCheckThreshold
+            : currentSettings.securityCheckThreshold,
         explanationsEnabled:
           typeof body.explanationsEnabled === 'boolean'
             ? body.explanationsEnabled

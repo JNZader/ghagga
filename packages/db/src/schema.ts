@@ -51,6 +51,12 @@ export interface RepoSettings {
   /** Enable blast-radius analysis using dependency graph. Default: false. */
   enableBlastRadius?: boolean;
 
+  /**
+   * Lowest severity that fails the ghagga/security check run.
+   * Absent means critical.
+   */
+  securityCheckThreshold?: 'critical' | 'high' | 'medium' | 'low';
+
   // ── Nightly health digest ──
   /** Opt in to the nightly digest issue (03:00 UTC). Absent = off. */
   digestsEnabled?: boolean;
