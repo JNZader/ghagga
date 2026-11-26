@@ -329,7 +329,12 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     }
 
     // Step 2: Load optional config file
-    const fileConfig = loadConfigFile(repoPath, options.config);
+    // A pull request checkout is the head commit. Config, lenses, and the
+    // graph on that commit are attacker-controlled, including for a fork or
+    // an author without write. Those inputs are not read from the head.
+    // Operator flags (--disable-tool, --lenses, --lens-dir) still apply.
+    const trustHead = options.pr == null && options.mr == null;
+    const fileConfig = trustHead ? loadConfigFile(repoPath, options.config) : {};
 
     // Step 2.5: Fail-closed --anchor. CLI flag wins over `.ghagga.json`.
     // Omitted / "auto" skip the mismatch check. Anything else must be a
@@ -343,16 +348,26 @@ export async function reviewCommand(targetPath: string, options: ReviewOptions):
     }
 
     // Step 3: Merge settings (CLI options take priority over config file)
-    const settings = mergeSettings(options, fileConfig);
+    const settings = mergeSettings(options, fileConfig, trustHead);
 
     // Step 3.4: Resolve blast-radius auto-ON (design v2 D7) — resolved
     // against repoPath (the review target), not process.cwd() (CRITICAL-2).
-    settings.enableBlastRadius = resolveBlastRadiusEnabled(repoPath, options, fileConfig);
+    settings.enableBlastRadius = resolveBlastRadiusEnabled(
+      repoPath,
+      options,
+      fileConfig,
+      trustHead,
+    );
 
     // Step 3.4b: Resolve graph-neighborhood context auto-ON
     // (graph-context-retrieval) — same precedence/auto-detection as
     // blast-radius, so `ghagga index` + `ghagga review` lights both up.
-    settings.enableGraphContext = resolveGraphContextEnabled(repoPath, options, fileConfig);
+    settings.enableGraphContext = resolveGraphContextEnabled(
+      repoPath,
+      options,
+      fileConfig,
+      trustHead,
+    );
     if (
       typeof fileConfig.graphContextMaxTokens === 'number' &&
       fileConfig.graphContextMaxTokens > 0
@@ -1218,8 +1233,12 @@ export function resolveBlastRadiusEnabled(
   repoPath: string,
   options: Pick<ReviewOptions, 'blastRadius'>,
   fileConfig: Pick<GhaggaConfig, 'enableBlastRadius'>,
+  trustWorkingTree = true,
 ): boolean {
   if (options.blastRadius === false) return false;
+  // The working tree of a pull request is the head. Do not auto-enable
+  // from a graph that commit can rewrite.
+  if (!trustWorkingTree) return false;
   if (fileConfig.enableBlastRadius === false) return false;
   if (fileConfig.enableBlastRadius === true) return true;
   return existsSync(join(repoPath, '.ghagga', 'graph.json'));
@@ -1242,8 +1261,10 @@ export function resolveGraphContextEnabled(
   repoPath: string,
   options: Pick<ReviewOptions, 'graphContext'>,
   fileConfig: Pick<GhaggaConfig, 'enableGraphContext'>,
+  trustWorkingTree = true,
 ): boolean {
   if (options.graphContext === false) return false;
+  if (!trustWorkingTree) return false;
   if (fileConfig.enableGraphContext === false) return false;
   if (fileConfig.enableGraphContext === true) return true;
   return existsSync(join(repoPath, '.ghagga', 'graph.json'));
@@ -1383,7 +1404,11 @@ export function computeUncoveredLanguages(
  * Deprecated --no-semgrep/--no-trivy/--no-cpd flags are translated into
  * disabledTools entries.
  */
-function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): ReviewSettings {
+function mergeSettings(
+  options: ReviewOptions,
+  fileConfig: GhaggaConfig,
+  trustHead = true,
+): ReviewSettings {
   // Collect disabledTools from: deprecated flags + CLI --disable-tool + config file
   const disabledTools = new Set<string>(DEFAULT_SETTINGS.disabledTools ?? []);
 
@@ -1432,7 +1457,10 @@ function mergeSettings(options: ReviewOptions, fileConfig: GhaggaConfig): Review
   // Resolve lens directory: CLI --lens-dir > default .ghagga/lenses/
   // The lensDir is resolved to an absolute path relative to the repo root later,
   // but we set the default convention here.
-  const lensDir = options.lensDir ?? join(resolve('.'), '.ghagga', 'lenses');
+  // Lenses on the pull request head are not a trusted source. An explicit
+  // --lens-dir is the operator's path, not the head's.
+  const lensDir =
+    options.lensDir ?? (trustHead ? join(resolve('.'), '.ghagga', 'lenses') : undefined);
 
   return {
     enableSemgrep: options.semgrep ?? fileConfig.enableSemgrep ?? DEFAULT_SETTINGS.enableSemgrep,

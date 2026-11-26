@@ -303,6 +303,8 @@ export type {
   SarifRule,
 } from './sarif/index.js';
 export { buildSarif } from './sarif/index.js';
+export type { GraphRefInput, HeadTrustInput } from './trust/source.js';
+export { chooseGraphRef, mayUseRepoSource } from './trust/source.js';
 
 // ─── Checklist ─────────────────────────────────────────────────
 

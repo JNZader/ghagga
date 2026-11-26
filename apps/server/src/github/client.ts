@@ -26,6 +26,7 @@
  */
 
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
+import { chooseGraphRef } from 'ghagga-core';
 import type { ExplanationCommentLookup, ExplanationCommentRef } from 'ghagga-forge';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 import { logger } from '../lib/logger.js';
@@ -1198,28 +1199,9 @@ export async function fetchGraphFromBranch(
   repo: string,
   token: string,
 ): Promise<import('ghagga-core').DependencyGraph | null> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/.ghagga/graph.json?ref=ghagga/graph`;
-
   try {
-    const response = await githubCircuitBreaker.execute(async () => {
-      return fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.raw',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(5_000),
-      });
-    });
-
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      console.warn(`[ghagga] Failed to fetch graph: ${response.status}`);
-      return null;
-    }
-
-    const json: unknown = await response.json();
-    // Inline validation — avoids dynamic import issues in test
+    const json = await fetchTrustedGraphFile(owner, repo, token, '.ghagga/graph.json');
+    if (json == null) return null;
     return validateGraphJson(json);
   } catch {
     return null;
@@ -1240,28 +1222,87 @@ export async function fetchGraphMetadata(
   repo: string,
   token: string,
 ): Promise<import('ghagga-core').GraphMetadata | null> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/.ghagga/metadata.json?ref=ghagga/graph`;
-
   try {
-    const response = await githubCircuitBreaker.execute(async () => {
-      return fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.raw',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(5_000),
-      });
-    });
-
-    if (response.status === 404) return null;
-    if (!response.ok) return null;
-
-    const json: unknown = await response.json();
+    const json = await fetchTrustedGraphFile(owner, repo, token, '.ghagga/metadata.json');
+    if (json == null) return null;
     return validateMetadataJson(json);
   } catch {
     return null;
   }
+}
+
+/**
+ * Read one `.ghagga` graph file from a trusted ref.
+ *
+ * The default branch is preferred. `ghagga/graph` is used only when that
+ * branch is protected. An unprotected orphan branch is ignored: a push to
+ * it would otherwise become part of the review prompt.
+ */
+async function fetchTrustedGraphFile(
+  owner: string,
+  repo: string,
+  token: string,
+  path: string,
+): Promise<unknown | null> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.raw',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const jsonHeaders = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+
+  const repoResponse = await githubCircuitBreaker.execute(() =>
+    fetch(repoUrl, { headers: jsonHeaders, signal: AbortSignal.timeout(5_000) }),
+  );
+  if (!repoResponse.ok) return null;
+  const repoBody = (await repoResponse.json()) as { default_branch?: unknown };
+  const defaultBranch =
+    typeof repoBody.default_branch === 'string' ? repoBody.default_branch : undefined;
+
+  if (defaultBranch) {
+    const onDefault = await githubCircuitBreaker.execute(() =>
+      fetch(`${repoUrl}/contents/${path}?ref=${encodeURIComponent(defaultBranch)}`, {
+        headers,
+        signal: AbortSignal.timeout(5_000),
+      }),
+    );
+    if (onDefault.ok) return onDefault.json();
+    if (onDefault.status !== 404) return null;
+  }
+
+  let graphBranchProtected: boolean | null = null;
+  const branchResponse = await githubCircuitBreaker.execute(() =>
+    fetch(`${repoUrl}/branches/${encodeURIComponent('ghagga/graph')}`, {
+      headers: jsonHeaders,
+      signal: AbortSignal.timeout(5_000),
+    }),
+  );
+  if (branchResponse.ok) {
+    const branch = (await branchResponse.json()) as { protected?: unknown };
+    graphBranchProtected = branch.protected === true;
+  } else if (branchResponse.status !== 404) {
+    return null;
+  }
+
+  const ref = chooseGraphRef({
+    defaultBranch,
+    defaultBranchHasGraph: false,
+    graphBranchProtected,
+  });
+  if (!ref) return null;
+  const fileResponse = await githubCircuitBreaker.execute(() =>
+    fetch(`${repoUrl}/contents/${path}?ref=${encodeURIComponent(ref)}`, {
+      headers,
+      signal: AbortSignal.timeout(5_000),
+    }),
+  );
+  if (!fileResponse.ok) return null;
+  return fileResponse.json();
 }
 
 // ─── File Contents ──────────────────────────────────────────────
