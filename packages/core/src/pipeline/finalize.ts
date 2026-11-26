@@ -20,6 +20,8 @@
  */
 
 import { persistReviewObservations } from '../memory/persist.js';
+import { openFindingsStillFail, verifyBeforePublish } from '../security/verify-before-publish.js';
+import { FINDING_LEDGER_STATUS } from '../types.js';
 import { runDegradable } from './degrade.js';
 import type { PipelineState } from './state.js';
 
@@ -28,6 +30,29 @@ import type { PipelineState } from './state.js';
  */
 export async function finalize(state: PipelineState): Promise<void> {
   const { input, result } = state;
+
+  // Mandatory refuter. A failure here must not block the review: the
+  // helper swallows its own errors, and this guard is the second line.
+  try {
+    const verified = verifyBeforePublish(result.findings);
+    const changed = verified.some(
+      (finding, index) => finding.ledgerStatus !== result.findings[index]?.ledgerStatus,
+    );
+    if (changed) {
+      result.findings = verified;
+      if (result.status === 'FAILED' && !openFindingsStillFail(verified)) {
+        const open = verified.filter(
+          (finding) => finding.ledgerStatus !== FINDING_LEDGER_STATUS.refuted,
+        );
+        result.status = open.length > 0 ? 'NEEDS_HUMAN_REVIEW' : 'PASSED';
+      }
+    }
+  } catch (error) {
+    console.warn(
+      '[ghagga] Security verification failed (non-fatal):',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 
   // ── Step 8: Persist to memory (awaited for SQLite correctness) ──
   if (input.settings.enableMemory && input.memoryStorage && input.context) {

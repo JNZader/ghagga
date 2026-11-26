@@ -474,6 +474,18 @@ export interface ReviewResult {
   coverageComplete?: boolean;
 }
 
+export interface SecurityTracePoint {
+  file: string;
+  line: number;
+}
+
+export interface SecurityTrace {
+  source: SecurityTracePoint;
+  path: SecurityTracePoint;
+  missingGuard: SecurityTracePoint;
+  sink: SecurityTracePoint;
+}
+
 export const REACHABILITY_VALUES = ['external', 'internal', 'unreachable'] as const;
 export type Reachability = (typeof REACHABILITY_VALUES)[number];
 
@@ -544,6 +556,18 @@ export interface ReviewFinding {
 
   /** Reason for AI filtering (present when aiFiltered === true). */
   filterReason?: string;
+
+  /**
+   * Located trace for a security finding. All four points are required
+   * before a security finding is published as open.
+   */
+  securityTrace?: SecurityTrace;
+
+  /**
+   * Checklist reason a refuter gave for removing this finding from the
+   * open set. Shown in the review comment.
+   */
+  refuteReason?: string;
 
   /**
    * Security-lens reachability of the issue.
