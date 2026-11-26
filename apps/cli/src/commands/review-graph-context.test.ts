@@ -34,6 +34,13 @@ describe('resolveGraphContextEnabled', () => {
     writeFileSync(join(repoPath, '.ghagga', 'graph.json'), '{}');
   }
 
+  it('does not auto-enable from the working tree when that tree is a pull request head', () => {
+    withGraph();
+    expect(resolveGraphContextEnabled(repoPath, {}, { enableGraphContext: true }, false)).toBe(
+      false,
+    );
+  });
+
   it('auto-enables when .ghagga/graph.json exists under repoPath', () => {
     withGraph();
     expect(resolveGraphContextEnabled(repoPath, {}, {})).toBe(true);

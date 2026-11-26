@@ -325,6 +325,8 @@ export {
   securityFindingsAtThreshold,
   shouldUpdateSecurityCheck,
 } from './security/check-decision.js';
+export type { GraphRefInput, HeadTrustInput } from './trust/source.js';
+export { chooseGraphRef, mayUseRepoSource } from './trust/source.js';
 
 // ─── Checklist ─────────────────────────────────────────────────
 

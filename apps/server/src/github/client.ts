@@ -26,6 +26,7 @@
  */
 
 import { createHmac, createSign, timingSafeEqual } from 'node:crypto';
+import { chooseGraphRef } from 'ghagga-core';
 import type { ExplanationCommentLookup, ExplanationCommentRef } from 'ghagga-forge';
 import { githubCircuitBreaker } from '../lib/circuit-breaker.js';
 import { logger } from '../lib/logger.js';
@@ -1453,28 +1454,9 @@ export async function fetchGraphFromBranch(
   repo: string,
   token: string,
 ): Promise<import('ghagga-core').DependencyGraph | null> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/.ghagga/graph.json?ref=ghagga/graph`;
-
   try {
-    const response = await githubCircuitBreaker.execute(async () => {
-      return fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.raw',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(5_000),
-      });
-    });
-
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      console.warn(`[ghagga] Failed to fetch graph: ${response.status}`);
-      return null;
-    }
-
-    const json: unknown = await response.json();
-    // Inline validation — avoids dynamic import issues in test
+    const json = await fetchTrustedGraphFile(owner, repo, token, '.ghagga/graph.json');
+    if (json == null) return null;
     return validateGraphJson(json);
   } catch {
     return null;
@@ -1495,28 +1477,122 @@ export async function fetchGraphMetadata(
   repo: string,
   token: string,
 ): Promise<import('ghagga-core').GraphMetadata | null> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/.ghagga/metadata.json?ref=ghagga/graph`;
-
   try {
-    const response = await githubCircuitBreaker.execute(async () => {
-      return fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.raw',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(5_000),
-      });
-    });
-
-    if (response.status === 404) return null;
-    if (!response.ok) return null;
-
-    const json: unknown = await response.json();
+    const json = await fetchTrustedGraphFile(owner, repo, token, '.ghagga/metadata.json');
+    if (json == null) return null;
     return validateMetadataJson(json);
   } catch {
     return null;
   }
+}
+
+/** How long a resolved default branch is reused for one owner/repo. */
+const DEFAULT_BRANCH_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface DefaultBranchCacheEntry {
+  branch: string | undefined;
+  expiresAt: number;
+}
+
+/**
+ * Default branch per `owner/repo`. The name is a property of the repository,
+ * so installations that can read the same repo share it. Failures are not
+ * cached. `fetchGraphFromBranch` and `fetchGraphMetadata` both call
+ * {@link fetchTrustedGraphFile}, and this avoids a second repo-metadata GET.
+ */
+const defaultBranchCache = new Map<string, DefaultBranchCacheEntry>();
+
+/** Test seam. Production callers rely on the TTL. */
+export function clearTrustedGraphCache(): void {
+  defaultBranchCache.clear();
+}
+
+/**
+ * Read one `.ghagga` graph file from a trusted ref.
+ *
+ * The default branch is preferred. `ghagga/graph` is used only when that
+ * branch is protected. An unprotected orphan branch is ignored: a push to
+ * it would otherwise become part of the review prompt.
+ *
+ * `?ref=` is percent-encoded (`ghagga/graph` → `ghagga%2Fgraph`). The branch
+ * path keeps the slash (`/branches/ghagga/graph`): GitHub treats that as the
+ * branch name, and encoding the slash makes the path a different resource.
+ */
+async function fetchTrustedGraphFile(
+  owner: string,
+  repo: string,
+  token: string,
+  path: string,
+): Promise<unknown | null> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.raw',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const jsonHeaders = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const cacheKey = `${owner}/${repo}`;
+  const cached = defaultBranchCache.get(cacheKey);
+  let defaultBranch: string | undefined;
+  if (cached && cached.expiresAt > Date.now()) {
+    defaultBranch = cached.branch;
+  } else {
+    const repoResponse = await githubCircuitBreaker.execute(() =>
+      fetch(repoUrl, { headers: jsonHeaders, signal: AbortSignal.timeout(5_000) }),
+    );
+    if (!repoResponse.ok) return null;
+    const repoBody = (await repoResponse.json()) as { default_branch?: unknown };
+    defaultBranch =
+      typeof repoBody.default_branch === 'string' ? repoBody.default_branch : undefined;
+    defaultBranchCache.set(cacheKey, {
+      branch: defaultBranch,
+      expiresAt: Date.now() + DEFAULT_BRANCH_CACHE_TTL_MS,
+    });
+  }
+
+  if (defaultBranch) {
+    const onDefault = await githubCircuitBreaker.execute(() =>
+      fetch(`${repoUrl}/contents/${path}?ref=${encodeURIComponent(defaultBranch)}`, {
+        headers,
+        signal: AbortSignal.timeout(5_000),
+      }),
+    );
+    if (onDefault.ok) return onDefault.json();
+    if (onDefault.status !== 404) return null;
+  }
+
+  let graphBranchProtected: boolean | null = null;
+  const branchResponse = await githubCircuitBreaker.execute(() =>
+    fetch(`${repoUrl}/branches/ghagga/graph`, {
+      headers: jsonHeaders,
+      signal: AbortSignal.timeout(5_000),
+    }),
+  );
+  if (branchResponse.ok) {
+    const branch = (await branchResponse.json()) as { protected?: unknown };
+    graphBranchProtected = branch.protected === true;
+  } else if (branchResponse.status !== 404) {
+    return null;
+  }
+
+  const ref = chooseGraphRef({
+    defaultBranch,
+    defaultBranchHasGraph: false,
+    graphBranchProtected,
+  });
+  if (!ref) return null;
+  const fileResponse = await githubCircuitBreaker.execute(() =>
+    fetch(`${repoUrl}/contents/${path}?ref=${encodeURIComponent(ref)}`, {
+      headers,
+      signal: AbortSignal.timeout(5_000),
+    }),
+  );
+  if (!fileResponse.ok) return null;
+  return fileResponse.json();
 }
 
 // ─── File Contents ──────────────────────────────────────────────
