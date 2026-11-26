@@ -330,6 +330,42 @@ describe('parseFindingsBlock', () => {
     expect(findings[0]?.source).toBe('ai');
   });
 
+  it('parses security-lens REACHABILITY and EXPLOITABILITY', () => {
+    const text = [
+      'FINDINGS:',
+      '- SEVERITY: critical',
+      '  CATEGORY: security',
+      '  FILE: src/auth.ts',
+      '  LINE: 42',
+      '  MESSAGE: SQL injection vulnerability in query builder',
+      '  SUGGESTION: Use parameterized queries instead',
+      '  REACHABILITY: external',
+      '  EXPLOITABILITY: trivial',
+    ].join('\n');
+
+    const findings = parseFindingsBlock(text);
+    expect(findings[0]?.reachability).toBe('external');
+    expect(findings[0]?.lensExploitability).toBe('trivial');
+  });
+
+  it('ignores an exploitability value outside the security-lens set', () => {
+    const text = [
+      'FINDINGS:',
+      '- SEVERITY: high',
+      '  CATEGORY: security',
+      '  FILE: src/auth.ts',
+      '  LINE: 8',
+      '  MESSAGE: Weak check',
+      '  SUGGESTION: Compare hashes',
+      '  EXPLOITABILITY: exploitable',
+    ].join('\n');
+
+    const findings = parseFindingsBlock(text);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.lensExploitability).toBeUndefined();
+    expect(findings[0]?.suggestion).toBe('Compare hashes');
+  });
+
   it('trims whitespace from all fields', () => {
     const text = [
       'FINDINGS:',
