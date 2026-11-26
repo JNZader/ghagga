@@ -42,6 +42,7 @@ const RepoSettingsSchema = z
     enabledTools: z.array(z.string()).optional(),
     disabledTools: z.array(z.string()).optional(),
     enableBlastRadius: z.boolean().optional(),
+    securityCheckThreshold: z.enum(['critical', 'high', 'medium', 'low']).optional(),
     explanationsEnabled: z.boolean().optional(),
     digestsEnabled: z.boolean().optional(),
   })
@@ -120,6 +121,7 @@ export function createSettingsRouter(db: Database) {
           enabledTools: gSettings.enabledTools ?? [],
           disabledTools: gSettings.disabledTools ?? [],
           enableBlastRadius: gSettings.enableBlastRadius ?? false,
+          securityCheckThreshold: gSettings.securityCheckThreshold ?? 'critical',
           explanationsEnabled: gSettings.explanationsEnabled ?? false,
           digestsEnabled: gSettings.digestsEnabled ?? false,
         };
@@ -142,6 +144,7 @@ export function createSettingsRouter(db: Database) {
           enabledTools: settings.enabledTools ?? [],
           disabledTools: settings.disabledTools ?? [],
           enableBlastRadius: settings.enableBlastRadius ?? false,
+          securityCheckThreshold: settings.securityCheckThreshold ?? 'critical',
           explanationsEnabled: settings.explanationsEnabled ?? false,
           digestsEnabled: settings.digestsEnabled ?? false,
           registeredTools: getRegisteredToolsList(),
@@ -188,6 +191,7 @@ export function createSettingsRouter(db: Database) {
       'enabledTools',
       'disabledTools',
       'enableBlastRadius',
+      'securityCheckThreshold',
       'explanationsEnabled',
       'digestsEnabled',
     ];
@@ -437,6 +441,13 @@ export function createSettingsRouter(db: Database) {
           typeof body.enableBlastRadius === 'boolean'
             ? body.enableBlastRadius
             : currentSettings.enableBlastRadius,
+        securityCheckThreshold:
+          body.securityCheckThreshold === 'critical' ||
+          body.securityCheckThreshold === 'high' ||
+          body.securityCheckThreshold === 'medium' ||
+          body.securityCheckThreshold === 'low'
+            ? body.securityCheckThreshold
+            : currentSettings.securityCheckThreshold,
         explanationsEnabled:
           typeof body.explanationsEnabled === 'boolean'
             ? body.explanationsEnabled
@@ -604,6 +615,7 @@ export function createSettingsRouter(db: Database) {
           enableCpd: repoSettings.enableCpd,
           enableMemory: repoSettings.enableMemory,
           enableBlastRadius: repoSettings.enableBlastRadius,
+          securityCheckThreshold: repoSettings.securityCheckThreshold,
           explanationsEnabled: repoSettings.explanationsEnabled === true,
           customRules: repoSettings.customRules,
           ignorePatterns: repoSettings.ignorePatterns,

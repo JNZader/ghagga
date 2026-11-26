@@ -382,9 +382,78 @@ describe('GitHubForgeAdapter — capability shape', () => {
     });
   });
 
-  it('does NOT implement publishInline (inline deferred)', () => {
+  it('does NOT implement publishInline when the client has no inline methods', () => {
     const adapter = makeAdapter(makeClient());
     expect('publishInline' in adapter).toBe(false);
+    expect(adapter.capabilities.inlineComments).toBe(false);
+  });
+
+  it('posts critical-path inline comments and skips one whose marker is already present', async () => {
+    const listPullReviewComments = vi
+      .fn()
+      .mockResolvedValue([
+        { id: 50, body: '<!-- ghagga-inline:src/old.ts:3:security --> already' },
+      ]);
+    const createPullReviewComment = vi.fn().mockResolvedValue({ id: 77 });
+    const adapter = makeAdapter(makeClient({ listPullReviewComments, createPullReviewComment }));
+    expect(typeof adapter.publishInline).toBe('function');
+    expect(adapter.capabilities.inlineComments).toBe(true);
+
+    const report = await adapter.publishInline!(ref, [
+      {
+        path: 'src/old.ts',
+        line: 3,
+        commitSha: 'abc',
+        body: '<!-- ghagga-inline:src/old.ts:3:security --> already',
+      },
+      {
+        path: 'src/new.ts',
+        line: 9,
+        commitSha: 'abc',
+        body: '<!-- ghagga-inline:src/new.ts:9:security --> fresh',
+      },
+      { path: 'src/missing.ts', line: 1, body: 'no commit' },
+    ]);
+
+    expect(listPullReviewComments).toHaveBeenCalledWith(OWNER, REPO, PR, TOKEN);
+    expect(createPullReviewComment).toHaveBeenCalledTimes(1);
+    expect(createPullReviewComment).toHaveBeenCalledWith(
+      OWNER,
+      REPO,
+      PR,
+      {
+        body: '<!-- ghagga-inline:src/new.ts:9:security --> fresh',
+        commitId: 'abc',
+        path: 'src/new.ts',
+        line: 9,
+      },
+      TOKEN,
+    );
+    expect(report.posted.map((id) => id.raw)).toEqual(['50', '77']);
+    expect(report.failed).toEqual([{ index: 2, error: 'inline comment is missing commitSha' }]);
+  });
+
+  it('records a 422 on one inline comment and continues the batch', async () => {
+    const createPullReviewComment = vi.fn(async (_o, _r, _pr, comment: { path: string }) => {
+      if (comment.path === 'src/bad.ts') {
+        throw Object.assign(new Error('line not in diff'), { status: 422 });
+      }
+      return { id: 8 };
+    });
+    const adapter = makeAdapter(
+      makeClient({
+        listPullReviewComments: vi.fn().mockResolvedValue([]),
+        createPullReviewComment,
+      }),
+    );
+
+    const report = await adapter.publishInline!(ref, [
+      { path: 'src/bad.ts', line: 1, commitSha: 'abc', body: 'a' },
+      { path: 'src/ok.ts', line: 2, commitSha: 'abc', body: 'b' },
+    ]);
+
+    expect(report.posted).toHaveLength(1);
+    expect(report.failed).toEqual([expect.objectContaining({ index: 0, status: 422 })]);
   });
 });
 

@@ -8,6 +8,7 @@
 import { calculateReviewCost, formatCostFooter } from './cost-footer.js';
 import type { BlastRadiusDiagram } from './graph/schema.js';
 import { MAX_DIAGRAM_EDGES, MAX_DIAGRAM_NODES } from './graph/schema.js';
+import { findingLocationKey } from './review-comment-ux.js';
 import { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 import type { EntityChange, EntityChangeKind, SemanticDiff } from './semantic-diff/index.js';
 import { initializeDefaultTools } from './tools/plugins/index.js';
@@ -600,7 +601,30 @@ export function demoteMarkdownHeadings(text: string): string {
  * ultimately derived from the attacker-controlled PR diff) — sanitize every
  * cell, not just the message.
  */
-function renderFindingRow(finding: ReviewFinding): string {
+/**
+ * Exploitability cell: the security-lens axis when the lens classified it,
+ * otherwise the existing Trivy CVE label (`exploitable`,
+ * `potentially-exploitable`, `not-exploitable`).
+ */
+function exploitabilityCell(finding: ReviewFinding): string {
+  return finding.lensExploitability ?? finding.exploitability ?? '';
+}
+
+function hasRiskAxis(findings: readonly ReviewFinding[]): boolean {
+  return findings.some(
+    (finding) =>
+      finding.reachability != null ||
+      finding.lensExploitability != null ||
+      finding.exploitability != null,
+  );
+}
+
+function axisCell(value: string | undefined): string {
+  if (!value) return '—';
+  return sanitizeTableCell(value);
+}
+
+function renderFindingRow(finding: ReviewFinding, withAxes: boolean): string {
   const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
   const severity = sanitizeTableCell(String(finding.severity));
   const category = sanitizeTableCell(String(finding.category));
@@ -608,7 +632,10 @@ function renderFindingRow(finding: ReviewFinding): string {
     finding.line ? `${finding.file}:${finding.line}` : finding.file,
   );
   const message = sanitizeTableCell(finding.message);
-  return `| ${emoji} ${severity} | ${category} | ${location} | ${message} |\n`;
+  const axes = withAxes
+    ? `| ${axisCell(finding.reachability)} | ${axisCell(exploitabilityCell(finding))} `
+    : '';
+  return `| ${emoji} ${severity} | ${category} ${axes}| ${location} | ${message} |\n`;
 }
 
 /**
@@ -634,14 +661,65 @@ function renderFindingGroups(
     if (!findings || findings.length === 0) continue;
 
     const label = sourceLabels[src] ?? sanitizeTableCell(src);
+    const withAxes = hasRiskAxis(findings);
     out += `**${label} (${findings.length})**\n`;
-    out += `| Severity | Category | File | Message |\n`;
-    out += `|----------|----------|------|----------|\n`;
+    out += withAxes
+      ? `| Severity | Category | Reachability | Exploitability | File | Message |\n|----------|----------|--------------|----------------|------|----------|\n`
+      : `| Severity | Category | File | Message |\n|----------|----------|------|----------|\n`;
     for (const finding of findings) {
-      out += renderFindingRow(finding);
+      out += renderFindingRow(finding, withAxes);
     }
     out += '\n';
   }
+  return out;
+}
+
+/**
+ * Refuted findings stay in the comment, collapsed, with the reason.
+ * Empty input renders zero bytes.
+ */
+function formatRefutedSection(findings: readonly ReviewFinding[]): string {
+  if (findings.length === 0) return '';
+  let out = `<details>\n<summary>Refuted findings (${findings.length})</summary>\n\n`;
+  out += `| Severity | File | Reason |\n`;
+  out += `|----------|------|--------|\n`;
+  for (const finding of findings) {
+    const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
+    const severity = sanitizeTableCell(String(finding.severity));
+    const location = sanitizeTableCell(
+      finding.line ? `${finding.file}:${finding.line}` : finding.file,
+    );
+    const reason = sanitizeTableCell(finding.refuteReason ?? 'refuted');
+    out += `| ${emoji} ${severity} | ${location} | ${reason} |\n`;
+  }
+  out += `\n</details>\n\n`;
+  return out;
+}
+
+/**
+ * "Fixed since last review" — previous findings whose location is gone.
+ * Empty input renders zero bytes so comments without a previous review
+ * stay unchanged.
+ */
+function formatFixedSinceSection(fixed: ReviewFinding[] | undefined): string {
+  if (!fixed || fixed.length === 0) return '';
+  let out = `### Fixed since last review (${fixed.length})\n\n`;
+  out += `| Severity | File | Message |\n`;
+  out += `|----------|------|----------|\n`;
+  const seen = new Set<string>();
+  for (const finding of fixed) {
+    const key = findingLocationKey(finding);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
+    const severity = sanitizeTableCell(String(finding.severity));
+    const location = sanitizeTableCell(
+      finding.line ? `${finding.file}:${finding.line}` : finding.file,
+    );
+    const message = sanitizeTableCell(finding.message);
+    out += `| ${emoji} ${severity} | ${location} | ${message} |\n`;
+  }
+  out += '\n';
   return out;
 }
 
@@ -672,6 +750,12 @@ export interface FormatReviewCommentOptions {
    * so GitHub sends a notification to the author when the review is posted.
    */
   prAuthor?: string;
+  /**
+   * Findings that were in the previous review and are absent now.
+   * Rendered as their own section. Omitted (and the comment stays
+   * byte-identical) when missing or empty.
+   */
+  fixedSince?: ReviewFinding[];
 }
 
 // ─── Formatting ─────────────────────────────────────────────────
@@ -736,12 +820,21 @@ export function formatReviewComment(
   // the comment stays byte-identical to having no section at all.
   comment += formatSemanticDiffSection(result.semanticDiff);
 
+  // Refuted findings leave the open table and are listed, with the reason,
+  // in one collapsed block. No refuted findings → the same array, so the
+  // open table stays byte-identical.
+  const refutedFindings = result.findings.filter((finding) => finding.ledgerStatus === 'refuted');
+  const openFindings =
+    refutedFindings.length === 0
+      ? result.findings
+      : result.findings.filter((finding) => finding.ledgerStatus !== 'refuted');
+
   // Findings grouped by source
-  if (result.findings.length > 0) {
-    comment += `### Findings (${result.findings.length})\n\n`;
+  if (openFindings.length > 0) {
+    comment += `### Findings (${openFindings.length})\n\n`;
 
     // Group findings by source
-    const grouped = groupFindingsBySource(result.findings);
+    const grouped = groupFindingsBySource(openFindings);
 
     // Render order: static tools first, then AI
     // Generate SOURCE_LABELS dynamically from registry when available
@@ -773,7 +866,7 @@ export function formatReviewComment(
     }
     renderOrder.push('ai');
 
-    if (result.findings.length <= MAX_VISIBLE_FINDINGS) {
+    if (openFindings.length <= MAX_VISIBLE_FINDINGS) {
       // Small reviews: EXACTLY the historical per-tool output (byte-identical
       // backward compat — comment-format-signal Fix 1 hard rule).
       comment += renderFindingGroups(grouped, renderOrder, SOURCE_LABELS);
@@ -782,15 +875,17 @@ export function formatReviewComment(
       // a Source column since the per-tool headers no longer sit next to
       // every row); ALL remaining findings collapse into ONE details block,
       // still grouped per tool in today's format.
-      const ranked = [...result.findings].sort(
+      const ranked = [...openFindings].sort(
         (a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4),
       );
       const visible = ranked.slice(0, MAX_VISIBLE_FINDINGS);
       const rest = ranked.slice(MAX_VISIBLE_FINDINGS);
 
+      const withAxes = hasRiskAxis(visible);
       comment += `**\ud83c\udfaf Top ${visible.length} findings (by severity)**\n`;
-      comment += `| Severity | Source | Category | File | Message |\n`;
-      comment += `|----------|--------|----------|------|----------|\n`;
+      comment += withAxes
+        ? `| Severity | Source | Category | Reachability | Exploitability | File | Message |\n|----------|--------|----------|--------------|----------------|------|----------|\n`
+        : `| Severity | Source | Category | File | Message |\n|----------|--------|----------|------|----------|\n`;
       for (const finding of visible) {
         const emoji = SEVERITY_EMOJI[finding.severity] ?? '';
         const severity = sanitizeTableCell(String(finding.severity));
@@ -802,7 +897,10 @@ export function formatReviewComment(
           finding.line ? `${finding.file}:${finding.line}` : finding.file,
         );
         const message = sanitizeTableCell(finding.message);
-        comment += `| ${emoji} ${severity} | ${sourceLabel} | ${category} | ${location} | ${message} |\n`;
+        const axes = withAxes
+          ? `| ${axisCell(finding.reachability)} | ${axisCell(exploitabilityCell(finding))} `
+          : '';
+        comment += `| ${emoji} ${severity} | ${sourceLabel} | ${category} ${axes}| ${location} | ${message} |\n`;
       }
       comment += '\n';
 
@@ -826,6 +924,9 @@ export function formatReviewComment(
       comment += `</details>\n\n`;
     }
   }
+
+  comment += formatFixedSinceSection(options?.fixedSince);
+  comment += formatRefutedSection(refutedFindings);
 
   // Static analysis summary.
   // toolsRun / toolsSkipped originate from the runner-callback payload

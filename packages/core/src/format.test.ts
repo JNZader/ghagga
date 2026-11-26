@@ -1850,3 +1850,118 @@ describe('formatReviewComment — summary heading demotion (Fix 3)', () => {
     expect(output).toContain('`## not a fence`');
   });
 });
+
+describe('formatReviewComment — reachability and exploitability columns', () => {
+  it('adds the columns for a security-lens finding and leaves other reviews unchanged', () => {
+    const plain = formatReviewComment(
+      makeResult({
+        findings: [makeFinding({ severity: 'high', message: 'No axes' })],
+      }),
+    );
+    expect(plain).not.toContain('Reachability');
+    expect(plain).toContain('| Severity | Category | File | Message |');
+
+    const classified = formatReviewComment(
+      makeResult({
+        findings: [
+          makeFinding({
+            severity: 'critical',
+            category: 'security',
+            file: 'src/auth.ts',
+            line: 12,
+            message: 'SQL injection',
+            reachability: 'external',
+            lensExploitability: 'trivial',
+          }),
+        ],
+      }),
+    );
+    expect(classified).toContain(
+      '| Severity | Category | Reachability | Exploitability | File | Message |',
+    );
+    expect(classified).toContain('| external | trivial |');
+  });
+
+  it('reuses the Trivy exploitability label when the security-lens axis is absent', () => {
+    const output = formatReviewComment(
+      makeResult({
+        findings: [
+          makeFinding({
+            severity: 'high',
+            category: 'dependency-vulnerability',
+            file: 'package-lock.json',
+            line: 4,
+            message: 'CVE-2024-0001 in lodash',
+            source: 'trivy',
+            exploitability: 'not-exploitable',
+          }),
+        ],
+      }),
+    );
+    expect(output).toContain('| — | not-exploitable |');
+    expect(output).not.toContain('trivial');
+  });
+});
+
+describe('formatReviewComment — refuted findings', () => {
+  it('moves refuted findings into a collapsed block with the reason', () => {
+    const output = formatReviewComment(
+      makeResult({
+        findings: [
+          makeFinding({ severity: 'high', file: 'src/open.ts', line: 2, message: 'Still open' }),
+          makeFinding({
+            severity: 'critical',
+            file: 'src/old.ts',
+            line: 9,
+            message: 'Already handled',
+            ledgerStatus: 'refuted',
+            refuteReason: 'mitigated',
+          }),
+        ],
+      }),
+    );
+    expect(output).toContain('### Findings (1)');
+    expect(output).toContain('Still open');
+    expect(output).not.toContain('| 🔴 critical | security | src/old.ts:9 |');
+    expect(output).toContain('<summary>Refuted findings (1)</summary>');
+    expect(output).toContain('src/old.ts:9');
+    expect(output).toContain('mitigated');
+  });
+
+  it('omits the refuted block when nothing was refuted', () => {
+    const output = formatReviewComment(
+      makeResult({ findings: [makeFinding({ message: 'Only open' })] }),
+    );
+    expect(output).not.toContain('Refuted findings');
+  });
+});
+
+describe('formatReviewComment — fixed since last review', () => {
+  it('renders a section for findings that disappeared and omits it when empty', () => {
+    const result = makeResult({
+      findings: [makeFinding({ file: 'src/still.ts', line: 2, message: 'still open' })],
+    });
+    const withFixed = formatReviewComment(result, {
+      fixedSince: [
+        makeFinding({
+          severity: 'high',
+          file: 'src/gone.ts',
+          line: 9,
+          category: 'security',
+          message: 'Removed the unsafe call',
+        }),
+      ],
+    });
+    expect(withFixed).toContain('### Fixed since last review (1)');
+    expect(withFixed).toContain('src/gone.ts:9');
+    expect(withFixed).toContain('Removed the unsafe call');
+    expect(withFixed.indexOf('### Findings')).toBeLessThan(
+      withFixed.indexOf('### Fixed since last review'),
+    );
+
+    const unchanged = formatReviewComment(result);
+    const explicitEmpty = formatReviewComment(result, { fixedSince: [] });
+    expect(explicitEmpty).toBe(unchanged);
+    expect(unchanged).not.toContain('Fixed since last review');
+  });
+});

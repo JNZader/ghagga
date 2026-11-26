@@ -62,11 +62,19 @@ describe('GitHubApiGraphLoader', () => {
     globalThis.fetch = originalFetch;
   });
 
+  function mockDefaultBranchFile(owner: string, repo: string, body: unknown) {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === `https://api.github.com/repos/${owner}/${repo}`) {
+        return new Response(JSON.stringify({ default_branch: 'main' }), { status: 200 });
+      }
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+  }
+
   describe('load()', () => {
-    it('returns DependencyGraph on 200 with valid JSON', async () => {
-      vi.mocked(globalThis.fetch).mockResolvedValue(
-        new Response(JSON.stringify(VALID_GRAPH), { status: 200 }),
-      );
+    it('returns DependencyGraph on 200 with valid JSON from the default branch', async () => {
+      mockDefaultBranchFile('owner', 'repo', VALID_GRAPH);
 
       const loader = new GitHubApiGraphLoader('owner', 'repo', 'token');
       const result = await loader.load();
@@ -76,16 +84,14 @@ describe('GitHubApiGraphLoader', () => {
       expect(result?.nodes['src/index.ts']).toBeDefined();
     });
 
-    it('sends correct URL and headers', async () => {
-      vi.mocked(globalThis.fetch).mockResolvedValue(
-        new Response(JSON.stringify(VALID_GRAPH), { status: 200 }),
-      );
+    it('reads the default branch and sends the raw accept header', async () => {
+      mockDefaultBranchFile('myorg', 'myrepo', VALID_GRAPH);
 
       const loader = new GitHubApiGraphLoader('myorg', 'myrepo', 'gh_token123');
       await loader.load();
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        'https://api.github.com/repos/myorg/myrepo/contents/.ghagga/graph.json?ref=ghagga/graph',
+        'https://api.github.com/repos/myorg/myrepo/contents/.ghagga/graph.json?ref=main',
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: 'Bearer gh_token123',
@@ -135,9 +141,7 @@ describe('GitHubApiGraphLoader', () => {
 
     it('returns null when graph has wrong version', async () => {
       const badGraph = { ...VALID_GRAPH, version: 999 };
-      vi.mocked(globalThis.fetch).mockResolvedValue(
-        new Response(JSON.stringify(badGraph), { status: 200 }),
-      );
+      mockDefaultBranchFile('owner', 'repo', badGraph);
 
       const loader = new GitHubApiGraphLoader('owner', 'repo', 'token');
       const result = await loader.load();
@@ -148,9 +152,7 @@ describe('GitHubApiGraphLoader', () => {
 
   describe('loadMetadata()', () => {
     it('returns GraphMetadata on 200 with valid JSON', async () => {
-      vi.mocked(globalThis.fetch).mockResolvedValue(
-        new Response(JSON.stringify(VALID_METADATA), { status: 200 }),
-      );
+      mockDefaultBranchFile('owner', 'repo', VALID_METADATA);
 
       const loader = new GitHubApiGraphLoader('owner', 'repo', 'token');
       const result = await loader.loadMetadata();

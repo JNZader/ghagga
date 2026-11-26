@@ -10,6 +10,7 @@
 import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { chooseGraphRef } from '../trust/source.js';
 import {
   type DependencyGraph,
   type GraphLoader,
@@ -22,10 +23,11 @@ import {
 // ─── GitHub API Graph Loader ────────────────────────────────────
 
 /**
- * Fetches the dependency graph from a GitHub repository's ghagga/graph orphan branch.
+ * Fetches the dependency graph from a trusted ref.
  *
- * Uses the GitHub Contents API with `Accept: application/vnd.github.raw` to get
- * the raw JSON without base64 encoding.
+ * The default branch is preferred. The `ghagga/graph` orphan branch is used
+ * only when that branch is protected. Uses the Contents API with
+ * `Accept: application/vnd.github.raw`.
  */
 export class GitHubApiGraphLoader implements GraphLoader {
   constructor(
@@ -36,47 +38,77 @@ export class GitHubApiGraphLoader implements GraphLoader {
 
   async load(): Promise<DependencyGraph | null> {
     try {
-      const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/.ghagga/graph.json?ref=ghagga/graph`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'application/vnd.github.raw',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(5_000),
-      });
-
-      if (response.status === 404) return null;
-      if (!response.ok) return null;
-
-      const json: unknown = await response.json();
+      const json = await this.#fetchTrusted('.ghagga/graph.json');
+      if (json == null) return null;
       return validateGraph(json);
     } catch {
-      // Network error, timeout, parse error — all return null
       return null;
     }
   }
 
   async loadMetadata(): Promise<GraphMetadata | null> {
     try {
-      const url = `https://api.github.com/repos/${this.owner}/${this.repo}/contents/.ghagga/metadata.json?ref=ghagga/graph`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'application/vnd.github.raw',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: AbortSignal.timeout(5_000),
-      });
-
-      if (response.status === 404) return null;
-      if (!response.ok) return null;
-
-      const json: unknown = await response.json();
+      const json = await this.#fetchTrusted('.ghagga/metadata.json');
+      if (json == null) return null;
       return validateMetadata(json);
     } catch {
       return null;
     }
+  }
+
+  async #fetchTrusted(path: string): Promise<unknown | null> {
+    const repoUrl = `https://api.github.com/repos/${this.owner}/${this.repo}`;
+    const rawHeaders = {
+      Authorization: `Bearer ${this.token}`,
+      Accept: 'application/vnd.github.raw',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+    const jsonHeaders = {
+      Authorization: `Bearer ${this.token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+    const repoResponse = await fetch(repoUrl, {
+      headers: jsonHeaders,
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!repoResponse.ok) return null;
+    const repoBody = (await repoResponse.json()) as { default_branch?: unknown };
+    const defaultBranch =
+      typeof repoBody.default_branch === 'string' ? repoBody.default_branch : undefined;
+    if (defaultBranch) {
+      const onDefault = await fetch(
+        `${repoUrl}/contents/${path}?ref=${encodeURIComponent(defaultBranch)}`,
+        { headers: rawHeaders, signal: AbortSignal.timeout(5_000) },
+      );
+      if (onDefault.ok) return onDefault.json();
+      if (onDefault.status !== 404) return null;
+    }
+    // Raw slash: GitHub treats /branches/ghagga/graph as that branch name.
+    // encodeURIComponent would turn the slash into %2F and miss the branch.
+    const branchResponse = await fetch(`${repoUrl}/branches/ghagga/graph`, {
+      headers: jsonHeaders,
+      signal: AbortSignal.timeout(5_000),
+    });
+    let graphBranchProtected: boolean | null = null;
+    if (branchResponse.ok) {
+      const branch = (await branchResponse.json()) as { protected?: unknown };
+      graphBranchProtected = branch.protected === true;
+    } else if (branchResponse.status !== 404) {
+      return null;
+    }
+    const ref = chooseGraphRef({
+      defaultBranch,
+      defaultBranchHasGraph: false,
+      graphBranchProtected,
+    });
+    if (!ref) return null;
+    const fileResponse = await fetch(`${repoUrl}/contents/${path}?ref=${encodeURIComponent(ref)}`, {
+      headers: rawHeaders,
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!fileResponse.ok) return null;
+    return fileResponse.json();
   }
 }
 

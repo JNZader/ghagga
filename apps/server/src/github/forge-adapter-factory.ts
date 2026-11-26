@@ -65,6 +65,14 @@ const githubClientPort: GitHubClientPort = {
   get updateComment() {
     return githubClient.updateComment;
   },
+  get listPullReviewComments() {
+    if (!('listPullReviewComments' in githubClient)) return undefined;
+    return githubClient.listPullReviewComments;
+  },
+  get createPullReviewComment() {
+    if (!('createPullReviewComment' in githubClient)) return undefined;
+    return githubClient.createPullReviewComment;
+  },
   get addCommentReaction() {
     return githubClient.addCommentReaction;
   },
