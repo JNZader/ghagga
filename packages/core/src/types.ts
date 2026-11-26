@@ -474,6 +474,29 @@ export interface ReviewResult {
   coverageComplete?: boolean;
 }
 
+export interface SecurityTracePoint {
+  file: string;
+  line: number;
+}
+
+export interface SecurityTrace {
+  source: SecurityTracePoint;
+  path: SecurityTracePoint;
+  missingGuard: SecurityTracePoint;
+  sink: SecurityTracePoint;
+}
+
+export const REACHABILITY_VALUES = ['external', 'internal', 'unreachable'] as const;
+export type Reachability = (typeof REACHABILITY_VALUES)[number];
+
+export const LENS_EXPLOITABILITY_VALUES = [
+  'trivial',
+  'moderate',
+  'difficult',
+  'theoretical',
+] as const;
+export type LensExploitability = (typeof LENS_EXPLOITABILITY_VALUES)[number];
+
 export const FINDING_LEDGER_STATUS = {
   open: 'open',
   fixed: 'fixed',
@@ -533,6 +556,34 @@ export interface ReviewFinding {
 
   /** Reason for AI filtering (present when aiFiltered === true). */
   filterReason?: string;
+
+  /**
+   * Located trace for a security finding. All four points are required
+   * before a security finding is published as open.
+   */
+  securityTrace?: SecurityTrace;
+
+  /**
+   * Checklist reason a refuter gave for removing this finding from the
+   * open set. Shown in the review comment.
+   */
+  refuteReason?: string;
+
+  /**
+   * Security-lens reachability of the issue.
+   * `external` crosses a trust boundary, `internal` needs an already-trusted
+   * caller, `unreachable` has no plausible caller. Absent when the lens
+   * did not classify it.
+   */
+  reachability?: Reachability;
+
+  /**
+   * Security-lens exploitability: how hard the issue is to exercise.
+   * Distinct from the Trivy CVE {@link exploitability} label. The review
+   * comment shows this value in the Exploitability column when it is set,
+   * and otherwise falls back to the Trivy label.
+   */
+  lensExploitability?: LensExploitability;
 
   /** Exploitability label for CVE findings (present when exploitability analysis runs). */
   exploitability?: import('./exploitability/types.js').ExploitabilityLabel;

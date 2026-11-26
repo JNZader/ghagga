@@ -539,6 +539,7 @@ async function handlePullRequest(
       enabledTools: effective.settings.enabledTools,
       disabledTools: effective.settings.disabledTools,
       enableBlastRadius: effective.settings.enableBlastRadius,
+      securityCheckThreshold: effective.settings.securityCheckThreshold,
     },
   });
 
@@ -795,6 +796,7 @@ async function handleIssueComment(
       enabledTools: effective.settings.enabledTools,
       disabledTools: effective.settings.disabledTools,
       enableBlastRadius: effective.settings.enableBlastRadius,
+      securityCheckThreshold: effective.settings.securityCheckThreshold,
     },
   });
 

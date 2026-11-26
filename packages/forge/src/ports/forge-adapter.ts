@@ -116,6 +116,11 @@ export interface InlineComment {
     /** Line on the head revision (GitLab `position[new_line]`). */
     newLine?: number;
   };
+  /**
+   * GitHub pull-review commit the comment anchors to (`commit_id`).
+   * Absent on forges that anchor through {@link position} instead.
+   */
+  commitSha?: string;
   /** Comment body (markdown). */
   body: string;
 }

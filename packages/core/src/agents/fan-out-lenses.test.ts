@@ -100,6 +100,15 @@ describe('Lens Registry', () => {
     ]);
   });
 
+  it('security lens asks for reachability and exploitability', () => {
+    expect(LENS_SECURITY.system).toContain('SOURCE: [file:line]');
+    expect(LENS_SECURITY.system).toContain('SINK: [file:line]');
+    expect(LENS_SECURITY.system).toContain('REACHABILITY: [external|internal|unreachable]');
+    expect(LENS_SECURITY.system).toContain(
+      'EXPLOITABILITY: [trivial|moderate|difficult|theoretical]',
+    );
+  });
+
   it('getLens returns built-in lenses by name', () => {
     expect(getLens('security')).toBe(LENS_SECURITY);
     expect(getLens('performance')).toBe(LENS_PERFORMANCE);
@@ -684,8 +693,8 @@ FINDINGS:
     const lensFn = makeFakeGenerateFn(
       FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection'),
     );
-    const refuter1 = makeFakeGenerateFn('security-001: refute');
-    const refuter2 = makeFakeGenerateFn('security-001: refute');
+    const refuter1 = makeFakeGenerateFn('security-001: refute speculative');
+    const refuter2 = makeFakeGenerateFn('security-001: refute speculative');
 
     const result = await runFanOutReview(
       makeInput({
@@ -699,6 +708,7 @@ FINDINGS:
     expect(result.findings[0]).toMatchObject({
       id: 'security-001',
       ledgerStatus: 'refuted',
+      refuteReason: 'speculative',
     });
     expect(result.status).not.toBe('FAILED');
     expect(lensFn).toHaveBeenCalledTimes(1);
@@ -710,7 +720,7 @@ FINDINGS:
     const lensFn = makeFakeGenerateFn(
       FINDING_RESPONSE('critical', 'security', 'auth.ts', 10, 'SQL injection'),
     );
-    const refuter1 = makeFakeGenerateFn('security-001: refute');
+    const refuter1 = makeFakeGenerateFn('security-001: refute duplicate');
     const refuter2 = makeFakeGenerateFn('security-001: stands');
 
     const result = await runFanOutReview(
@@ -744,6 +754,40 @@ FINDINGS:
     );
 
     expect(result.findings[0]?.ledgerStatus).toBe('open');
+  });
+
+  it('sends high findings to the refuter and keeps a bare refute from counting', async () => {
+    const lensFn = makeFakeGenerateFn(
+      FINDING_RESPONSE('high', 'security', 'auth.ts', 12, 'Missing authorization check'),
+    );
+    const bare1 = makeFakeGenerateFn('security-001: refute');
+    const bare2 = makeFakeGenerateFn('security-001: refute');
+
+    const bare = await runFanOutReview(
+      makeInput({
+        generateFns: [lensFn, bare1, bare2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        refuterCount: 2,
+      }),
+    );
+    expect(bare1).toHaveBeenCalledTimes(1);
+    expect(bare.findings[0]?.ledgerStatus).toBe('open');
+
+    const reasoned1 = makeFakeGenerateFn('security-001: refute test-only');
+    const reasoned2 = makeFakeGenerateFn('security-001: refute test-only');
+    const reasoned = await runFanOutReview(
+      makeInput({
+        generateFns: [lensFn, reasoned1, reasoned2],
+        lenses: ['security'],
+        pinLensesToFirst: true,
+        refuterCount: 2,
+      }),
+    );
+    expect(reasoned.findings[0]).toMatchObject({
+      ledgerStatus: 'refuted',
+      refuteReason: 'test-only',
+    });
   });
 
   it('skips refuter generateFns when there are no critical findings', async () => {

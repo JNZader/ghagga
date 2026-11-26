@@ -81,6 +81,7 @@ import {
   getInstallationsByAccountLogin,
   getInstallationsByUserId,
   getIssueDraftById,
+  getLatestReviewFindings,
   getMemoryObservation,
   getMemoryStats,
   getObservationsBySession,
@@ -783,6 +784,37 @@ describe('saveReview', () => {
     expect(inserted).not.toHaveProperty('inputTokens');
     expect(inserted).not.toHaveProperty('outputTokens');
     expect(inserted.tokensUsed).toBe(10_000);
+  });
+});
+
+describe('getLatestReviewFindings', () => {
+  it('returns the findings array of the newest review for the PR', async () => {
+    const findings = [
+      { file: 'src/a.ts', line: 1, severity: 'high', message: 'x', category: 'bug' },
+    ];
+    const mockLimit = vi.fn().mockResolvedValue([{ findings }]);
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    await expect(getLatestReviewFindings(db, 4, 9)).resolves.toEqual(findings);
+    expect(mockLimit).toHaveBeenCalledWith(1);
+  });
+
+  it('returns null when the PR has no review or the column is not an array', async () => {
+    const mockLimit = vi.fn().mockResolvedValue([{ findings: null }]);
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+    const db = { select: mockSelect } as unknown as Database;
+
+    await expect(getLatestReviewFindings(db, 4, 9)).resolves.toBeNull();
+
+    mockLimit.mockResolvedValue([]);
+    await expect(getLatestReviewFindings(db, 4, 9)).resolves.toBeNull();
   });
 });
 

@@ -79,6 +79,7 @@ const mockGetEffectiveRepoSettings = vi.fn();
 vi.mock('ghagga-db', () => ({
   decrypt: (v: string) => mockDecrypt(v),
   saveReview: (...args: unknown[]) => mockSaveReview(...args),
+  getLatestReviewFindings: vi.fn().mockResolvedValue(null),
   createDatabaseFromEnv: () => mockCreateDatabaseFromEnv(),
   getRepositoryById: (...args: unknown[]) => mockGetRepositoryById(...args),
   getEffectiveRepoSettings: (...args: unknown[]) => mockGetEffectiveRepoSettings(...args),

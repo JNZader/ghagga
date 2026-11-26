@@ -1015,6 +1015,261 @@ export async function updateExplanationComment(
   }
 }
 
+const CHECK_NAME_HEADER = {
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+} as const;
+
+function repoUrl(owner: string, repo: string, suffix: string): string {
+  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}${suffix}`;
+}
+
+/**
+ * Check runs for one commit whose name matches `name`.
+ * @internal Used by the security check publisher.
+ */
+export async function listCheckRunsByName(
+  owner: string,
+  repo: string,
+  sha: string,
+  name: string,
+  token: string,
+): Promise<Array<{ id: number }>> {
+  const url = repoUrl(
+    owner,
+    repo,
+    `/commits/${encodeURIComponent(sha)}/check-runs?check_name=${encodeURIComponent(name)}`,
+  );
+  return githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      headers: { ...CHECK_NAME_HEADER, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error listing check runs: ${response.status} ${response.statusText}`,
+      );
+    }
+    const payload = (await response.json()) as { check_runs?: Array<{ id?: number }> };
+    return (payload.check_runs ?? [])
+      .filter((run) => typeof run.id === 'number')
+      .map((run) => ({ id: run.id as number }));
+  });
+}
+
+export interface SecurityCheckRunBody {
+  name: string;
+  headSha: string;
+  conclusion: 'success' | 'failure';
+  title: string;
+  summary: string;
+}
+
+/**
+ * Create a completed check run.
+ * @internal Used by the security check publisher.
+ */
+export async function createCheckRun(
+  owner: string,
+  repo: string,
+  body: SecurityCheckRunBody,
+  token: string,
+): Promise<{ id: number }> {
+  const url = repoUrl(owner, repo, '/check-runs');
+  return githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...CHECK_NAME_HEADER,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: body.name,
+        head_sha: body.headSha,
+        status: 'completed',
+        conclusion: body.conclusion,
+        output: { title: body.title, summary: body.summary },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error creating check run: ${response.status} ${response.statusText}`,
+      );
+    }
+    const payload = (await response.json()) as { id?: number };
+    if (typeof payload.id !== 'number') {
+      throw new TypeError('GitHub API create check run returned no id');
+    }
+    return { id: payload.id };
+  });
+}
+
+/**
+ * Update a check run in place. This is how a failing ghagga/security check
+ * stays on the commit until a later review clears it.
+ * @internal Used by the security check publisher.
+ */
+export async function updateCheckRun(
+  owner: string,
+  repo: string,
+  checkRunId: number,
+  body: Pick<SecurityCheckRunBody, 'conclusion' | 'title' | 'summary'>,
+  token: string,
+): Promise<void> {
+  const url = repoUrl(owner, repo, `/check-runs/${checkRunId}`);
+  await githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        ...CHECK_NAME_HEADER,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'completed',
+        conclusion: body.conclusion,
+        output: { title: body.title, summary: body.summary },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error updating check run: ${response.status} ${response.statusText}`,
+      );
+    }
+  });
+}
+
+/**
+ * Upload a gzip+base64 SARIF document to GitHub code scanning.
+ * @internal Used by the security check publisher.
+ */
+export async function uploadSarif(
+  owner: string,
+  repo: string,
+  payload: { commitSha: string; ref: string; sarif: string },
+  token: string,
+): Promise<void> {
+  const url = repoUrl(owner, repo, '/code-scanning/sarifs');
+  await githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...CHECK_NAME_HEADER,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commit_sha: payload.commitSha,
+        ref: payload.ref,
+        sarif: payload.sarif,
+        tool_name: 'ghagga',
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error uploading SARIF: ${response.status} ${response.statusText}`,
+      );
+    }
+  });
+}
+
+/**
+ * List pull-request review comments (the inline diff comments, not the
+ * issue-thread summary). Used to skip an inline comment that was already
+ * posted. Capped at one page — a review posts at most 20 inline comments.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter.
+ */
+export async function listPullReviewComments(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  token: string,
+): Promise<Array<{ id: number; body: string }>> {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/comments?per_page=100`;
+
+  return githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error listing review comments: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const payload = (await response.json()) as Array<{ id?: number; body?: string }>;
+    if (!Array.isArray(payload)) return [];
+    return payload
+      .filter((comment) => typeof comment.id === 'number' && typeof comment.body === 'string')
+      .map((comment) => ({ id: comment.id as number, body: comment.body as string }));
+  });
+}
+
+/**
+ * Post one inline review comment on a pull request diff.
+ * GitHub rejects the call with 422 when `line` is not part of the diff.
+ *
+ * @internal INTERNAL — consume via GitHubForgeAdapter.
+ */
+export async function createPullReviewComment(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  comment: { body: string; commitId: string; path: string; line: number },
+  token: string,
+): Promise<{ id: number }> {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/comments`;
+
+  return githubCircuitBreaker.execute(async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({
+        body: comment.body,
+        commit_id: comment.commitId,
+        path: comment.path,
+        line: comment.line,
+        side: 'RIGHT',
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error creating review comment: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const payload = (await response.json()) as { id?: number };
+    if (typeof payload.id !== 'number') {
+      throw new TypeError('GitHub API create review comment returned no id');
+    }
+    return { id: payload.id };
+  });
+}
+
 /**
  * Delete a comment from a pull request.
  *

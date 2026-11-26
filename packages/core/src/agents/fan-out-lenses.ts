@@ -96,6 +96,17 @@ FINDINGS:
   LINE: [line number or "N/A"]
   MESSAGE: [clear description of the security issue]
   SUGGESTION: [specific security fix]
+  REACHABILITY: [external|internal|unreachable]
+  EXPLOITABILITY: [trivial|moderate|difficult|theoretical]
+  SOURCE: [file:line]
+  PATH: [file:line]
+  MISSING_GUARD: [file:line]
+  SINK: [file:line]
+
+REACHABILITY: external = an untrusted caller can reach the issue across a trust boundary; internal = only an already-authenticated principal inside the boundary can reach it; unreachable = no plausible caller.
+EXPLOITABILITY: trivial = no special conditions; moderate = a common precondition; difficult = rare conditions or a bug chain; theoretical = no practical path.
+SOURCE, PATH, MISSING_GUARD, and SINK are required on every security finding. Each value is a file path, a colon, and a line number (for example src/handler.ts:40). SOURCE is where untrusted data enters, PATH is a hop it travels, MISSING_GUARD is the check that should exist, SINK is where the data becomes dangerous.
+Always include the two axes and all four trace lines on every security finding.
 
 FAILED if: Any critical or high security issues. PASSED otherwise.
 Report ONLY security findings you are 90%+ confident about.`,
@@ -498,19 +509,36 @@ FAILED if: Any critical or high issues. PASSED otherwise.`;
 /** Batched closed-list refuter. Not a lens and not SIMPLE_REVIEW_SYSTEM. */
 const REFUTER_SYSTEM = `You are a batched finding refuter. You are not a review lens.
 
-You receive a closed candidate list. Do not add findings. Do not invent ids.
+You receive a closed candidate list of critical and high findings. Do not add findings. Do not invent ids.
 For each candidate id, emit exactly one verdict: stands or refute.
 A missing or malformed verdict is treated as stands.
+Refute only for one of these reasons: duplicate, mitigated, speculative, test-only, dead code, unreachable.
+A refute without one of those reasons is treated as stands.
 
 Format each verdict on its own line as:
 <id>: stands
-<id>: refute`;
+<id>: refute duplicate
+<id>: refute mitigated
+<id>: refute speculative
+<id>: refute test-only
+<id>: refute dead code
+<id>: refute unreachable`;
 
 /**
  * Parse per-id refuter verdicts from model text.
  * Only explicit `refute` or `stands` lines count. Unknown ids are kept in the
  * map for the caller to ignore. Missing candidate ids have no map entry.
  */
+export const REFUTE_REASONS = [
+  'duplicate',
+  'mitigated',
+  'speculative',
+  'test-only',
+  'dead code',
+  'unreachable',
+] as const;
+export type RefuteReason = (typeof REFUTE_REASONS)[number];
+
 export function parseRefuterVerdicts(text: string): Map<string, 'refute' | 'stands'> {
   const verdicts = new Map<string, 'refute' | 'stands'>();
   const pattern = /^\s*([A-Za-z0-9][A-Za-z0-9_-]*)\s*:\s*(refute|stands)\b/gim;
@@ -521,6 +549,20 @@ export function parseRefuterVerdicts(text: string): Map<string, 'refute' | 'stan
     verdicts.set(id, verdict);
   }
   return verdicts;
+}
+
+/** Checklist reason attached to an explicit `refute <reason>` line. A bare `refute` has no entry. */
+export function parseRefuterReasons(text: string): Map<string, RefuteReason> {
+  const reasons = new Map<string, RefuteReason>();
+  const pattern =
+    /^\s*([A-Za-z0-9][A-Za-z0-9_-]*)\s*:\s*refute\s+(duplicate|mitigated|speculative|test-only|dead code|unreachable)\b/gim;
+  for (const match of text.matchAll(pattern)) {
+    const id = match[1];
+    const reason = match[2]?.toLowerCase() as RefuteReason | undefined;
+    if (!id || !reason || !(REFUTE_REASONS as readonly string[]).includes(reason)) continue;
+    reasons.set(id, reason);
+  }
+  return reasons;
 }
 
 // ─── Merge Logic ───────────────────────────────────────────────
@@ -940,7 +982,9 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
   let mergedFindings = stampFindingLedger(mergeFindings(allFindings));
 
   if (typeof refuterCount === 'number' && Number.isInteger(refuterCount) && refuterCount >= 2) {
-    const candidates = mergedFindings.filter((f) => f.severity === 'critical' && f.id);
+    const candidates = mergedFindings.filter(
+      (f) => (f.severity === 'critical' || f.severity === 'high') && f.id,
+    );
     if (candidates.length > 0) {
       const contrarianN =
         typeof contrarianCount === 'number' &&
@@ -964,6 +1008,7 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
       const refuterSystem = [REFUTER_SYSTEM, UNTRUSTED_CONTENT_POLICY].join('\n');
 
       const refuteVotes = new Map<string, number>();
+      const refuteReasons = new Map<string, RefuteReason>();
       for (const candidate of candidates) {
         if (candidate.id) refuteVotes.set(candidate.id, 0);
       }
@@ -982,7 +1027,7 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
 
       emit({
         step: 'fan-out-refuter',
-        message: `Launching ${refuterCount} batched refuter voice(s) on ${candidates.length} critical finding(s)`,
+        message: `Launching ${refuterCount} batched refuter voice(s) on ${candidates.length} critical or high finding(s)`,
       });
 
       const refuterResults = await runWithConcurrency(refuterTasks, { concurrency, delayMs });
@@ -1000,19 +1045,33 @@ export async function runFanOutReview(input: FanOutReviewInput): Promise<ReviewR
           totalOutputTokens += result.value.outputTokens;
         }
         const verdicts = parseRefuterVerdicts(result.value.text);
+        const reasons = parseRefuterReasons(result.value.text);
         for (const candidate of candidates) {
           if (!candidate.id) continue;
-          if (verdicts.get(candidate.id) === 'refute') {
+          const reason = reasons.get(candidate.id);
+          // A bare "refute" with no checklist reason does not count. The
+          // review still publishes; a missing reason is treated as stands.
+          if (verdicts.get(candidate.id) === 'refute' && reason) {
             refuteVotes.set(candidate.id, (refuteVotes.get(candidate.id) ?? 0) + 1);
+            if (!refuteReasons.has(candidate.id)) {
+              refuteReasons.set(candidate.id, reason);
+            }
           }
         }
       }
 
       mergedFindings = mergedFindings.map((finding) => {
-        if (finding.severity !== 'critical' || !finding.id) return finding;
+        if ((finding.severity !== 'critical' && finding.severity !== 'high') || !finding.id) {
+          return finding;
+        }
         const votes = refuteVotes.get(finding.id) ?? 0;
         if (votes >= 2) {
-          return { ...finding, ledgerStatus: FINDING_LEDGER_STATUS.refuted };
+          const reason = refuteReasons.get(finding.id);
+          return {
+            ...finding,
+            ledgerStatus: FINDING_LEDGER_STATUS.refuted,
+            ...(reason ? { refuteReason: reason } : {}),
+          };
         }
         return finding;
       });
