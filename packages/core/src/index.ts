@@ -20,6 +20,7 @@ export type {
   // Diagnostic types
   Hypothesis,
   HypothesisConfidence,
+  LensExploitability,
   ListObservationsOptions,
   LLMProvider,
   MemoryObservation,
@@ -33,6 +34,7 @@ export type {
   ProgressCallback,
   ProgressEvent,
   ProviderChainEntry,
+  Reachability,
   ReviewContext,
   ReviewFinding,
   // Input types
@@ -104,6 +106,8 @@ export {
   DEFAULT_SETTINGS,
   DEFAULT_VERSIONING_CONFIG,
   FINDING_LEDGER_STATUS,
+  LENS_EXPLOITABILITY_VALUES,
+  REACHABILITY_VALUES,
 } from './types.js';
 
 // ─── Utilities (for advanced usage) ─────────────────────────────
@@ -261,6 +265,15 @@ export {
   sanitizeInlineCodeName,
 } from './format.js';
 export { DIGEST_ISSUE_MARKER, formatDigestIssue } from './format-digest.js';
+export {
+  buildInlineCommentBody,
+  findingLocationKey,
+  findingsFixedSince,
+  INLINE_SEVERITIES,
+  inlineCommentMarker,
+  MAX_INLINE_COMMENTS,
+  selectInlineFindings,
+} from './review-comment-ux.js';
 export { isValidGithubLogin, sanitizeMarkdownText, sanitizeTableCell } from './sanitize.js';
 
 // ─── Extensible Tool System ─────────────────────────────────────
