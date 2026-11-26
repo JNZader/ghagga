@@ -1,5 +1,15 @@
 # ghagga-core
 
+## 3.9.0
+
+### Minor Changes
+
+- 5e647bb: Review comments now post inline only for critical and high findings. Each inline comment includes a collapsed "How to verify" section and a collapsed prompt an AI agent can use to fix the finding. The summary comment is still posted and, when a previous review exists, lists findings that have disappeared since then. The summary itself continues to be edited in place.
+- 2c35f26: The GitHub App publishes a `ghagga/security` check run. It fails when a security finding is at or above a configurable threshold (default: critical) and stays failed on that commit until a later review no longer contains the finding. The App also uploads a SARIF report to GitHub code scanning. `checks: write` and `security_events: write` are required, and adding them asks existing installations to re-consent.
+- 79d57b3: The security lens now reports REACHABILITY (`external`, `internal`, `unreachable`) and EXPLOITABILITY (`trivial`, `moderate`, `difficult`, `theoretical`). Review comments show both as columns when a finding carries them. Trivy CVE labels (`exploitable`, `potentially-exploitable`, `not-exploitable`) reuse the same Exploitability column.
+- c0314f5: Security findings must include SOURCE, PATH, MISSING_GUARD, and SINK, each as a file and a line, before they are published as open. Critical and high findings also pass a refuter checklist (duplicate, mitigated, speculative, test-only, dead code, unreachable). Refuted findings stay in the review comment inside a collapsed block with the reason. A refuter failure does not block the review.
+- 28b5d39: Config, lenses, and the dependency graph are read only from the default branch or a protected branch. `ghagga/graph` was an unprotected orphan branch; it is used only when that branch is protected, and a graph file on the default branch is preferred. `ghagga review --pr` and `--mr` do not load `.ghagga.json`, `.ghagga/lenses`, or `.ghagga/graph.json` from the pull request head. A fork or an author without write permission cannot supply those inputs.
+
 ## 3.8.0
 
 ### Minor Changes
