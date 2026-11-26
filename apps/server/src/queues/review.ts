@@ -18,14 +18,17 @@ import type {
   StaticAnalysisResult,
 } from 'ghagga-core';
 import {
+  buildInlineCommentBody,
   createEmbeddingProvider,
   fetchGatewayModels,
   fetchGatewayProviders,
+  findingsFixedSince,
   formatReviewComment,
   PreloadedGraphLoader,
   REVIEW_COMMENT_MARKER,
   resolveEmbeddingConfig,
   reviewPipeline,
+  selectInlineFindings,
   validateProviderChain,
 } from 'ghagga-core';
 import type { Database, DbProviderChainEntry } from 'ghagga-db';
@@ -34,6 +37,7 @@ import {
   decrypt,
   eq,
   getEffectiveRepoSettings,
+  getLatestReviewFindings,
   getRepositoryById,
   repositories,
   saveReview,
@@ -950,6 +954,17 @@ async function processReview(
   // fall back to minting one (preserving the original throw-on-missing-DB
   // behavior) only if the top-of-job creation degraded to undefined.
   const persistDb = db ?? createDatabaseFromEnv();
+  // Compare against the previous saved review BEFORE inserting this one,
+  // so a finding that disappeared can be called out in the summary.
+  // A lookup failure must not block the review — the summary still posts.
+  let fixedSince: ReturnType<typeof findingsFixedSince> = [];
+  try {
+    const previousFindings = await getLatestReviewFindings(persistDb, repositoryId, prNumber);
+    fixedSince = findingsFixedSince(previousFindings, reviewResult.findings ?? []);
+  } catch (error) {
+    log.warn({ error: String(error) }, 'Could not compare findings with the previous review');
+  }
+
   await saveReview(persistDb, {
     repositoryId,
     prNumber,
@@ -1003,16 +1018,17 @@ async function processReview(
     // Prefer the human who triggered the review over the PR author.
     // This matters for bot-opened PRs (e.g., Dependabot) where prAuthor is a bot.
     prAuthor: job.data.reviewTriggeredBy ?? job.data.prAuthor,
+    ...(fixedSince.length > 0 ? { fixedSince } : {}),
   });
   commentBody += `\n<!-- reviewId: ${reviewId} -->`;
 
-  // Strategy: delete all existing GHAGGA review comments, then post a fresh one at the bottom.
-  // This ensures the review always appears at the most recent position in the PR thread,
-  // which is better UX than editing in place (GitHub keeps edited comments at their original position).
+  // The summary comment is edited in place (FORGE-UPSERT-005): the latest
+  // GHAGGA comment is PATCHed, and only stale duplicates are deleted after
+  // that update succeeds. Findings that disappeared since the previous
+  // review are listed in the body (`fixedSince`) rather than by reposting.
   //
-  // upsertSummaryComment folds find → delete-ALL([latestId, ...staleIds]) → post
-  // into one adapter call, preserving the EXACT baseline ordering + best-effort
-  // delete semantics. The marker passed MUST equal REVIEW_COMMENT_MARKER (the
+  // upsertSummaryComment folds find → update-latest → delete-stale into one
+  // adapter call. The marker passed MUST equal REVIEW_COMMENT_MARKER (the
   // GitHub adapter matches that fixed marker inside client.findExistingComment).
   //
   // P2 401-RECOVERY (in-job, bounded to exactly ONE retry): with P2 caching the
@@ -1045,6 +1061,39 @@ async function processReview(
   // BOX the GitHub-native numeric id review.ts-LOCAL (R-COMMENTID).
   const postedCommentId = githubCommentId(upsertResult.created);
   log.info({ commentId: postedCommentId.raw }, 'Review comment posted');
+
+  // Inline comments for critical and high findings only. The summary above
+  // still carries every finding. A missing head SHA, a client without the
+  // inline methods, or a per-comment 422 must not fail the review.
+  const headSha = job.data.headSha;
+  if (
+    headSha &&
+    /^[0-9a-f]{7,40}$/i.test(headSha) &&
+    typeof adapter2.publishInline === 'function'
+  ) {
+    const inlineFindings = selectInlineFindings(reviewResult.findings ?? []);
+    if (inlineFindings.length > 0) {
+      try {
+        const report = await adapter2.publishInline(
+          changeRef,
+          inlineFindings.map((finding) => ({
+            path: finding.file,
+            line: finding.line ?? 0,
+            side: 'new' as const,
+            commitSha: headSha,
+            body: buildInlineCommentBody(finding),
+          })),
+        );
+        log.info(
+          { posted: report.posted.length, failed: report.failed.length },
+          'Inline review comments published',
+        );
+      } catch (error) {
+        log.warn({ error: String(error) }, 'Inline review comments skipped');
+      }
+    }
+  }
+
   await job.updateProgress(90);
 
   // Step 7: React with rocket to the trigger comment
